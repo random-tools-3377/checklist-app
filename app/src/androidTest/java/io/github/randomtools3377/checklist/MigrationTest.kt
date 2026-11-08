@@ -43,7 +43,7 @@ class MigrationTest {
             close()
         }
 
-        helper.runMigrationsAndValidate(name, 5, true, *MIGRATIONS).close()
+        helper.runMigrationsAndValidate(name, 6, true, *MIGRATIONS).close()
 
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val db = Room.databaseBuilder(context, AppDatabase::class.java, name).addMigrations(*MIGRATIONS).build()

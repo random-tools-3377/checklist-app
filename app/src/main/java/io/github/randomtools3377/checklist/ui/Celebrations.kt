@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -54,8 +55,11 @@ private val Confetti = listOf(
 
 /** A big celebration that fills the screen. */
 sealed interface BigCelebration {
-    data class ProjectFinished(val icon: String, val name: String, val points: Int) : BigCelebration
+    data class ProjectFinished(val icon: String, val name: String, val points: Int, val gif: String? = null) : BigCelebration
     data class Bought(val icon: String, val name: String) : BigCelebration
+
+    /** A habit finished for its day, week, month or year, with its own GIF. */
+    data class GoalFinished(val icon: String, val name: String, val points: Int, val gif: String) : BigCelebration
 }
 
 private data class Burst(val id: Long, val at: Offset, val label: String, val big: Boolean)
@@ -180,7 +184,7 @@ private fun BigEffect(celebration: BigCelebration, onEnd: () -> Unit) {
     }
     LaunchedEffect(Unit) {
         // Closes by itself, or sooner with a tap.
-        delay(if (celebration is BigCelebration.ProjectFinished) 4500L else 3000L)
+        delay(if (celebration is BigCelebration.Bought) 3000L else 4500L)
         onEnd()
     }
 
@@ -211,7 +215,12 @@ private fun BigEffect(celebration: BigCelebration, onEnd: () -> Unit) {
         ) {
             when (celebration) {
                 is BigCelebration.ProjectFinished -> {
-                    Text(celebration.icon, fontSize = 96.sp)
+                    val gif = celebration.gif
+                    if (gif != null) {
+                        CelebrationGif(gif, Modifier.size(240.dp).testTag("celebration-gif"))
+                    } else {
+                        Text(celebration.icon, fontSize = 96.sp)
+                    }
                     Spacer(Modifier.height(16.dp))
                     Text("Project finished!", color = Color.White, fontSize = 32.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
                     Spacer(Modifier.height(8.dp))
@@ -219,6 +228,15 @@ private fun BigEffect(celebration: BigCelebration, onEnd: () -> Unit) {
                     if (celebration.points > 0) {
                         Spacer(Modifier.height(16.dp))
                         Text("+${celebration.points} points", color = Color(0xFFFFC145), fontSize = 26.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+                is BigCelebration.GoalFinished -> {
+                    CelebrationGif(celebration.gif, Modifier.size(240.dp).testTag("celebration-gif"))
+                    Spacer(Modifier.height(16.dp))
+                    Text("${celebration.icon} ${celebration.name}", color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+                    if (celebration.points > 0) {
+                        Spacer(Modifier.height(12.dp))
+                        Text("+${celebration.points} points", color = Color(0xFFFFC145), fontSize = 24.sp, fontWeight = FontWeight.Bold)
                     }
                 }
                 is BigCelebration.Bought -> {

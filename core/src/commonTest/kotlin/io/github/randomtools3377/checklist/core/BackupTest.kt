@@ -17,7 +17,7 @@ class BackupTest {
                 id = 1, kind = GoalKind.HABIT, name = "Water", icon = "💧", points = 1,
                 repeat = Repeat(RepeatKind.WEEKDAYS, day, interval = 2, weekdays = setOf(1, 3)),
                 target = 8, bonus = 5, minutes = 2, at = LocalTime(9, 30), finishBy = LocalTime(21, 0),
-                position = 3, createdAt = 42,
+                position = 3, createdAt = 42, celebration = Celebration.own("own-1a2b.gif"),
             ),
             Goal(id = 2, kind = GoalKind.PROJECT, name = "Shelf", icon = "🔨", points = 0, repeat = null, deadline = day),
         ),
@@ -36,6 +36,7 @@ class BackupTest {
         penalties = listOf(Penalty(id = 600, lapseId = 500, createdAt = 7, choice = PenaltyChoice.TASK, taskId = 700, label = "Push-ups", doneAt = 8)),
         penaltyTasks = listOf(PenaltyTask(id = 700, name = "Push-ups")),
         gaps = listOf(Gap(id = 800, from = day, to = day.plusDays(2), kind = GapKind.NOTHING_TICKED, createdAt = 9, reason = Reason.ILL, note = "flu")),
+        files = mapOf("own-1a2b.gif" to "R0lGODlhAQABAAAAACw="),
     )
 
     @Test
@@ -47,7 +48,7 @@ class BackupTest {
     fun theFileSaysWhatItIs() {
         val text = Backup.encode(backup)
         assertTrue(text.contains("\"app\": \"checklist\""))
-        assertTrue(text.contains("\"format\": 3"))
+        assertTrue(text.contains("\"format\": 4"))
     }
 
     @Test
@@ -59,7 +60,7 @@ class BackupTest {
 
     @Test
     fun aBackupFromANewerVersionIsRefused() {
-        val newer = Backup.encode(backup).replace("\"format\": 3", "\"format\": 99")
+        val newer = Backup.encode(backup).replace("\"format\": 4", "\"format\": 99")
         val error = assertFailsWith<BackupError> { Backup.decode(newer) }
         assertEquals("This backup was made by a newer version of the app. Update the app first.", error.message)
     }
@@ -67,7 +68,7 @@ class BackupTest {
     @Test
     fun aFormat1BackupStillReads() {
         val old = Backup.encode(backup.copy(lapses = emptyList(), penalties = emptyList(), penaltyTasks = emptyList(), gaps = emptyList()))
-            .replace("\"format\": 3", "\"format\": 1")
+            .replace("\"format\": 4", "\"format\": 1")
             .replace(Regex(",\\s*\"lapses\": \\[\\],\\s*\"penalties\": \\[\\],\\s*\"penaltyTasks\": \\[\\]"), "")
         val read = Backup.decode(old)
         assertEquals(1, read.format)

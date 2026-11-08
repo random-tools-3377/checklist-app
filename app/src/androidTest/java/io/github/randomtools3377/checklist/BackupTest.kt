@@ -10,6 +10,8 @@ import io.github.randomtools3377.checklist.core.Period
 import io.github.randomtools3377.checklist.core.Repeat
 import io.github.randomtools3377.checklist.core.RepeatKind
 import io.github.randomtools3377.checklist.data.AppDatabase
+import io.github.randomtools3377.checklist.data.CelebrationFiles
+import io.github.randomtools3377.checklist.core.Celebration
 import io.github.randomtools3377.checklist.data.HabitDraft
 import io.github.randomtools3377.checklist.data.Repository
 import io.github.randomtools3377.checklist.data.RewardDraft
@@ -28,7 +30,9 @@ import org.junit.runner.RunWith
 class BackupTest {
     private val context = InstrumentationRegistry.getInstrumentation().targetContext
     private val db = Room.inMemoryDatabaseBuilder(context, AppDatabase::class.java).build()
-    private val repository = Repository(db)
+    private val folder = java.io.File(context.cacheDir, "backup-test").apply { deleteRecursively() }
+    private val gifs = CelebrationFiles(folder)
+    private val repository = Repository(db, gifs)
     private val book = Book(RoomStore(db))
 
     @After
@@ -72,6 +76,36 @@ class BackupTest {
         assertEquals(30, repository.goal(water)!!.minutes)
         assertTrue(book.returnPurchase(bought.purchaseId))
         assertEquals(10, book.balance())
+    }
+
+    @Test
+    fun aPickedGifTravelsWithTheBackup() = runTest {
+        val gif = "GIF89a".toByteArray() + ByteArray(64) { it.toByte() }
+        val name = gifs.add(gif.inputStream()).getOrThrow()
+        repository.saveHabit(
+            HabitDraft(
+                id = 0, name = "Run", icon = "🏃", points = 5, repeat = Repeat.everyDay(nowLocal().date), target = 1, bonus = 0,
+                minutes = null, at = null, finishBy = null, finishDay = null, celebration = Celebration.own(name),
+            ),
+        )
+        val text = repository.exportBackup()
+
+        repository.restore(
+            Backup(
+                exportedAt = 0, goals = emptyList(), steps = emptyList(), ticks = emptyList(), entries = emptyList(),
+                rewards = emptyList(), purchases = emptyList(), settings = emptyMap(),
+            ),
+        )
+        assertEquals(null, gifs.read(name))
+
+        repository.restore(Backup.decode(text))
+        assertTrue(gif.contentEquals(gifs.read(name)))
+        assertEquals(Celebration.own(name), db.dao().activeGoals().single().celebration)
+    }
+
+    @Test
+    fun onlyGifsAreKept() {
+        assertTrue(gifs.add("not a gif".byteInputStream()).isFailure)
     }
 
     @Test

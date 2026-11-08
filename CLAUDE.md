@@ -76,6 +76,11 @@ The app has no network access unless the owner decides otherwise for this app.
   and its own for buying a reward **(default)**.
 - The GIFs come with the app, or the user picks one with the Photo Picker. That hands over a single
   file and needs no storage permission.
+- **Details (default):** four GIFs come with the app (confetti, a star, fireworks, a big tick),
+  drawn for this project by `tools/make-celebration-gifs.py`. A goal with its own GIF shows it
+  full screen when it is finished, in place of the usual burst. A picked GIF (up to 10 MB) is
+  copied into the app's own storage and goes in the backup file. GIFs move on Android 9 and
+  later; on Android 8 they show still.
 
 ## Pacing and the order to do things
 

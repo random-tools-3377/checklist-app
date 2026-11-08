@@ -1,6 +1,7 @@
 package io.github.randomtools3377.checklist.data
 
 import androidx.room.withTransaction
+import io.github.randomtools3377.checklist.core.Celebration
 import io.github.randomtools3377.checklist.core.Days
 import io.github.randomtools3377.checklist.core.Entry
 import io.github.randomtools3377.checklist.core.EntryKind
@@ -106,6 +107,7 @@ fun GoalEntity.toCore() = Goal(
     allowance = allowance,
     allowancePer = allowancePer?.let { Period.valueOf(it) },
     private = isPrivate,
+    celebration = celebration?.takeIf { Celebration.isValid(it) },
     archived = archived,
     position = position,
     createdAt = createdAt,
@@ -133,6 +135,7 @@ fun Goal.toEntity() = GoalEntity(
     allowance = allowance,
     allowancePer = allowancePer?.name,
     isPrivate = private,
+    celebration = celebration,
 )
 
 fun StepEntity.toCore() = Step(id = id, goalId = goalId, name = name, points = points, position = position, archived = archived)

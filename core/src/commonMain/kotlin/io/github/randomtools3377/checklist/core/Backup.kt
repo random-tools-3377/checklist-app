@@ -27,12 +27,14 @@ data class Backup(
     val penaltyTasks: List<PenaltyTask> = emptyList(),
     /** Gaps (format 3). */
     val gaps: List<Gap> = emptyList(),
+    /** The celebration GIFs the user picked, by file name, in base64 (format 4). */
+    val files: Map<String, String> = emptyMap(),
 ) {
     companion object {
         const val APP = "checklist"
 
         /** Raised whenever the file's layout changes in a way older versions can't read. */
-        const val FORMAT = 3
+        const val FORMAT = 4
 
         private val json = Json {
             prettyPrint = true

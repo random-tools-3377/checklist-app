@@ -7,6 +7,7 @@ import io.github.randomtools3377.checklist.core.Book
 import io.github.randomtools3377.checklist.core.Gaps
 import io.github.randomtools3377.checklist.core.Lapses
 import io.github.randomtools3377.checklist.data.AppDatabase
+import io.github.randomtools3377.checklist.data.CelebrationFiles
 import io.github.randomtools3377.checklist.data.Repository
 import io.github.randomtools3377.checklist.data.RoomStore
 import io.github.randomtools3377.checklist.reminders.Reminders
@@ -46,7 +47,8 @@ class Container(app: Application) {
             gaps.find()
         }
     }
-    val repository = Repository(db)
+    val celebrationFiles = CelebrationFiles(app.filesDir)
+    val repository = Repository(db, celebrationFiles)
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val changes = MutableSharedFlow<Unit>(replay = 1, extraBufferCapacity = 1)

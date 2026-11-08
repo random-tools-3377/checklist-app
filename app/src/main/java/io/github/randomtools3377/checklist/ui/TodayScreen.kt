@@ -58,6 +58,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import io.github.randomtools3377.checklist.core.Celebration
 import io.github.randomtools3377.checklist.core.Goal
 import io.github.randomtools3377.checklist.core.HabitRow
 import io.github.randomtools3377.checklist.core.LongPace
@@ -109,7 +110,16 @@ fun TodayScreen(
     }
 
     fun tick(row: HabitRow, spot: Spot) {
-        vm.tickHabit(row.goal.id) { celebrateTick(it, spot, row.goal.target > 1) }
+        vm.tickHabit(row.goal.id) { result ->
+            val gif = row.goal.celebration?.takeIf { Celebration.isValid(it) }
+            if (gif != null && result is TickResult.Ticked && result.finished) {
+                // Its own GIF, full screen.
+                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                celebrations.show(BigCelebration.GoalFinished(row.goal.icon, row.goal.name, result.points + result.bonus, gif))
+            } else {
+                celebrateTick(result, spot, row.goal.target > 1)
+            }
+        }
     }
 
     LazyColumn(
@@ -183,7 +193,10 @@ fun TodayScreen(
                             celebrateTick(result, spot, bigWhenFinished = false)
                             if (result is TickResult.Ticked && result.finished) {
                                 celebrations.show(
-                                    BigCelebration.ProjectFinished(project.goal.icon, project.goal.name, result.points + result.bonus),
+                                    BigCelebration.ProjectFinished(
+                                        project.goal.icon, project.goal.name, result.points + result.bonus,
+                                        gif = project.goal.celebration?.takeIf { Celebration.isValid(it) },
+                                    ),
                                 )
                             }
                         }

@@ -293,6 +293,7 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit) {
     var allowance by rememberSaveable { mutableStateOf(Goal.DEFAULT_ALLOWANCE.toString()) }
     var allowancePer by rememberSaveable { mutableStateOf(Period.WEEKLY) }
     var isPrivate by rememberSaveable { mutableStateOf(false) }
+    var celebration by rememberSaveable { mutableStateOf<String?>(null) }
     var showErrors by rememberSaveable { mutableStateOf(false) }
     var choosingRepeat by remember { mutableStateOf(false) }
     val context = LocalContext.current
@@ -313,6 +314,7 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit) {
                 allowance = goal.allowed.toString()
                 allowancePer = goal.allowanceWindow
                 isPrivate = goal.private
+                celebration = goal.celebration
                 goal.reminder?.let { r ->
                     notifyOnTime = r.onTime
                     alertBefore = r.minutesBefore
@@ -409,6 +411,7 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit) {
                         allowance = allowance.toIntOrNull() ?: Goal.DEFAULT_ALLOWANCE,
                         allowancePer = allowancePer,
                         private = isPrivate,
+                        celebration = celebration,
                     ),
                     onDone = {
                         val wantsNotifications = if (atMinute != null) notifyOnTime || alertBefore != null else remindAtMinute != null
@@ -605,6 +608,7 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit) {
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+        CelebrationPicker(celebration) { celebration = it }
         if (id != 0L) RemoveButton("habit", name) { vm.removeGoal(id, onClose) }
     }
 
@@ -720,6 +724,7 @@ fun ProjectEditor(id: Long, vm: MainViewModel, onClose: () -> Unit) {
     var finishByMinute by rememberSaveable { mutableStateOf<Int?>(null) }
     var allowance by rememberSaveable { mutableStateOf(Goal.DEFAULT_ALLOWANCE.toString()) }
     var isPrivate by rememberSaveable { mutableStateOf(false) }
+    var celebration by rememberSaveable { mutableStateOf<String?>(null) }
     var nextKey by rememberSaveable { mutableStateOf(2L) }
     val steps = rememberSaveable(saver = StepFieldsSaver) { mutableListOf(StepField(1L, 0L, "", "")).toMutableStateList() }
     var showErrors by rememberSaveable { mutableStateOf(false) }
@@ -734,6 +739,7 @@ fun ProjectEditor(id: Long, vm: MainViewModel, onClose: () -> Unit) {
                 finishByMinute = goal.finishBy?.toMinuteOfDay()
                 allowance = goal.allowed.toString()
                 isPrivate = goal.private
+                celebration = goal.celebration
                 steps.clear()
                 existingSteps.forEach { steps += StepField(nextKey++, it.id, it.name, it.points.toString()) }
                 if (steps.isEmpty()) steps += StepField(nextKey++, 0L, "", "")
@@ -768,6 +774,7 @@ fun ProjectEditor(id: Long, vm: MainViewModel, onClose: () -> Unit) {
                         finishBy = finishByMinute?.toTime(),
                         allowance = allowance.toIntOrNull() ?: Goal.DEFAULT_ALLOWANCE,
                         private = isPrivate,
+                        celebration = celebration,
                     ),
                     onDone = onClose,
                 )
@@ -856,6 +863,7 @@ fun ProjectEditor(id: Long, vm: MainViewModel, onClose: () -> Unit) {
         } else {
             PrivateSwitch(isPrivate) { isPrivate = it }
         }
+        CelebrationPicker(celebration) { celebration = it }
         if (id != 0L) RemoveButton("project", name) { vm.removeGoal(id, onClose) }
     }
 }

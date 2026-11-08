@@ -34,8 +34,11 @@ keeps the data.
   the things the user picks.
 - 0.5.0: gap check-ins, a review of each day, week and month with stats, and more for the
   privacy lock.
+- 0.6.0: celebration GIFs for each goal, from the app or the user's own through the Photo
+  Picker.
 
-Next: celebration GIFs.
+Every feature in the design is now built for Android. The iPhone app waits for a way to
+install it.
 
 ## How it is built
 

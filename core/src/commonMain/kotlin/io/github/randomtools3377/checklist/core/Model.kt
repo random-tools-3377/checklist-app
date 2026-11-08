@@ -53,6 +53,8 @@ data class Goal(
     val allowancePer: Period? = null,
     /** Kept behind the privacy lock, when the user turns that on. */
     val private: Boolean = false,
+    /** Its own celebration GIF, if it has one (see [Celebration]). */
+    val celebration: String? = null,
     val archived: Boolean = false,
     val position: Int = 0,
     val createdAt: Long = 0,
