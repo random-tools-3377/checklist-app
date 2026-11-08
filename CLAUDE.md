@@ -77,6 +77,26 @@ The app has no network access unless the owner decides otherwise for this app.
 - The GIFs come with the app, or the user picks one with the Photo Picker. That hands over a single
   file and needs no storage permission.
 
+## Pacing and the order to do things
+
+- The app tells the user how quickly they need to go to get everything done on time.
+- A goal can have a length (how long it takes), a clock time (when to do it), both, or neither.
+  Timed goals keep their time; untimed goals share what is left evenly.
+- Pacing counts down to a finish time and date. Settings can hold defaults, but the app never
+  assumes an end date the user hasn't set.
+- Goals due over a week, month or year, and projects with a deadline, are paced too, like "2 left,
+  about one every 2 days".
+- Each goal can have its own finish-by time, and a date where it fits. Goals without one use the
+  default finish time in Settings, and until that is set, today's list shows no pace
+  **(default)**.
+- A goal with no finish date, like a "3 times a week" goal or a project with no deadline, is not
+  paced until the user gives it one **(default)**.
+- Today's list can be shown in a recommended order that makes each thing more likely to get done.
+- The recommended order **(default)**: goals with a clock time sit at that time; then the earliest
+  finish-by first; goals falling behind their pace move up; goals the user usually does around
+  this time of day (learned from their own ticks) come next; quick ones before long ones. The user
+  can switch Today between the recommended order and their own order.
+
 ## Streaks
 
 - Streaks count days. For the main streak the user sets what a day needs: a number of goals
@@ -130,11 +150,17 @@ The app has no network access unless the owner decides otherwise for this app.
 2. The penalty task, if anything went over the limit.
 3. Today's list, with the balance at the top.
 
-## Ticking without opening the app (default)
+## Notifications and the widget
 
-- A home-screen widget showing today's list.
-- Reminders with Done and Skip buttons. A Skip that would go over the limit opens the app instead,
-  because it needs the warning, the reason and the penalty.
+- Notifications at set times, the way a calendar app reminds you. They are scheduled on the phone
+  and need no internet.
+- A home-screen widget that looks like a calendar, to see the schedule at a glance.
+- A goal with a clock time notifies at that time, and the user can add an earlier alert, like a
+  calendar's "10 minutes before" **(default)**.
+- Notifications have Done and Skip buttons. A Skip that would go over the limit opens the app
+  instead, because it needs the warning, the reason and the penalty **(default)**.
+- The widget can be resized: small shows today's agenda with times and tick buttons, larger shows
+  the week or the month **(default)**.
 
 ## Review
 
@@ -187,10 +213,12 @@ Build order **(default)**, each step a Release the owner can try:
 
 1. Goals, ticking, points and the shop. Released as 0.1.0.
 2. Export and import (decided: before skips and misses), flexible repeats, reordering, the points
-   history, returning a bought reward, and hiding the recent-apps preview.
-3. Skips, misses, the limit and penalties, with streaks and the privacy lock.
-4. Gaps, the review screen and stats.
-5. The widget and reminders.
+   history, returning a bought reward, hiding the recent-apps preview, pacing and the recommended
+   order.
+3. Notifications and the calendar widget. They build on the times and repeats from step 2; the
+   Skip button arrives with step 4.
+4. Skips, misses, the limit and penalties, with streaks and the privacy lock.
+5. Gaps, the review screen and stats.
 
 ## Talking to the owner
 
