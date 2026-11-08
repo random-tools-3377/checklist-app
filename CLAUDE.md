@@ -1,8 +1,8 @@
 # Checklist app — house rules (working name)
 
-An Android app for setting goals, ticking them off and earning points, then spending the points in
-a shop of real-life rewards the user stocks and prices. It is for one person: no sharing, no
-accounts, no sync.
+An app for Android, and later iPhone, for setting goals, ticking them off and earning points, then
+spending the points in a shop of real-life rewards the user stocks and prices. It is for one
+person: no sharing, no accounts, no sync.
 
 Designed on 2026-11-08. Plain bullets are the owner's decisions. Bullets marked **(default)** are
 suggestions the owner has not overruled and can still change. Anything not written here is not
@@ -192,9 +192,25 @@ The app has no network access unless the owner decides otherwise for this app.
   `OpenDocument`). Where that file goes is the user's choice.
 - The app makes no copy of its own anywhere else.
 
+## iPhone
+
+- The app is planned for iPhone too. The code is restructured now, before 0.2.0, so Android and
+  iPhone share it through Kotlin Multiplatform and each feature is built once.
+- The iPhone app itself is built once there is a way to install it: a paid Apple Developer account
+  (TestFlight) or a Mac. Until then, Android releases continue.
+- Each phone keeps its own data. The export file is the same on both, so data moves between them
+  only by exporting on one and importing on the other. No sync.
+- The shared code holds the rules, repeats, pacing, the recommended order and the export format,
+  and CI builds and tests it for iPhone on every push. The Android screens are written so they can
+  move to Compose Multiplatform when the iPhone app starts. iPhone widgets are written separately
+  in Swift **(default)**.
+- iPhones have no internet permission to remove, so there "no internet" means no networking code,
+  checked in the code rather than on a permission **(default)**.
+
 ## Builds and releases
 
-- Kotlin and Jetpack Compose. Work lands on `main` without pull requests.
+- Kotlin Multiplatform for the shared code, Jetpack Compose for the Android screens. Work lands on
+  `main` without pull requests.
 - GitHub Actions builds the APK. **The owner installs from the Releases page in the phone's
   browser**, so every build meant to be tried is a Release with the APK attached.
 - **Every release is signed with the same key**, or Android refuses to install it over the
@@ -212,7 +228,8 @@ The app has no network access unless the owner decides otherwise for this app.
 Build order **(default)**, each step a Release the owner can try:
 
 1. Goals, ticking, points and the shop. Released as 0.1.0.
-2. Export and import (decided: before skips and misses), flexible repeats, reordering, the points
+2. First the code is restructured to be shared with iPhone (no Release on its own). Then export
+   and import (decided: before skips and misses), flexible repeats, reordering, the points
    history, returning a bought reward, hiding the recent-apps preview, pacing and the recommended
    order.
 3. Notifications and the calendar widget. They build on the times and repeats from step 2; the
