@@ -11,7 +11,8 @@ The design and the house rules are in [CLAUDE.md](CLAUDE.md).
 - The app has no internet access. The manifest removes every network permission, and CI fails
   the build if the release APK asks for one.
 - Phone backup and phone-to-phone transfer are off, so nothing is uploaded anywhere.
-- Everything is kept in a database on the phone. Uninstalling the app deletes it.
+- Everything is kept in a database on the phone. Settings → Backup exports it to a file you
+  choose, and imports it back; that file is the only copy anywhere else.
 
 ## Installing
 
@@ -22,12 +23,15 @@ keeps the data.
 
 ## What is built
 
-Stage 1 of the build order: goals (habits and projects), ticking, points and the shop.
+- 0.1.0: goals (habits and projects), ticking, points and the shop.
+- 0.2.0: flexible repeats, lengths and clock times, pacing and a recommended order, export and
+  import, a points history, returning bought rewards, reordering, and a hidden recent-apps
+  preview.
 
-Skips, misses, the allowance, penalties, gaps, the review screen, the widget and reminders
-come later. The data is laid out so they fit in: every tick records the period it counts for,
-and the balance is the sum of a ledger whose entries have a kind (tick, bonus, purchase), so
-penalties and refunds become new kinds of entry.
+Next: notifications and a calendar-style widget; then skips, misses, the allowance, penalties,
+streaks and the privacy lock; then gaps, the review screen and stats. The data is laid out so
+these fit in: every tick records the window it counts for, and the balance is the sum of a
+ledger whose entries have a kind, so penalties and refunds become new kinds of entry.
 
 ## How it is built
 
