@@ -36,7 +36,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import java.time.LocalDate
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.toJavaLocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
@@ -59,8 +60,8 @@ fun pointsText(points: Int): String = if (points == 1 || points == -1) "$points 
 private val ShortDate = DateTimeFormatter.ofPattern("EEE d MMM", Locale.getDefault())
 private val LongDate = DateTimeFormatter.ofPattern("EEEE d MMMM", Locale.getDefault())
 
-fun shortDate(date: LocalDate): String = date.format(ShortDate)
-fun longDate(date: LocalDate): String = date.format(LongDate)
+fun shortDate(date: LocalDate): String = date.toJavaLocalDate().format(ShortDate)
+fun longDate(date: LocalDate): String = date.toJavaLocalDate().format(LongDate)
 
 /** The balance, big. It turns red below zero. */
 @Composable

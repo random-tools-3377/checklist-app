@@ -1,6 +1,6 @@
 package io.github.randomtools3377.checklist.core
 
-import java.time.LocalDate
+import kotlinx.datetime.LocalDate
 import kotlin.math.roundToInt
 
 /** How long a price takes to earn, judged from the user's own history. */
@@ -18,7 +18,7 @@ object Usual {
      */
     fun pointsPerDay(earnedByDay: Map<LocalDate, Int>, firstDay: LocalDate?, today: LocalDate): Double? {
         if (firstDay == null || firstDay > today) return null
-        val from = maxOf(firstDay, today.minusDays(WINDOW_DAYS.toLong()))
+        val from = maxOf(firstDay, today.minusDays(WINDOW_DAYS))
         val to = today.minusDays(1)
         val days = if (from > to) listOf(today) else generateSequence(from) { it.plusDays(1) }.takeWhile { it <= to }.toList()
         val average = days.sumOf { earnedByDay[it] ?: 0 }.toDouble() / days.size

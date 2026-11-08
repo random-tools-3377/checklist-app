@@ -1,6 +1,6 @@
 package io.github.randomtools3377.checklist.core
 
-import java.time.LocalDate
+import kotlinx.datetime.LocalDate
 
 /** Where goals, ticks, the ledger and the shop are kept. The app keeps them in a database. */
 interface Store {

@@ -1,40 +1,40 @@
 package io.github.randomtools3377.checklist.core
 
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNull
-import org.junit.Test
-import java.time.LocalDate
-import java.time.LocalDateTime
+import kotlin.test.assertEquals
+import kotlin.test.assertNull
+import kotlin.test.Test
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalDateTime
 
 class DaysTest {
     @Test
     fun theDayEndsAtTheChosenHour() {
-        val lateNight = LocalDateTime.of(2026, 11, 10, 3, 59)
-        assertEquals(LocalDate.of(2026, 11, 9), Days.dayOf(lateNight, dayEndHour = 4))
-        assertEquals(LocalDate.of(2026, 11, 10), Days.dayOf(lateNight, dayEndHour = 0))
-        assertEquals(LocalDate.of(2026, 11, 10), Days.dayOf(LocalDateTime.of(2026, 11, 10, 4, 0), dayEndHour = 4))
+        val lateNight = LocalDateTime(2026, 11, 10, 3, 59)
+        assertEquals(LocalDate(2026, 11, 9), Days.dayOf(lateNight, dayEndHour = 4))
+        assertEquals(LocalDate(2026, 11, 10), Days.dayOf(lateNight, dayEndHour = 0))
+        assertEquals(LocalDate(2026, 11, 10), Days.dayOf(LocalDateTime(2026, 11, 10, 4, 0), dayEndHour = 4))
     }
 
     @Test
     fun weeksStartOnMondayAndMonthsOnTheFirst() {
-        val sunday = LocalDate.of(2026, 11, 15)
-        assertEquals(LocalDate.of(2026, 11, 9), Days.periodStart(sunday, Period.WEEKLY))
+        val sunday = LocalDate(2026, 11, 15)
+        assertEquals(LocalDate(2026, 11, 9), Days.periodStart(sunday, Period.WEEKLY))
         assertEquals(sunday, Days.periodEnd(sunday, Period.WEEKLY))
-        assertEquals(LocalDate.of(2026, 11, 1), Days.periodStart(sunday, Period.MONTHLY))
-        assertEquals(LocalDate.of(2026, 11, 30), Days.periodEnd(sunday, Period.MONTHLY))
+        assertEquals(LocalDate(2026, 11, 1), Days.periodStart(sunday, Period.MONTHLY))
+        assertEquals(LocalDate(2026, 11, 30), Days.periodEnd(sunday, Period.MONTHLY))
         assertEquals(sunday, Days.periodStart(sunday, Period.DAILY))
     }
 
     @Test
     fun theEarliestOpenDayCoversAWeekThatStartedLastMonth() {
         // Tuesday 1 December 2026: the week started on Monday 30 November.
-        assertEquals(LocalDate.of(2026, 11, 30), Days.earliestOpenDay(LocalDate.of(2026, 12, 1)))
-        assertEquals(LocalDate.of(2026, 11, 1), Days.earliestOpenDay(LocalDate.of(2026, 11, 20)))
+        assertEquals(LocalDate(2026, 11, 30), Days.earliestOpenDay(LocalDate(2026, 12, 1)))
+        assertEquals(LocalDate(2026, 11, 1), Days.earliestOpenDay(LocalDate(2026, 11, 20)))
     }
 }
 
 class UsualTest {
-    private val today = LocalDate.of(2026, 11, 20)
+    private val today = LocalDate(2026, 11, 20)
 
     @Test
     fun nothingEarnedMeansNoUsualYet() {

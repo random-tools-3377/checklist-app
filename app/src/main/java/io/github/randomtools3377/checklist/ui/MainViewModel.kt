@@ -33,8 +33,11 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import java.time.LocalDate
-import java.time.LocalDateTime
+import io.github.randomtools3377.checklist.core.minusDays
+import io.github.randomtools3377.checklist.data.nowLocal
+import io.github.randomtools3377.checklist.data.toDay
+import io.github.randomtools3377.checklist.data.toEpochDay
+import kotlinx.datetime.LocalDate
 
 /** Every goal, for the Goals screen. */
 data class GoalsView(val goals: List<Goal>, val steps: Map<Long, List<Step>>)
@@ -59,7 +62,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val today: Flow<LocalDate> = combine(
         flow {
             while (true) {
-                emit(LocalDateTime.now(container.clock))
+                emit(nowLocal())
                 delay(30_000)
             }
         },
@@ -90,12 +93,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     val shopView: StateFlow<ShopView?> = today.flatMapLatest { day ->
         val pointsPerDay = combine(
-            dao.observeEarnedByDay(day.minusDays(Usual.WINDOW_DAYS.toLong()).toEpochDay()),
+            dao.observeEarnedByDay(day.minusDays(Usual.WINDOW_DAYS).toEpochDay()),
             dao.observeFirstEarningDay(),
         ) { earned, first ->
             Usual.pointsPerDay(
-                earnedByDay = earned.associate { LocalDate.ofEpochDay(it.day) to it.amount },
-                firstDay = first?.let { LocalDate.ofEpochDay(it) },
+                earnedByDay = earned.associate { it.day.toDay() to it.amount },
+                firstDay = first?.toDay(),
                 today = day,
             )
         }

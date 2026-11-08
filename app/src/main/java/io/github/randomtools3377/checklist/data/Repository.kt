@@ -6,8 +6,7 @@ import io.github.randomtools3377.checklist.core.GoalKind
 import io.github.randomtools3377.checklist.core.Period
 import io.github.randomtools3377.checklist.core.Reward
 import io.github.randomtools3377.checklist.core.Step
-import java.time.Clock
-import java.time.LocalDate
+import kotlinx.datetime.LocalDate
 
 /** What the habit editor saves. */
 data class HabitDraft(
@@ -37,7 +36,7 @@ data class ProjectDraft(
 data class RewardDraft(val id: Long, val name: String, val icon: String, val price: Int)
 
 /** Adding, editing and removing goals and rewards, and the settings. */
-class Repository(private val db: AppDatabase, private val clock: Clock) {
+class Repository(private val db: AppDatabase) {
     private val dao = db.dao()
 
     suspend fun goal(id: Long): Goal? = dao.goal(id)?.toCore()
@@ -61,7 +60,7 @@ class Repository(private val db: AppDatabase, private val clock: Clock) {
                     deadline = null,
                     archived = false,
                     position = dao.nextGoalPosition(),
-                    createdAt = clock.millis(),
+                    createdAt = nowMillis(),
                 ),
             )
         } else {
@@ -94,7 +93,7 @@ class Repository(private val db: AppDatabase, private val clock: Clock) {
                     deadline = draft.deadline?.toEpochDay(),
                     archived = false,
                     position = dao.nextGoalPosition(),
-                    createdAt = clock.millis(),
+                    createdAt = nowMillis(),
                 ),
             )
         } else {
@@ -139,7 +138,7 @@ class Repository(private val db: AppDatabase, private val clock: Clock) {
                     price = draft.price,
                     archived = false,
                     position = dao.nextRewardPosition(),
-                    createdAt = clock.millis(),
+                    createdAt = nowMillis(),
                 ),
             )
         } else {

@@ -31,8 +31,10 @@ penalties and refunds become new kinds of entry.
 
 ## How it is built
 
-- Kotlin and Jetpack Compose. `core/` holds the points rules in plain Kotlin with their unit
-  tests; `app/` is the Android app.
+- `core/` holds the rules in Kotlin Multiplatform, shared by Android and the planned iPhone app,
+  with their unit tests. `app/` is the Android app, in Jetpack Compose.
+- On every push CI also runs the shared tests on an iPhone simulator, so the shared code stays
+  ready for the iPhone app.
 - GitHub Actions, on every push: unit tests, an emulator test that ticks a goal and buys a
   reward, a release build, the signature check and the network-permission check.
 - The release APK is built without secrets, then signed in a separate job that runs no build

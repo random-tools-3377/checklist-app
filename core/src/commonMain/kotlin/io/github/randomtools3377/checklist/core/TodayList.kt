@@ -1,6 +1,6 @@
 package io.github.randomtools3377.checklist.core
 
-import java.time.LocalDate
+import kotlinx.datetime.LocalDate
 
 /** A habit on today's list, with how many times it has been ticked this period. */
 data class HabitRow(val goal: Goal, val count: Int) {

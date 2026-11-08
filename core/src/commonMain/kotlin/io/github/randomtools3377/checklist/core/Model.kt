@@ -1,6 +1,6 @@
 package io.github.randomtools3377.checklist.core
 
-import java.time.LocalDate
+import kotlinx.datetime.LocalDate
 
 /** Habits repeat. Projects are made of steps and are done once. */
 enum class GoalKind { HABIT, PROJECT }

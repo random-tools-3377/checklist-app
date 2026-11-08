@@ -1,8 +1,9 @@
 package io.github.randomtools3377.checklist.core
 
-import java.time.Clock
-import java.time.LocalDate
-import java.time.LocalDateTime
+import kotlinx.datetime.Clock
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
 
 sealed interface TickResult {
     /** The tick was recorded. [finished] is true when it completed the habit's period or the project. */
@@ -27,10 +28,15 @@ sealed interface BuyResult {
  * The points rules: ticking earns, undoing a tick takes its points back, buying spends, and a
  * reward can't be bought for more than the balance. The balance may go negative.
  */
-class Book(private val store: Store, private val clock: Clock) {
+class Book(
+    private val store: Store,
+    private val clock: Clock = Clock.System,
+    private val timeZone: () -> TimeZone = { TimeZone.currentSystemDefault() },
+) {
+    private fun millis(): Long = clock.now().toEpochMilliseconds()
 
     /** The user's current day, after the day-end setting. */
-    suspend fun today(): LocalDate = Days.dayOf(LocalDateTime.now(clock), store.dayEndHour())
+    suspend fun today(): LocalDate = Days.dayOf(clock.now().toLocalDateTime(timeZone()), store.dayEndHour())
 
     suspend fun balance(): Int = store.balance()
 
@@ -46,7 +52,7 @@ class Book(private val store: Store, private val clock: Clock) {
         val ticks = store.habitTicks(goalId, start).filter { it.countsToward(goal, start) }
         if (ticks.size >= goal.target) return@transaction TickResult.AlreadyDone
 
-        val at = clock.millis()
+        val at = millis()
         val tickId = store.addTick(
             Tick(goalId = goalId, stepId = null, at = at, day = day, period = period, periodStart = start),
         )
@@ -93,7 +99,7 @@ class Book(private val store: Store, private val clock: Clock) {
         if (store.stepTick(stepId) != null) return@transaction TickResult.AlreadyDone
 
         val day = today()
-        val at = clock.millis()
+        val at = millis()
         val tickId = store.addTick(
             Tick(goalId = goal.id, stepId = stepId, at = at, day = day, period = null, periodStart = day),
         )
@@ -134,7 +140,7 @@ class Book(private val store: Store, private val clock: Clock) {
         val balance = store.balance()
         if (reward.price > balance) return@transaction BuyResult.TooExpensive(reward.price, balance)
 
-        val at = clock.millis()
+        val at = millis()
         val purchaseId = store.addPurchase(
             Purchase(rewardId = reward.id, name = reward.name, icon = reward.icon, price = reward.price, at = at),
         )
@@ -151,7 +157,7 @@ class Book(private val store: Store, private val clock: Clock) {
     suspend fun use(purchaseId: Long): Boolean = store.transaction {
         val purchase = store.purchase(purchaseId)
         if (purchase == null || purchase.usedAt != null) return@transaction false
-        store.markUsed(purchaseId, clock.millis())
+        store.markUsed(purchaseId, millis())
         true
     }
 

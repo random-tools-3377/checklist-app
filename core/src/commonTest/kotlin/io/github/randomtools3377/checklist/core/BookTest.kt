@@ -1,18 +1,18 @@
 package io.github.randomtools3377.checklist.core
 
 import kotlinx.coroutines.test.runTest
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertTrue
-import org.junit.Test
-import java.time.LocalDateTime
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
+import kotlin.test.Test
+import kotlinx.datetime.LocalDateTime
 
 class BookTest {
     private val store = MemoryStore()
 
     // Wednesday 11 November 2026, 10:00.
-    private val clock = TestClock(LocalDateTime.of(2026, 11, 11, 10, 0))
-    private val book = Book(store, clock)
+    private val clock = TestClock(LocalDateTime(2026, 11, 11, 10, 0))
+    private val book = Book(store, clock) { kotlinx.datetime.TimeZone.UTC }
 
     private fun habit(points: Int, period: Period = Period.DAILY, target: Int = 1, bonus: Int = 0) =
         store.addGoal(Goal(kind = GoalKind.HABIT, name = "Habit", icon = "⭐", points = points, period = period, target = target, bonus = bonus))
@@ -48,7 +48,7 @@ class BookTest {
     fun aDailyHabitCanBeTickedAgainTheNextDay() = runTest {
         val goal = habit(points = 10)
         book.tickHabit(goal.id)
-        clock.set(LocalDateTime.of(2026, 11, 12, 9, 0))
+        clock.set(LocalDateTime(2026, 11, 12, 9, 0))
 
         assertTrue(book.tickHabit(goal.id) is TickResult.Ticked)
         assertEquals(20, book.balance())
@@ -104,11 +104,11 @@ class BookTest {
     fun aWeeklyHabitCountsTicksFromMondayToSunday() = runTest {
         val goal = habit(points = 3, period = Period.WEEKLY, target = 2)
         book.tickHabit(goal.id) // Wednesday
-        clock.set(LocalDateTime.of(2026, 11, 15, 20, 0)) // Sunday, same week
+        clock.set(LocalDateTime(2026, 11, 15, 20, 0)) // Sunday, same week
         assertEquals(TickResult.Ticked(3, 0, true), book.tickHabit(goal.id))
         assertEquals(TickResult.AlreadyDone, book.tickHabit(goal.id))
 
-        clock.set(LocalDateTime.of(2026, 11, 16, 8, 0)) // Monday, a new week
+        clock.set(LocalDateTime(2026, 11, 16, 8, 0)) // Monday, a new week
         assertEquals(TickResult.Ticked(3, 0, false), book.tickHabit(goal.id))
     }
 
@@ -116,13 +116,13 @@ class BookTest {
     fun aTickBeforeTheDayEndsCountsForTheDayBefore() = runTest {
         store.dayEnd = 4
         val goal = habit(points = 10)
-        clock.set(LocalDateTime.of(2026, 11, 11, 23, 30))
+        clock.set(LocalDateTime(2026, 11, 11, 23, 30))
         book.tickHabit(goal.id)
 
-        clock.set(LocalDateTime.of(2026, 11, 12, 1, 30)) // still Wednesday for the user
+        clock.set(LocalDateTime(2026, 11, 12, 1, 30)) // still Wednesday for the user
         assertEquals(TickResult.AlreadyDone, book.tickHabit(goal.id))
 
-        clock.set(LocalDateTime.of(2026, 11, 12, 4, 0)) // Thursday has started
+        clock.set(LocalDateTime(2026, 11, 12, 4, 0)) // Thursday has started
         assertTrue(book.tickHabit(goal.id) is TickResult.Ticked)
     }
 
@@ -134,7 +134,7 @@ class BookTest {
         store.goals[0] = goal.copy(points = 50)
 
         assertEquals(10, book.balance())
-        clock.set(LocalDateTime.of(2026, 11, 12, 9, 0))
+        clock.set(LocalDateTime(2026, 11, 12, 9, 0))
         book.tickHabit(goal.id)
         assertEquals(60, book.balance())
     }

@@ -44,8 +44,7 @@ import io.github.randomtools3377.checklist.core.BuyResult
 import io.github.randomtools3377.checklist.core.Purchase
 import io.github.randomtools3377.checklist.core.Reward
 import io.github.randomtools3377.checklist.data.RewardDraft
-import java.time.Instant
-import java.time.ZoneId
+import io.github.randomtools3377.checklist.data.toLocalDateTime
 
 @Composable
 fun ShopScreen(
@@ -195,7 +194,7 @@ private fun RewardCard(row: RewardRow, balance: Int, onBuy: () -> Unit, onEdit: 
 
 @Composable
 private fun BoughtCard(purchase: Purchase, onUse: () -> Unit) {
-    val day = Instant.ofEpochMilli(purchase.at).atZone(ZoneId.systemDefault()).toLocalDate()
+    val day = purchase.at.toLocalDateTime().date
     Card(Modifier.fillMaxWidth().testTag("bought:${purchase.name}")) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(12.dp)) {
             Text(purchase.icon, fontSize = 30.sp, modifier = Modifier.width(44.dp), textAlign = TextAlign.Center)

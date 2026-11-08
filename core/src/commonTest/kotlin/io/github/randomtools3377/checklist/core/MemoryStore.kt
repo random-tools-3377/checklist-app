@@ -1,11 +1,11 @@
 package io.github.randomtools3377.checklist.core
 
-import java.time.Clock
-import java.time.Instant
-import java.time.LocalDate
-import java.time.LocalDateTime
-import java.time.ZoneId
-import java.time.ZoneOffset
+import kotlinx.datetime.Clock
+import kotlinx.datetime.Instant
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalDateTime
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toInstant
 
 /** A [Store] kept in memory, for tests. */
 class MemoryStore : Store {
@@ -47,14 +47,12 @@ class MemoryStore : Store {
 }
 
 /** A clock the test can move. It runs in UTC. */
-class TestClock(start: LocalDateTime) : Clock() {
-    var now: Instant = start.toInstant(ZoneOffset.UTC)
+class TestClock(start: LocalDateTime) : Clock {
+    private var now: Instant = start.toInstant(TimeZone.UTC)
 
     fun set(moment: LocalDateTime) {
-        now = moment.toInstant(ZoneOffset.UTC)
+        now = moment.toInstant(TimeZone.UTC)
     }
 
-    override fun getZone(): ZoneId = ZoneOffset.UTC
-    override fun withZone(zone: ZoneId?): Clock = this
-    override fun instant(): Instant = now
+    override fun now(): Instant = now
 }

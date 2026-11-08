@@ -1,12 +1,12 @@
 package io.github.randomtools3377.checklist.core
 
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
-import org.junit.Test
-import java.time.LocalDate
+import kotlin.test.assertEquals
+import kotlin.test.assertTrue
+import kotlin.test.Test
+import kotlinx.datetime.LocalDate
 
 class TodayListTest {
-    private val wednesday = LocalDate.of(2026, 11, 11)
+    private val wednesday = LocalDate(2026, 11, 11)
 
     private fun tick(goalId: Long, day: LocalDate, period: Period?, stepId: Long? = null) = Tick(
         goalId = goalId, stepId = stepId, at = 0, day = day, period = period,

@@ -12,7 +12,7 @@ import io.github.randomtools3377.checklist.core.Reward
 import io.github.randomtools3377.checklist.core.Step
 import io.github.randomtools3377.checklist.core.Store
 import io.github.randomtools3377.checklist.core.Tick
-import java.time.LocalDate
+import kotlinx.datetime.LocalDate
 
 const val SETTING_DAY_END_HOUR = "day_end_hour"
 
@@ -59,7 +59,7 @@ fun GoalEntity.toCore() = Goal(
     period = period?.let { Period.valueOf(it) },
     target = target,
     bonus = bonus,
-    deadline = deadline?.let { LocalDate.ofEpochDay(it) },
+    deadline = deadline?.toDay(),
     archived = archived,
 )
 
@@ -70,9 +70,9 @@ fun TickEntity.toCore() = Tick(
     goalId = goalId,
     stepId = stepId,
     at = at,
-    day = LocalDate.ofEpochDay(day),
+    day = day.toDay(),
     period = period?.let { Period.valueOf(it) },
-    periodStart = LocalDate.ofEpochDay(periodStart),
+    periodStart = periodStart.toDay(),
 )
 
 fun Tick.toEntity() = TickEntity(
@@ -88,7 +88,7 @@ fun Tick.toEntity() = TickEntity(
 fun EntryEntity.toCore() = Entry(
     id = id,
     at = at,
-    day = LocalDate.ofEpochDay(day),
+    day = day.toDay(),
     kind = EntryKind.valueOf(kind),
     amount = amount,
     goalId = goalId,

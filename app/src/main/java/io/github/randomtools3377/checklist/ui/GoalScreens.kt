@@ -60,9 +60,9 @@ import io.github.randomtools3377.checklist.core.Period
 import io.github.randomtools3377.checklist.data.HabitDraft
 import io.github.randomtools3377.checklist.data.ProjectDraft
 import io.github.randomtools3377.checklist.data.StepDraft
-import java.time.Instant
-import java.time.LocalDate
-import java.time.ZoneOffset
+import io.github.randomtools3377.checklist.data.nowLocal
+import io.github.randomtools3377.checklist.data.toDay
+import io.github.randomtools3377.checklist.data.toEpochDay
 
 // The list of goals
 
@@ -359,7 +359,7 @@ fun ProjectEditor(id: Long, vm: MainViewModel, onClose: () -> Unit) {
                         icon = icon,
                         steps = filled.map { StepDraft(it.id, it.name.trim(), it.points.toInt()) },
                         bonus = bonus.toIntOrNull() ?: 0,
-                        deadline = deadline?.let { LocalDate.ofEpochDay(it) },
+                        deadline = deadline?.toDay(),
                     ),
                     onDone = onClose,
                 )
@@ -426,7 +426,7 @@ fun ProjectEditor(id: Long, vm: MainViewModel, onClose: () -> Unit) {
 
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-                deadline?.let { "Deadline: ${longDate(LocalDate.ofEpochDay(it))}" } ?: "No deadline",
+                deadline?.let { "Deadline: ${longDate(it.toDay())}" } ?: "No deadline",
                 modifier = Modifier.weight(1f),
             )
             TextButton(onClick = { pickingDate = true }) { Text(if (deadline == null) "Set" else "Change") }
@@ -442,15 +442,14 @@ fun ProjectEditor(id: Long, vm: MainViewModel, onClose: () -> Unit) {
 
     if (pickingDate) {
         val state = rememberDatePickerState(
-            initialSelectedDateMillis = (deadline?.let { LocalDate.ofEpochDay(it) } ?: LocalDate.now())
-                .atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli(),
+            initialSelectedDateMillis = (deadline ?: nowLocal().date.toEpochDay()) * 86_400_000L,
         )
         DatePickerDialog(
             onDismissRequest = { pickingDate = false },
             confirmButton = {
                 TextButton(onClick = {
                     state.selectedDateMillis?.let {
-                        deadline = Instant.ofEpochMilli(it).atZone(ZoneOffset.UTC).toLocalDate().toEpochDay()
+                        deadline = Math.floorDiv(it, 86_400_000L)
                     }
                     pickingDate = false
                 }) { Text("OK") }

@@ -1,9 +1,11 @@
 package io.github.randomtools3377.checklist.core
 
-import java.time.DayOfWeek
-import java.time.LocalDate
-import java.time.LocalDateTime
-import java.time.temporal.TemporalAdjusters
+import kotlinx.datetime.DateTimeUnit
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalDateTime
+import kotlinx.datetime.isoDayNumber
+import kotlinx.datetime.minus
+import kotlinx.datetime.plus
 
 /** Which day and which period a moment belongs to. Weeks start on Monday. */
 object Days {
@@ -16,27 +18,30 @@ object Days {
      */
     fun dayOf(moment: LocalDateTime, dayEndHour: Int): LocalDate {
         val hour = dayEndHour.coerceIn(0, MAX_DAY_END_HOUR)
-        return if (moment.hour < hour) moment.toLocalDate().minusDays(1) else moment.toLocalDate()
+        return if (moment.hour < hour) moment.date.minusDays(1) else moment.date
     }
 
     /** First day of the [period] that contains [day]. */
     fun periodStart(day: LocalDate, period: Period): LocalDate = when (period) {
         Period.DAILY -> day
-        Period.WEEKLY -> day.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
-        Period.MONTHLY -> day.withDayOfMonth(1)
+        Period.WEEKLY -> day.minusDays(day.dayOfWeek.isoDayNumber - 1)
+        Period.MONTHLY -> LocalDate(day.year, day.month, 1)
     }
 
     /** Last day of the [period] that contains [day]. */
     fun periodEnd(day: LocalDate, period: Period): LocalDate = when (period) {
         Period.DAILY -> day
         Period.WEEKLY -> periodStart(day, period).plusDays(6)
-        Period.MONTHLY -> day.withDayOfMonth(day.lengthOfMonth())
+        Period.MONTHLY -> LocalDate(day.year, day.month, 1).plus(1, DateTimeUnit.MONTH).minusDays(1)
     }
 
     /** The earliest day whose ticks can still count toward any period that contains [day]. */
     fun earliestOpenDay(day: LocalDate): LocalDate =
         minOf(periodStart(day, Period.WEEKLY), periodStart(day, Period.MONTHLY))
 }
+
+fun LocalDate.plusDays(days: Int): LocalDate = plus(days, DateTimeUnit.DAY)
+fun LocalDate.minusDays(days: Int): LocalDate = minus(days, DateTimeUnit.DAY)
 
 /** Whether [tick] counts toward [goal]'s period that starts on [periodStart]. */
 fun Tick.countsToward(goal: Goal, periodStart: LocalDate): Boolean =
