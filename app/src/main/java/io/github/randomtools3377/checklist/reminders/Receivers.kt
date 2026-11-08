@@ -5,6 +5,9 @@ import android.content.Context
 import android.content.Intent
 import androidx.core.app.NotificationManagerCompat
 import io.github.randomtools3377.checklist.ChecklistApplication
+import io.github.randomtools3377.checklist.core.Alert
+import io.github.randomtools3377.checklist.core.AlertKind
+import io.github.randomtools3377.checklist.core.SkipCheck
 import io.github.randomtools3377.checklist.widget.CalendarWidget
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -22,9 +25,10 @@ private fun BroadcastReceiver.work(block: suspend () -> Unit) {
     }
 }
 
-/** The alarm went off: show what is due, set the next alarm, and refresh the widget. */
+/** The alarm went off: find misses if the day ended, show what is due, set the next alarm, refresh the widget. */
 class AlarmReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) = work {
+        runCatching { (context.applicationContext as ChecklistApplication).container.lapses.closeDays() }
         Reminders.fire(context)
         CalendarWidget.refresh(context)
     }
@@ -43,6 +47,32 @@ class DoneReceiver : BroadcastReceiver() {
     companion object {
         const val EXTRA_GOAL = "goal"
         const val EXTRA_NOTIFICATION = "notification"
+    }
+}
+
+/**
+ * "Skip" on a notification, when it was within the allowance. If it would go over the limit by
+ * now, the notification is replaced with one that opens the app to skip there, with a reason.
+ */
+class SkipReceiver : BroadcastReceiver() {
+    override fun onReceive(context: Context, intent: Intent) = work {
+        val goalId = intent.getLongExtra(DoneReceiver.EXTRA_GOAL, -1)
+        val notification = intent.getIntExtra(DoneReceiver.EXTRA_NOTIFICATION, 0)
+        val container = (context.applicationContext as ChecklistApplication).container
+        val check = container.lapses.checkSkip(goalId)
+        if (check is SkipCheck.Allowed && !check.overLimit) {
+            container.lapses.skip(goalId, reason = null, note = null)
+            NotificationManagerCompat.from(context).cancel(notification)
+        } else if (check is SkipCheck.Allowed) {
+            val goal = container.repository.goal(goalId) ?: return@work
+            Reminders.show(
+                context, goal,
+                Alert(goalId, container.book.today(), io.github.randomtools3377.checklist.data.nowLocal(), AlertKind.REMINDER),
+                count = 0, hidden = false, skip = check,
+            )
+        } else {
+            NotificationManagerCompat.from(context).cancel(notification)
+        }
     }
 }
 

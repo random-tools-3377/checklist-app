@@ -27,6 +27,14 @@ class BackupTest {
         rewards = listOf(Reward(id = 300, name = "Coffee", icon = "☕", price = 4)),
         purchases = listOf(Purchase(id = 400, rewardId = 300, name = "Coffee", icon = "☕", price = 4, at = 9, returnedAt = 10)),
         settings = mapOf("day_end_hour" to "4"),
+        lapses = listOf(
+            Lapse(
+                id = 500, goalId = 1, kind = LapseKind.MISS, day = day, period = Period.DAILY, periodStart = day, at = 7,
+                overLimit = true, cost = 1, reason = Reason.ILL, note = "flu", label = "Water",
+            ),
+        ),
+        penalties = listOf(Penalty(id = 600, lapseId = 500, createdAt = 7, choice = PenaltyChoice.TASK, taskId = 700, label = "Push-ups", doneAt = 8)),
+        penaltyTasks = listOf(PenaltyTask(id = 700, name = "Push-ups")),
     )
 
     @Test
@@ -38,7 +46,7 @@ class BackupTest {
     fun theFileSaysWhatItIs() {
         val text = Backup.encode(backup)
         assertTrue(text.contains("\"app\": \"checklist\""))
-        assertTrue(text.contains("\"format\": 1"))
+        assertTrue(text.contains("\"format\": 2"))
     }
 
     @Test
@@ -50,9 +58,19 @@ class BackupTest {
 
     @Test
     fun aBackupFromANewerVersionIsRefused() {
-        val newer = Backup.encode(backup).replace("\"format\": 1", "\"format\": 99")
+        val newer = Backup.encode(backup).replace("\"format\": 2", "\"format\": 99")
         val error = assertFailsWith<BackupError> { Backup.decode(newer) }
         assertEquals("This backup was made by a newer version of the app. Update the app first.", error.message)
+    }
+
+    @Test
+    fun aFormat1BackupStillReads() {
+        val old = Backup.encode(backup.copy(lapses = emptyList(), penalties = emptyList(), penaltyTasks = emptyList()))
+            .replace("\"format\": 2", "\"format\": 1")
+            .replace(Regex(",\\s*\"lapses\": \\[\\],\\s*\"penalties\": \\[\\],\\s*\"penaltyTasks\": \\[\\]"), "")
+        val read = Backup.decode(old)
+        assertEquals(1, read.format)
+        assertTrue(read.lapses.isEmpty())
     }
 
     @Test

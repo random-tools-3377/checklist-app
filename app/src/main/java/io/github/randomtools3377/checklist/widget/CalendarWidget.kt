@@ -48,6 +48,7 @@ import io.github.randomtools3377.checklist.core.DayCell
 import io.github.randomtools3377.checklist.core.Days
 import io.github.randomtools3377.checklist.core.TickResult
 import io.github.randomtools3377.checklist.core.weekdayShort
+import io.github.randomtools3377.checklist.data.LOCK_PRIVATE
 import io.github.randomtools3377.checklist.data.SETTING_DAY_END_HOUR
 import io.github.randomtools3377.checklist.data.nowLocal
 import io.github.randomtools3377.checklist.data.parseDayEndHour
@@ -89,7 +90,9 @@ class CalendarWidget : GlanceAppWidget() {
             val dao = (context.applicationContext as ChecklistApplication).container.db.dao()
             val dayEnd = parseDayEndHour(dao.setting(SETTING_DAY_END_HOUR))
             val today = Days.dayOf(nowLocal(), dayEnd)
-            val goals = dao.activeGoals().map { it.toCore() }
+            // Private goals stay off the home screen while the privacy lock covers them.
+            val hidePrivate = dao.setting(LOCK_PRIVATE) == "1"
+            val goals = dao.activeGoals().map { it.toCore() }.filter { !(hidePrivate && it.private) }
             val since = minOf(CalendarView.monthGridStart(today), Days.earliestOpenDay(today))
             val ticks = dao.habitTicksSince(since.toEpochDay()).map { it.toCore() }
             return WidgetData(

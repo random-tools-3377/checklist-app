@@ -36,7 +36,7 @@ class Book(
     private val clock: Clock = Clock.System,
     private val timeZone: () -> TimeZone = { TimeZone.currentSystemDefault() },
 ) {
-    private fun millis(): Long = clock.now().toEpochMilliseconds()
+    fun millis(): Long = clock.now().toEpochMilliseconds()
 
     /** The user's current day, after the day-end setting. */
     suspend fun today(): LocalDate = Days.dayOf(clock.now().toLocalDateTime(timeZone()), store.dayEndHour())

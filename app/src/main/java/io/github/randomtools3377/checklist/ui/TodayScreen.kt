@@ -30,6 +30,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedIconButton
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
@@ -37,7 +38,11 @@ import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -53,6 +58,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import io.github.randomtools3377.checklist.core.Goal
 import io.github.randomtools3377.checklist.core.HabitRow
 import io.github.randomtools3377.checklist.core.LongPace
 import io.github.randomtools3377.checklist.core.Planned
@@ -77,11 +83,23 @@ fun TodayScreen(
     onAddGoal: () -> Unit,
     onHistory: () -> Unit,
     onSettings: () -> Unit,
+    onUnlock: () -> Unit,
+    skipRequest: Long?,
+    onSkipRequestHandled: () -> Unit,
     padding: PaddingValues,
 ) {
     if (screen == null) return
     val view = screen.view
     val haptics = LocalHapticFeedback.current
+    var skipping by remember { mutableStateOf<Goal?>(null) }
+    LaunchedEffect(skipRequest, screen.plan) {
+        if (skipRequest != null) {
+            val all = screen.plan.map { it.row } + view.thisWeek + view.thisMonth + view.thisYear
+            all.firstOrNull { it.goal.id == skipRequest }?.let { skipping = it.goal }
+            onSkipRequestHandled()
+        }
+    }
+    skipping?.let { goal -> SkipDialog(goal, vm) { skipping = null } }
 
     fun celebrateTick(result: TickResult, spot: Spot, bigWhenFinished: Boolean) {
         if (result !is TickResult.Ticked) return
@@ -106,6 +124,14 @@ fun TodayScreen(
         item {
             Text(longDate(view.day), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(bottom = 8.dp))
             BalanceCard(view.balance, modifier = Modifier.clickable(onClick = onHistory), note = "Tap for your points history")
+            Spacer(Modifier.height(12.dp))
+            StreakCard(screen.streaks, screen.streakSettings)
+            if (screen.hiddenPrivate > 0) {
+                Spacer(Modifier.height(8.dp))
+                OutlinedButton(onClick = onUnlock, modifier = Modifier.fillMaxWidth().testTag("unlock-private")) {
+                    Text(if (screen.hiddenPrivate == 1) "🔒 1 private goal · Unlock" else "🔒 ${screen.hiddenPrivate} private goals · Unlock")
+                }
+            }
         }
         if (view.isEmpty) {
             item {
@@ -138,13 +164,14 @@ fun TodayScreen(
                     paceLine = null,
                     onTick = { spot -> tick(planned.row, spot) },
                     onUndo = { vm.undoHabitTick(planned.row.goal.id) },
+                    onSkip = { skipping = planned.row.goal },
                 )
                 Spacer(Modifier.height(10.dp))
             }
         }
-        habitSection("This week", view.thisWeek, screen, ::tick, vm)
-        habitSection("This month", view.thisMonth, screen, ::tick, vm)
-        habitSection("This year", view.thisYear, screen, ::tick, vm)
+        habitSection("This week", view.thisWeek, screen, ::tick, vm) { skipping = it }
+        habitSection("This month", view.thisMonth, screen, ::tick, vm) { skipping = it }
+        habitSection("This year", view.thisYear, screen, ::tick, vm) { skipping = it }
         if (view.projects.isNotEmpty()) {
             item { SectionTitle("Projects") }
             items(view.projects, key = { "project-${it.goal.id}" }) { project ->
@@ -184,6 +211,7 @@ private fun LazyListScope.habitSection(
     screen: TodayState,
     tick: (HabitRow, Spot) -> Unit,
     vm: MainViewModel,
+    onSkip: (Goal) -> Unit,
 ) {
     if (rows.isEmpty()) return
     item { SectionTitle(title) }
@@ -195,6 +223,7 @@ private fun LazyListScope.habitSection(
             paceLine = screen.longPaces[row.goal.id]?.let { paceText(it) },
             onTick = { spot -> tick(row, spot) },
             onUndo = { vm.undoHabitTick(row.goal.id) },
+            onSkip = { onSkip(row.goal) },
         )
         Spacer(Modifier.height(10.dp))
     }
@@ -279,6 +308,7 @@ private fun HabitCard(
     paceLine: String?,
     onTick: (Spot) -> Unit,
     onUndo: () -> Unit,
+    onSkip: () -> Unit,
 ) {
     val goal = row.goal
     val spot = remember { Spot() }
@@ -307,6 +337,16 @@ private fun HabitCard(
                 if (paceLine != null) {
                     Text(paceLine, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
                 }
+                if (row.skipped) {
+                    Text("Skipped", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.secondary, modifier = Modifier.testTag("skipped:${goal.name}"))
+                } else if (!row.done) {
+                    Text(
+                        "Skip",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.secondary,
+                        modifier = Modifier.clickable(onClick = onSkip).padding(vertical = 4.dp).testTag("skip:${goal.name}"),
+                    )
+                }
                 if (counted) {
                     Spacer(Modifier.height(6.dp))
                     LinearProgressIndicator(
@@ -324,14 +364,15 @@ private fun HabitCard(
                     Text("−", fontSize = 22.sp)
                 }
             }
+            val shownDone = row.count >= goal.target
             TickButton(
-                done = row.done,
-                label = if (counted && !row.done) "${row.count}/${goal.target}" else null,
-                description = if (row.done) "Undo ${goal.name}" else "Tick ${goal.name}",
+                done = shownDone,
+                label = if (counted && !shownDone) "${row.count}/${goal.target}" else null,
+                description = if (shownDone) "Undo ${goal.name}" else "Tick ${goal.name}",
                 modifier = Modifier
                     .onGloballyPositioned { spot.center = it.boundsInRoot().center }
                     .testTag("tick:${goal.name}"),
-                onClick = { if (row.done && !counted) onUndo() else if (!row.done) onTick(spot) },
+                onClick = { if (shownDone && !counted) onUndo() else if (!shownDone) onTick(spot) },
             )
         }
     }

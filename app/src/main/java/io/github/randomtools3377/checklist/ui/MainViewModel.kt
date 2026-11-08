@@ -27,6 +27,23 @@ import io.github.randomtools3377.checklist.core.TodayView
 import io.github.randomtools3377.checklist.core.Usual
 import io.github.randomtools3377.checklist.core.minusDays
 import io.github.randomtools3377.checklist.core.usualMinuteOfDay
+import io.github.randomtools3377.checklist.core.Lapse
+import io.github.randomtools3377.checklist.core.Penalty
+import io.github.randomtools3377.checklist.core.PenaltyTask
+import io.github.randomtools3377.checklist.core.Reason
+import io.github.randomtools3377.checklist.core.SkipCheck
+import io.github.randomtools3377.checklist.core.SkipResult
+import io.github.randomtools3377.checklist.core.StreakCounter
+import io.github.randomtools3377.checklist.core.StreakSettings
+import io.github.randomtools3377.checklist.core.StreakTarget
+import io.github.randomtools3377.checklist.core.Streaks
+import io.github.randomtools3377.checklist.core.Tick
+import io.github.randomtools3377.checklist.data.LOCK_HISTORY
+import io.github.randomtools3377.checklist.data.LOCK_PRIVATE
+import io.github.randomtools3377.checklist.data.LOCK_SHOP
+import io.github.randomtools3377.checklist.data.SETTING_STREAK_TARGET
+import io.github.randomtools3377.checklist.data.SETTING_STREAK_VALUE
+import kotlinx.coroutines.flow.MutableStateFlow
 import io.github.randomtools3377.checklist.data.HabitDraft
 import io.github.randomtools3377.checklist.data.ORDER_OWN
 import io.github.randomtools3377.checklist.data.ORDER_RECOMMENDED
@@ -62,7 +79,13 @@ import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.LocalTime
 
 /** Every goal, for the Goals screen. */
-data class GoalsView(val goals: List<Goal>, val steps: Map<Long, List<Step>>)
+data class GoalsView(val goals: List<Goal>, val steps: Map<Long, List<Step>>, val hiddenPrivate: Int = 0)
+
+/** What the database gives the Today screen, before the lock and the streaks are applied. */
+private data class Raw(val goals: List<Goal>, val steps: List<Step>, val ticks: List<Tick>, val balance: Int, val usual: Map<Long, Int>)
+
+/** How far back streaks are counted. */
+private const val STREAK_DAYS = 400
 
 data class RewardRow(val reward: Reward, val usual: String?)
 
@@ -78,9 +101,22 @@ data class TodayState(
     val recommended: Boolean,
     val longPaces: Map<Long, LongPace>,
     val hasDefaultFinish: Boolean,
+    val streaks: Streaks,
+    val streakSettings: StreakSettings,
+    /** Private goals left off the list because the lock is on. */
+    val hiddenPrivate: Int,
 )
 
-data class Settings(val dayEndHour: Int, val defaultFinish: LocalTime?, val order: String)
+/** What the privacy lock covers, as chosen in Settings. */
+data class Locks(val history: Boolean = false, val shop: Boolean = false, val privateGoals: Boolean = false)
+
+data class Settings(
+    val dayEndHour: Int,
+    val defaultFinish: LocalTime?,
+    val order: String,
+    val streak: StreakSettings = StreakSettings(),
+    val locks: Locks = Locks(),
+)
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class MainViewModel(app: Application) : AndroidViewModel(app) {
@@ -93,16 +129,52 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), initial)
 
     val settings: StateFlow<Settings> = combine(
-        dao.observeSetting(SETTING_DAY_END_HOUR),
-        dao.observeSetting(SETTING_DEFAULT_FINISH),
-        dao.observeSetting(SETTING_TODAY_ORDER),
-    ) { hour, finish, order ->
+        combine(
+            dao.observeSetting(SETTING_DAY_END_HOUR),
+            dao.observeSetting(SETTING_DEFAULT_FINISH),
+            dao.observeSetting(SETTING_TODAY_ORDER),
+        ) { hour, finish, order -> Triple(hour, finish, order) },
+        combine(dao.observeSetting(SETTING_STREAK_TARGET), dao.observeSetting(SETTING_STREAK_VALUE)) { target, value ->
+            val defaults = StreakSettings()
+            StreakSettings(
+                target = target?.let { runCatching { StreakTarget.valueOf(it) }.getOrNull() } ?: defaults.target,
+                value = value?.toIntOrNull() ?: defaults.value,
+            )
+        },
+        combine(dao.observeSetting(LOCK_HISTORY), dao.observeSetting(LOCK_SHOP), dao.observeSetting(LOCK_PRIVATE)) { h, sh, p ->
+            Locks(history = h == "1", shop = sh == "1", privateGoals = p == "1")
+        },
+    ) { (hour, finish, order), streak, locks ->
         Settings(
             dayEndHour = parseDayEndHour(hour),
             defaultFinish = finish?.toIntOrNull()?.toTime(),
             order = if (order == ORDER_OWN) ORDER_OWN else ORDER_RECOMMENDED,
+            streak = streak,
+            locks = locks,
         )
     }.state(Settings(0, null, ORDER_RECOMMENDED))
+
+    /** True from unlocking until the user leaves the app. */
+    val unlocked = MutableStateFlow(false)
+
+    /** A goal to skip, asked for from a notification whose skip would go over the limit. */
+    val skipRequest = MutableStateFlow<Long?>(null)
+
+    fun requestSkip(goalId: Long) {
+        skipRequest.value = goalId
+    }
+
+    fun clearSkipRequest() {
+        skipRequest.value = null
+    }
+
+    fun markUnlocked() {
+        unlocked.value = true
+    }
+
+    fun lockAgain() {
+        unlocked.value = false
+    }
 
     /** The phone's time, checked every half minute, so pace and the day turn over on their own. */
     private val now: Flow<LocalDateTime> = flow {
@@ -118,7 +190,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         combine(now, settings) { moment, s -> Days.dayOf(moment, s.dayEndHour) }.distinctUntilChanged()
 
     val todayState: StateFlow<TodayState?> = today.flatMapLatest { day ->
-        val since = minOf(Days.earliestOpenDay(day), day.minusDays(Usual.WINDOW_DAYS))
+        // Streaks look back up to a year and a bit; that also covers every open window.
+        val since = minOf(Days.earliestOpenDay(day), day.minusDays(STREAK_DAYS))
         val view = combine(
             dao.observeGoals(),
             dao.observeSteps(),
@@ -133,9 +206,16 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 .mapValues { (_, list) -> usualMinuteOfDay(list.map { it.at.toLocalDateTime().let { t -> t.hour * 60 + t.minute } }) }
                 .filterValues { it != null }
                 .mapValues { it.value!! }
-            TodayList.build(day, goals.map { it.toCore() }, steps.map { it.toCore() }, ticks, balance) to usual
+            Raw(goals.map { it.toCore() }, steps.map { it.toCore() }, ticks, balance, usual)
         }
-        combine(view, now, settings) { (todayView, usual), moment, s ->
+        val lapsesFlow = dao.observeLapsesSince(since.toEpochDay()).map { rows -> rows.map { it.toCore() } }
+        combine(view, lapsesFlow, now, settings, unlocked) { raw, lapses, moment, s, isUnlocked ->
+            val hidePrivate = s.locks.privateGoals && !isUnlocked
+            val shownGoals = if (hidePrivate) raw.goals.filter { !it.private } else raw.goals
+            val todayView = TodayList.build(day, shownGoals, raw.steps, raw.ticks, raw.balance, lapses)
+            val usual = raw.usual
+            val records = StreakCounter.records(day.minusDays(STREAK_DAYS), day, raw.goals, raw.ticks.filter { it.stepId == null }, lapses)
+            val streaks = StreakCounter.count(records, day, s.streak)
             val paceSettings = PaceSettings(s.dayEndHour, s.defaultFinish)
             val pace = Pace.today(moment, day, todayView.dueToday, paceSettings)
             val recommended = s.order == ORDER_RECOMMENDED
@@ -153,13 +233,88 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 }
                 todayView.projects.forEach { project -> Pace.forProject(project, day)?.let { put(project.goal.id, it) } }
             }
-            TodayState(todayView, moment, pace, plan, recommended, longPaces, s.defaultFinish != null)
+            TodayState(
+                todayView, moment, pace, plan, recommended, longPaces, s.defaultFinish != null,
+                streaks, s.streak, hiddenPrivate = raw.goals.count { it.private && !it.archived } - shownGoals.count { it.private && !it.archived },
+            )
         }
     }.state(null)
 
-    val goalsView: StateFlow<GoalsView?> = combine(dao.observeGoals(), dao.observeSteps()) { goals, steps ->
-        GoalsView(goals.map { it.toCore() }, steps.map { it.toCore() }.groupBy { it.goalId })
+    val goalsView: StateFlow<GoalsView?> = combine(dao.observeGoals(), dao.observeSteps(), settings, unlocked) { goals, steps, s, isUnlocked ->
+        val all = goals.map { it.toCore() }
+        val shown = if (s.locks.privateGoals && !isUnlocked) all.filter { !it.private } else all
+        GoalsView(shown, steps.map { it.toCore() }.groupBy { it.goalId }, hiddenPrivate = all.size - shown.size)
     }.state(null)
+
+    // Skips, misses and penalties
+
+    private val lapses = container.lapses
+
+    /** Misses still waiting for a reason. They come first when the app opens. */
+    val unexplained: StateFlow<List<Lapse>?> = dao.observeUnexplained().map { rows -> rows.map { it.toCore() } }.state(null)
+
+    /** The penalty task owed right now, if any. It comes next, and fills the screen until done. */
+    val openPenalty: StateFlow<Penalty?> = dao.observeOpenPenalties().map { rows -> rows.firstOrNull()?.toCore() }.state(null)
+
+    val penaltyTasks: StateFlow<List<PenaltyTask>> = dao.observePenaltyTasks().map { rows -> rows.map { it.toCore() } }.state(emptyList())
+
+    /** Goals skipped or missed in the last two weeks, which a penalty can be paid off by making up. */
+    val makeUpChoices: StateFlow<List<Goal>> = today.flatMapLatest { day ->
+        combine(dao.observeLapsesSince(day.minusDays(14).toEpochDay()), dao.observeGoals()) { recent, goals ->
+            val ids = recent.filter { !it.forgotten }.map { it.goalId }.toSet()
+            goals.map { it.toCore() }.filter { it.id in ids && it.kind == GoalKind.HABIT }
+        }
+    }.state(emptyList())
+
+    /** Looks for misses since the last check. Called when the app comes to the front. */
+    fun closeDays() {
+        viewModelScope.launch { lapses.closeDays() }
+    }
+
+    suspend fun checkSkip(goalId: Long): SkipCheck = lapses.checkSkip(goalId)
+
+    fun skip(goalId: Long, reason: Reason?, note: String?, onResult: (SkipResult) -> Unit = {}) {
+        viewModelScope.launch { onResult(lapses.skip(goalId, reason, note)) }
+    }
+
+    fun explain(lapseId: Long, reason: Reason, note: String?) {
+        viewModelScope.launch { lapses.explain(lapseId, reason, note) }
+    }
+
+    fun forgotToTick(lapseId: Long) {
+        viewModelScope.launch { lapses.forgotToTick(lapseId) }
+    }
+
+    fun makeUp(penaltyId: Long, goalId: Long) {
+        viewModelScope.launch { lapses.makeUp(penaltyId, goalId) }
+    }
+
+    fun drawTask(penaltyId: Long) {
+        viewModelScope.launch { lapses.drawTask(penaltyId) }
+    }
+
+    fun finishPenalty(penaltyId: Long) {
+        viewModelScope.launch { lapses.finishPenalty(penaltyId) }
+    }
+
+    fun addPenaltyTask(name: String) {
+        viewModelScope.launch { repository.addPenaltyTask(name.trim()) }
+    }
+
+    fun removePenaltyTask(id: Long) {
+        viewModelScope.launch { repository.removePenaltyTask(id) }
+    }
+
+    fun setStreakSettings(settings: StreakSettings) {
+        viewModelScope.launch {
+            repository.setSetting(SETTING_STREAK_TARGET, settings.target.name)
+            repository.setSetting(SETTING_STREAK_VALUE, settings.value.toString())
+        }
+    }
+
+    fun setLock(name: String, on: Boolean) {
+        viewModelScope.launch { repository.setSetting(name, if (on) "1" else "0") }
+    }
 
     val shopView: StateFlow<ShopView?> = today.flatMapLatest { day ->
         val pointsPerDay = combine(

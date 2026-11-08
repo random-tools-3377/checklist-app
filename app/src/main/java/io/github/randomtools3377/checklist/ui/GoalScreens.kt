@@ -95,7 +95,14 @@ import kotlinx.datetime.isoDayNumber
 // The list of goals
 
 @Composable
-fun GoalsScreen(view: GoalsView?, reordering: Boolean, onEdit: (Goal) -> Unit, onMove: (Goal, Int) -> Unit, padding: PaddingValues) {
+fun GoalsScreen(
+    view: GoalsView?,
+    reordering: Boolean,
+    onEdit: (Goal) -> Unit,
+    onMove: (Goal, Int) -> Unit,
+    onUnlock: () -> Unit,
+    padding: PaddingValues,
+) {
     if (view == null) return
     val habits = view.goals.filter { it.kind == GoalKind.HABIT }
     val projects = view.goals.filter { it.kind == GoalKind.PROJECT }
@@ -115,6 +122,13 @@ fun GoalsScreen(view: GoalsView?, reordering: Boolean, onEdit: (Goal) -> Unit, o
                     textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth().padding(top = 48.dp),
                 )
+            }
+        }
+        if (view.hiddenPrivate > 0) {
+            item {
+                OutlinedButton(onClick = onUnlock, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+                    Text(if (view.hiddenPrivate == 1) "🔒 1 private goal · Unlock" else "🔒 ${view.hiddenPrivate} private goals · Unlock")
+                }
             }
         }
         if (reordering && view.goals.isNotEmpty()) {
@@ -276,6 +290,9 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit) {
     var notifyOnTime by rememberSaveable { mutableStateOf(true) }
     var alertBefore by rememberSaveable { mutableStateOf<Int?>(null) }
     var remindAtMinute by rememberSaveable { mutableStateOf<Int?>(null) }
+    var allowance by rememberSaveable { mutableStateOf(Goal.DEFAULT_ALLOWANCE.toString()) }
+    var allowancePer by rememberSaveable { mutableStateOf(Period.WEEKLY) }
+    var isPrivate by rememberSaveable { mutableStateOf(false) }
     var showErrors by rememberSaveable { mutableStateOf(false) }
     var choosingRepeat by remember { mutableStateOf(false) }
     val context = LocalContext.current
@@ -293,6 +310,9 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit) {
                 atMinute = goal.at?.toMinuteOfDay()
                 finishByMinute = goal.finishBy?.toMinuteOfDay()
                 finishDay = goal.finishDay
+                allowance = goal.allowed.toString()
+                allowancePer = goal.allowanceWindow
+                isPrivate = goal.private
                 goal.reminder?.let { r ->
                     notifyOnTime = r.onTime
                     alertBefore = r.minutesBefore
@@ -386,6 +406,9 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit) {
                             minutesBefore = if (atMinute != null) alertBefore else null,
                             at = if (atMinute == null) remindAtMinute?.toTime() else null,
                         ),
+                        allowance = allowance.toIntOrNull() ?: Goal.DEFAULT_ALLOWANCE,
+                        allowancePer = allowancePer,
+                        private = isPrivate,
                     ),
                     onDone = {
                         val wantsNotifications = if (atMinute != null) notifyOnTime || alertBefore != null else remindAtMinute != null
@@ -569,6 +592,14 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit) {
                 hint = "Or give it a set time above, and it notifies at that time.",
             )
         }
+        AllowanceAndPrivacy(
+            allowance = allowance,
+            onAllowance = { allowance = it },
+            per = allowancePer,
+            onPer = { allowancePer = it },
+            isPrivate = isPrivate,
+            onPrivate = { isPrivate = it },
+        )
         Text(
             "Changes apply from now on. Points already earned stay as they were.",
             style = MaterialTheme.typography.bodySmall,
@@ -687,6 +718,8 @@ fun ProjectEditor(id: Long, vm: MainViewModel, onClose: () -> Unit) {
     var bonus by rememberSaveable { mutableStateOf("") }
     var deadline by rememberSaveable { mutableStateOf<Long?>(null) }
     var finishByMinute by rememberSaveable { mutableStateOf<Int?>(null) }
+    var allowance by rememberSaveable { mutableStateOf(Goal.DEFAULT_ALLOWANCE.toString()) }
+    var isPrivate by rememberSaveable { mutableStateOf(false) }
     var nextKey by rememberSaveable { mutableStateOf(2L) }
     val steps = rememberSaveable(saver = StepFieldsSaver) { mutableListOf(StepField(1L, 0L, "", "")).toMutableStateList() }
     var showErrors by rememberSaveable { mutableStateOf(false) }
@@ -699,6 +732,8 @@ fun ProjectEditor(id: Long, vm: MainViewModel, onClose: () -> Unit) {
                 bonus = if (goal.bonus > 0) goal.bonus.toString() else ""
                 deadline = goal.deadline?.toEpochDay()
                 finishByMinute = goal.finishBy?.toMinuteOfDay()
+                allowance = goal.allowed.toString()
+                isPrivate = goal.private
                 steps.clear()
                 existingSteps.forEach { steps += StepField(nextKey++, it.id, it.name, it.points.toString()) }
                 if (steps.isEmpty()) steps += StepField(nextKey++, 0L, "", "")
@@ -731,6 +766,8 @@ fun ProjectEditor(id: Long, vm: MainViewModel, onClose: () -> Unit) {
                         bonus = bonus.toIntOrNull() ?: 0,
                         deadline = deadline?.toDay(),
                         finishBy = finishByMinute?.toTime(),
+                        allowance = allowance.toIntOrNull() ?: Goal.DEFAULT_ALLOWANCE,
+                        private = isPrivate,
                     ),
                     onDone = onClose,
                 )
@@ -803,10 +840,22 @@ fun ProjectEditor(id: Long, vm: MainViewModel, onClose: () -> Unit) {
             )
         }
         Text(
-            "With a deadline, Today shows how many steps a day it takes to finish in time.",
+            "With a deadline, Today shows how many steps a day it takes to finish in time. Missing it counts as a miss.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+        if (deadline != null) {
+            AllowanceAndPrivacy(
+                allowance = allowance,
+                onAllowance = { allowance = it },
+                per = null,
+                onPer = {},
+                isPrivate = isPrivate,
+                onPrivate = { isPrivate = it },
+            )
+        } else {
+            PrivateSwitch(isPrivate) { isPrivate = it }
+        }
         if (id != 0L) RemoveButton("project", name) { vm.removeGoal(id, onClose) }
     }
 }
@@ -841,5 +890,53 @@ fun EditorScaffold(title: String, onBack: () -> Unit, onSave: () -> Unit, conten
             content()
             Spacer(Modifier.height(24.dp))
         }
+    }
+}
+
+/** How many skips and misses are free, and whether the goal sits behind the privacy lock. */
+@Composable
+private fun AllowanceAndPrivacy(
+    allowance: String,
+    onAllowance: (String) -> Unit,
+    per: Period?,
+    onPer: (Period) -> Unit,
+    isPrivate: Boolean,
+    onPrivate: (Boolean) -> Unit,
+) {
+    HorizontalDivider()
+    Text("Skips and misses", style = MaterialTheme.typography.titleSmall)
+    NumberField(
+        label = if (per == null) "Allowed before it costs points" else "Allowed per ${if (per == Period.MONTHLY) "month" else "week"}",
+        value = allowance,
+        onValueChange = onAllowance,
+        tag = "field:allowance",
+        hint = "Within this, a skip needs nothing and a miss only a reason. Over it, each costs half the points and a penalty task.",
+    )
+    if (per != null) {
+        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+            listOf(Period.WEEKLY to "Per week", Period.MONTHLY to "Per month").forEachIndexed { index, (value, label) ->
+                SegmentedButton(
+                    selected = per == value,
+                    onClick = { onPer(value) },
+                    shape = SegmentedButtonDefaults.itemShape(index = index, count = 2),
+                ) { Text(label) }
+            }
+        }
+    }
+    PrivateSwitch(isPrivate, onPrivate)
+}
+
+@Composable
+private fun PrivateSwitch(isPrivate: Boolean, onPrivate: (Boolean) -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.weight(1f)) {
+            Text("Private", style = MaterialTheme.typography.bodyLarge)
+            Text(
+                "Hidden behind the privacy lock, if it's on for private goals (Settings → Privacy).",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Switch(checked = isPrivate, onCheckedChange = onPrivate, modifier = Modifier.testTag("field:private"))
     }
 }

@@ -6,7 +6,13 @@ import io.github.randomtools3377.checklist.core.Entry
 import io.github.randomtools3377.checklist.core.EntryKind
 import io.github.randomtools3377.checklist.core.Goal
 import io.github.randomtools3377.checklist.core.GoalKind
+import io.github.randomtools3377.checklist.core.Lapse
+import io.github.randomtools3377.checklist.core.LapseKind
+import io.github.randomtools3377.checklist.core.Penalty
+import io.github.randomtools3377.checklist.core.PenaltyChoice
+import io.github.randomtools3377.checklist.core.PenaltyTask
 import io.github.randomtools3377.checklist.core.Period
+import io.github.randomtools3377.checklist.core.Reason
 import io.github.randomtools3377.checklist.core.RepeatText
 import io.github.randomtools3377.checklist.core.Purchase
 import io.github.randomtools3377.checklist.core.Reward
@@ -50,6 +56,23 @@ class RoomStore(private val db: AppDatabase) : Store {
     override suspend fun addPurchase(purchase: Purchase): Long = dao.insertPurchase(purchase.toEntity())
     override suspend fun markUsed(purchaseId: Long, at: Long) = dao.markUsed(purchaseId, at)
     override suspend fun markReturned(purchaseId: Long, at: Long) = dao.markReturned(purchaseId, at)
+
+    override suspend fun activeGoals(): List<Goal> = dao.activeGoals().map { it.toCore() }
+    override suspend fun habitTicksSince(day: LocalDate): List<Tick> = dao.habitTicksSince(day.toEpochDay()).map { it.toCore() }
+    override suspend fun lapses(goalId: Long, from: LocalDate, to: LocalDate): List<Lapse> =
+        dao.lapses(goalId, from.toEpochDay(), to.toEpochDay()).map { it.toCore() }
+    override suspend fun lapse(id: Long): Lapse? = dao.lapse(id)?.toCore()
+    override suspend fun addLapse(lapse: Lapse): Long = dao.insertLapse(lapse.toEntity())
+    override suspend fun updateLapse(lapse: Lapse) = dao.updateLapse(lapse.toEntity())
+    override suspend fun entriesForLapse(lapseId: Long): List<Entry> = dao.entriesForLapse(lapseId).map { it.toCore() }
+    override suspend fun addPenalty(penalty: Penalty): Long = dao.insertPenalty(penalty.toEntity())
+    override suspend fun penalty(id: Long): Penalty? = dao.penalty(id)?.toCore()
+    override suspend fun updatePenalty(penalty: Penalty) = dao.updatePenalty(penalty.toEntity())
+    override suspend fun penaltyForLapse(lapseId: Long): Penalty? = dao.penaltyForLapse(lapseId)?.toCore()
+    override suspend fun openPenalties(): List<Penalty> = dao.openPenalties().map { it.toCore() }
+    override suspend fun penaltyTasks(): List<PenaltyTask> = dao.penaltyTasks().map { it.toCore() }
+    override suspend fun setting(name: String): String? = dao.setting(name)
+    override suspend fun putSetting(name: String, value: String) = dao.putSetting(SettingEntity(name, value))
 }
 
 fun GoalEntity.toCore() = Goal(
@@ -67,6 +90,9 @@ fun GoalEntity.toCore() = Goal(
     finishBy = finishByMinute?.toTime(),
     finishDay = finishDay,
     reminder = reminder?.let { RepeatText.decodeReminder(it) },
+    allowance = allowance,
+    allowancePer = allowancePer?.let { Period.valueOf(it) },
+    private = isPrivate,
     archived = archived,
     position = position,
     createdAt = createdAt,
@@ -91,6 +117,9 @@ fun Goal.toEntity() = GoalEntity(
     finishByMinute = finishBy?.toMinuteOfDay(),
     finishDay = finishDay,
     reminder = reminder?.let { RepeatText.encodeReminder(it) },
+    allowance = allowance,
+    allowancePer = allowancePer?.name,
+    isPrivate = private,
 )
 
 fun StepEntity.toCore() = Step(id = id, goalId = goalId, name = name, points = points, position = position, archived = archived)
@@ -128,6 +157,7 @@ fun EntryEntity.toCore() = Entry(
     rewardId = rewardId,
     purchaseId = purchaseId,
     label = label,
+    lapseId = lapseId,
 )
 
 fun Entry.toEntity() = EntryEntity(
@@ -141,6 +171,7 @@ fun Entry.toEntity() = EntryEntity(
     rewardId = rewardId,
     purchaseId = purchaseId,
     label = label,
+    lapseId = lapseId,
 )
 
 fun RewardEntity.toCore() = Reward(
@@ -158,3 +189,63 @@ fun PurchaseEntity.toCore() = Purchase(
 fun Purchase.toEntity() = PurchaseEntity(
     id = id, rewardId = rewardId, name = name, icon = icon, price = price, at = at, usedAt = usedAt, returnedAt = returnedAt,
 )
+
+fun LapseEntity.toCore() = Lapse(
+    id = id,
+    goalId = goalId,
+    kind = LapseKind.valueOf(kind),
+    day = day.toDay(),
+    period = period?.let { Period.valueOf(it) },
+    periodStart = periodStart.toDay(),
+    at = at,
+    overLimit = overLimit,
+    cost = cost,
+    reason = reason?.let { Reason.valueOf(it) },
+    note = note,
+    forgotten = forgotten,
+    label = label,
+)
+
+fun Lapse.toEntity() = LapseEntity(
+    id = id,
+    goalId = goalId,
+    kind = kind.name,
+    day = day.toEpochDay(),
+    period = period?.name,
+    periodStart = periodStart.toEpochDay(),
+    at = at,
+    overLimit = overLimit,
+    cost = cost,
+    reason = reason?.name,
+    note = note,
+    forgotten = forgotten,
+    label = label,
+)
+
+fun PenaltyEntity.toCore() = Penalty(
+    id = id,
+    lapseId = lapseId,
+    createdAt = createdAt,
+    choice = choice?.let { PenaltyChoice.valueOf(it) },
+    goalId = goalId,
+    taskId = taskId,
+    label = label,
+    doneAt = doneAt,
+    cancelledAt = cancelledAt,
+)
+
+fun Penalty.toEntity() = PenaltyEntity(
+    id = id,
+    lapseId = lapseId,
+    createdAt = createdAt,
+    choice = choice?.name,
+    goalId = goalId,
+    taskId = taskId,
+    label = label,
+    doneAt = doneAt,
+    cancelledAt = cancelledAt,
+)
+
+fun PenaltyTaskEntity.toCore() = PenaltyTask(id = id, name = name, archived = archived)
+
+fun PenaltyTask.toEntity() = PenaltyTaskEntity(id = id, name = name, archived = archived)

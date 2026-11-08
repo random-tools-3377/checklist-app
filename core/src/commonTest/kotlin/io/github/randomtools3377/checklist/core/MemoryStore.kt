@@ -49,6 +49,36 @@ class MemoryStore : Store {
         val i = purchases.indexOfFirst { it.id == purchaseId }
         purchases[i] = purchases[i].copy(returnedAt = at)
     }
+
+    val lapses = mutableListOf<Lapse>()
+    val penalties = mutableListOf<Penalty>()
+    val penaltyTaskList = mutableListOf<PenaltyTask>()
+    val settings = mutableMapOf<String, String>()
+
+    fun addPenaltyTask(name: String): PenaltyTask = PenaltyTask(id = nextId++, name = name).also { penaltyTaskList += it }
+
+    override suspend fun activeGoals(): List<Goal> = goals.filter { !it.archived }
+    override suspend fun habitTicksSince(day: LocalDate): List<Tick> = ticks.filter { it.stepId == null && it.periodStart >= day }
+    override suspend fun lapses(goalId: Long, from: LocalDate, to: LocalDate): List<Lapse> =
+        lapses.filter { it.goalId == goalId && it.day >= from && it.day <= to }
+    override suspend fun lapse(id: Long): Lapse? = lapses.find { it.id == id }
+    override suspend fun addLapse(lapse: Lapse): Long = nextId++.also { lapses += lapse.copy(id = it) }
+    override suspend fun updateLapse(lapse: Lapse) {
+        lapses[lapses.indexOfFirst { it.id == lapse.id }] = lapse
+    }
+    override suspend fun entriesForLapse(lapseId: Long): List<Entry> = entries.filter { it.lapseId == lapseId }
+    override suspend fun addPenalty(penalty: Penalty): Long = nextId++.also { penalties += penalty.copy(id = it) }
+    override suspend fun penalty(id: Long): Penalty? = penalties.find { it.id == id }
+    override suspend fun updatePenalty(penalty: Penalty) {
+        penalties[penalties.indexOfFirst { it.id == penalty.id }] = penalty
+    }
+    override suspend fun penaltyForLapse(lapseId: Long): Penalty? = penalties.find { it.lapseId == lapseId }
+    override suspend fun openPenalties(): List<Penalty> = penalties.filter { it.doneAt == null && it.cancelledAt == null }
+    override suspend fun penaltyTasks(): List<PenaltyTask> = penaltyTaskList.filter { !it.archived }
+    override suspend fun setting(name: String): String? = settings[name]
+    override suspend fun putSetting(name: String, value: String) {
+        settings[name] = value
+    }
 }
 
 /** A clock the test can move. It runs in UTC. */

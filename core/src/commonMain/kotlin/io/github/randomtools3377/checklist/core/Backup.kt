@@ -21,12 +21,16 @@ data class Backup(
     val rewards: List<Reward>,
     val purchases: List<Purchase>,
     val settings: Map<String, String>,
+    /** Skips and misses (format 2). */
+    val lapses: List<Lapse> = emptyList(),
+    val penalties: List<Penalty> = emptyList(),
+    val penaltyTasks: List<PenaltyTask> = emptyList(),
 ) {
     companion object {
         const val APP = "checklist"
 
         /** Raised whenever the file's layout changes in a way older versions can't read. */
-        const val FORMAT = 1
+        const val FORMAT = 2
 
         private val json = Json {
             prettyPrint = true

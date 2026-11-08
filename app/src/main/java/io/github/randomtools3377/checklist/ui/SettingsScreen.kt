@@ -60,6 +60,16 @@ import io.github.randomtools3377.checklist.core.dateText
 import io.github.randomtools3377.checklist.data.nowLocal
 import io.github.randomtools3377.checklist.data.toLocalDateTime
 import io.github.randomtools3377.checklist.reminders.Reminders
+import io.github.randomtools3377.checklist.core.StreakSettings
+import io.github.randomtools3377.checklist.core.StreakTarget
+import io.github.randomtools3377.checklist.data.LOCK_HISTORY
+import io.github.randomtools3377.checklist.data.LOCK_PRIVATE
+import io.github.randomtools3377.checklist.data.LOCK_SHOP
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.runtime.collectAsState
 
 fun hourText(hour: Int): String = when (hour) {
     0 -> "Midnight"
@@ -150,6 +160,14 @@ fun SettingsScreen(
             }
 
             HorizontalDivider(Modifier.padding(top = 8.dp))
+            Section("Streaks")
+            StreakSettingsRow(settings.streak) { vm.setStreakSettings(it) }
+
+            HorizontalDivider(Modifier.padding(top = 8.dp))
+            Section("Penalty tasks")
+            PenaltyTaskList(vm)
+
+            HorizontalDivider(Modifier.padding(top = 8.dp))
             Section("Notifications")
             NotificationSettings()
 
@@ -178,6 +196,23 @@ fun SettingsScreen(
 
             HorizontalDivider(Modifier.padding(top = 8.dp))
             Section("Privacy")
+            Text(
+                "Pick what sits behind the lock. Unlocking uses your phone's own lock, and stays open until you leave the app.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+            )
+            LockSwitch("Points history", settings.locks.history, "lock:history") { vm.setLock(LOCK_HISTORY, it) }
+            LockSwitch("The shop and bought rewards", settings.locks.shop, "lock:shop") { vm.setLock(LOCK_SHOP, it) }
+            LockSwitch("Goals marked private", settings.locks.privateGoals, "lock:private") { vm.setLock(LOCK_PRIVATE, it) }
+            if (settings.locks.privateGoals) {
+                Text(
+                    "While locked, private goals are left off the widget, and their notifications don't name them.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                )
+            }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 Text(
                     "The app's preview is hidden in the recent-apps screen.",
@@ -328,5 +363,83 @@ private fun NotificationSettings() {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = 8.dp),
         )
+    }
+}
+
+@Composable
+private fun LockSwitch(label: String, on: Boolean, tag: String, onChange: (Boolean) -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
+        Text(label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+        Switch(checked = on, onCheckedChange = onChange, modifier = Modifier.testTag(tag))
+    }
+}
+
+/** What a day needs for the main streak: a number of goals, or a percentage of those due. */
+@Composable
+private fun StreakSettingsRow(current: StreakSettings, onChange: (StreakSettings) -> Unit) {
+    var value by remember(current) { mutableStateOf(current.value.toString()) }
+    Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)) {
+        Text("A day keeps the main streak going when:", style = MaterialTheme.typography.bodyMedium)
+        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+            listOf(StreakTarget.PERCENT to "A % of the day's goals", StreakTarget.COUNT to "A number of goals").forEachIndexed { index, (target, label) ->
+                SegmentedButton(
+                    selected = current.target == target,
+                    onClick = {
+                        val default = if (target == StreakTarget.PERCENT) 90 else 3
+                        onChange(StreakSettings(target, if (target == current.target) current.value else default))
+                    },
+                    shape = SegmentedButtonDefaults.itemShape(index = index, count = 2),
+                ) { Text(label) }
+            }
+        }
+        NumberField(
+            label = if (current.target == StreakTarget.PERCENT) "Percent done" else "Goals done",
+            value = value,
+            onValueChange = {
+                value = it
+                val number = it.toIntOrNull()
+                if (number != null && number > 0 && (current.target == StreakTarget.COUNT || number <= 100)) {
+                    onChange(current.copy(value = number))
+                }
+            },
+            tag = "setting:streak-value",
+            hint = "At ${current.describe()}, the rest can be missed or skipped without breaking it. Other streaks count days with no misses, no skips, nothing over the limit, and everything done.",
+        )
+    }
+}
+
+/** The user's own penalty tasks, one of which is drawn at random when a penalty comes up. */
+@Composable
+private fun PenaltyTaskList(vm: MainViewModel) {
+    val tasks by vm.penaltyTasks.collectAsState()
+    var newTask by remember { mutableStateOf("") }
+    Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+        Text(
+            "Going over the limit means a penalty task right away: make up a missed goal, or draw one of these at random. They pay nothing.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        tasks.forEach { task ->
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("• ${task.name}", modifier = Modifier.weight(1f))
+                TextButton(onClick = { vm.removePenaltyTask(task.id) }) { Text("Remove") }
+            }
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            OutlinedTextField(
+                value = newTask,
+                onValueChange = { newTask = it.take(80) },
+                label = { Text("New penalty task") },
+                singleLine = true,
+                modifier = Modifier.weight(1f).testTag("setting:new-penalty-task"),
+            )
+            TextButton(
+                onClick = {
+                    vm.addPenaltyTask(newTask)
+                    newTask = ""
+                },
+                enabled = newTask.isNotBlank(),
+            ) { Text("Add") }
+        }
     }
 }

@@ -20,6 +20,8 @@ import io.github.randomtools3377.checklist.core.Alerts
 import io.github.randomtools3377.checklist.core.Days
 import io.github.randomtools3377.checklist.core.Goal
 import io.github.randomtools3377.checklist.core.Pace
+import io.github.randomtools3377.checklist.core.SkipCheck
+import io.github.randomtools3377.checklist.data.LOCK_PRIVATE
 import io.github.randomtools3377.checklist.core.countsToward
 import io.github.randomtools3377.checklist.core.plusDays
 import io.github.randomtools3377.checklist.data.SETTING_DAY_END_HOUR
@@ -111,12 +113,18 @@ object Reminders {
         if (due.isNotEmpty()) {
             val earliest = due.minOf { it.day }.startOfYear()
             val ticks = dao.habitTicksSince(earliest.toEpochDay()).map { it.toCore() }
+            val hidePrivate = dao.setting(LOCK_PRIVATE) == "1"
+            val container = (context.applicationContext as ChecklistApplication).container
             for (alert in due) {
                 val goal = goals.find { it.id == alert.goalId } ?: continue
                 val window = goal.repeat?.window(alert.day) ?: continue
                 val count = ticks.count { it.countsToward(goal, window.start) }
                 if (count >= goal.target) continue
-                show(context, goal, alert, count)
+                val skips = dao.lapses(goal.id, window.start.toEpochDay(), window.end.toEpochDay())
+                    .count { it.kind == "SKIP" && it.periodStart == window.start.toEpochDay() }
+                if (window.period == io.github.randomtools3377.checklist.core.Period.DAILY && skips > 0) continue
+                val skip = container.lapses.checkSkip(goal.id) as? SkipCheck.Allowed
+                show(context, goal, alert, count, hidden = hidePrivate && goal.private, skip = skip)
             }
         }
         prefs.edit().putLong(LAST_FIRED, until).apply()
@@ -128,9 +136,10 @@ object Reminders {
 
     fun notificationId(goalId: Long): Int = (goalId % 1_000_000).toInt() + 1000
 
-    private fun show(context: Context, goal: Goal, alert: Alert, count: Int) {
+    /** Shows a notification, or replaces it. [hidden] leaves the goal's name out (privacy lock). */
+    fun show(context: Context, goal: Goal, alert: Alert, count: Int, hidden: Boolean, skip: SkipCheck.Allowed?) {
         if (!canNotify(context)) return
-        val title = "${goal.icon} ${goal.name}"
+        val title = if (hidden) "🔒 A private goal" else "${goal.icon} ${goal.name}"
         val whenText = when (alert.kind) {
             AlertKind.ON_TIME -> "Now"
             AlertKind.BEFORE -> "In ${alert.minutesBefore} min, at ${timeText(alert.at.time)}"
@@ -158,16 +167,39 @@ object Reminders {
                 .putExtra(DoneReceiver.EXTRA_NOTIFICATION, id),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
-        val notification = NotificationCompat.Builder(context, CHANNEL)
+        val builder = NotificationCompat.Builder(context, CHANNEL)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(title)
-            .setContentText(details)
+            .setContentText(if (hidden) "Due now" else details)
             .setContentIntent(open)
             .addAction(0, "Done", done)
             .setAutoCancel(true)
             .setCategory(NotificationCompat.CATEGORY_REMINDER)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .build()
+        if (skip != null) {
+            // A skip over the limit needs the warning, a reason and the penalty, so it opens the app.
+            val skipIntent = if (skip.overLimit) {
+                PendingIntent.getActivity(
+                    context,
+                    id + 500_000,
+                    Intent(context, MainActivity::class.java)
+                        .putExtra(MainActivity.EXTRA_SKIP, goal.id)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
+                    PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+                )
+            } else {
+                PendingIntent.getBroadcast(
+                    context,
+                    id + 500_000,
+                    Intent(context, SkipReceiver::class.java)
+                        .putExtra(DoneReceiver.EXTRA_GOAL, goal.id)
+                        .putExtra(DoneReceiver.EXTRA_NOTIFICATION, id),
+                    PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+                )
+            }
+            builder.addAction(0, "Skip", skipIntent)
+        }
+        val notification = builder.build()
         try {
             NotificationManagerCompat.from(context).notify(id, notification)
         } catch (e: SecurityException) {

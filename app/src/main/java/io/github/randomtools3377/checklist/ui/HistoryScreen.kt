@@ -36,11 +36,13 @@ private fun kindText(kind: EntryKind): String = when (kind) {
     EntryKind.BONUS -> "Bonus for finishing"
     EntryKind.PURCHASE -> "Bought"
     EntryKind.RETURN -> "Returned"
+    EntryKind.PENALTY -> "Over the limit"
+    EntryKind.REFUND -> "Penalty given back"
 }
 
 /** Every change to the balance, newest first, grouped by day. */
 @Composable
-fun HistoryScreen(entries: List<Entry>?, onBack: () -> Unit) {
+fun HistoryScreen(entries: List<Entry>?, locked: Boolean, onUnlock: () -> Unit, onBack: () -> Unit) {
     Scaffold(
         topBar = {
             TopAppBar(
@@ -51,6 +53,10 @@ fun HistoryScreen(entries: List<Entry>?, onBack: () -> Unit) {
             )
         },
     ) { padding ->
+        if (locked) {
+            LockedPanel("Your points history", onUnlock, Modifier.padding(padding))
+            return@Scaffold
+        }
         if (entries == null) return@Scaffold
         LazyColumn(
             modifier = Modifier.fillMaxSize().testTag("history"),

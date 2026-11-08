@@ -47,12 +47,28 @@ data class Goal(
     val finishDay: Int? = null,
     /** How the phone reminds the user. Null means the defaults (see [Reminder]). */
     val reminder: Reminder? = null,
+    /** Skips and misses allowed per [allowancePer] before they cost points. Null means the default. */
+    val allowance: Int? = null,
+    /** WEEKLY or MONTHLY. Null means the default. */
+    val allowancePer: Period? = null,
+    /** Kept behind the privacy lock, when the user turns that on. */
+    val private: Boolean = false,
     val archived: Boolean = false,
     val position: Int = 0,
     val createdAt: Long = 0,
 ) {
     /** The kind of stretch its ticks count toward. Null for a project. */
     val period: Period? get() = repeat?.windowPeriod
+
+    /** Skips and misses allowed per [allowanceWindow] before they go over the limit. */
+    val allowed: Int get() = allowance ?: DEFAULT_ALLOWANCE
+
+    val allowanceWindow: Period get() = if (allowancePer == Period.MONTHLY) Period.MONTHLY else Period.WEEKLY
+
+    companion object {
+        /** One skip or miss a week is free until the user sets otherwise. */
+        const val DEFAULT_ALLOWANCE = 1
+    }
 }
 
 /**
@@ -104,7 +120,15 @@ data class Tick(
  * miss turns out to be a forgotten tick) without changing how the balance works.
  */
 @Serializable
-enum class EntryKind { TICK, BONUS, PURCHASE, RETURN }
+enum class EntryKind {
+    TICK, BONUS, PURCHASE, RETURN,
+
+    /** Half the goal's points, for a skip or miss over the limit. */
+    PENALTY,
+
+    /** A penalty given back, because the miss turned out to be a forgotten tick. */
+    REFUND,
+}
 
 /** One line in the points ledger. Positive amounts are earned, negative ones are spent. */
 @Serializable
@@ -120,6 +144,8 @@ data class Entry(
     val purchaseId: Long? = null,
     /** What it was for, as it was named at the time. */
     val label: String,
+    /** The skip or miss a penalty or refund belongs to. */
+    val lapseId: Long? = null,
 )
 
 /** A real-life reward in the shop, at the price the user set. */
@@ -145,4 +171,69 @@ data class Purchase(
     val at: Long,
     val usedAt: Long? = null,
     val returnedAt: Long? = null,
+)
+
+/** A skip says in advance that a goal won't be done. A miss is found when its time ran out. */
+@Serializable
+enum class LapseKind { SKIP, MISS }
+
+/** Why a goal was skipped or missed. */
+@Serializable
+enum class Reason(val label: String) {
+    FORGOT("Forgot"),
+    NO_TIME("No time"),
+    ILL("Ill"),
+    CHOSE_NOT("Chose not to"),
+}
+
+/**
+ * A skip or a miss. [day] is the day it belongs to: the day it was due, or the last day of a
+ * week, month or year window, or a project's deadline. Over the limit, it cost points and owes a
+ * penalty task.
+ */
+@Serializable
+data class Lapse(
+    val id: Long = 0,
+    val goalId: Long,
+    val kind: LapseKind,
+    val day: LocalDate,
+    /** The window it belongs to, so a forgotten tick can be put back in it. Null for a project. */
+    val period: Period?,
+    val periodStart: LocalDate,
+    /** When it was recorded, in epoch milliseconds. */
+    val at: Long,
+    val overLimit: Boolean,
+    /** Points it cost, 0 within the allowance. */
+    val cost: Int = 0,
+    /** Null until the user gives one. Skips within the allowance need none. */
+    val reason: Reason? = null,
+    val note: String? = null,
+    /** True when the user said they did it and forgot to tick: no longer a miss. */
+    val forgotten: Boolean = false,
+    /** The goal's name at the time. */
+    val label: String,
+)
+
+/** One of the user's own penalty tasks, to be drawn at random. */
+@Serializable
+data class PenaltyTask(val id: Long = 0, val name: String, val archived: Boolean = false)
+
+/** How a penalty is paid off: by making up a goal, or by a penalty task. */
+@Serializable
+enum class PenaltyChoice { MAKE_UP, TASK }
+
+/** A penalty task owed for going over the limit. It must be done before anything else. */
+@Serializable
+data class Penalty(
+    val id: Long = 0,
+    /** The skip or miss that caused it. Null for a gap check-in. */
+    val lapseId: Long?,
+    val createdAt: Long,
+    val choice: PenaltyChoice? = null,
+    /** What it came to: the goal made up, or the penalty task drawn. */
+    val goalId: Long? = null,
+    val taskId: Long? = null,
+    val label: String? = null,
+    val doneAt: Long? = null,
+    val cancelledAt: Long? = null,
 )

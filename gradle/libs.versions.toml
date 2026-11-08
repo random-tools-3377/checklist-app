@@ -15,6 +15,8 @@ androidxTestExt = "1.2.1"
 androidxTestRunner = "1.6.2"
 espresso = "3.6.1"
 glance = "1.1.1"
+biometric = "1.1.0"
+fragment = "1.8.5"
 androidxTestRules = "1.6.1"
 
 [libraries]
@@ -43,6 +45,8 @@ androidx-test-runner = { module = "androidx.test:runner", version.ref = "android
 androidx-test-espresso-core = { module = "androidx.test.espresso:espresso-core", version.ref = "espresso" }
 androidx-test-rules = { module = "androidx.test:rules", version.ref = "androidxTestRules" }
 glance-appwidget = { module = "androidx.glance:glance-appwidget", version.ref = "glance" }
+androidx-biometric = { module = "androidx.biometric:biometric", version.ref = "biometric" }
+androidx-fragment-ktx = { module = "androidx.fragment:fragment-ktx", version.ref = "fragment" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

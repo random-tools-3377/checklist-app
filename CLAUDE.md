@@ -108,6 +108,8 @@ The app has no network access unless the owner decides otherwise for this app.
   flashy.
 - A goal due a number of times per week or month counts on the day its period ends
   **(default)**.
+- The main streak's target starts at 90%. Days with nothing due neither count nor break a streak.
+  A skip, or going over the limit, breaks its streak the same day **(default)**.
 
 ## Skips, misses and the limit
 
@@ -134,6 +136,13 @@ The app has no network access unless the owner decides otherwise for this app.
   user is asleep, so its penalty waits for the next time the app opens and fills the screen until
   it is ticked done.
 - **There is no pause button.**
+- **Details (default):** each goal starts with 1 skip or miss allowed per week, changeable per
+  goal, per week or month. Skipping a single-day goal skips that day; skipping a "so many times a
+  week" goal skips one of its times. A skipped goal can still be ticked. A project's missed
+  deadline counts against its allowance in the week of the deadline and, over the limit, costs
+  half its finishing bonus; "I forgot to tick it" isn't offered for it. A penalty can be paid off
+  by making up any goal skipped or missed in the last two weeks. Misses are first looked for from
+  the day this was built, never further back.
 
 ## Gaps
 
@@ -182,6 +191,10 @@ The app has no network access unless the owner decides otherwise for this app.
 - What can be put behind the lock **(default)**: reasons and notes for skips and misses, gap
   check-ins, the points history, the review and stats, the shop and bought rewards, and single
   goals marked private. Locked things don't show in the widget or reminders either.
+- So far the lock can cover the points history, the shop, and private goals; reasons, gap
+  check-ins and the review join with the review screen. A locked private goal's notification says
+  "A private goal". A phone with no screen lock can't be asked, so there the lock opens, with a
+  note **(default)**.
 - The app's preview in the recent-apps screen is hidden. On Android 13 and later that leaves
   screenshots working. On older phones it also blocks screenshots, so there it is a switch in the
   Privacy menu **(default)**.

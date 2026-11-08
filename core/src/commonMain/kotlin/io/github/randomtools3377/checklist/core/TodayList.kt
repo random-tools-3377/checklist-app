@@ -2,10 +2,16 @@ package io.github.randomtools3377.checklist.core
 
 import kotlinx.datetime.LocalDate
 
-/** A habit that is due now, with how many times it has been ticked in its current [window]. */
-data class HabitRow(val goal: Goal, val count: Int, val window: Window) {
-    val done: Boolean get() = count >= goal.target
-    val left: Int get() = (goal.target - count).coerceAtLeast(0)
+/**
+ * A habit that is due now, with how many times it has been ticked in its current [window], and
+ * how many skips it has there. A skip covers the whole day for a single-day habit, or one of the
+ * times for a "times per" habit.
+ */
+data class HabitRow(val goal: Goal, val count: Int, val window: Window, val skips: Int = 0) {
+    val skipped: Boolean get() = skips > 0 && count < goal.target
+    val done: Boolean
+        get() = count >= goal.target || if (window.period == Period.DAILY) skips > 0 else count + skips >= goal.target
+    val left: Int get() = if (done) 0 else (goal.target - count - skips).coerceAtLeast(0)
 }
 
 data class StepRow(val step: Step, val done: Boolean)
@@ -43,11 +49,13 @@ object TodayList {
         steps: List<Step>,
         ticks: List<Tick>,
         balance: Int,
+        lapses: List<Lapse> = emptyList(),
     ): TodayView {
         val active = goals.filter { !it.archived }.sortedWith(compareBy({ it.position }, { it.id }))
         val habits = active.filter { it.kind == GoalKind.HABIT }.mapNotNull { goal ->
             val window = goal.repeat?.window(day) ?: return@mapNotNull null
-            HabitRow(goal, ticks.count { it.countsToward(goal, window.start) }, window)
+            val skips = lapses.count { it.goalId == goal.id && it.kind == LapseKind.SKIP && it.periodStart == window.start && !it.forgotten }
+            HabitRow(goal, ticks.count { it.countsToward(goal, window.start) }, window, skips)
         }
         val stepTicks = ticks.filter { it.stepId != null }.associateBy { it.stepId }
         val projects = active.filter { it.kind == GoalKind.PROJECT }.map { goal ->

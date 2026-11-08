@@ -40,4 +40,33 @@ interface Store {
     suspend fun addPurchase(purchase: Purchase): Long
     suspend fun markUsed(purchaseId: Long, at: Long)
     suspend fun markReturned(purchaseId: Long, at: Long)
+
+    // Skips, misses and penalties
+
+    suspend fun activeGoals(): List<Goal>
+
+    /** Habit ticks whose window starts on or after [day]. */
+    suspend fun habitTicksSince(day: LocalDate): List<Tick>
+
+    /** Skips and misses of [goalId] whose day falls from [from] to [to], both included. */
+    suspend fun lapses(goalId: Long, from: LocalDate, to: LocalDate): List<Lapse>
+    suspend fun lapse(id: Long): Lapse?
+    suspend fun addLapse(lapse: Lapse): Long
+    suspend fun updateLapse(lapse: Lapse)
+
+    suspend fun entriesForLapse(lapseId: Long): List<Entry>
+
+    suspend fun addPenalty(penalty: Penalty): Long
+    suspend fun penalty(id: Long): Penalty?
+    suspend fun updatePenalty(penalty: Penalty)
+    suspend fun penaltyForLapse(lapseId: Long): Penalty?
+
+    /** Penalties not yet done or cancelled, oldest first. */
+    suspend fun openPenalties(): List<Penalty>
+
+    /** The user's own penalty tasks that haven't been removed. */
+    suspend fun penaltyTasks(): List<PenaltyTask>
+
+    suspend fun setting(name: String): String?
+    suspend fun putSetting(name: String, value: String)
 }

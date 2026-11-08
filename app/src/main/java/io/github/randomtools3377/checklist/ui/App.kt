@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Add
@@ -85,6 +86,31 @@ fun ChecklistApp(vm: MainViewModel = viewModel()) {
     val shop by vm.shopView.collectAsStateWithLifecycle()
     val settings by vm.settings.collectAsStateWithLifecycle()
     val history by vm.history.collectAsStateWithLifecycle()
+    val unexplained by vm.unexplained.collectAsStateWithLifecycle()
+    val penalty by vm.openPenalty.collectAsStateWithLifecycle()
+    val makeUp by vm.makeUpChoices.collectAsStateWithLifecycle()
+    val penaltyTasks by vm.penaltyTasks.collectAsStateWithLifecycle()
+    val unlocked by vm.unlocked.collectAsStateWithLifecycle()
+    val skipRequest by vm.skipRequest.collectAsStateWithLifecycle()
+    val unlock = rememberUnlock(vm)
+
+    // Opening the app: misses waiting for a reason first, then the penalty task, then the rest.
+    val misses = unexplained
+    val owed = penalty
+    if (!misses.isNullOrEmpty()) {
+        Box(Modifier.fillMaxSize()) {
+            MissesScreen(misses, vm)
+            celebrations.Overlay()
+        }
+        return
+    }
+    if (owed != null) {
+        Box(Modifier.fillMaxSize()) {
+            PenaltyScreen(owed, makeUp, penaltyTasks, vm)
+            celebrations.Overlay()
+        }
+        return
+    }
 
     Box(Modifier.fillMaxSize()) {
         val parts = route.split("/")
@@ -94,7 +120,7 @@ fun ChecklistApp(vm: MainViewModel = viewModel()) {
             "project" -> ProjectEditor(id, vm, onClose = ::pop)
             "reward" -> RewardEditor(id, vm, onClose = ::pop)
             "settings" -> SettingsScreen(settings, vm, onBack = ::pop)
-            "history" -> HistoryScreen(history, onBack = ::pop)
+            "history" -> HistoryScreen(history, locked = settings.locks.history && !unlocked, onUnlock = unlock, onBack = ::pop)
             else -> {
                 val tab = AppTab.entries.firstOrNull { it.route == route } ?: AppTab.TODAY
                 TabScaffold(
@@ -124,6 +150,9 @@ fun ChecklistApp(vm: MainViewModel = viewModel()) {
                             onAddGoal = { goTo(AppTab.GOALS); newGoal = true },
                             onHistory = { push("history") },
                             onSettings = { push("settings") },
+                            onUnlock = unlock,
+                            skipRequest = skipRequest,
+                            onSkipRequestHandled = vm::clearSkipRequest,
                             padding = padding,
                         )
                         AppTab.GOALS -> GoalsScreen(
@@ -131,9 +160,12 @@ fun ChecklistApp(vm: MainViewModel = viewModel()) {
                             reordering = reorderGoals,
                             onEdit = { goal -> push((if (goal.kind == GoalKind.HABIT) "habit/" else "project/") + goal.id) },
                             onMove = { goal, by -> vm.moveGoal(goal.id, by) },
+                            onUnlock = unlock,
                             padding = padding,
                         )
-                        AppTab.SHOP -> ShopScreen(
+                        AppTab.SHOP -> if (settings.locks.shop && !unlocked) {
+                            LockedPanel("The shop", unlock, Modifier.padding(padding))
+                        } else ShopScreen(
                             shop, vm, celebrations,
                             showBought = showBought,
                             onShowBought = {

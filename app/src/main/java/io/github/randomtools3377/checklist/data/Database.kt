@@ -1,6 +1,7 @@
 package io.github.randomtools3377.checklist.data
 
 import android.content.Context
+import androidx.room.AutoMigration
 import androidx.room.ColumnInfo
 import androidx.room.Dao
 import androidx.room.Database
@@ -46,6 +47,11 @@ data class GoalEntity(
     val finishDay: Int? = null,
     /** Notification settings, as JSON (see RepeatText). Null means the defaults. Added in version 3. */
     val reminder: String? = null,
+    /** Skips and misses allowed per [allowancePer]. Null means the default. Added in version 4. */
+    val allowance: Int? = null,
+    val allowancePer: String? = null,
+    /** Kept behind the privacy lock. Added in version 4. */
+    @ColumnInfo(defaultValue = "0") val isPrivate: Boolean = false,
 )
 
 @Entity(tableName = "steps", indices = [Index("goalId")])
@@ -82,6 +88,8 @@ data class EntryEntity(
     val rewardId: Long?,
     val purchaseId: Long?,
     val label: String,
+    /** The skip or miss a penalty or refund belongs to. Added in version 4. */
+    val lapseId: Long? = null,
 )
 
 @Entity(tableName = "rewards")
@@ -106,6 +114,46 @@ data class PurchaseEntity(
     val usedAt: Long?,
     /** When it was returned for a refund. Added in version 2. */
     val returnedAt: Long? = null,
+)
+
+/** Skips and misses. Added in version 4. */
+@Entity(tableName = "lapses", indices = [Index("goalId", "day")])
+data class LapseEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val goalId: Long,
+    val kind: String,
+    val day: Long,
+    val period: String?,
+    val periodStart: Long,
+    val at: Long,
+    val overLimit: Boolean,
+    val cost: Int,
+    val reason: String?,
+    val note: String?,
+    val forgotten: Boolean,
+    val label: String,
+)
+
+/** Penalty tasks owed for going over the limit. Added in version 4. */
+@Entity(tableName = "penalties", indices = [Index("lapseId")])
+data class PenaltyEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val lapseId: Long?,
+    val createdAt: Long,
+    val choice: String?,
+    val goalId: Long?,
+    val taskId: Long?,
+    val label: String?,
+    val doneAt: Long?,
+    val cancelledAt: Long?,
+)
+
+/** The user's own penalty tasks. Added in version 4. */
+@Entity(tableName = "penalty_tasks")
+data class PenaltyTaskEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val name: String,
+    val archived: Boolean,
 )
 
 @Entity(tableName = "settings")
@@ -278,6 +326,73 @@ interface ChecklistDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun putSetting(setting: SettingEntity)
+
+    // Skips, misses and penalties
+
+    @Query("SELECT * FROM lapses WHERE goalId = :goalId AND day >= :from AND day <= :to ORDER BY day, id")
+    suspend fun lapses(goalId: Long, from: Long, to: Long): List<LapseEntity>
+
+    @Query("SELECT * FROM lapses WHERE id = :id")
+    suspend fun lapse(id: Long): LapseEntity?
+
+    @Insert
+    suspend fun insertLapse(lapse: LapseEntity): Long
+
+    @Update
+    suspend fun updateLapse(lapse: LapseEntity)
+
+    @Query("SELECT * FROM lapses WHERE day >= :since ORDER BY day, id")
+    fun observeLapsesSince(since: Long): Flow<List<LapseEntity>>
+
+    @Query("SELECT * FROM lapses WHERE day >= :since ORDER BY day, id")
+    suspend fun lapsesSince(since: Long): List<LapseEntity>
+
+    /** Misses still waiting for a reason. */
+    @Query("SELECT * FROM lapses WHERE reason IS NULL AND forgotten = 0 AND kind = 'MISS' ORDER BY day, id")
+    fun observeUnexplained(): Flow<List<LapseEntity>>
+
+    @Query("SELECT * FROM entries WHERE lapseId = :lapseId")
+    suspend fun entriesForLapse(lapseId: Long): List<EntryEntity>
+
+    @Insert
+    suspend fun insertPenalty(penalty: PenaltyEntity): Long
+
+    @Update
+    suspend fun updatePenalty(penalty: PenaltyEntity)
+
+    @Query("SELECT * FROM penalties WHERE id = :id")
+    suspend fun penalty(id: Long): PenaltyEntity?
+
+    @Query("SELECT * FROM penalties WHERE lapseId = :lapseId ORDER BY id LIMIT 1")
+    suspend fun penaltyForLapse(lapseId: Long): PenaltyEntity?
+
+    @Query("SELECT * FROM penalties WHERE doneAt IS NULL AND cancelledAt IS NULL ORDER BY createdAt, id")
+    suspend fun openPenalties(): List<PenaltyEntity>
+
+    @Query("SELECT * FROM penalties WHERE doneAt IS NULL AND cancelledAt IS NULL ORDER BY createdAt, id")
+    fun observeOpenPenalties(): Flow<List<PenaltyEntity>>
+
+    @Query("SELECT * FROM penalty_tasks WHERE archived = 0 ORDER BY id")
+    suspend fun penaltyTasks(): List<PenaltyTaskEntity>
+
+    @Query("SELECT * FROM penalty_tasks WHERE archived = 0 ORDER BY id")
+    fun observePenaltyTasks(): Flow<List<PenaltyTaskEntity>>
+
+    @Insert
+    suspend fun insertPenaltyTask(task: PenaltyTaskEntity): Long
+
+    @Query("UPDATE penalty_tasks SET archived = 1 WHERE id = :id")
+    suspend fun removePenaltyTask(id: Long)
+
+    @Query("SELECT * FROM lapses") suspend fun allLapses(): List<LapseEntity>
+    @Query("SELECT * FROM penalties") suspend fun allPenalties(): List<PenaltyEntity>
+    @Query("SELECT * FROM penalty_tasks") suspend fun allPenaltyTasks(): List<PenaltyTaskEntity>
+    @Query("DELETE FROM lapses") suspend fun deleteLapses()
+    @Query("DELETE FROM penalties") suspend fun deletePenalties()
+    @Query("DELETE FROM penalty_tasks") suspend fun deletePenaltyTasks()
+    @Insert suspend fun insertLapses(rows: List<LapseEntity>)
+    @Insert suspend fun insertPenalties(rows: List<PenaltyEntity>)
+    @Insert suspend fun insertPenaltyTasks(rows: List<PenaltyTaskEntity>)
 }
 
 @Database(
@@ -289,9 +404,14 @@ interface ChecklistDao {
         RewardEntity::class,
         PurchaseEntity::class,
         SettingEntity::class,
+        LapseEntity::class,
+        PenaltyEntity::class,
+        PenaltyTaskEntity::class,
     ],
-    version = 3,
+    version = 4,
     exportSchema = true,
+    // Version 4 only adds tables and columns, so Room works the migration out from the layouts.
+    autoMigrations = [AutoMigration(from = 3, to = 4)],
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun dao(): ChecklistDao
