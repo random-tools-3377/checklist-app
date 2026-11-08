@@ -51,14 +51,14 @@ class TickAndBuyTest {
         app.onNodeWithTag("field:name").performTextInput("Drink water")
         app.onNodeWithTag("field:points").performTextInput("10")
         app.onNodeWithTag("save").performClick()
-        app.waitUntil(10_000) { !gone("goal:Drink water") }
+        app.waitFor { !gone("goal:Drink water") }
 
         // Tick it on today's list: the balance goes from 0 to 10.
         app.onNodeWithTag("nav:today").performClick()
-        app.waitUntil(10_000) { !gone("tick:Drink water") }
+        app.waitFor { !gone("tick:Drink water") }
         app.onNodeWithTag("balance", useUnmergedTree = true).assertTextEquals("0 points")
         app.onNodeWithTag("tick:Drink water").performClick()
-        app.waitUntil(10_000) { balanceIs("10 points") }
+        app.waitFor { balanceIs("10 points") }
 
         // A reward that costs 4.
         app.onNodeWithTag("nav:shop").performClick()
@@ -66,12 +66,12 @@ class TickAndBuyTest {
         app.onNodeWithTag("field:name").performTextInput("Coffee")
         app.onNodeWithTag("field:price").performTextInput("4")
         app.onNodeWithTag("save").performClick()
-        app.waitUntil(10_000) { !gone("buy:Coffee") }
+        app.waitFor { !gone("buy:Coffee") }
 
         // Buy it: the balance drops to 6.
         app.onNodeWithTag("buy:Coffee").performClick()
         app.onNodeWithTag("confirm-buy").performClick()
-        app.waitUntil(10_000) { balanceIs("6 points") }
+        app.waitFor { balanceIs("6 points") }
 
         // The buying celebration closes with a tap, or by itself.
         if (!gone("celebration")) {
@@ -81,14 +81,14 @@ class TickAndBuyTest {
                 // It closed by itself in the meantime.
             }
         }
-        app.waitUntil(10_000) { gone("celebration") }
+        app.waitFor { gone("celebration") }
 
         // It waits under Bought until it is used.
         app.onNodeWithTag("tab:bought").performClick()
         app.onNodeWithTag("bought:Coffee").assertIsDisplayed()
         app.onNodeWithTag("use:Coffee").performClick()
         app.onNodeWithTag("confirm-use").performClick()
-        app.waitUntil(10_000) { gone("bought:Coffee") }
+        app.waitFor { gone("bought:Coffee") }
         app.onNodeWithTag("balance", useUnmergedTree = true).assertTextEquals("6 points")
     }
 
@@ -99,7 +99,7 @@ class TickAndBuyTest {
         app.onNodeWithTag("field:name").performTextInput("Trip")
         app.onNodeWithTag("field:price").performTextInput("500")
         app.onNodeWithTag("save").performClick()
-        app.waitUntil(10_000) { !gone("buy:Trip") }
+        app.waitFor { !gone("buy:Trip") }
 
         app.onNodeWithTag("buy:Trip").assertIsNotEnabled()
         app.onNodeWithTag("buy:Trip").performClick()

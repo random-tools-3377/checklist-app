@@ -43,28 +43,28 @@ class SkipOverTheLimitTest {
         app.onNodeWithTag("field:allowance").performTextClearance()
         app.onNodeWithTag("field:allowance").performTextInput("0")
         app.onNodeWithTag("save").performClick()
-        app.waitUntil(10_000) { !gone("goal:Run") }
+        app.waitFor { !gone("goal:Run") }
 
         // Skip it: over the limit, it needs a reason.
         app.onNodeWithTag("nav:today").performClick()
-        app.waitUntil(10_000) { !gone("skip:Run") }
+        app.waitFor { !gone("skip:Run") }
         app.onNodeWithTag("skip:Run").performClick()
-        app.waitUntil(10_000) { !gone("skip-reason:NO_TIME") }
+        app.waitFor { !gone("skip-reason:NO_TIME") }
         app.onNodeWithTag("skip-reason:NO_TIME").performClick()
         app.onNodeWithTag("confirm-skip").performClick()
 
         // The penalty task fills the screen. No penalty tasks yet, so write one and draw it.
-        app.waitUntil(10_000) { !gone("penalty") }
+        app.waitFor { !gone("penalty") }
         app.onNodeWithTag("new-penalty-task").performTextInput("20 push-ups")
         app.onNodeWithTag("add-penalty-task").performClick()
-        app.waitUntil(10_000) { !gone("draw-task") }
+        app.waitFor { !gone("draw-task") }
         app.onNodeWithTag("draw-task").performClick()
-        app.waitUntil(10_000) { !gone("penalty-task") }
+        app.waitFor { !gone("penalty-task") }
         app.onNodeWithTag("penalty-task").assertTextEquals("20 push-ups")
         app.onNodeWithTag("penalty-done").performClick()
 
         // Back on Today: skipped, and half of 10 taken off.
-        app.waitUntil(10_000) { !gone("skipped:Run") }
+        app.waitFor { !gone("skipped:Run") }
         app.onNodeWithTag("balance", useUnmergedTree = true).assertTextEquals("-5 points")
     }
 }
@@ -98,22 +98,22 @@ class MissesOnOpeningTest {
     @Test
     fun twoMissesNeedReasonsAndEachOverTheLimitOwesAPenalty() {
         // Two days missed, with no allowance: both are over the limit.
-        app.waitUntil(10_000) { app.onAllNodesWithTag("miss:Read").fetchSemanticsNodes().size == 2 }
+        app.waitFor { app.onAllNodesWithTag("miss:Read").fetchSemanticsNodes().size == 2 }
         app.onAllNodesWithTag("reason:Read:ILL")[0].performClick()
         app.onAllNodesWithTag("reason:Read:NO_TIME")[1].performClick()
         app.onNodeWithTag("misses-done").performClick()
 
         // Then a penalty task for each: make up the missed goal, twice.
         repeat(2) {
-            app.waitUntil(10_000) { !gone("makeup:Read") }
+            app.waitFor { !gone("makeup:Read") }
             app.onNodeWithTag("makeup:Read").performClick()
-            app.waitUntil(10_000) { !gone("penalty-done") }
+            app.waitFor { !gone("penalty-done") }
             app.onNodeWithTag("penalty-done").performClick()
             app.waitForIdle()
         }
 
         // Then today's list. Half of 4 came off for each miss.
-        app.waitUntil(10_000) { !gone("today-list") }
+        app.waitFor { !gone("today-list") }
         app.onNodeWithTag("balance", useUnmergedTree = true).assertTextEquals("-4 points")
     }
 }
