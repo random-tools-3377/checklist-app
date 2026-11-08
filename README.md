@@ -27,8 +27,10 @@ keeps the data.
 - 0.2.0: flexible repeats, lengths and clock times, pacing and a recommended order, export and
   import, a points history, returning bought rewards, reordering, and a hidden recent-apps
   preview.
+- 0.3.0: notifications at set times with a Done button, and a calendar widget for the home
+  screen.
 
-Next: notifications and a calendar-style widget; then skips, misses, the allowance, penalties,
+Next: skips, misses, the allowance, penalties,
 streaks and the privacy lock; then gaps, the review screen and stats. The data is laid out so
 these fit in: every tick records the window it counts for, and the balance is the sum of a
 ledger whose entries have a kind, so penalties and refunds become new kinds of entry.
