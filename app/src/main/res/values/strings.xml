@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Checklist</string>
+    <string name="widget_name">Checklist calendar</string>
+    <string name="widget_description">Today's goals with tick boxes. Make it wider for the week, taller for the month.</string>
 </resources>

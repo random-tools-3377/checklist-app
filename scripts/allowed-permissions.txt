@@ -3,3 +3,11 @@
 
 # Added by AndroidX so the app's own broadcast receivers are private to it. Not a network permission.
 ${applicationId}.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION
+
+# Notifications at set times (0.3.0), all scheduled on the phone.
+android.permission.POST_NOTIFICATIONS
+android.permission.USE_EXACT_ALARM
+android.permission.SCHEDULE_EXACT_ALARM
+android.permission.RECEIVE_BOOT_COMPLETED
+# Added by WorkManager, which the home-screen widget library runs on. Not a network permission.
+android.permission.WAKE_LOCK

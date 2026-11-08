@@ -2,9 +2,12 @@
 
 package io.github.randomtools3377.checklist.ui
 
+import android.Manifest
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
+import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Build
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -48,6 +51,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import io.github.randomtools3377.checklist.BuildConfig
 import io.github.randomtools3377.checklist.Privacy
 import io.github.randomtools3377.checklist.core.Backup
@@ -55,6 +59,7 @@ import io.github.randomtools3377.checklist.core.Days
 import io.github.randomtools3377.checklist.core.dateText
 import io.github.randomtools3377.checklist.data.nowLocal
 import io.github.randomtools3377.checklist.data.toLocalDateTime
+import io.github.randomtools3377.checklist.reminders.Reminders
 
 fun hourText(hour: Int): String = when (hour) {
     0 -> "Midnight"
@@ -143,6 +148,10 @@ fun SettingsScreen(
                     hint = "Today shows how fast to go to be done by then. A goal can have its own finish time instead.",
                 )
             }
+
+            HorizontalDivider(Modifier.padding(top = 8.dp))
+            Section("Notifications")
+            NotificationSettings()
 
             HorizontalDivider(Modifier.padding(top = 8.dp))
             Section("Backup")
@@ -269,3 +278,55 @@ fun SettingsScreen(
     }
 }
 
+
+/** Whether reminders can show, with a way to turn them on, and whether they arrive exactly on time. */
+@Composable
+private fun NotificationSettings() {
+    val context = LocalContext.current
+    var allowed by remember { mutableStateOf(Reminders.canNotify(context)) }
+    val ask = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { allowed = Reminders.canNotify(context) }
+    Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+        Text(
+            if (allowed) "Reminders are on. Each habit sets its own in its editor."
+            else "Reminders are off for this app, so habits with a set time or a reminder can't notify you.",
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        if (!allowed) {
+            Spacer(Modifier.height(8.dp))
+            FilledTonalButton(
+                onClick = {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                        ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+                    ) {
+                        ask.launch(Manifest.permission.POST_NOTIFICATIONS)
+                    } else {
+                        context.startActivity(
+                            Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                                .putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, context.packageName),
+                        )
+                    }
+                },
+                modifier = Modifier.testTag("allow-notifications"),
+            ) { Text("Turn on reminders") }
+        }
+        if (!Reminders.exactAlarmsAllowed(context)) {
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "This phone lets reminders arrive only roughly on time.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                TextButton(onClick = { context.startActivity(Intent(android.provider.Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM)) }) {
+                    Text("Allow exact times")
+                }
+            }
+        }
+        Text(
+            "Add the Checklist calendar to your home screen from the phone's widget list. Make it wider for the week, taller for the month.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 8.dp),
+        )
+    }
+}

@@ -45,6 +45,8 @@ data class Goal(
      * month × 100 + day (1201 for 1 December).
      */
     val finishDay: Int? = null,
+    /** How the phone reminds the user. Null means the defaults (see [Reminder]). */
+    val reminder: Reminder? = null,
     val archived: Boolean = false,
     val position: Int = 0,
     val createdAt: Long = 0,
@@ -52,6 +54,18 @@ data class Goal(
     /** The kind of stretch its ticks count toward. Null for a project. */
     val period: Period? get() = repeat?.windowPeriod
 }
+
+/**
+ * Notifications for a habit, scheduled on the phone like a calendar's. A habit with a clock time
+ * notifies at that time unless [onTime] is off, and can add an earlier alert [minutesBefore]. A
+ * habit without a clock time can be reminded [at] a time of day.
+ */
+@Serializable
+data class Reminder(
+    val onTime: Boolean = true,
+    val minutesBefore: Int? = null,
+    val at: LocalTime? = null,
+)
 
 /** One step of a project. */
 @Serializable

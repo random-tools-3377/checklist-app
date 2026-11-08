@@ -12,6 +12,16 @@
     <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" tools:node="remove" />
     <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" tools:node="remove" />
 
+    <!-- Notifications at set times, scheduled on the phone. No network involved. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    <uses-permission
+        android:name="android.permission.SCHEDULE_EXACT_ALARM"
+        android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- Added by a library the widget uses, for work the app never does. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" tools:node="remove" />
+
     <!--
         No phone backup and no phone-to-phone transfer: Google or Samsung backup would upload
         the goals. allowBackup="false" covers cloud backup; the rules files also exclude
@@ -37,6 +47,38 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- The calendar widget. -->
+        <receiver
+            android:name=".widget.CalendarWidgetReceiver"
+            android:exported="true"
+            android:label="@string/widget_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/calendar_widget_info" />
+        </receiver>
+
+        <!-- Reminders: the alarm, the Done button, and setting the alarm again after a restart. -->
+        <receiver
+            android:name=".reminders.AlarmReceiver"
+            android:exported="false" />
+        <receiver
+            android:name=".reminders.DoneReceiver"
+            android:exported="false" />
+        <receiver
+            android:name=".reminders.SystemEventsReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="android.intent.action.TIME_SET" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+                <action android:name="android.app.action.SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED" />
+            </intent-filter>
+        </receiver>
 
         <!--
             EmojiCompat's start-up step asks a font provider (Google Play services) for an

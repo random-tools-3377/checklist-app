@@ -8,7 +8,6 @@ import io.github.randomtools3377.checklist.core.Period
 import io.github.randomtools3377.checklist.core.RepeatKind
 import io.github.randomtools3377.checklist.data.AppDatabase
 import io.github.randomtools3377.checklist.data.MIGRATIONS
-import io.github.randomtools3377.checklist.data.Migration1To2
 import io.github.randomtools3377.checklist.data.toCore
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -26,7 +25,7 @@ class MigrationTest {
     val helper = MigrationTestHelper(InstrumentationRegistry.getInstrumentation(), AppDatabase::class.java)
 
     @Test
-    fun version1HabitsBecomeTheMatchingRepeats() {
+    fun aVersion1DatabaseMovesToTheLatestWithItsHabitsAsMatchingRepeats() {
         helper.createDatabase(name, 1).apply {
             // 20406 is 14 Nov 2025 as an epoch day; createdAt is that day in milliseconds.
             val created = 20406L * 86_400_000L
@@ -44,7 +43,7 @@ class MigrationTest {
             close()
         }
 
-        helper.runMigrationsAndValidate(name, 2, true, Migration1To2).close()
+        helper.runMigrationsAndValidate(name, 3, true, *MIGRATIONS).close()
 
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val db = Room.databaseBuilder(context, AppDatabase::class.java, name).addMigrations(*MIGRATIONS).build()
@@ -65,6 +64,7 @@ class MigrationTest {
 
                 assertEquals(1, dao.balance()) // the ledger is untouched
                 assertNull(dao.purchase(1)!!.returnedAt)
+                assertNull(water.reminder) // version 3: default notifications
             }
         } finally {
             db.close()

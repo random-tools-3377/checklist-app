@@ -66,6 +66,7 @@ fun GoalEntity.toCore() = Goal(
     at = atMinute?.toTime(),
     finishBy = finishByMinute?.toTime(),
     finishDay = finishDay,
+    reminder = reminder?.let { RepeatText.decodeReminder(it) },
     archived = archived,
     position = position,
     createdAt = createdAt,
@@ -89,6 +90,7 @@ fun Goal.toEntity() = GoalEntity(
     atMinute = at?.toMinuteOfDay(),
     finishByMinute = finishBy?.toMinuteOfDay(),
     finishDay = finishDay,
+    reminder = reminder?.let { RepeatText.encodeReminder(it) },
 )
 
 fun StepEntity.toCore() = Step(id = id, goalId = goalId, name = name, points = points, position = position, archived = archived)

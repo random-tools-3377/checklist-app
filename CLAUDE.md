@@ -225,6 +225,10 @@ The app has no network access unless the owner decides otherwise for this app.
   from a pull request.
 - CI on every push: the network-permission check, the signature check, and the tests.
 
+The owner tries the app once the calendar and the later features are built. Until then, each
+step goes on without waiting for feedback, and still ends in a Release. Questions about the
+iPhone version are on hold.
+
 Build order **(default)**, each step a Release the owner can try:
 
 1. Goals, ticking, points and the shop. Released as 0.1.0.

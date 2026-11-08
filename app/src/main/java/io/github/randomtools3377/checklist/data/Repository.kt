@@ -4,6 +4,7 @@ import androidx.room.withTransaction
 import io.github.randomtools3377.checklist.core.Backup
 import io.github.randomtools3377.checklist.core.Goal
 import io.github.randomtools3377.checklist.core.GoalKind
+import io.github.randomtools3377.checklist.core.Reminder
 import io.github.randomtools3377.checklist.core.Repeat
 import io.github.randomtools3377.checklist.core.RepeatText
 import io.github.randomtools3377.checklist.core.Reward
@@ -29,6 +30,7 @@ data class HabitDraft(
     val at: LocalTime?,
     val finishBy: LocalTime?,
     val finishDay: Int?,
+    val reminder: Reminder? = null,
 )
 
 /** One step in the project editor. [id] is 0 for a new step. */
@@ -76,6 +78,7 @@ class Repository(private val db: AppDatabase) {
             atMinute = draft.at?.toMinuteOfDay(),
             finishByMinute = draft.finishBy?.toMinuteOfDay(),
             finishDay = draft.finishDay,
+            reminder = draft.reminder?.let { RepeatText.encodeReminder(it) },
         )
         if (existing == null) dao.insertGoal(row) else dao.updateGoal(row)
         Unit

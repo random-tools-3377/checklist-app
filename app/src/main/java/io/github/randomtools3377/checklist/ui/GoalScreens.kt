@@ -2,6 +2,10 @@
 
 package io.github.randomtools3377.checklist.ui
 
+import android.Manifest
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -43,6 +47,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -58,6 +63,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.toMutableStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
@@ -66,6 +72,7 @@ import androidx.compose.ui.unit.sp
 import io.github.randomtools3377.checklist.core.Goal
 import io.github.randomtools3377.checklist.core.GoalKind
 import io.github.randomtools3377.checklist.core.Period
+import io.github.randomtools3377.checklist.core.Reminder
 import io.github.randomtools3377.checklist.core.Repeat
 import io.github.randomtools3377.checklist.core.RepeatKind
 import io.github.randomtools3377.checklist.core.describe
@@ -74,6 +81,7 @@ import io.github.randomtools3377.checklist.core.monthShort
 import io.github.randomtools3377.checklist.core.ordinal
 import io.github.randomtools3377.checklist.core.weekdayShort
 import io.github.randomtools3377.checklist.data.HabitDraft
+import io.github.randomtools3377.checklist.reminders.Reminders
 import io.github.randomtools3377.checklist.data.ProjectDraft
 import io.github.randomtools3377.checklist.data.StepDraft
 import io.github.randomtools3377.checklist.data.nowLocal
@@ -265,8 +273,13 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit) {
     var atMinute by rememberSaveable { mutableStateOf<Int?>(null) }
     var finishByMinute by rememberSaveable { mutableStateOf<Int?>(null) }
     var finishDay by rememberSaveable { mutableStateOf<Int?>(null) }
+    var notifyOnTime by rememberSaveable { mutableStateOf(true) }
+    var alertBefore by rememberSaveable { mutableStateOf<Int?>(null) }
+    var remindAtMinute by rememberSaveable { mutableStateOf<Int?>(null) }
     var showErrors by rememberSaveable { mutableStateOf(false) }
     var choosingRepeat by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    val askPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { onClose() }
 
     LaunchedEffect(id) {
         if (!loaded) {
@@ -280,6 +293,11 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit) {
                 atMinute = goal.at?.toMinuteOfDay()
                 finishByMinute = goal.finishBy?.toMinuteOfDay()
                 finishDay = goal.finishDay
+                goal.reminder?.let { r ->
+                    notifyOnTime = r.onTime
+                    alertBefore = r.minutesBefore
+                    remindAtMinute = r.at?.toMinuteOfDay()
+                }
                 goal.repeat?.let { r ->
                     startDay = r.start.toEpochDay()
                     endDay = r.end?.toEpochDay()
@@ -363,8 +381,20 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit) {
                         at = atMinute?.toTime(),
                         finishBy = finishByMinute?.toTime(),
                         finishDay = if (choice == RepeatChoice.TIMES_PER) finishDay else null,
+                        reminder = Reminder(
+                            onTime = notifyOnTime,
+                            minutesBefore = if (atMinute != null) alertBefore else null,
+                            at = if (atMinute == null) remindAtMinute?.toTime() else null,
+                        ),
                     ),
-                    onDone = onClose,
+                    onDone = {
+                        val wantsNotifications = if (atMinute != null) notifyOnTime || alertBefore != null else remindAtMinute != null
+                        if (wantsNotifications && !Reminders.canNotify(context) && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                            askPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+                        } else {
+                            onClose()
+                        }
+                    },
                 )
             }
         },
@@ -508,6 +538,36 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit) {
         )
         if (choice == RepeatChoice.TIMES_PER) {
             FinishDayPicker(per, finishDay) { finishDay = it }
+        }
+
+        // Reminders
+        HorizontalDivider()
+        Text("Reminders", style = MaterialTheme.typography.titleSmall)
+        val clock = atMinute
+        if (clock != null) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                Text("Notify at ${timeText(clock.toTime())}", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                Switch(checked = notifyOnTime, onCheckedChange = { notifyOnTime = it }, modifier = Modifier.testTag("field:notify-on-time"))
+            }
+            Text("Also alert before", style = MaterialTheme.typography.bodyLarge)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                listOf(null, 5, 10, 15, 30, 60).forEach { minutes ->
+                    FilterChip(
+                        selected = alertBefore == minutes,
+                        onClick = { alertBefore = minutes },
+                        label = { Text(minutes?.let { "$it min" } ?: "No") },
+                    )
+                }
+            }
+        } else {
+            TimeSetting(
+                "Remind me at",
+                remindAtMinute?.toTime(),
+                { remindAtMinute = it?.toMinuteOfDay() },
+                "field:remind-at",
+                emptyText = "No reminder",
+                hint = "Or give it a set time above, and it notifies at that time.",
+            )
         }
         Text(
             "Changes apply from now on. Points already earned stay as they were.",

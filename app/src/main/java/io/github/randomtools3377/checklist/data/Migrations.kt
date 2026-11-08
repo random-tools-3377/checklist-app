@@ -11,7 +11,7 @@ import io.github.randomtools3377.checklist.core.RepeatText
  * of them drops it. app/schemas holds the layout of every version, and the emulator tests check
  * each migration.
  */
-val MIGRATIONS: Array<Migration> = arrayOf(Migration1To2)
+val MIGRATIONS: Array<Migration> = arrayOf(Migration1To2, Migration2To3)
 
 /**
  * Version 2 (app 0.2.0): flexible repeats, lengths, clock times, finish-by times, and returning
@@ -46,5 +46,12 @@ object Migration1To2 : Migration(1, 2) {
             }
             db.execSQL("UPDATE goals SET `repeat` = ? WHERE id = ?", arrayOf<Any>(RepeatText.encode(repeat), id))
         }
+    }
+}
+
+/** Version 3 (app 0.3.0): notification settings per goal. Existing goals keep the defaults. */
+object Migration2To3 : Migration(2, 3) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE goals ADD COLUMN `reminder` TEXT")
     }
 }

@@ -44,6 +44,8 @@ data class GoalEntity(
     val finishByMinute: Int? = null,
     /** For "times per": the day of its week, month or year to finish by. Added in version 2. */
     val finishDay: Int? = null,
+    /** Notification settings, as JSON (see RepeatText). Null means the defaults. Added in version 3. */
+    val reminder: String? = null,
 )
 
 @Entity(tableName = "steps", indices = [Index("goalId")])
@@ -155,6 +157,9 @@ interface ChecklistDao {
 
     @Query("SELECT * FROM ticks WHERE stepId IS NOT NULL")
     fun observeStepTicks(): Flow<List<TickEntity>>
+
+    @Query("SELECT * FROM ticks WHERE stepId IS NULL AND periodStart >= :since")
+    suspend fun habitTicksSince(since: Long): List<TickEntity>
 
     @Query("SELECT * FROM ticks WHERE goalId = :goalId AND stepId IS NULL AND periodStart = :periodStart ORDER BY id")
     suspend fun habitTicks(goalId: Long, periodStart: Long): List<TickEntity>
@@ -285,7 +290,7 @@ interface ChecklistDao {
         PurchaseEntity::class,
         SettingEntity::class,
     ],
-    version = 2,
+    version = 3,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {

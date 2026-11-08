@@ -56,10 +56,12 @@ data class Backup(
 
 class BackupError(message: String) : Exception(message)
 
-/** Stores a [Repeat] as text in the database, in the same form as the backup file. */
+/** Stores a [Repeat] or a [Reminder] as text in the database, in the same form as the backup file. */
 object RepeatText {
     private val json = Json { ignoreUnknownKeys = true }
 
     fun encode(repeat: Repeat): String = json.encodeToString(Repeat.serializer(), repeat)
     fun decode(text: String): Repeat = json.decodeFromString(Repeat.serializer(), text)
+    fun encodeReminder(reminder: Reminder): String = json.encodeToString(Reminder.serializer(), reminder)
+    fun decodeReminder(text: String): Reminder = json.decodeFromString(Reminder.serializer(), text)
 }
