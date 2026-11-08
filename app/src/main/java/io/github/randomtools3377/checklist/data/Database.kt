@@ -34,6 +34,16 @@ data class GoalEntity(
     val archived: Boolean,
     val position: Int,
     val createdAt: Long,
+    /** When it is due, as JSON (see RepeatText). Null for a project. Added in version 2. */
+    val repeat: String? = null,
+    /** How long one tick takes, in minutes. Added in version 2. */
+    val minutes: Int? = null,
+    /** Clock time to do it at, in minutes after midnight. Added in version 2. */
+    val atMinute: Int? = null,
+    /** Time to finish it by, in minutes after midnight. Added in version 2. */
+    val finishByMinute: Int? = null,
+    /** For "times per": the day of its week, month or year to finish by. Added in version 2. */
+    val finishDay: Int? = null,
 )
 
 @Entity(tableName = "steps", indices = [Index("goalId")])
@@ -92,6 +102,8 @@ data class PurchaseEntity(
     val price: Int,
     val at: Long,
     val usedAt: Long?,
+    /** When it was returned for a refund. Added in version 2. */
+    val returnedAt: Long? = null,
 )
 
 @Entity(tableName = "settings")
@@ -199,7 +211,7 @@ interface ChecklistDao {
     @Query("SELECT COALESCE(MAX(position), -1) + 1 FROM rewards")
     suspend fun nextRewardPosition(): Int
 
-    @Query("SELECT * FROM purchases WHERE usedAt IS NULL ORDER BY at DESC, id DESC")
+    @Query("SELECT * FROM purchases WHERE usedAt IS NULL AND returnedAt IS NULL ORDER BY at DESC, id DESC")
     fun observeUnusedPurchases(): Flow<List<PurchaseEntity>>
 
     @Query("SELECT * FROM purchases WHERE id = :id")
@@ -210,6 +222,46 @@ interface ChecklistDao {
 
     @Query("UPDATE purchases SET usedAt = :at WHERE id = :id")
     suspend fun markUsed(id: Long, at: Long)
+
+    @Query("UPDATE purchases SET returnedAt = :at WHERE id = :id")
+    suspend fun markReturned(id: Long, at: Long)
+
+    // Points history
+
+    @Query("SELECT * FROM entries ORDER BY at DESC, id DESC")
+    fun observeEntries(): Flow<List<EntryEntity>>
+
+    @Query("SELECT * FROM rewards WHERE archived = 0 ORDER BY position, id")
+    suspend fun activeRewards(): List<RewardEntity>
+
+    @Query("SELECT * FROM goals WHERE archived = 0 ORDER BY position, id")
+    suspend fun activeGoals(): List<GoalEntity>
+
+    // Backup: everything, including removed goals and rewards, which history still refers to.
+
+    @Query("SELECT * FROM goals") suspend fun allGoals(): List<GoalEntity>
+    @Query("SELECT * FROM steps") suspend fun allSteps(): List<StepEntity>
+    @Query("SELECT * FROM ticks") suspend fun allTicks(): List<TickEntity>
+    @Query("SELECT * FROM entries") suspend fun allEntries(): List<EntryEntity>
+    @Query("SELECT * FROM rewards") suspend fun allRewards(): List<RewardEntity>
+    @Query("SELECT * FROM purchases") suspend fun allPurchases(): List<PurchaseEntity>
+    @Query("SELECT * FROM settings") suspend fun allSettings(): List<SettingEntity>
+
+    @Query("DELETE FROM goals") suspend fun deleteGoals()
+    @Query("DELETE FROM steps") suspend fun deleteSteps()
+    @Query("DELETE FROM ticks") suspend fun deleteTicks()
+    @Query("DELETE FROM entries") suspend fun deleteEntries()
+    @Query("DELETE FROM rewards") suspend fun deleteRewards()
+    @Query("DELETE FROM purchases") suspend fun deletePurchases()
+    @Query("DELETE FROM settings") suspend fun deleteSettings()
+
+    @Insert suspend fun insertGoals(rows: List<GoalEntity>)
+    @Insert suspend fun insertSteps(rows: List<StepEntity>)
+    @Insert suspend fun insertTicks(rows: List<TickEntity>)
+    @Insert suspend fun insertEntries(rows: List<EntryEntity>)
+    @Insert suspend fun insertRewards(rows: List<RewardEntity>)
+    @Insert suspend fun insertPurchases(rows: List<PurchaseEntity>)
+    @Insert suspend fun insertSettings(rows: List<SettingEntity>)
 
     // Settings
 
@@ -233,7 +285,7 @@ interface ChecklistDao {
         PurchaseEntity::class,
         SettingEntity::class,
     ],
-    version = 1,
+    version = 2,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -243,6 +295,8 @@ abstract class AppDatabase : RoomDatabase() {
         const val FILE_NAME = "checklist.db"
 
         fun open(context: Context): AppDatabase =
-            Room.databaseBuilder(context, AppDatabase::class.java, FILE_NAME).build()
+            Room.databaseBuilder(context, AppDatabase::class.java, FILE_NAME)
+                .addMigrations(*MIGRATIONS)
+                .build()
     }
 }

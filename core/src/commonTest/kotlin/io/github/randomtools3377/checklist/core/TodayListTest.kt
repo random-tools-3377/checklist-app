@@ -1,12 +1,13 @@
 package io.github.randomtools3377.checklist.core
 
+import kotlinx.datetime.LocalDate
+import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
-import kotlin.test.Test
-import kotlinx.datetime.LocalDate
 
 class TodayListTest {
     private val wednesday = LocalDate(2026, 11, 11)
+    private val start = LocalDate(2026, 1, 1)
 
     private fun tick(goalId: Long, day: LocalDate, period: Period?, stepId: Long? = null) = Tick(
         goalId = goalId, stepId = stepId, at = 0, day = day, period = period,
@@ -14,9 +15,9 @@ class TodayListTest {
     )
 
     @Test
-    fun habitsAreGroupedAndCountedForTheirCurrentPeriod() {
-        val water = Goal(id = 1, kind = GoalKind.HABIT, name = "Water", icon = "💧", points = 1, period = Period.DAILY, target = 8)
-        val gym = Goal(id = 2, kind = GoalKind.HABIT, name = "Gym", icon = "🏋", points = 10, period = Period.WEEKLY, target = 3)
+    fun habitsAreGroupedAndCountedForTheirCurrentWindow() {
+        val water = Goal(id = 1, kind = GoalKind.HABIT, name = "Water", icon = "💧", points = 1, repeat = Repeat.everyDay(start), target = 8)
+        val gym = Goal(id = 2, kind = GoalKind.HABIT, name = "Gym", icon = "🏋", points = 10, repeat = Repeat.timesPer(Period.WEEKLY, start), target = 3)
         val ticks = listOf(
             tick(1, wednesday, Period.DAILY),
             tick(1, wednesday, Period.DAILY),
@@ -26,15 +27,32 @@ class TodayListTest {
 
         val view = TodayList.build(wednesday, listOf(water, gym), emptyList(), ticks, balance = 12)
 
-        assertEquals(listOf(HabitRow(water, 2)), view.daily)
-        assertEquals(listOf(HabitRow(gym, 1)), view.weekly)
-        assertTrue(view.monthly.isEmpty())
+        assertEquals(listOf(2), view.dueToday.map { it.count })
+        assertEquals(Window(wednesday, wednesday, Period.DAILY), view.dueToday.single().window)
+        assertEquals(listOf(1), view.thisWeek.map { it.count })
+        assertEquals(LocalDate(2026, 11, 9), view.thisWeek.single().window.start)
+        assertTrue(view.thisMonth.isEmpty())
         assertEquals(12, view.balance)
     }
 
     @Test
+    fun habitsNotDueTodayAreLeftOut() {
+        val mondays = Goal(id = 1, kind = GoalKind.HABIT, name = "Mon", icon = "⭐", points = 1, repeat = Repeat(RepeatKind.WEEKDAYS, start, weekdays = setOf(1)))
+        val view = TodayList.build(wednesday, listOf(mondays), emptyList(), emptyList(), 0)
+        assertTrue(view.isEmpty)
+    }
+
+    @Test
+    fun habitsFollowTheUsersOwnOrder() {
+        val a = Goal(id = 1, kind = GoalKind.HABIT, name = "A", icon = "⭐", points = 1, repeat = Repeat.everyDay(start), position = 2)
+        val b = Goal(id = 2, kind = GoalKind.HABIT, name = "B", icon = "⭐", points = 1, repeat = Repeat.everyDay(start), position = 1)
+        val view = TodayList.build(wednesday, listOf(a, b), emptyList(), emptyList(), 0)
+        assertEquals(listOf("B", "A"), view.dueToday.map { it.goal.name })
+    }
+
+    @Test
     fun finishedProjectsStayOnTheListOnlyForTheDayTheyWereFinished() {
-        val project = Goal(id = 1, kind = GoalKind.PROJECT, name = "Shelf", icon = "🔨", points = 0, period = null)
+        val project = Goal(id = 1, kind = GoalKind.PROJECT, name = "Shelf", icon = "🔨", points = 0, repeat = null)
         val steps = listOf(Step(id = 10, goalId = 1, name = "Buy", points = 5, position = 0))
         val ticks = listOf(tick(1, wednesday, null, stepId = 10))
 
@@ -47,8 +65,8 @@ class TodayListTest {
 
     @Test
     fun removedGoalsAndStepsAreLeftOut() {
-        val gone = Goal(id = 1, kind = GoalKind.HABIT, name = "Old", icon = "⭐", points = 1, period = Period.DAILY, archived = true)
-        val project = Goal(id = 2, kind = GoalKind.PROJECT, name = "P", icon = "⭐", points = 0, period = null)
+        val gone = Goal(id = 1, kind = GoalKind.HABIT, name = "Old", icon = "⭐", points = 1, repeat = Repeat.everyDay(start), archived = true)
+        val project = Goal(id = 2, kind = GoalKind.PROJECT, name = "P", icon = "⭐", points = 0, repeat = null)
         val steps = listOf(
             Step(id = 10, goalId = 2, name = "Kept", points = 1, position = 1),
             Step(id = 11, goalId = 2, name = "Removed", points = 1, position = 0, archived = true),
@@ -56,7 +74,7 @@ class TodayListTest {
 
         val view = TodayList.build(wednesday, listOf(gone, project), steps, emptyList(), 0)
 
-        assertTrue(view.daily.isEmpty())
+        assertTrue(view.dueToday.isEmpty())
         assertEquals(listOf("Kept"), view.projects.single().steps.map { it.step.name })
     }
 }

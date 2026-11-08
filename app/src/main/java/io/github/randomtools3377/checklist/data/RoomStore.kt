@@ -7,6 +7,7 @@ import io.github.randomtools3377.checklist.core.EntryKind
 import io.github.randomtools3377.checklist.core.Goal
 import io.github.randomtools3377.checklist.core.GoalKind
 import io.github.randomtools3377.checklist.core.Period
+import io.github.randomtools3377.checklist.core.RepeatText
 import io.github.randomtools3377.checklist.core.Purchase
 import io.github.randomtools3377.checklist.core.Reward
 import io.github.randomtools3377.checklist.core.Step
@@ -48,6 +49,7 @@ class RoomStore(private val db: AppDatabase) : Store {
     override suspend fun purchase(id: Long): Purchase? = dao.purchase(id)?.toCore()
     override suspend fun addPurchase(purchase: Purchase): Long = dao.insertPurchase(purchase.toEntity())
     override suspend fun markUsed(purchaseId: Long, at: Long) = dao.markUsed(purchaseId, at)
+    override suspend fun markReturned(purchaseId: Long, at: Long) = dao.markReturned(purchaseId, at)
 }
 
 fun GoalEntity.toCore() = Goal(
@@ -56,14 +58,42 @@ fun GoalEntity.toCore() = Goal(
     name = name,
     icon = icon,
     points = points,
-    period = period?.let { Period.valueOf(it) },
+    repeat = repeat?.let { RepeatText.decode(it) },
     target = target,
     bonus = bonus,
     deadline = deadline?.toDay(),
+    minutes = minutes,
+    at = atMinute?.toTime(),
+    finishBy = finishByMinute?.toTime(),
+    finishDay = finishDay,
     archived = archived,
+    position = position,
+    createdAt = createdAt,
+)
+
+fun Goal.toEntity() = GoalEntity(
+    id = id,
+    kind = kind.name,
+    name = name,
+    icon = icon,
+    points = points,
+    period = period?.name,
+    target = target,
+    bonus = bonus,
+    deadline = deadline?.toEpochDay(),
+    archived = archived,
+    position = position,
+    createdAt = createdAt,
+    repeat = repeat?.let { RepeatText.encode(it) },
+    minutes = minutes,
+    atMinute = at?.toMinuteOfDay(),
+    finishByMinute = finishBy?.toMinuteOfDay(),
+    finishDay = finishDay,
 )
 
 fun StepEntity.toCore() = Step(id = id, goalId = goalId, name = name, points = points, position = position, archived = archived)
+
+fun Step.toEntity() = StepEntity(id = id, goalId = goalId, name = name, points = points, position = position, archived = archived)
 
 fun TickEntity.toCore() = Tick(
     id = id,
@@ -111,12 +141,18 @@ fun Entry.toEntity() = EntryEntity(
     label = label,
 )
 
-fun RewardEntity.toCore() = Reward(id = id, name = name, icon = icon, price = price, archived = archived)
+fun RewardEntity.toCore() = Reward(
+    id = id, name = name, icon = icon, price = price, archived = archived, position = position, createdAt = createdAt,
+)
+
+fun Reward.toEntity() = RewardEntity(
+    id = id, name = name, icon = icon, price = price, archived = archived, position = position, createdAt = createdAt,
+)
 
 fun PurchaseEntity.toCore() = Purchase(
-    id = id, rewardId = rewardId, name = name, icon = icon, price = price, at = at, usedAt = usedAt,
+    id = id, rewardId = rewardId, name = name, icon = icon, price = price, at = at, usedAt = usedAt, returnedAt = returnedAt,
 )
 
 fun Purchase.toEntity() = PurchaseEntity(
-    id = id, rewardId = rewardId, name = name, icon = icon, price = price, at = at, usedAt = usedAt,
+    id = id, rewardId = rewardId, name = name, icon = icon, price = price, at = at, usedAt = usedAt, returnedAt = returnedAt,
 )

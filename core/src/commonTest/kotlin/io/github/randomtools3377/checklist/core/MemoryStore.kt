@@ -44,6 +44,11 @@ class MemoryStore : Store {
         val i = purchases.indexOfFirst { it.id == purchaseId }
         purchases[i] = purchases[i].copy(usedAt = at)
     }
+
+    override suspend fun markReturned(purchaseId: Long, at: Long) {
+        val i = purchases.indexOfFirst { it.id == purchaseId }
+        purchases[i] = purchases[i].copy(returnedAt = at)
+    }
 }
 
 /** A clock the test can move. It runs in UTC. */

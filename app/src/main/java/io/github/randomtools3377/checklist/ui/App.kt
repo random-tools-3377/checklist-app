@@ -5,6 +5,7 @@ package io.github.randomtools3377.checklist.ui
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
@@ -20,6 +21,7 @@ import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -59,6 +61,8 @@ fun ChecklistApp(vm: MainViewModel = viewModel()) {
     val stack = rememberSaveable(saver = RoutesSaver) { mutableListOf(AppTab.TODAY.route).toMutableStateList() }
     var showBought by rememberSaveable { mutableStateOf(false) }
     var newGoal by remember { mutableStateOf(false) }
+    var reorderGoals by rememberSaveable { mutableStateOf(false) }
+    var reorderRewards by rememberSaveable { mutableStateOf(false) }
 
     val route = stack.last()
     fun push(next: String) {
@@ -70,14 +74,17 @@ fun ChecklistApp(vm: MainViewModel = viewModel()) {
     fun goTo(tab: AppTab) {
         stack.clear()
         stack.add(tab.route)
+        reorderGoals = false
+        reorderRewards = false
     }
 
     BackHandler(enabled = stack.size > 1 || route != AppTab.TODAY.route) { pop() }
 
-    val today by vm.todayView.collectAsStateWithLifecycle()
+    val today by vm.todayState.collectAsStateWithLifecycle()
     val goals by vm.goalsView.collectAsStateWithLifecycle()
     val shop by vm.shopView.collectAsStateWithLifecycle()
-    val dayEndHour by vm.dayEndHour.collectAsStateWithLifecycle()
+    val settings by vm.settings.collectAsStateWithLifecycle()
+    val history by vm.history.collectAsStateWithLifecycle()
 
     Box(Modifier.fillMaxSize()) {
         val parts = route.split("/")
@@ -86,29 +93,54 @@ fun ChecklistApp(vm: MainViewModel = viewModel()) {
             "habit" -> HabitEditor(id, vm, onClose = ::pop)
             "project" -> ProjectEditor(id, vm, onClose = ::pop)
             "reward" -> RewardEditor(id, vm, onClose = ::pop)
-            "settings" -> SettingsScreen(dayEndHour, vm::setDayEndHour, onBack = ::pop)
+            "settings" -> SettingsScreen(settings, vm, onBack = ::pop)
+            "history" -> HistoryScreen(history, onBack = ::pop)
             else -> {
                 val tab = AppTab.entries.firstOrNull { it.route == route } ?: AppTab.TODAY
                 TabScaffold(
                     tab = tab,
                     onTab = ::goTo,
                     onSettings = { push("settings") },
+                    actions = {
+                        if (tab == AppTab.GOALS && goals?.goals?.isNotEmpty() == true) {
+                            TextButton(onClick = { reorderGoals = !reorderGoals }, modifier = Modifier.testTag("reorder")) {
+                                Text(if (reorderGoals) "Done" else "Reorder")
+                            }
+                        }
+                        if (tab == AppTab.SHOP && !showBought && shop?.rewards?.isNotEmpty() == true) {
+                            TextButton(onClick = { reorderRewards = !reorderRewards }, modifier = Modifier.testTag("reorder")) {
+                                Text(if (reorderRewards) "Done" else "Reorder")
+                            }
+                        }
+                    },
                     fab = {
-                        if (tab == AppTab.GOALS) AddButton("New goal", "add-goal") { newGoal = true }
-                        if (tab == AppTab.SHOP && !showBought) AddButton("New reward", "add-reward") { push("reward/0") }
+                        if (tab == AppTab.GOALS && !reorderGoals) AddButton("New goal", "add-goal") { newGoal = true }
+                        if (tab == AppTab.SHOP && !showBought && !reorderRewards) AddButton("New reward", "add-reward") { push("reward/0") }
                     },
                 ) { padding ->
                     when (tab) {
-                        AppTab.TODAY -> TodayScreen(today, vm, celebrations, onAddGoal = { goTo(AppTab.GOALS); newGoal = true }, padding = padding)
+                        AppTab.TODAY -> TodayScreen(
+                            today, vm, celebrations,
+                            onAddGoal = { goTo(AppTab.GOALS); newGoal = true },
+                            onHistory = { push("history") },
+                            onSettings = { push("settings") },
+                            padding = padding,
+                        )
                         AppTab.GOALS -> GoalsScreen(
                             goals,
+                            reordering = reorderGoals,
                             onEdit = { goal -> push((if (goal.kind == GoalKind.HABIT) "habit/" else "project/") + goal.id) },
+                            onMove = { goal, by -> vm.moveGoal(goal.id, by) },
                             padding = padding,
                         )
                         AppTab.SHOP -> ShopScreen(
                             shop, vm, celebrations,
                             showBought = showBought,
-                            onShowBought = { showBought = it },
+                            onShowBought = {
+                                showBought = it
+                                reorderRewards = false
+                            },
+                            reordering = reorderRewards,
                             onEdit = { reward -> push("reward/${reward.id}") },
                             padding = padding,
                         )
@@ -144,6 +176,7 @@ private fun TabScaffold(
     tab: AppTab,
     onTab: (AppTab) -> Unit,
     onSettings: () -> Unit,
+    actions: @Composable RowScope.() -> Unit,
     fab: @Composable () -> Unit,
     content: @Composable (PaddingValues) -> Unit,
 ) {
@@ -152,6 +185,7 @@ private fun TabScaffold(
             TopAppBar(
                 title = { Text(tab.label) },
                 actions = {
+                    actions()
                     if (tab == AppTab.TODAY) {
                         IconButton(onClick = onSettings, modifier = Modifier.testTag("settings")) {
                             Icon(Icons.Filled.Settings, contentDescription = "Settings")

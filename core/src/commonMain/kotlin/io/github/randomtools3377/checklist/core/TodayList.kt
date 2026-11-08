@@ -2,9 +2,10 @@ package io.github.randomtools3377.checklist.core
 
 import kotlinx.datetime.LocalDate
 
-/** A habit on today's list, with how many times it has been ticked this period. */
-data class HabitRow(val goal: Goal, val count: Int) {
+/** A habit that is due now, with how many times it has been ticked in its current [window]. */
+data class HabitRow(val goal: Goal, val count: Int, val window: Window) {
     val done: Boolean get() = count >= goal.target
+    val left: Int get() = (goal.target - count).coerceAtLeast(0)
 }
 
 data class StepRow(val step: Step, val done: Boolean)
@@ -12,24 +13,29 @@ data class StepRow(val step: Step, val done: Boolean)
 /** A project on today's list. [finishedOn] is the day its last step was done, if it is finished. */
 data class ProjectRow(val goal: Goal, val steps: List<StepRow>, val finishedOn: LocalDate?) {
     val doneCount: Int get() = steps.count { it.done }
+    val left: Int get() = steps.size - doneCount
     val finished: Boolean get() = finishedOn != null
 }
 
 data class TodayView(
     val day: LocalDate,
     val balance: Int,
-    val daily: List<HabitRow>,
-    val weekly: List<HabitRow>,
-    val monthly: List<HabitRow>,
+    /** Habits due on this day: every-day, chosen weekdays, dates of the month, yearly, once. */
+    val dueToday: List<HabitRow>,
+    /** "Times per week" habits, and so on. */
+    val thisWeek: List<HabitRow>,
+    val thisMonth: List<HabitRow>,
+    val thisYear: List<HabitRow>,
     val projects: List<ProjectRow>,
 ) {
-    val isEmpty: Boolean get() = daily.isEmpty() && weekly.isEmpty() && monthly.isEmpty() && projects.isEmpty()
+    val isEmpty: Boolean
+        get() = dueToday.isEmpty() && thisWeek.isEmpty() && thisMonth.isEmpty() && thisYear.isEmpty() && projects.isEmpty()
 }
 
 object TodayList {
     /**
-     * Today's list: each habit with its count for the current period, and each project that is
-     * not finished, or was finished today.
+     * Today's list: each habit that is due now with its count for the current window, and each
+     * project that is not finished, or was finished today. Habits are in the user's own order.
      */
     fun build(
         day: LocalDate,
@@ -38,10 +44,10 @@ object TodayList {
         ticks: List<Tick>,
         balance: Int,
     ): TodayView {
-        val active = goals.filter { !it.archived }
-        val habits = active.filter { it.kind == GoalKind.HABIT && it.period != null }.map { goal ->
-            val start = Days.periodStart(day, goal.period!!)
-            HabitRow(goal, ticks.count { it.countsToward(goal, start) })
+        val active = goals.filter { !it.archived }.sortedWith(compareBy({ it.position }, { it.id }))
+        val habits = active.filter { it.kind == GoalKind.HABIT }.mapNotNull { goal ->
+            val window = goal.repeat?.window(day) ?: return@mapNotNull null
+            HabitRow(goal, ticks.count { it.countsToward(goal, window.start) }, window)
         }
         val stepTicks = ticks.filter { it.stepId != null }.associateBy { it.stepId }
         val projects = active.filter { it.kind == GoalKind.PROJECT }.map { goal ->
@@ -59,9 +65,10 @@ object TodayList {
         return TodayView(
             day = day,
             balance = balance,
-            daily = habits.filter { it.goal.period == Period.DAILY },
-            weekly = habits.filter { it.goal.period == Period.WEEKLY },
-            monthly = habits.filter { it.goal.period == Period.MONTHLY },
+            dueToday = habits.filter { it.window.period == Period.DAILY },
+            thisWeek = habits.filter { it.window.period == Period.WEEKLY },
+            thisMonth = habits.filter { it.window.period == Period.MONTHLY },
+            thisYear = habits.filter { it.window.period == Period.YEARLY },
             projects = projects,
         )
     }

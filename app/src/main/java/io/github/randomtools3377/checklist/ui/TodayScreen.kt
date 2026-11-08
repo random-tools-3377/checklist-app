@@ -1,3 +1,5 @@
+@file:OptIn(ExperimentalMaterial3Api::class)
+
 package io.github.randomtools3377.checklist.ui
 
 import androidx.compose.foundation.BorderStroke
@@ -21,13 +23,19 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedIconButton
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -46,10 +54,15 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.randomtools3377.checklist.core.HabitRow
+import io.github.randomtools3377.checklist.core.LongPace
+import io.github.randomtools3377.checklist.core.Planned
 import io.github.randomtools3377.checklist.core.ProjectRow
 import io.github.randomtools3377.checklist.core.StepRow
 import io.github.randomtools3377.checklist.core.TickResult
-import io.github.randomtools3377.checklist.core.TodayView
+import io.github.randomtools3377.checklist.core.TodayPace
+import io.github.randomtools3377.checklist.core.dateText
+import io.github.randomtools3377.checklist.data.ORDER_OWN
+import io.github.randomtools3377.checklist.data.ORDER_RECOMMENDED
 
 /** Where a tick button is on screen, so its burst starts there. */
 private class Spot {
@@ -58,13 +71,16 @@ private class Spot {
 
 @Composable
 fun TodayScreen(
-    view: TodayView?,
+    screen: TodayState?,
     vm: MainViewModel,
     celebrations: Celebrations,
     onAddGoal: () -> Unit,
+    onHistory: () -> Unit,
+    onSettings: () -> Unit,
     padding: PaddingValues,
 ) {
-    if (view == null) return
+    if (screen == null) return
+    val view = screen.view
     val haptics = LocalHapticFeedback.current
 
     fun celebrateTick(result: TickResult, spot: Spot, bigWhenFinished: Boolean) {
@@ -72,6 +88,10 @@ fun TodayScreen(
         haptics.performHapticFeedback(HapticFeedbackType.LongPress)
         val total = result.points + result.bonus
         celebrations.burst(spot.center, "+$total", big = bigWhenFinished && result.finished)
+    }
+
+    fun tick(row: HabitRow, spot: Spot) {
+        vm.tickHabit(row.goal.id) { celebrateTick(it, spot, row.goal.target > 1) }
     }
 
     LazyColumn(
@@ -85,7 +105,7 @@ fun TodayScreen(
     ) {
         item {
             Text(longDate(view.day), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(bottom = 8.dp))
-            BalanceCard(view.balance)
+            BalanceCard(view.balance, modifier = Modifier.clickable(onClick = onHistory), note = "Tap for your points history")
         }
         if (view.isEmpty) {
             item {
@@ -93,7 +113,7 @@ fun TodayScreen(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     modifier = Modifier.fillMaxWidth().padding(top = 48.dp),
                 ) {
-                    Text("Nothing to do yet.", style = MaterialTheme.typography.titleMedium)
+                    Text("Nothing due today.", style = MaterialTheme.typography.titleMedium)
                     Spacer(Modifier.height(8.dp))
                     Text("Add a habit or a project, then tick it here to earn points.", textAlign = TextAlign.Center)
                     Spacer(Modifier.height(16.dp))
@@ -101,14 +121,36 @@ fun TodayScreen(
                 }
             }
         }
-        habitSection("Today", view.daily, vm, ::celebrateTick)
-        habitSection("This week", view.weekly, vm, ::celebrateTick)
-        habitSection("This month", view.monthly, vm, ::celebrateTick)
+
+        if (screen.plan.isNotEmpty()) {
+            item {
+                Spacer(Modifier.height(12.dp))
+                PaceCard(screen, onSettings)
+                Spacer(Modifier.height(12.dp))
+                OrderSwitch(screen.recommended) { vm.setTodayOrder(if (it) ORDER_RECOMMENDED else ORDER_OWN) }
+            }
+            item { SectionTitle("Today") }
+            items(screen.plan, key = { "today-${it.row.goal.id}" }) { planned ->
+                HabitCard(
+                    row = planned.row,
+                    timeLabel = timeLabel(planned, screen),
+                    late = planned.late,
+                    paceLine = null,
+                    onTick = { spot -> tick(planned.row, spot) },
+                    onUndo = { vm.undoHabitTick(planned.row.goal.id) },
+                )
+                Spacer(Modifier.height(10.dp))
+            }
+        }
+        habitSection("This week", view.thisWeek, screen, ::tick, vm)
+        habitSection("This month", view.thisMonth, screen, ::tick, vm)
+        habitSection("This year", view.thisYear, screen, ::tick, vm)
         if (view.projects.isNotEmpty()) {
             item { SectionTitle("Projects") }
             items(view.projects, key = { "project-${it.goal.id}" }) { project ->
                 ProjectCard(
                     project = project,
+                    paceLine = screen.longPaces[project.goal.id]?.let { paceText(it) },
                     onTick = { step, spot ->
                         vm.tickStep(step.step.id) { result ->
                             celebrateTick(result, spot, bigWhenFinished = false)
@@ -127,26 +169,117 @@ fun TodayScreen(
     }
 }
 
+private fun timeLabel(planned: Planned, screen: TodayState): String? {
+    val time = planned.time ?: return null
+    if (planned.row.done) return null
+    val text = momentText(time, screen.view.day)
+    return if (planned.fixed) "at $text" else "by about $text"
+}
+
+private fun paceText(pace: LongPace): String = "${pace.describe()} (finish by ${dateText(pace.finish)})"
+
 private fun LazyListScope.habitSection(
     title: String,
     rows: List<HabitRow>,
+    screen: TodayState,
+    tick: (HabitRow, Spot) -> Unit,
     vm: MainViewModel,
-    celebrate: (TickResult, Spot, Boolean) -> Unit,
 ) {
     if (rows.isEmpty()) return
     item { SectionTitle(title) }
     items(rows, key = { "habit-${it.goal.id}" }) { row ->
         HabitCard(
             row = row,
-            onTick = { spot -> vm.tickHabit(row.goal.id) { celebrate(it, spot, row.goal.target > 1) } },
+            timeLabel = null,
+            late = false,
+            paceLine = screen.longPaces[row.goal.id]?.let { paceText(it) },
+            onTick = { spot -> tick(row, spot) },
             onUndo = { vm.undoHabitTick(row.goal.id) },
         )
         Spacer(Modifier.height(10.dp))
     }
 }
 
+/** How fast to go to get through what is left today. */
 @Composable
-private fun HabitCard(row: HabitRow, onTick: (Spot) -> Unit, onUndo: () -> Unit) {
+private fun PaceCard(screen: TodayState, onSettings: () -> Unit) {
+    val pace: TodayPace? = screen.pace
+    val left = screen.plan.count { !it.row.done }
+    Card(
+        modifier = Modifier.fillMaxWidth().testTag("pace"),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+    ) {
+        Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+            val color = MaterialTheme.colorScheme.onSecondaryContainer
+            when {
+                left == 0 -> Text("Everything due today is done. 🎉", color = color, style = MaterialTheme.typography.titleSmall)
+                pace == null -> {
+                    Text("$left left today", color = color, style = MaterialTheme.typography.titleSmall)
+                    Text(
+                        if (screen.hasDefaultFinish) "None of them has a finish time, so there is no pace yet."
+                        else "Set when you want to be done each day to see how fast to go.",
+                        color = color,
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    if (!screen.hasDefaultFinish) TextButton(onClick = onSettings) { Text("Set a finish time") }
+                }
+                else -> {
+                    val day = screen.view.day
+                    val headline = when {
+                        pace.minutesEach == null -> "$left left today"
+                        pace.minutesEach == 0 -> "$left left today · no time to spare"
+                        else -> "$left left today · about ${minutesText(pace.minutesEach!!)} each"
+                    }
+                    Text(headline, color = color, style = MaterialTheme.typography.titleSmall)
+                    val next = pace.nextBy?.let { "Next one by ${momentText(it, day)} · " } ?: ""
+                    Text("${next}finish by ${momentText(pace.finishAt, day)}", color = color, style = MaterialTheme.typography.bodyMedium)
+                    if (pace.reservedMinutes > 0) {
+                        Text("Includes ${minutesText(pace.reservedMinutes)} for goals with a set length", color = color, style = MaterialTheme.typography.bodySmall)
+                    }
+                    if (pace.shortBy > 0) {
+                        Text(
+                            "Not enough time: ${minutesText(pace.shortBy)} short",
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Bold,
+                        )
+                    }
+                    if (pace.unpaced > 0) {
+                        Text("${pace.unpaced} without a finish time aren't counted", color = color, style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun OrderSwitch(recommended: Boolean, onChange: (Boolean) -> Unit) {
+    SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+        SegmentedButton(
+            selected = recommended,
+            onClick = { onChange(true) },
+            shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
+            modifier = Modifier.testTag("order:recommended"),
+        ) { Text("Recommended order") }
+        SegmentedButton(
+            selected = !recommended,
+            onClick = { onChange(false) },
+            shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
+            modifier = Modifier.testTag("order:own"),
+        ) { Text("My order") }
+    }
+}
+
+@Composable
+private fun HabitCard(
+    row: HabitRow,
+    timeLabel: String?,
+    late: Boolean,
+    paceLine: String?,
+    onTick: (Spot) -> Unit,
+    onUndo: () -> Unit,
+) {
     val goal = row.goal
     val spot = remember { Spot() }
     val counted = goal.target > 1
@@ -156,12 +289,24 @@ private fun HabitCard(row: HabitRow, onTick: (Spot) -> Unit, onUndo: () -> Unit)
             Spacer(Modifier.width(8.dp))
             Column(Modifier.weight(1f)) {
                 Text(goal.name, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                val detail = buildString {
-                    append("+${goal.points}")
-                    if (counted) append(" each · ${row.count} of ${goal.target}")
-                    if (counted && goal.bonus > 0) append(" · bonus +${goal.bonus}")
-                }
+                val detail = buildList {
+                    add("+${goal.points}" + if (counted) " each" else "")
+                    if (counted) add("${row.count} of ${goal.target}")
+                    if (counted && goal.bonus > 0) add("bonus +${goal.bonus}")
+                    goal.minutes?.let { add(minutesText(it)) }
+                }.joinToString(" · ")
                 Text(detail, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (timeLabel != null) {
+                    Text(
+                        if (late) "$timeLabel · late" else timeLabel,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium,
+                        color = if (late) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                    )
+                }
+                if (paceLine != null) {
+                    Text(paceLine, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                }
                 if (counted) {
                     Spacer(Modifier.height(6.dp))
                     LinearProgressIndicator(
@@ -213,7 +358,7 @@ private fun TickButton(done: Boolean, label: String?, description: String, modif
 }
 
 @Composable
-private fun ProjectCard(project: ProjectRow, onTick: (StepRow, Spot) -> Unit, onUndo: (StepRow) -> Unit) {
+private fun ProjectCard(project: ProjectRow, paceLine: String?, onTick: (StepRow, Spot) -> Unit, onUndo: (StepRow) -> Unit) {
     val goal = project.goal
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(12.dp)) {
@@ -228,6 +373,9 @@ private fun ProjectCard(project: ProjectRow, onTick: (StepRow, Spot) -> Unit, on
                         goal.deadline?.let { add("due ${shortDate(it)}") }
                     }.joinToString(" · ")
                     Text(detail, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (paceLine != null) {
+                        Text(paceLine, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                    }
                 }
                 if (project.finished) {
                     Text("Finished", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)

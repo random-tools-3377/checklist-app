@@ -138,6 +138,13 @@ jobs:
       - name: Shared tests on an iPhone simulator
         run: ./gradlew --no-daemon :core:iosSimulatorArm64Test
 
+      - name: Check the iPhone tests really ran
+        run: |
+          results=$(ls core/build/test-results/iosSimulatorArm64Test/*.xml 2>/dev/null | wc -l | tr -d ' ')
+          tests=$(cat core/build/test-results/iosSimulatorArm64Test/*.xml 2>/dev/null | grep -o 'tests="[0-9]*"' | grep -o '[0-9]*' | paste -sd+ - | bc)
+          echo "Test files: $results, tests: ${tests:-0}"
+          if [ "${tests:-0}" -lt 1 ]; then echo "::error::No iPhone tests ran."; exit 1; fi
+
       - name: Keep the test reports
         if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

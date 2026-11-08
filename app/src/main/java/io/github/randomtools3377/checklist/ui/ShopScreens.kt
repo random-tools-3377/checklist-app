@@ -13,6 +13,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -53,6 +59,7 @@ fun ShopScreen(
     celebrations: Celebrations,
     showBought: Boolean,
     onShowBought: (Boolean) -> Unit,
+    reordering: Boolean,
     onEdit: (Reward) -> Unit,
     padding: PaddingValues,
 ) {
@@ -61,6 +68,7 @@ fun ShopScreen(
     val context = LocalContext.current
     var buying by remember { mutableStateOf<Reward?>(null) }
     var using by remember { mutableStateOf<Purchase?>(null) }
+    var returning by remember { mutableStateOf<Purchase?>(null) }
 
     Column(Modifier.fillMaxSize().padding(top = padding.calculateTopPadding())) {
         BalanceCard(
@@ -91,8 +99,17 @@ fun ShopScreen(
                         )
                     }
                 }
-                items(view.rewards, key = { it.reward.id }) { row ->
-                    RewardCard(row, view.balance, onBuy = { buying = row.reward }, onEdit = { onEdit(row.reward) })
+                itemsIndexed(view.rewards, key = { _, row -> row.reward.id }) { index, row ->
+                    RewardCard(
+                        row,
+                        view.balance,
+                        reordering = reordering,
+                        canMoveUp = index > 0,
+                        canMoveDown = index < view.rewards.lastIndex,
+                        onMove = { vm.moveReward(row.reward.id, it) },
+                        onBuy = { buying = row.reward },
+                        onEdit = { onEdit(row.reward) },
+                    )
                     Spacer(Modifier.height(10.dp))
                 }
             } else {
@@ -106,7 +123,7 @@ fun ShopScreen(
                     }
                 }
                 items(view.bought, key = { it.id }) { purchase ->
-                    BoughtCard(purchase, onUse = { using = purchase })
+                    BoughtCard(purchase, onUse = { using = purchase }, onReturn = { returning = purchase })
                     Spacer(Modifier.height(10.dp))
                 }
             }
@@ -141,6 +158,20 @@ fun ShopScreen(
         )
     }
 
+    returning?.let { purchase ->
+        AlertDialog(
+            onDismissRequest = { returning = null },
+            title = { Text("Return ${purchase.name}?") },
+            text = { Text("You get ${pointsText(purchase.price)} back, and it leaves your Bought list.") },
+            confirmButton = {
+                TextButton(onClick = { vm.returnPurchase(purchase.id); returning = null }, modifier = Modifier.testTag("confirm-return")) {
+                    Text("Return it")
+                }
+            },
+            dismissButton = { TextButton(onClick = { returning = null }) { Text("Keep it") } },
+        )
+    }
+
     using?.let { purchase ->
         AlertDialog(
             onDismissRequest = { using = null },
@@ -155,10 +186,19 @@ fun ShopScreen(
 }
 
 @Composable
-private fun RewardCard(row: RewardRow, balance: Int, onBuy: () -> Unit, onEdit: () -> Unit) {
+private fun RewardCard(
+    row: RewardRow,
+    balance: Int,
+    reordering: Boolean,
+    canMoveUp: Boolean,
+    canMoveDown: Boolean,
+    onMove: (Int) -> Unit,
+    onBuy: () -> Unit,
+    onEdit: () -> Unit,
+) {
     val reward = row.reward
     val affordable = reward.price <= balance
-    Card(Modifier.fillMaxWidth().clickable(onClick = onEdit).testTag("reward:${reward.name}")) {
+    Card(Modifier.fillMaxWidth().clickable(enabled = !reordering, onClick = onEdit).testTag("reward:${reward.name}")) {
         Column(Modifier.padding(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(reward.icon, fontSize = 30.sp, modifier = Modifier.width(44.dp), textAlign = TextAlign.Center)
@@ -171,7 +211,16 @@ private fun RewardCard(row: RewardRow, balance: Int, onBuy: () -> Unit, onEdit: 
                     }
                 }
                 Spacer(Modifier.width(8.dp))
-                Button(onClick = onBuy, enabled = affordable, modifier = Modifier.testTag("buy:${reward.name}")) { Text("Buy") }
+                if (reordering) {
+                    IconButton(onClick = { onMove(-1) }, enabled = canMoveUp, modifier = Modifier.testTag("up:${reward.name}")) {
+                        Icon(Icons.Filled.KeyboardArrowUp, contentDescription = "Move ${reward.name} up")
+                    }
+                    IconButton(onClick = { onMove(1) }, enabled = canMoveDown, modifier = Modifier.testTag("down:${reward.name}")) {
+                        Icon(Icons.Filled.KeyboardArrowDown, contentDescription = "Move ${reward.name} down")
+                    }
+                } else {
+                    Button(onClick = onBuy, enabled = affordable, modifier = Modifier.testTag("buy:${reward.name}")) { Text("Buy") }
+                }
             }
             if (!affordable) {
                 // Saving for it: how far the balance has got toward the price.
@@ -193,7 +242,7 @@ private fun RewardCard(row: RewardRow, balance: Int, onBuy: () -> Unit, onEdit: 
 }
 
 @Composable
-private fun BoughtCard(purchase: Purchase, onUse: () -> Unit) {
+private fun BoughtCard(purchase: Purchase, onUse: () -> Unit, onReturn: () -> Unit) {
     val day = purchase.at.toLocalDateTime().date
     Card(Modifier.fillMaxWidth().testTag("bought:${purchase.name}")) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(12.dp)) {
@@ -203,7 +252,10 @@ private fun BoughtCard(purchase: Purchase, onUse: () -> Unit) {
                 Text(purchase.name, style = MaterialTheme.typography.titleMedium)
                 Text("Bought ${shortDate(day)} · ${pointsText(purchase.price)}", style = MaterialTheme.typography.bodySmall)
             }
-            FilledTonalButton(onClick = onUse, modifier = Modifier.testTag("use:${purchase.name}")) { Text("Use it") }
+            Column(horizontalAlignment = Alignment.End) {
+                FilledTonalButton(onClick = onUse, modifier = Modifier.testTag("use:${purchase.name}")) { Text("Use it") }
+                TextButton(onClick = onReturn, modifier = Modifier.testTag("return:${purchase.name}")) { Text("Return") }
+            }
         }
     }
 }

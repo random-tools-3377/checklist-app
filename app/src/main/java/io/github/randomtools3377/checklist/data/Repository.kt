@@ -1,12 +1,20 @@
 package io.github.randomtools3377.checklist.data
 
 import androidx.room.withTransaction
+import io.github.randomtools3377.checklist.core.Backup
 import io.github.randomtools3377.checklist.core.Goal
 import io.github.randomtools3377.checklist.core.GoalKind
-import io.github.randomtools3377.checklist.core.Period
+import io.github.randomtools3377.checklist.core.Repeat
+import io.github.randomtools3377.checklist.core.RepeatText
 import io.github.randomtools3377.checklist.core.Reward
 import io.github.randomtools3377.checklist.core.Step
 import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalTime
+
+const val SETTING_DEFAULT_FINISH = "default_finish_minute"
+const val SETTING_TODAY_ORDER = "today_order"
+const val ORDER_RECOMMENDED = "recommended"
+const val ORDER_OWN = "own"
 
 /** What the habit editor saves. */
 data class HabitDraft(
@@ -14,9 +22,13 @@ data class HabitDraft(
     val name: String,
     val icon: String,
     val points: Int,
-    val period: Period,
+    val repeat: Repeat,
     val target: Int,
     val bonus: Int,
+    val minutes: Int?,
+    val at: LocalTime?,
+    val finishBy: LocalTime?,
+    val finishDay: Int?,
 )
 
 /** One step in the project editor. [id] is 0 for a new step. */
@@ -30,12 +42,13 @@ data class ProjectDraft(
     val steps: List<StepDraft>,
     val bonus: Int,
     val deadline: LocalDate?,
+    val finishBy: LocalTime?,
 )
 
 /** What the reward editor saves. */
 data class RewardDraft(val id: Long, val name: String, val icon: String, val price: Int)
 
-/** Adding, editing and removing goals and rewards, and the settings. */
+/** Adding, editing, ordering and removing goals and rewards; settings; export and import. */
 class Repository(private val db: AppDatabase) {
     private val dao = db.dao()
 
@@ -47,34 +60,24 @@ class Repository(private val db: AppDatabase) {
 
     suspend fun saveHabit(draft: HabitDraft): Unit = db.withTransaction {
         val existing = if (draft.id != 0L) dao.goal(draft.id) else null
-        if (existing == null) {
-            dao.insertGoal(
-                GoalEntity(
-                    kind = GoalKind.HABIT.name,
-                    name = draft.name,
-                    icon = draft.icon,
-                    points = draft.points,
-                    period = draft.period.name,
-                    target = draft.target,
-                    bonus = draft.bonus,
-                    deadline = null,
-                    archived = false,
-                    position = dao.nextGoalPosition(),
-                    createdAt = nowMillis(),
-                ),
-            )
-        } else {
-            dao.updateGoal(
-                existing.copy(
-                    name = draft.name,
-                    icon = draft.icon,
-                    points = draft.points,
-                    period = draft.period.name,
-                    target = draft.target,
-                    bonus = draft.bonus,
-                ),
-            )
-        }
+        val base = existing ?: GoalEntity(
+            kind = GoalKind.HABIT.name, name = "", icon = "", points = 0, period = null, target = 1, bonus = 0,
+            deadline = null, archived = false, position = dao.nextGoalPosition(), createdAt = nowMillis(),
+        )
+        val row = base.copy(
+            name = draft.name,
+            icon = draft.icon,
+            points = draft.points,
+            period = draft.repeat.windowPeriod.name,
+            target = draft.target,
+            bonus = draft.bonus,
+            repeat = RepeatText.encode(draft.repeat),
+            minutes = draft.minutes,
+            atMinute = draft.at?.toMinuteOfDay(),
+            finishByMinute = draft.finishBy?.toMinuteOfDay(),
+            finishDay = draft.finishDay,
+        )
+        if (existing == null) dao.insertGoal(row) else dao.updateGoal(row)
         Unit
     }
 
@@ -94,6 +97,7 @@ class Repository(private val db: AppDatabase) {
                     archived = false,
                     position = dao.nextGoalPosition(),
                     createdAt = nowMillis(),
+                    finishByMinute = draft.finishBy?.toMinuteOfDay(),
                 ),
             )
         } else {
@@ -103,6 +107,7 @@ class Repository(private val db: AppDatabase) {
                     icon = draft.icon,
                     bonus = draft.bonus,
                     deadline = draft.deadline?.toEpochDay(),
+                    finishByMinute = draft.finishBy?.toMinuteOfDay(),
                 ),
             )
             existing.id
@@ -126,6 +131,21 @@ class Repository(private val db: AppDatabase) {
     /** Removes a goal from the lists. Points it already paid stay in the balance. */
     suspend fun removeGoal(id: Long) {
         dao.goal(id)?.let { dao.updateGoal(it.copy(archived = true)) }
+    }
+
+    /** Moves a goal one place up ([by] = -1) or down (+1) among the goals of the same kind. */
+    suspend fun moveGoal(id: Long, by: Int): Unit = db.withTransaction {
+        val goal = dao.goal(id) ?: return@withTransaction
+        val all = dao.activeGoals()
+        val sameKind = all.filter { it.kind == goal.kind }.toMutableList()
+        val from = sameKind.indexOfFirst { it.id == id }
+        val to = from + by
+        if (from < 0 || to !in sameKind.indices) return@withTransaction
+        sameKind.add(to, sameKind.removeAt(from))
+        // Put the reordered kind back into the same slots, then number everything in order.
+        val reordered = sameKind.iterator()
+        all.map { if (it.kind == goal.kind) reordered.next() else it }
+            .forEachIndexed { i, row -> if (row.position != i) dao.updateGoal(row.copy(position = i)) }
     }
 
     suspend fun saveReward(draft: RewardDraft): Unit = db.withTransaction {
@@ -152,7 +172,61 @@ class Repository(private val db: AppDatabase) {
         dao.reward(id)?.let { dao.updateReward(it.copy(archived = true)) }
     }
 
+    /** Moves a reward one place up ([by] = -1) or down (+1) in the shop. */
+    suspend fun moveReward(id: Long, by: Int): Unit = db.withTransaction {
+        val list = dao.activeRewards().toMutableList()
+        val from = list.indexOfFirst { it.id == id }
+        val to = from + by
+        if (from < 0 || to !in list.indices) return@withTransaction
+        list.add(to, list.removeAt(from))
+        list.forEachIndexed { i, row -> if (row.position != i) dao.updateReward(row.copy(position = i)) }
+    }
+
     suspend fun setDayEndHour(hour: Int) {
         dao.putSetting(SettingEntity(SETTING_DAY_END_HOUR, parseDayEndHour(hour.toString()).toString()))
+    }
+
+    /** The default time to finish the day's goals by. Null clears it, which turns today's pace off. */
+    suspend fun setDefaultFinish(time: LocalTime?) {
+        dao.putSetting(SettingEntity(SETTING_DEFAULT_FINISH, time?.toMinuteOfDay()?.toString() ?: ""))
+    }
+
+    suspend fun setTodayOrder(order: String) {
+        dao.putSetting(SettingEntity(SETTING_TODAY_ORDER, order))
+    }
+
+    /** Everything in the app as a backup file's text. */
+    suspend fun exportBackup(): String {
+        val backup = db.withTransaction {
+            Backup(
+                exportedAt = nowMillis(),
+                goals = dao.allGoals().map { it.toCore() },
+                steps = dao.allSteps().map { it.toCore() },
+                ticks = dao.allTicks().map { it.toCore() },
+                entries = dao.allEntries().map { it.toCore() },
+                rewards = dao.allRewards().map { it.toCore() },
+                purchases = dao.allPurchases().map { it.toCore() },
+                settings = dao.allSettings().associate { it.name to it.value },
+            )
+        }
+        return Backup.encode(backup)
+    }
+
+    /** Replaces everything in the app with [backup]. All or nothing. */
+    suspend fun restore(backup: Backup): Unit = db.withTransaction {
+        dao.deleteTicks()
+        dao.deleteEntries()
+        dao.deletePurchases()
+        dao.deleteSteps()
+        dao.deleteGoals()
+        dao.deleteRewards()
+        dao.deleteSettings()
+        dao.insertGoals(backup.goals.map { it.toEntity() })
+        dao.insertSteps(backup.steps.map { it.toEntity() })
+        dao.insertTicks(backup.ticks.map { it.toEntity() })
+        dao.insertEntries(backup.entries.map { it.toEntity() })
+        dao.insertRewards(backup.rewards.map { it.toEntity() })
+        dao.insertPurchases(backup.purchases.map { it.toEntity() })
+        dao.insertSettings(backup.settings.map { (name, value) -> SettingEntity(name, value) })
     }
 }

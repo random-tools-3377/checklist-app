@@ -12,6 +12,9 @@ sealed interface TickResult {
     /** The habit already reached its target this period, or the step is already done. */
     data object AlreadyDone : TickResult
 
+    /** The habit isn't due today. */
+    data object NotDue : TickResult
+
     data object NotFound : TickResult
 }
 
@@ -43,18 +46,19 @@ class Book(
     /** Ticks a habit once for its current period, paying its points and, on finishing, its bonus. */
     suspend fun tickHabit(goalId: Long): TickResult = store.transaction {
         val goal = store.goal(goalId)
-        val period = goal?.period
-        if (goal == null || goal.archived || goal.kind != GoalKind.HABIT || period == null) {
+        val repeat = goal?.repeat
+        if (goal == null || goal.archived || goal.kind != GoalKind.HABIT || repeat == null) {
             return@transaction TickResult.NotFound
         }
         val day = today()
-        val start = Days.periodStart(day, period)
+        val window = repeat.window(day) ?: return@transaction TickResult.NotDue
+        val start = window.start
         val ticks = store.habitTicks(goalId, start).filter { it.countsToward(goal, start) }
         if (ticks.size >= goal.target) return@transaction TickResult.AlreadyDone
 
         val at = millis()
         val tickId = store.addTick(
-            Tick(goalId = goalId, stepId = null, at = at, day = day, period = period, periodStart = start),
+            Tick(goalId = goalId, stepId = null, at = at, day = day, period = window.period, periodStart = start),
         )
         store.addEntry(
             Entry(at = at, day = day, kind = EntryKind.TICK, amount = goal.points, goalId = goalId, tickId = tickId, label = goal.name),
@@ -77,9 +81,9 @@ class Book(
      */
     suspend fun undoHabitTick(goalId: Long): Boolean = store.transaction {
         val goal = store.goal(goalId)
-        val period = goal?.period
-        if (goal == null || goal.kind != GoalKind.HABIT || period == null) return@transaction false
-        val start = Days.periodStart(today(), period)
+        val repeat = goal?.repeat
+        if (goal == null || goal.kind != GoalKind.HABIT || repeat == null) return@transaction false
+        val start = repeat.window(today())?.start ?: return@transaction false
         val ticks = store.habitTicks(goalId, start).filter { it.countsToward(goal, start) }
         val last = ticks.maxByOrNull { it.id } ?: return@transaction false
 
@@ -156,8 +160,23 @@ class Book(
     /** Takes a bought reward out of the inventory because it has been used. */
     suspend fun use(purchaseId: Long): Boolean = store.transaction {
         val purchase = store.purchase(purchaseId)
-        if (purchase == null || purchase.usedAt != null) return@transaction false
+        if (purchase == null || purchase.usedAt != null || purchase.returnedAt != null) return@transaction false
         store.markUsed(purchaseId, millis())
+        true
+    }
+
+    /** Returns a bought reward that hasn't been used, for a full refund of what it cost. */
+    suspend fun returnPurchase(purchaseId: Long): Boolean = store.transaction {
+        val purchase = store.purchase(purchaseId)
+        if (purchase == null || purchase.usedAt != null || purchase.returnedAt != null) return@transaction false
+        val at = millis()
+        store.markReturned(purchaseId, at)
+        store.addEntry(
+            Entry(
+                at = at, day = today(), kind = EntryKind.RETURN, amount = purchase.price,
+                rewardId = purchase.rewardId, purchaseId = purchaseId, label = purchase.name,
+            ),
+        )
         true
     }
 

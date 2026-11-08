@@ -39,4 +39,5 @@ interface Store {
     suspend fun purchase(id: Long): Purchase?
     suspend fun addPurchase(purchase: Purchase): Long
     suspend fun markUsed(purchaseId: Long, at: Long)
+    suspend fun markReturned(purchaseId: Long, at: Long)
 }

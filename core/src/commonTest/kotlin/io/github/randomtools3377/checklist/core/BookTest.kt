@@ -5,6 +5,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlin.test.Test
+import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
 
 class BookTest {
@@ -14,11 +15,19 @@ class BookTest {
     private val clock = TestClock(LocalDateTime(2026, 11, 11, 10, 0))
     private val book = Book(store, clock) { kotlinx.datetime.TimeZone.UTC }
 
-    private fun habit(points: Int, period: Period = Period.DAILY, target: Int = 1, bonus: Int = 0) =
-        store.addGoal(Goal(kind = GoalKind.HABIT, name = "Habit", icon = "⭐", points = points, period = period, target = target, bonus = bonus))
+    private val start = LocalDate(2026, 1, 1)
+
+    private fun habit(points: Int, period: Period = Period.DAILY, target: Int = 1, bonus: Int = 0, repeat: Repeat? = null) =
+        store.addGoal(
+            Goal(
+                kind = GoalKind.HABIT, name = "Habit", icon = "⭐", points = points,
+                repeat = repeat ?: if (period == Period.DAILY) Repeat.everyDay(start) else Repeat.timesPer(period, start),
+                target = target, bonus = bonus,
+            ),
+        )
 
     private fun project(bonus: Int, vararg stepPoints: Int): Pair<Goal, List<Step>> {
-        val goal = store.addGoal(Goal(kind = GoalKind.PROJECT, name = "Project", icon = "⭐", points = 0, period = null, bonus = bonus))
+        val goal = store.addGoal(Goal(kind = GoalKind.PROJECT, name = "Project", icon = "⭐", points = 0, repeat = null, bonus = bonus))
         val steps = stepPoints.mapIndexed { i, p -> store.addStep(Step(goalId = goal.id, name = "Step $i", points = p, position = i)) }
         return goal to steps
     }
@@ -238,5 +247,47 @@ class BookTest {
 
         assertEquals(TickResult.NotFound, book.tickHabit(goal.id))
         assertEquals(BuyResult.NotFound, book.buy(treat.id))
+    }
+
+    @Test
+    fun aHabitCannotBeTickedOnADayItIsNotDue() = runTest {
+        // Due on Mondays and Fridays; the clock says Wednesday.
+        val goal = habit(points = 5, repeat = Repeat(RepeatKind.WEEKDAYS, start, weekdays = setOf(1, 5)))
+
+        assertEquals(TickResult.NotDue, book.tickHabit(goal.id))
+        clock.set(LocalDateTime(2026, 11, 13, 9, 0)) // Friday
+        assertEquals(TickResult.Ticked(5, 0, true), book.tickHabit(goal.id))
+    }
+
+    @Test
+    fun aYearlyCountedHabitCountsAcrossTheYear() = runTest {
+        val goal = habit(points = 1, period = Period.YEARLY, target = 2)
+        book.tickHabit(goal.id)
+        clock.set(LocalDateTime(2026, 12, 30, 9, 0))
+        assertEquals(TickResult.Ticked(1, 0, true), book.tickHabit(goal.id))
+        clock.set(LocalDateTime(2027, 1, 2, 9, 0))
+        assertEquals(TickResult.Ticked(1, 0, false), book.tickHabit(goal.id))
+    }
+
+    @Test
+    fun returningAnUnusedRewardRefundsItsPrice() = runTest {
+        book.tickHabit(habit(points = 10).id)
+        val bought = book.buy(reward(price = 7).id) as BuyResult.Bought
+
+        assertTrue(book.returnPurchase(bought.purchaseId))
+
+        assertEquals(10, book.balance())
+        assertFalse(book.returnPurchase(bought.purchaseId))
+        assertFalse(book.use(bought.purchaseId))
+    }
+
+    @Test
+    fun aUsedRewardCannotBeReturned() = runTest {
+        book.tickHabit(habit(points = 10).id)
+        val bought = book.buy(reward(price = 7).id) as BuyResult.Bought
+        book.use(bought.purchaseId)
+
+        assertFalse(book.returnPurchase(bought.purchaseId))
+        assertEquals(3, book.balance())
     }
 }

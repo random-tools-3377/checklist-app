@@ -1,3 +1,5 @@
+@file:OptIn(ExperimentalMaterial3Api::class)
+
 package io.github.randomtools3377.checklist.ui
 
 import androidx.compose.foundation.border
@@ -36,9 +38,24 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import android.text.format.DateFormat
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.TimePicker
+import androidx.compose.material3.rememberDatePickerState
+import androidx.compose.material3.rememberTimePickerState
+import androidx.compose.ui.platform.LocalContext
+import io.github.randomtools3377.checklist.data.nowLocal
+import io.github.randomtools3377.checklist.data.toDay
+import io.github.randomtools3377.checklist.data.toEpochDay
 import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalDateTime
+import kotlinx.datetime.LocalTime
 import kotlinx.datetime.toJavaLocalDate
+import kotlinx.datetime.toJavaLocalTime
 import java.time.format.DateTimeFormatter
+import java.time.format.FormatStyle
 import java.util.Locale
 
 const val GOAL_ICON = "⭐"
@@ -60,8 +77,24 @@ fun pointsText(points: Int): String = if (points == 1 || points == -1) "$points 
 private val ShortDate = DateTimeFormatter.ofPattern("EEE d MMM", Locale.getDefault())
 private val LongDate = DateTimeFormatter.ofPattern("EEEE d MMMM", Locale.getDefault())
 
+private val ShortTime = DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT)
+
 fun shortDate(date: LocalDate): String = date.toJavaLocalDate().format(ShortDate)
 fun longDate(date: LocalDate): String = date.toJavaLocalDate().format(LongDate)
+
+/** "6:00 PM" or "18:00", as the phone is set. */
+fun timeText(time: LocalTime): String = time.toJavaLocalTime().format(ShortTime)
+
+/** A time on [today], with the day added when it falls on another one. */
+fun momentText(moment: LocalDateTime, today: LocalDate): String =
+    if (moment.date == today) timeText(moment.time) else "${shortDate(moment.date)} ${timeText(moment.time)}"
+
+/** "45 min", "2 h", "1 h 20 min". */
+fun minutesText(minutes: Int): String = when {
+    minutes < 60 -> "$minutes min"
+    minutes % 60 == 0 -> "${minutes / 60} h"
+    else -> "${minutes / 60} h ${minutes % 60} min"
+}
 
 /** The balance, big. It turns red below zero. */
 @Composable
@@ -175,4 +208,82 @@ fun SectionTitle(text: String, modifier: Modifier = Modifier) {
         color = MaterialTheme.colorScheme.primary,
         modifier = modifier.fillMaxWidth().padding(top = 16.dp, bottom = 6.dp),
     )
+}
+
+/** A row showing a time, or [emptyText] when there is none. Tapping it opens a clock to pick one. */
+@Composable
+fun TimeSetting(
+    label: String,
+    time: LocalTime?,
+    onChange: (LocalTime?) -> Unit,
+    tag: String,
+    emptyText: String = "Not set",
+    hint: String? = null,
+) {
+    var open by remember { mutableStateOf(false) }
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.weight(1f)) {
+            Text(label, style = MaterialTheme.typography.bodyLarge)
+            Text(time?.let { timeText(it) } ?: emptyText, color = MaterialTheme.colorScheme.primary)
+            if (hint != null) Text(hint, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        TextButton(onClick = { open = true }, modifier = Modifier.testTag(tag)) { Text(if (time == null) "Set" else "Change") }
+        if (time != null) TextButton(onClick = { onChange(null) }) { Text("Clear") }
+    }
+    if (open) {
+        val start = time ?: LocalTime(18, 0)
+        val state = rememberTimePickerState(
+            initialHour = start.hour,
+            initialMinute = start.minute,
+            is24Hour = DateFormat.is24HourFormat(LocalContext.current),
+        )
+        AlertDialog(
+            onDismissRequest = { open = false },
+            confirmButton = {
+                TextButton(onClick = { onChange(LocalTime(state.hour, state.minute)); open = false }, modifier = Modifier.testTag("$tag:ok")) {
+                    Text("OK")
+                }
+            },
+            dismissButton = { TextButton(onClick = { open = false }) { Text("Cancel") } },
+            text = { TimePicker(state = state) },
+        )
+    }
+}
+
+/** A row showing a date, or [emptyText]. Tapping it opens a calendar to pick one. */
+@Composable
+fun DateSetting(
+    label: String,
+    date: LocalDate?,
+    onChange: (LocalDate?) -> Unit,
+    tag: String,
+    emptyText: String = "Not set",
+    canClear: Boolean = true,
+) {
+    var open by remember { mutableStateOf(false) }
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.weight(1f)) {
+            Text(label, style = MaterialTheme.typography.bodyLarge)
+            Text(date?.let { longDate(it) } ?: emptyText, color = MaterialTheme.colorScheme.primary)
+        }
+        TextButton(onClick = { open = true }, modifier = Modifier.testTag(tag)) { Text(if (date == null) "Set" else "Change") }
+        if (date != null && canClear) TextButton(onClick = { onChange(null) }) { Text("Clear") }
+    }
+    if (open) {
+        val state = rememberDatePickerState(
+            initialSelectedDateMillis = (date ?: nowLocal().date).toEpochDay() * 86_400_000L,
+        )
+        DatePickerDialog(
+            onDismissRequest = { open = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    state.selectedDateMillis?.let { onChange(Math.floorDiv(it, 86_400_000L).toDay()) }
+                    open = false
+                }) { Text("OK") }
+            },
+            dismissButton = { TextButton(onClick = { open = false }) { Text("Cancel") } },
+        ) {
+            DatePicker(state = state)
+        }
+    }
 }

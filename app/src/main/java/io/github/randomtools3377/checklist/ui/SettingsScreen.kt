@@ -2,11 +2,20 @@
 
 package io.github.randomtools3377.checklist.ui
 
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
+import android.os.Build
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -17,12 +26,15 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -33,9 +45,16 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import io.github.randomtools3377.checklist.BuildConfig
+import io.github.randomtools3377.checklist.Privacy
+import io.github.randomtools3377.checklist.core.Backup
 import io.github.randomtools3377.checklist.core.Days
+import io.github.randomtools3377.checklist.core.dateText
+import io.github.randomtools3377.checklist.data.nowLocal
+import io.github.randomtools3377.checklist.data.toLocalDateTime
 
 fun hourText(hour: Int): String = when (hour) {
     0 -> "Midnight"
@@ -43,9 +62,46 @@ fun hourText(hour: Int): String = when (hour) {
     else -> "$hour am"
 }
 
+private fun Context.findActivity(): Activity? = when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.findActivity()
+    else -> null
+}
+
 @Composable
-fun SettingsScreen(dayEndHour: Int, onDayEndHour: (Int) -> Unit, onBack: () -> Unit) {
-    var choosing by remember { mutableStateOf(false) }
+private fun Section(title: String) {
+    Text(
+        title,
+        style = MaterialTheme.typography.titleSmall,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 4.dp),
+    )
+}
+
+@Composable
+fun SettingsScreen(
+    settings: Settings,
+    vm: MainViewModel,
+    onBack: () -> Unit,
+) {
+    val context = LocalContext.current
+    var choosingHour by remember { mutableStateOf(false) }
+    var pendingImport by remember { mutableStateOf<Backup?>(null) }
+    var hideInRecents by remember { mutableStateOf(Privacy.hideInRecents(context)) }
+
+    fun toast(message: String) = Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+
+    val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+        if (uri != null) vm.exportTo(uri) { toast(it) }
+    }
+    val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) {
+            vm.readBackup(uri) { backup, error ->
+                if (backup != null) pendingImport = backup else toast(error ?: "Couldn't read that file.")
+            }
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -62,30 +118,94 @@ fun SettingsScreen(dayEndHour: Int, onDayEndHour: (Int) -> Unit, onBack: () -> U
                 .padding(padding)
                 .verticalScroll(rememberScrollState()),
         ) {
+            Section("Your day")
             Column(
                 Modifier
                     .fillMaxWidth()
-                    .clickable { choosing = true }
-                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                    .clickable { choosingHour = true }
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
             ) {
-                Text("My day ends at", style = MaterialTheme.typography.titleMedium)
-                Text(hourText(dayEndHour), color = MaterialTheme.colorScheme.primary)
+                Text("My day ends at", style = MaterialTheme.typography.bodyLarge)
+                Text(hourText(settings.dayEndHour), color = MaterialTheme.colorScheme.primary)
                 Text(
                     "Ticks before this time count for the day before, so a late night still counts as that day.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            HorizontalDivider()
-            Column(Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
-                Text("Private and offline", style = MaterialTheme.typography.titleMedium)
+            Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                TimeSetting(
+                    label = "Finish each day's goals by",
+                    time = settings.defaultFinish,
+                    onChange = { vm.setDefaultFinish(it) },
+                    tag = "setting:finish",
+                    emptyText = "Not set, so today's pace is off",
+                    hint = "Today shows how fast to go to be done by then. A goal can have its own finish time instead.",
+                )
+            }
+
+            HorizontalDivider(Modifier.padding(top = 8.dp))
+            Section("Backup")
+            Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
                 Text(
-                    "This app has no internet access and is left out of phone backups. Everything stays on this phone.",
+                    "Phone backup is off for this app, so this file is your backup. Keep it somewhere safe. " +
+                        "It also moves your data to another phone, Android or iPhone.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                Spacer(Modifier.height(8.dp))
+                Row {
+                    FilledTonalButton(
+                        onClick = { exportLauncher.launch("checklist-backup-${nowLocal().date}.json") },
+                        modifier = Modifier.testTag("export"),
+                    ) { Text("Export everything") }
+                    Spacer(Modifier.padding(4.dp))
+                    OutlinedButton(
+                        onClick = { importLauncher.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) },
+                        modifier = Modifier.testTag("import"),
+                    ) { Text("Import a backup") }
+                }
             }
-            HorizontalDivider()
+
+            HorizontalDivider(Modifier.padding(top = 8.dp))
+            Section("Privacy")
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                Text(
+                    "The app's preview is hidden in the recent-apps screen.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                )
+            } else {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Hide in recent apps", style = MaterialTheme.typography.bodyLarge)
+                        Text(
+                            "On this phone, hiding the preview also blocks screenshots of the app.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Switch(
+                        checked = hideInRecents,
+                        onCheckedChange = {
+                            hideInRecents = it
+                            Privacy.setHideInRecents(context, it)
+                            context.findActivity()?.let { activity -> Privacy.apply(activity) }
+                        },
+                    )
+                }
+            }
+            Text(
+                "This app has no internet access and is left out of phone backups. Everything stays on this phone.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+            )
+
+            HorizontalDivider(Modifier.padding(top = 8.dp))
             Text(
                 "Version ${BuildConfig.VERSION_NAME}",
                 style = MaterialTheme.typography.bodySmall,
@@ -95,9 +215,9 @@ fun SettingsScreen(dayEndHour: Int, onDayEndHour: (Int) -> Unit, onBack: () -> U
         }
     }
 
-    if (choosing) {
+    if (choosingHour) {
         AlertDialog(
-            onDismissRequest = { choosing = false },
+            onDismissRequest = { choosingHour = false },
             title = { Text("My day ends at") },
             text = {
                 LazyColumn(Modifier.heightIn(max = 420.dp)) {
@@ -107,17 +227,45 @@ fun SettingsScreen(dayEndHour: Int, onDayEndHour: (Int) -> Unit, onBack: () -> U
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable {
-                                    onDayEndHour(hour)
-                                    choosing = false
+                                    vm.setDayEndHour(hour)
+                                    choosingHour = false
                                 },
                         ) {
-                            RadioButton(selected = hour == dayEndHour, onClick = null)
+                            RadioButton(selected = hour == settings.dayEndHour, onClick = null)
                             Text(hourText(hour), modifier = Modifier.padding(start = 8.dp, top = 12.dp, bottom = 12.dp))
                         }
                     }
                 }
             },
-            confirmButton = { TextButton(onClick = { choosing = false }) { Text("Close") } },
+            confirmButton = { TextButton(onClick = { choosingHour = false }) { Text("Close") } },
+        )
+    }
+
+    pendingImport?.let { backup ->
+        val habits = backup.goals.count { !it.archived && it.repeat != null }
+        val projects = backup.goals.count { !it.archived && it.repeat == null }
+        AlertDialog(
+            onDismissRequest = { pendingImport = null },
+            title = { Text("Replace everything?") },
+            text = {
+                Text(
+                    "This backup is from ${dateText(backup.exportedAt.toLocalDateTime().date)}. It has $habits habits, " +
+                        "$projects projects, ${backup.rewards.count { !it.archived }} rewards and ${backup.ticks.size} ticks, " +
+                        "with a balance of ${pointsText(backup.entries.sumOf { it.amount })}.\n\n" +
+                        "Importing replaces everything on this phone with it. Export first if you want to keep what is here now.",
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        pendingImport = null
+                        vm.restore(backup) { toast(it) }
+                    },
+                    modifier = Modifier.testTag("confirm-import"),
+                ) { Text("Replace everything", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = { TextButton(onClick = { pendingImport = null }) { Text("Cancel") } },
         )
     }
 }
+

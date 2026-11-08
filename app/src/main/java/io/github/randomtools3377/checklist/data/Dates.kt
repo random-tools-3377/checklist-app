@@ -3,6 +3,7 @@ package io.github.randomtools3377.checklist.data
 import kotlinx.datetime.Clock
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
+import kotlinx.datetime.LocalTime
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 
@@ -19,3 +20,7 @@ fun nowLocal(): LocalDateTime = Clock.System.now().toLocalDateTime(TimeZone.curr
 
 fun Long.toLocalDateTime(): LocalDateTime =
     kotlinx.datetime.Instant.fromEpochMilliseconds(this).toLocalDateTime(TimeZone.currentSystemDefault())
+
+fun Int.toTime(): LocalTime = LocalTime(this / 60 % 24, this % 60)
+
+fun LocalTime.toMinuteOfDay(): Int = hour * 60 + minute

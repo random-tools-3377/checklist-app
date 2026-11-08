@@ -26,6 +26,7 @@ object Days {
         Period.DAILY -> day
         Period.WEEKLY -> day.minusDays(day.dayOfWeek.isoDayNumber - 1)
         Period.MONTHLY -> LocalDate(day.year, day.month, 1)
+        Period.YEARLY -> LocalDate(day.year, 1, 1)
     }
 
     /** Last day of the [period] that contains [day]. */
@@ -33,11 +34,12 @@ object Days {
         Period.DAILY -> day
         Period.WEEKLY -> periodStart(day, period).plusDays(6)
         Period.MONTHLY -> LocalDate(day.year, day.month, 1).plus(1, DateTimeUnit.MONTH).minusDays(1)
+        Period.YEARLY -> LocalDate(day.year, 12, 31)
     }
 
-    /** The earliest day whose ticks can still count toward any period that contains [day]. */
+    /** The earliest day whose ticks can still count toward any window that contains [day]. */
     fun earliestOpenDay(day: LocalDate): LocalDate =
-        minOf(periodStart(day, Period.WEEKLY), periodStart(day, Period.MONTHLY))
+        minOf(periodStart(day, Period.WEEKLY), periodStart(day, Period.YEARLY))
 }
 
 fun LocalDate.plusDays(days: Int): LocalDate = plus(days, DateTimeUnit.DAY)

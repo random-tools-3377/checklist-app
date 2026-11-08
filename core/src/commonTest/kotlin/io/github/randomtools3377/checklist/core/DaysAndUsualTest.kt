@@ -26,10 +26,17 @@ class DaysTest {
     }
 
     @Test
-    fun theEarliestOpenDayCoversAWeekThatStartedLastMonth() {
-        // Tuesday 1 December 2026: the week started on Monday 30 November.
-        assertEquals(LocalDate(2026, 11, 30), Days.earliestOpenDay(LocalDate(2026, 12, 1)))
-        assertEquals(LocalDate(2026, 11, 1), Days.earliestOpenDay(LocalDate(2026, 11, 20)))
+    fun theEarliestOpenDayCoversTheYearAndAWeekThatStartedLastYear() {
+        assertEquals(LocalDate(2026, 1, 1), Days.earliestOpenDay(LocalDate(2026, 12, 1)))
+        // Friday 1 January 2027: its week started on Monday 28 December 2026.
+        assertEquals(LocalDate(2026, 12, 28), Days.earliestOpenDay(LocalDate(2027, 1, 1)))
+    }
+
+    @Test
+    fun yearsRunFromJanuaryToDecember() {
+        val day = LocalDate(2026, 6, 15)
+        assertEquals(LocalDate(2026, 1, 1), Days.periodStart(day, Period.YEARLY))
+        assertEquals(LocalDate(2026, 12, 31), Days.periodEnd(day, Period.YEARLY))
     }
 }
 
