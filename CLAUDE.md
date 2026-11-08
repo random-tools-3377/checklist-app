@@ -38,9 +38,18 @@ The app has no network access unless the owner decides otherwise for this app.
 ## Goals
 
 - Habits, which repeat, and projects, which are made of steps.
-- Goals can be daily, weekly or monthly.
+- Repeats are very flexible, with free choice of the days of the week. The goal editor offers
+  every pattern below **(default list)**:
+  - every day, or every few days (every 2nd, 3rd, … day)
+  - chosen days of the week in any combination, every week or every 2nd, 3rd, … week
+  - a number of times per week, month or year, on any days
+  - chosen dates of the month (the last day included), or a weekday of the month such as the
+    first Monday or the last Friday, every month or every few months
+  - a date every year, or once on a single date
+  - an optional start date and end date for any of these
 - Each goal has a name, an icon, the points it pays, how often it repeats, its allowance, an
   optional reminder, and optionally its own celebration GIF.
+- The user can reorder goals, and rewards in the shop.
 - Counted goals, like "8 glasses", pay for each tick plus a bonus for finishing **(default)**.
 - Each step of a project pays, and finishing the project pays a bonus. A project can have a
   deadline, and missing it counts as a miss **(default)**.
@@ -54,7 +63,9 @@ The app has no network access unless the owner decides otherwise for this app.
 - Each price also shows how long it takes the user to earn, like "≈ 4 days of your usual", worked
   out from their own history **(default)**.
 - A bought reward waits in an inventory until it is used **(default)**.
+- A bought reward can be returned for a full refund until it is used.
 - Undoing a tick takes its points back **(default)**.
+- A points history lists every change to the balance: what it was for, when, and how much.
 - The balance can go negative. A reward can't be bought for more than the balance, so a negative
   balance means the shop is effectively closed until the user earns back.
 
@@ -65,6 +76,18 @@ The app has no network access unless the owner decides otherwise for this app.
   and its own for buying a reward **(default)**.
 - The GIFs come with the app, or the user picks one with the Photo Picker. That hands over a single
   file and needs no storage permission.
+
+## Streaks
+
+- Streaks count days. For the main streak the user sets what a day needs: a number of goals
+  done, or a percentage of the goals due that day. At 90%, the other 10% can be missed or skipped
+  without breaking it.
+- Several streaks run side by side: goals done (the target above), no misses, no skips, and
+  others **(default: never over the limit, and perfect days with everything done)**.
+- Today shows the current streaks. When every streak is running at once, it is shown big and
+  flashy.
+- A goal due a number of times per week or month counts on the day its period ends
+  **(default)**.
 
 ## Skips, misses and the limit
 
@@ -121,6 +144,21 @@ The app has no network access unless the owner decides otherwise for this app.
   - points earned, spent and lost
   - longest runs
   - gaps marked on the calendar, with what was written at the check-in
+- Stats, including the most skipped, most missed and most consistent goals **(default, also:
+  most ticked, best and worst days of the week, points per goal, current and longest streaks)**.
+
+## Privacy lock
+
+- There is no lock on the whole app. In a Privacy menu in Settings, the user picks which things
+  sit behind the lock, and only those ask to be unlocked.
+- Unlocking uses the phone's own lock: fingerprint, face, or the phone's PIN or pattern. It stays
+  unlocked until the user leaves the app.
+- What can be put behind the lock **(default)**: reasons and notes for skips and misses, gap
+  check-ins, the points history, the review and stats, the shop and bought rewards, and single
+  goals marked private. Locked things don't show in the widget or reminders either.
+- The app's preview in the recent-apps screen is hidden. On Android 13 and later that leaves
+  screenshots working. On older phones it also blocks screenshots, so there it is a switch in the
+  Privacy menu **(default)**.
 
 ## Backup (default)
 
@@ -147,10 +185,12 @@ The app has no network access unless the owner decides otherwise for this app.
 
 Build order **(default)**, each step a Release the owner can try:
 
-1. Goals, ticking, points and the shop.
-2. Skips, misses, the limit and penalties.
-3. Gaps and the review screen.
-4. The widget and reminders.
+1. Goals, ticking, points and the shop. Released as 0.1.0.
+2. Export and import (decided: before skips and misses), flexible repeats, reordering, the points
+   history, returning a bought reward, and hiding the recent-apps preview.
+3. Skips, misses, the limit and penalties, with streaks and the privacy lock.
+4. Gaps, the review screen and stats.
+5. The widget and reminders.
 
 ## Talking to the owner
 
