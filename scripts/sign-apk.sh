@@ -26,7 +26,14 @@ trap 'rm -rf "$work"' EXIT
 chmod 700 "$work"
 
 printf '%s' "$SIGNING_KEYSTORE_B64" | tr -d ' \r\n' | base64 --decode > "$work/release.p12"
-"$zipalign" -p -f 4 "$in" "$work/aligned.apk"
+# The build already aligns the APK, including the 16 KB page alignment newer phones need for
+# native libraries. Only re-align if that check fails.
+if "$zipalign" -c -P 16 4 "$in" > /dev/null 2>&1; then
+  cp "$in" "$work/aligned.apk"
+else
+  echo "Aligning the APK."
+  "$zipalign" -P 16 -f 4 "$in" "$work/aligned.apk"
+fi
 "$apksigner" sign \
   --ks "$work/release.p12" \
   --ks-type PKCS12 \
