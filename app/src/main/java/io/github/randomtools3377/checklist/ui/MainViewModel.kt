@@ -27,7 +27,14 @@ import io.github.randomtools3377.checklist.core.TodayView
 import io.github.randomtools3377.checklist.core.Usual
 import io.github.randomtools3377.checklist.core.minusDays
 import io.github.randomtools3377.checklist.core.usualMinuteOfDay
+import io.github.randomtools3377.checklist.core.Gap
+import io.github.randomtools3377.checklist.core.GapSettings
+import io.github.randomtools3377.checklist.core.Gaps
 import io.github.randomtools3377.checklist.core.Lapse
+import io.github.randomtools3377.checklist.core.Period
+import io.github.randomtools3377.checklist.core.Review
+import io.github.randomtools3377.checklist.core.ReviewSummary
+import io.github.randomtools3377.checklist.core.plusDays
 import io.github.randomtools3377.checklist.core.Penalty
 import io.github.randomtools3377.checklist.core.PenaltyTask
 import io.github.randomtools3377.checklist.core.Reason
@@ -38,7 +45,10 @@ import io.github.randomtools3377.checklist.core.StreakSettings
 import io.github.randomtools3377.checklist.core.StreakTarget
 import io.github.randomtools3377.checklist.core.Streaks
 import io.github.randomtools3377.checklist.core.Tick
+import io.github.randomtools3377.checklist.data.LOCK_GAPS
 import io.github.randomtools3377.checklist.data.LOCK_HISTORY
+import io.github.randomtools3377.checklist.data.LOCK_REASONS
+import io.github.randomtools3377.checklist.data.LOCK_REVIEW
 import io.github.randomtools3377.checklist.data.LOCK_PRIVATE
 import io.github.randomtools3377.checklist.data.LOCK_SHOP
 import io.github.randomtools3377.checklist.data.SETTING_STREAK_TARGET
@@ -108,7 +118,14 @@ data class TodayState(
 )
 
 /** What the privacy lock covers, as chosen in Settings. */
-data class Locks(val history: Boolean = false, val shop: Boolean = false, val privateGoals: Boolean = false)
+data class Locks(
+    val history: Boolean = false,
+    val shop: Boolean = false,
+    val privateGoals: Boolean = false,
+    val reasons: Boolean = false,
+    val gaps: Boolean = false,
+    val review: Boolean = false,
+)
 
 data class Settings(
     val dayEndHour: Int,
@@ -116,6 +133,7 @@ data class Settings(
     val order: String,
     val streak: StreakSettings = StreakSettings(),
     val locks: Locks = Locks(),
+    val gaps: GapSettings = GapSettings(),
 )
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -141,16 +159,27 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 value = value?.toIntOrNull() ?: defaults.value,
             )
         },
-        combine(dao.observeSetting(LOCK_HISTORY), dao.observeSetting(LOCK_SHOP), dao.observeSetting(LOCK_PRIVATE)) { h, sh, p ->
-            Locks(history = h == "1", shop = sh == "1", privateGoals = p == "1")
+        combine(
+            dao.observeSetting(LOCK_HISTORY),
+            dao.observeSetting(LOCK_SHOP),
+            dao.observeSetting(LOCK_PRIVATE),
+            dao.observeSetting(LOCK_REASONS),
+            combine(dao.observeSetting(LOCK_GAPS), dao.observeSetting(LOCK_REVIEW)) { g, r -> g to r },
+        ) { h, sh, p, r, (g, rv) ->
+            Locks(history = h == "1", shop = sh == "1", privateGoals = p == "1", reasons = r == "1", gaps = g == "1", review = rv == "1")
         },
-    ) { (hour, finish, order), streak, locks ->
+        combine(dao.observeSetting(Gaps.SETTING_DAYS), dao.observeSetting(Gaps.SETTING_POINTS)) { days, points ->
+            val defaults = GapSettings()
+            GapSettings(days = days?.toIntOrNull() ?: defaults.days, points = points?.toIntOrNull() ?: defaults.points)
+        },
+    ) { (hour, finish, order), streak, locks, gapSettings ->
         Settings(
             dayEndHour = parseDayEndHour(hour),
             defaultFinish = finish?.toIntOrNull()?.toTime(),
             order = if (order == ORDER_OWN) ORDER_OWN else ORDER_RECOMMENDED,
             streak = streak,
             locks = locks,
+            gaps = gapSettings,
         )
     }.state(Settings(0, null, ORDER_RECOMMENDED))
 
@@ -266,10 +295,78 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }.state(emptyList())
 
-    /** Looks for misses since the last check. Called when the app comes to the front. */
+    /** Looks for misses and gaps since the last check. Called when the app comes to the front. */
     fun closeDays() {
-        viewModelScope.launch { lapses.closeDays() }
+        viewModelScope.launch { container.closeDays() }
     }
+
+    // Gaps and the review
+
+    /** A gap waiting for its check-in. It comes first when the app opens. */
+    val unansweredGap: StateFlow<Gap?> = dao.observeUnansweredGaps().map { rows -> rows.firstOrNull()?.toCore() }.state(null)
+
+    /** Every gap, to mark in the history and the review. */
+    val gaps: StateFlow<List<Gap>> = dao.observeGaps().map { rows -> rows.map { it.toCore() } }.state(emptyList())
+
+    /** How many misses fall inside a gap, and the points they cost, for the check-in. */
+    suspend fun gapCost(gap: Gap): Pair<Int, Int> {
+        val inGap = dao.allLapses(gap.from.toEpochDay(), gap.to.toEpochDay()).filter { it.gapId == gap.id }
+        return inGap.size to inGap.sumOf { it.cost }
+    }
+
+    fun explainGap(gapId: Long, reason: Reason, note: String?) {
+        viewModelScope.launch { container.gaps.explain(gapId, reason, note) }
+    }
+
+    fun setGapSettings(settings: GapSettings) {
+        viewModelScope.launch {
+            repository.setSetting(Gaps.SETTING_DAYS, settings.days.toString())
+            repository.setSetting(Gaps.SETTING_POINTS, settings.points.toString())
+        }
+    }
+
+    val reviewPeriod = MutableStateFlow(Period.WEEKLY)
+
+    /** A day inside the stretch being reviewed; null for the current one. */
+    val reviewDay = MutableStateFlow<LocalDate?>(null)
+
+    fun reviewStep(by: Int) {
+        viewModelScope.launch {
+            val today = Days.dayOf(nowLocal(), settings.value.dayEndHour)
+            val day = reviewDay.value ?: today
+            val moved = when (reviewPeriod.value) {
+                Period.DAILY -> day.plusDays(by)
+                Period.WEEKLY -> day.plusDays(7 * by)
+                else -> Review.range(day, Period.MONTHLY).let { (start, end) -> if (by < 0) start.minusDays(1) else end.plusDays(1) }
+            }
+            reviewDay.value = if (moved >= today) null else moved
+        }
+    }
+
+    val review: StateFlow<ReviewSummary?> = combine(reviewPeriod, reviewDay, today) { period, day, todayDay ->
+        Triple(period, day ?: todayDay, todayDay)
+    }.distinctUntilChanged().flatMapLatest { (period, day, todayDay) ->
+        val (from, to) = Review.range(day, period)
+        val windowsFrom = Days.earliestOpenDay(from).minusDays(7)
+        combine(
+            dao.observeGoals(),
+            dao.observeHabitTicksSince(windowsFrom.toEpochDay()),
+            dao.observeLapsesSince(windowsFrom.toEpochDay()),
+            dao.observeEntries(from.toEpochDay(), to.toEpochDay()),
+            dao.observeGaps(),
+        ) { goals, ticks, lapsesRows, entries, gapRows ->
+            Review.summarize(
+                from = from,
+                to = to,
+                today = todayDay,
+                goals = goals.map { it.toCore() },
+                ticks = ticks.map { it.toCore() },
+                lapses = lapsesRows.map { it.toCore() },
+                entries = entries.map { it.toCore() },
+                gaps = gapRows.map { it.toCore() },
+            )
+        }
+    }.state(null)
 
     suspend fun checkSkip(goalId: Long): SkipCheck = lapses.checkSkip(goalId)
 

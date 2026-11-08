@@ -29,6 +29,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import io.github.randomtools3377.checklist.core.Entry
 import io.github.randomtools3377.checklist.core.EntryKind
+import io.github.randomtools3377.checklist.core.Gap
 import io.github.randomtools3377.checklist.data.toLocalDateTime
 
 private fun kindText(kind: EntryKind): String = when (kind) {
@@ -42,7 +43,7 @@ private fun kindText(kind: EntryKind): String = when (kind) {
 
 /** Every change to the balance, newest first, grouped by day. */
 @Composable
-fun HistoryScreen(entries: List<Entry>?, locked: Boolean, onUnlock: () -> Unit, onBack: () -> Unit) {
+fun HistoryScreen(entries: List<Entry>?, gaps: List<Gap>, locked: Boolean, onUnlock: () -> Unit, onBack: () -> Unit) {
     Scaffold(
         topBar = {
             TopAppBar(
@@ -72,6 +73,10 @@ fun HistoryScreen(entries: List<Entry>?, locked: Boolean, onUnlock: () -> Unit, 
                 }
             }
             entries.groupBy { it.day }.forEach { (day, onDay) ->
+                // A gap is marked where it ends, with what the user wrote at the check-in.
+                gaps.filter { it.to == day }.forEach { gap ->
+                    item(key = "gap-${gap.id}") { GapMark(gap) }
+                }
                 item(key = "day-$day") {
                     val total = onDay.sumOf { it.amount }
                     Row(Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -103,3 +108,24 @@ fun HistoryScreen(entries: List<Entry>?, locked: Boolean, onUnlock: () -> Unit, 
 }
 
 private fun signed(amount: Int): String = if (amount > 0) "+$amount" else "$amount"
+
+/** A gap, marked in the history. */
+@Composable
+fun GapMark(gap: Gap) {
+    androidx.compose.material3.Card(
+        modifier = Modifier.fillMaxWidth().padding(top = 12.dp).testTag("gap-mark"),
+        colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer),
+    ) {
+        Column(Modifier.padding(12.dp)) {
+            Text(
+                "Gap: " + if (gap.from == gap.to) shortDate(gap.from) else "${shortDate(gap.from)} to ${shortDate(gap.to)}",
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onTertiaryContainer,
+            )
+            val said = listOfNotNull(gap.reason?.label, gap.note).joinToString(" · ")
+            if (said.isNotEmpty()) {
+                Text(said, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onTertiaryContainer)
+            }
+        }
+    }
+}

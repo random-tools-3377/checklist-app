@@ -1,0 +1,125 @@
+package io.github.randomtools3377.checklist.core
+
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.isoDayNumber
+
+/** How one habit went over a stretch of days, counting each time it was due. */
+data class GoalSummary(
+    val goal: Goal,
+    val due: Int,
+    val done: Int,
+    val skipped: Int,
+    val missed: Int,
+    /** Ticks in the stretch. */
+    val ticks: Int,
+    /** Points it earned in the stretch. */
+    val points: Int,
+    /** Longest run of times in a row it was done, within the stretch. */
+    val longestRun: Int,
+    /** The run it is on now, if the stretch reaches today. */
+    val currentRun: Int,
+) {
+    /** Share of the times it was due that it got done, 0 to 1. */
+    val consistency: Double get() = if (due == 0) 0.0 else done.toDouble() / due
+}
+
+/** Everything the review shows for a stretch of days. */
+data class ReviewSummary(
+    val from: LocalDate,
+    val to: LocalDate,
+    val goals: List<GoalSummary>,
+    /** How often each reason was given, most first. */
+    val reasons: List<Pair<Reason, Int>>,
+    val earned: Int,
+    val spent: Int,
+    val lost: Int,
+    val days: List<DayRecord>,
+    val gaps: List<Gap>,
+    /** Done out of due for each day of the week, Monday = 1. */
+    val weekdays: Map<Int, Pair<Int, Int>>,
+) {
+    val mostSkipped: GoalSummary? get() = goals.filter { it.skipped > 0 }.maxByOrNull { it.skipped }
+    val mostMissed: GoalSummary? get() = goals.filter { it.missed > 0 }.maxByOrNull { it.missed }
+    val mostConsistent: GoalSummary? get() = goals.filter { it.due > 0 }.maxWithOrNull(compareBy({ it.consistency }, { it.due }))
+    val mostTicked: GoalSummary? get() = goals.filter { it.ticks > 0 }.maxByOrNull { it.ticks }
+
+    private fun rate(day: Int): Double? = weekdays[day]?.takeIf { it.first > 0 }?.let { it.second.toDouble() / it.first }
+    val bestWeekday: Int? get() = (1..7).filter { rate(it) != null }.maxByOrNull { rate(it)!! }
+    val worstWeekday: Int? get() = (1..7).filter { rate(it) != null }.minByOrNull { rate(it)!! }
+}
+
+object Review {
+    /** The day, the Monday-to-Sunday week, or the calendar month containing [day]. */
+    fun range(day: LocalDate, period: Period): Pair<LocalDate, LocalDate> = Days.periodStart(day, period) to Days.periodEnd(day, period)
+
+    /**
+     * Sums up [from] to [to]. A habit counts each time its window ends inside the stretch:
+     * done if ticked enough (or, for a single day, skipped), skipped if a skip covered it, missed
+     * if a miss was recorded. Points come from the ledger: earned (ticks, bonuses, refunds),
+     * spent (rewards, less returns) and lost (penalties).
+     */
+    fun summarize(
+        from: LocalDate,
+        to: LocalDate,
+        today: LocalDate,
+        goals: List<Goal>,
+        ticks: List<Tick>,
+        lapses: List<Lapse>,
+        entries: List<Entry>,
+        gaps: List<Gap>,
+    ): ReviewSummary {
+        val live = lapses.filter { !it.forgotten }
+        val inRange = entries.filter { it.day >= from && it.day <= to }
+        val habits = goals.filter { it.kind == GoalKind.HABIT && it.repeat != null }
+        val weekdayDue = IntArray(8)
+        val weekdayDone = IntArray(8)
+        val summaries = habits.map { goal ->
+            var due = 0
+            var done = 0
+            var skipped = 0
+            var missed = 0
+            var run = 0
+            var longest = 0
+            var day = from
+            while (day <= to) {
+                val window = goal.repeat!!.window(day)
+                if (window != null && window.end == day) {
+                    due++
+                    val count = ticks.count { it.countsToward(goal, window.start) }
+                    val skips = live.count { it.goalId == goal.id && it.kind == LapseKind.SKIP && it.periodStart == window.start }
+                    val finished = if (window.period == Period.DAILY) count >= goal.target || skips > 0 else count + skips >= goal.target
+                    if (skips > 0 && count < goal.target) skipped++
+                    if (live.any { it.goalId == goal.id && it.kind == LapseKind.MISS && it.periodStart == window.start }) missed++
+                    weekdayDue[day.dayOfWeek.isoDayNumber]++
+                    if (finished) {
+                        done++
+                        weekdayDone[day.dayOfWeek.isoDayNumber]++
+                        run++
+                        longest = maxOf(longest, run)
+                    } else if (day < today) {
+                        run = 0
+                    }
+                }
+                day = day.plusDays(1)
+            }
+            val goalTicks = ticks.filter { it.goalId == goal.id && it.stepId == null && it.day >= from && it.day <= to }
+            val points = inRange.filter { it.goalId == goal.id && (it.kind == EntryKind.TICK || it.kind == EntryKind.BONUS) }.sumOf { it.amount }
+            GoalSummary(goal, due, done, skipped, missed, goalTicks.size, points, longest, if (to >= today) run else 0)
+        }
+
+        val reasons = live.filter { it.day >= from && it.day <= to }.mapNotNull { it.reason }.groupingBy { it }.eachCount().toList().sortedByDescending { it.second }
+        fun sum(vararg kinds: EntryKind) = inRange.filter { it.kind in kinds }.sumOf { it.amount }
+        return ReviewSummary(
+            from = from,
+            to = to,
+            goals = summaries,
+            reasons = reasons,
+            earned = sum(EntryKind.TICK, EntryKind.BONUS, EntryKind.REFUND),
+            spent = -sum(EntryKind.PURCHASE, EntryKind.RETURN),
+            lost = -sum(EntryKind.PENALTY),
+            days = StreakCounter.records(from, to, goals, ticks, lapses),
+            gaps = gaps.filter { it.to >= from && it.from <= to },
+            weekdays = (1..7).associateWith { weekdayDue[it] to weekdayDone[it] },
+        )
+    }
+}

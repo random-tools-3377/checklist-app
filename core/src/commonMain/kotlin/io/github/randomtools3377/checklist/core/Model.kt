@@ -212,7 +212,34 @@ data class Lapse(
     val forgotten: Boolean = false,
     /** The goal's name at the time. */
     val label: String,
+    /** The gap it falls in, whose one reason covers it. */
+    val gapId: Long? = null,
 )
+
+/**
+ * A stretch when it looks like the user stopped for a while. One reason and one penalty task
+ * cover the whole stretch; points still come off for every miss in it.
+ */
+@Serializable
+data class Gap(
+    val id: Long = 0,
+    val from: LocalDate,
+    val to: LocalDate,
+    /** Why it was flagged. */
+    val kind: GapKind,
+    val createdAt: Long,
+    val reason: Reason? = null,
+    val note: String? = null,
+)
+
+@Serializable
+enum class GapKind {
+    /** Days in a row with nothing ticked. */
+    NOTHING_TICKED,
+
+    /** A big point loss within one week. */
+    POINT_LOSS,
+}
 
 /** One of the user's own penalty tasks, to be drawn at random. */
 @Serializable
@@ -228,6 +255,8 @@ data class Penalty(
     val id: Long = 0,
     /** The skip or miss that caused it. Null for a gap check-in. */
     val lapseId: Long?,
+    /** The gap it covers, for a gap check-in. */
+    val gapId: Long? = null,
     val createdAt: Long,
     val choice: PenaltyChoice? = null,
     /** What it came to: the goal made up, or the penalty task drawn. */

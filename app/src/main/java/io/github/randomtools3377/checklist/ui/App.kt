@@ -12,6 +12,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -44,6 +45,7 @@ private enum class AppTab(val route: String, val label: String, val icon: ImageV
     TODAY("today", "Today", Icons.Filled.CheckCircle),
     GOALS("goals", "Goals", Icons.AutoMirrored.Filled.List),
     SHOP("shop", "Shop", Icons.Filled.ShoppingCart),
+    REVIEW("review", "Review", Icons.Filled.DateRange),
 }
 
 private val RoutesSaver = listSaver<SnapshotStateList<String>, String>(
@@ -93,10 +95,21 @@ fun ChecklistApp(vm: MainViewModel = viewModel()) {
     val unlocked by vm.unlocked.collectAsStateWithLifecycle()
     val skipRequest by vm.skipRequest.collectAsStateWithLifecycle()
     val unlock = rememberUnlock(vm)
+    val gap by vm.unansweredGap.collectAsStateWithLifecycle()
+    val review by vm.review.collectAsStateWithLifecycle()
+    val reviewPeriod by vm.reviewPeriod.collectAsStateWithLifecycle()
+    val allGaps by vm.gaps.collectAsStateWithLifecycle()
 
-    // Opening the app: misses waiting for a reason first, then the penalty task, then the rest.
+    // Opening the app: the gap check-in or misses waiting for a reason first, then the penalty task, then the rest.
     val misses = unexplained
     val owed = penalty
+    val checkIn = gap
+    if (checkIn != null) {
+        Box(Modifier.fillMaxSize()) {
+            GapCheckInScreen(checkIn, vm)
+        }
+        return
+    }
     if (!misses.isNullOrEmpty()) {
         Box(Modifier.fillMaxSize()) {
             MissesScreen(misses, vm)
@@ -120,7 +133,13 @@ fun ChecklistApp(vm: MainViewModel = viewModel()) {
             "project" -> ProjectEditor(id, vm, onClose = ::pop)
             "reward" -> RewardEditor(id, vm, onClose = ::pop)
             "settings" -> SettingsScreen(settings, vm, onBack = ::pop)
-            "history" -> HistoryScreen(history, locked = settings.locks.history && !unlocked, onUnlock = unlock, onBack = ::pop)
+            "history" -> HistoryScreen(
+                history,
+                gaps = if (settings.locks.gaps && !unlocked) emptyList() else allGaps,
+                locked = settings.locks.history && !unlocked,
+                onUnlock = unlock,
+                onBack = ::pop,
+            )
             else -> {
                 val tab = AppTab.entries.firstOrNull { it.route == route } ?: AppTab.TODAY
                 TabScaffold(
@@ -163,6 +182,20 @@ fun ChecklistApp(vm: MainViewModel = viewModel()) {
                             onUnlock = unlock,
                             padding = padding,
                         )
+                        AppTab.REVIEW -> if (settings.locks.review && !unlocked) {
+                            LockedPanel("The review", unlock, Modifier.padding(padding))
+                        } else {
+                            ReviewScreen(
+                                summary = review,
+                                period = reviewPeriod,
+                                streaks = today?.streaks,
+                                hideReasons = settings.locks.reasons && !unlocked,
+                                hideGapNotes = settings.locks.gaps && !unlocked,
+                                onPeriod = { vm.reviewPeriod.value = it; vm.reviewDay.value = null },
+                                onStep = vm::reviewStep,
+                                padding = padding,
+                            )
+                        }
                         AppTab.SHOP -> if (settings.locks.shop && !unlocked) {
                             LockedPanel("The shop", unlock, Modifier.padding(padding))
                         } else ShopScreen(

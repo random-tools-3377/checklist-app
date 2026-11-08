@@ -55,6 +55,7 @@ import androidx.core.content.ContextCompat
 import io.github.randomtools3377.checklist.BuildConfig
 import io.github.randomtools3377.checklist.Privacy
 import io.github.randomtools3377.checklist.core.Backup
+import io.github.randomtools3377.checklist.core.GapSettings
 import io.github.randomtools3377.checklist.core.Days
 import io.github.randomtools3377.checklist.core.dateText
 import io.github.randomtools3377.checklist.data.nowLocal
@@ -64,6 +65,9 @@ import io.github.randomtools3377.checklist.core.StreakSettings
 import io.github.randomtools3377.checklist.core.StreakTarget
 import io.github.randomtools3377.checklist.data.LOCK_HISTORY
 import io.github.randomtools3377.checklist.data.LOCK_PRIVATE
+import io.github.randomtools3377.checklist.data.LOCK_REVIEW
+import io.github.randomtools3377.checklist.data.LOCK_GAPS
+import io.github.randomtools3377.checklist.data.LOCK_REASONS
 import io.github.randomtools3377.checklist.data.LOCK_SHOP
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SegmentedButton
@@ -168,6 +172,10 @@ fun SettingsScreen(
             PenaltyTaskList(vm)
 
             HorizontalDivider(Modifier.padding(top = 8.dp))
+            Section("Gaps")
+            GapSettingsRow(settings.gaps) { vm.setGapSettings(it) }
+
+            HorizontalDivider(Modifier.padding(top = 8.dp))
             Section("Notifications")
             NotificationSettings()
 
@@ -205,6 +213,9 @@ fun SettingsScreen(
             LockSwitch("Points history", settings.locks.history, "lock:history") { vm.setLock(LOCK_HISTORY, it) }
             LockSwitch("The shop and bought rewards", settings.locks.shop, "lock:shop") { vm.setLock(LOCK_SHOP, it) }
             LockSwitch("Goals marked private", settings.locks.privateGoals, "lock:private") { vm.setLock(LOCK_PRIVATE, it) }
+            LockSwitch("Reasons and notes for skips and misses", settings.locks.reasons, "lock:reasons") { vm.setLock(LOCK_REASONS, it) }
+            LockSwitch("Gap check-ins", settings.locks.gaps, "lock:gaps") { vm.setLock(LOCK_GAPS, it) }
+            LockSwitch("The review and stats", settings.locks.review, "lock:review") { vm.setLock(LOCK_REVIEW, it) }
             if (settings.locks.privateGoals) {
                 Text(
                     "While locked, private goals are left off the widget, and their notifications don't name them.",
@@ -404,6 +415,40 @@ private fun StreakSettingsRow(current: StreakSettings, onChange: (StreakSettings
             },
             tag = "setting:streak-value",
             hint = "At ${current.describe()}, the rest can be missed or skipped without breaking it. Other streaks count days with no misses, no skips, nothing over the limit, and everything done.",
+        )
+    }
+}
+
+/** When a stretch counts as a gap: days in a row with nothing ticked, or points lost in a week. */
+@Composable
+private fun GapSettingsRow(current: GapSettings, onChange: (GapSettings) -> Unit) {
+    var days by remember(current) { mutableStateOf(current.days.toString()) }
+    var points by remember(current) { mutableStateOf(current.points.toString()) }
+    Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)) {
+        Text(
+            "When it looks like you stopped for a while, the app asks what happened. One reason and one penalty task cover the whole stretch; points still come off for each miss in it.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        NumberField(
+            label = "Days in a row with nothing ticked",
+            value = days,
+            onValueChange = {
+                days = it
+                it.toIntOrNull()?.takeIf { n -> n in 2..60 }?.let { n -> onChange(current.copy(days = n)) }
+            },
+            tag = "setting:gap-days",
+            hint = "From 2 to 60. Days with nothing due don't count.",
+        )
+        NumberField(
+            label = "Or points lost within a week",
+            value = points,
+            onValueChange = {
+                points = it
+                it.toIntOrNull()?.takeIf { n -> n >= 1 }?.let { n -> onChange(current.copy(points = n)) }
+            },
+            tag = "setting:gap-points",
+            hint = "Points taken off for going over the limit, within any 7 days in a row.",
         )
     }
 }

@@ -79,6 +79,19 @@ class MemoryStore : Store {
     override suspend fun putSetting(name: String, value: String) {
         settings[name] = value
     }
+
+    val gapList = mutableListOf<Gap>()
+
+    override suspend fun allLapses(from: LocalDate, to: LocalDate): List<Lapse> = lapses.filter { it.day >= from && it.day <= to }
+    override suspend fun entries(from: LocalDate, to: LocalDate): List<Entry> = entries.filter { it.day >= from && it.day <= to }
+    override suspend fun tickedDays(from: LocalDate, to: LocalDate): Set<LocalDate> =
+        ticks.map { it.day }.filter { it >= from && it <= to }.toSet()
+    override suspend fun gaps(): List<Gap> = gapList.toList()
+    override suspend fun gap(id: Long): Gap? = gapList.find { it.id == id }
+    override suspend fun addGap(gap: Gap): Long = nextId++.also { gapList += gap.copy(id = it) }
+    override suspend fun updateGap(gap: Gap) {
+        gapList[gapList.indexOfFirst { it.id == gap.id }] = gap
+    }
 }
 
 /** A clock the test can move. It runs in UTC. */

@@ -1,0 +1,283 @@
+@file:OptIn(ExperimentalMaterial3Api::class)
+
+package io.github.randomtools3377.checklist.ui
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material3.Card
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import io.github.randomtools3377.checklist.core.DayRecord
+import io.github.randomtools3377.checklist.core.Gap
+import io.github.randomtools3377.checklist.core.Period
+import io.github.randomtools3377.checklist.core.ReviewSummary
+import io.github.randomtools3377.checklist.core.Streaks
+import io.github.randomtools3377.checklist.core.weekdayShort
+import kotlinx.datetime.isoDayNumber
+import kotlin.math.roundToInt
+
+/**
+ * The review: a day, a week or a month at a time. Done, skipped and missed for each goal, the
+ * reasons that come up most, points earned, spent and lost, the longest runs, gaps marked on the
+ * calendar with what was written, and stats.
+ */
+@Composable
+fun ReviewScreen(
+    summary: ReviewSummary?,
+    period: Period,
+    streaks: Streaks?,
+    hideReasons: Boolean,
+    hideGapNotes: Boolean,
+    onPeriod: (Period) -> Unit,
+    onStep: (Int) -> Unit,
+    padding: PaddingValues,
+) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize().testTag("review"),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = padding.calculateTopPadding() + 8.dp, bottom = padding.calculateBottomPadding() + 24.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        item {
+            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+                listOf(Period.DAILY to "Day", Period.WEEKLY to "Week", Period.MONTHLY to "Month").forEachIndexed { index, (value, label) ->
+                    SegmentedButton(
+                        selected = period == value,
+                        onClick = { onPeriod(value) },
+                        shape = SegmentedButtonDefaults.itemShape(index = index, count = 3),
+                        modifier = Modifier.testTag("review:$label"),
+                    ) { Text(label) }
+                }
+            }
+        }
+        if (summary == null) return@LazyColumn
+        item {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = { onStep(-1) }, modifier = Modifier.testTag("review:back")) {
+                    Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "Earlier")
+                }
+                Text(
+                    if (summary.from == summary.to) longDate(summary.from) else "${shortDate(summary.from)} to ${shortDate(summary.to)}",
+                    style = MaterialTheme.typography.titleMedium,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.weight(1f),
+                )
+                IconButton(onClick = { onStep(1) }) {
+                    Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "Later")
+                }
+            }
+        }
+        item { PointsCard(summary) }
+        if (period == Period.MONTHLY) item { MonthCalendar(summary) }
+        item { GoalsCard(summary) }
+        item { ReasonsCard(summary, hideReasons) }
+        if (summary.gaps.isNotEmpty()) item { GapsCard(summary.gaps, hideGapNotes) }
+        item { StatsCard(summary, streaks) }
+    }
+}
+
+@Composable
+private fun ReviewCard(title: String, content: @Composable () -> Unit) {
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(title, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+            content()
+        }
+    }
+}
+
+@Composable
+private fun PointsCard(summary: ReviewSummary) {
+    ReviewCard("Points") {
+        Row(Modifier.fillMaxWidth()) {
+            PointsFigure("Earned", "+${summary.earned}", MaterialTheme.colorScheme.primary, Modifier.weight(1f))
+            PointsFigure("Spent", "−${summary.spent}", MaterialTheme.colorScheme.onSurface, Modifier.weight(1f))
+            PointsFigure("Lost", "−${summary.lost}", MaterialTheme.colorScheme.error, Modifier.weight(1f))
+        }
+    }
+}
+
+@Composable
+private fun PointsFigure(label: String, value: String, color: androidx.compose.ui.graphics.Color, modifier: Modifier) {
+    Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(value, fontSize = 22.sp, fontWeight = FontWeight.Bold, color = color, modifier = Modifier.testTag("review:${label.lowercase()}"))
+        Text(label, style = MaterialTheme.typography.bodySmall)
+    }
+}
+
+@Composable
+private fun GoalsCard(summary: ReviewSummary) {
+    ReviewCard("Each goal") {
+        val shown = summary.goals.filter { it.due > 0 || it.ticks > 0 }
+        if (shown.isEmpty()) {
+            Text("Nothing was due.", style = MaterialTheme.typography.bodyMedium)
+        }
+        Row {
+            Text("", modifier = Modifier.weight(1f))
+            listOf("Done", "Skipped", "Missed", "Run").forEach {
+                Text(it, style = MaterialTheme.typography.labelSmall, textAlign = TextAlign.Center, modifier = Modifier.width(56.dp))
+            }
+        }
+        shown.forEach { goal ->
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("${goal.goal.icon} ${goal.goal.name}", maxLines = 1, modifier = Modifier.weight(1f))
+                Cell("${goal.done}/${goal.due}")
+                Cell("${goal.skipped}")
+                Cell("${goal.missed}", if (goal.missed > 0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface)
+                Cell("${goal.longestRun}")
+            }
+        }
+        Text("Run: the most times in a row it was done in this stretch.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@Composable
+private fun Cell(text: String, color: androidx.compose.ui.graphics.Color = MaterialTheme.colorScheme.onSurface) {
+    Text(text, textAlign = TextAlign.Center, color = color, modifier = Modifier.width(56.dp))
+}
+
+@Composable
+private fun ReasonsCard(summary: ReviewSummary, hidden: Boolean) {
+    ReviewCard("Reasons that came up most") {
+        when {
+            hidden -> Text("🔒 Behind the privacy lock", style = MaterialTheme.typography.bodyMedium)
+            summary.reasons.isEmpty() -> Text("No skips or misses with a reason.", style = MaterialTheme.typography.bodyMedium)
+            else -> summary.reasons.forEach { (reason, count) ->
+                Row {
+                    Text(reason.label, modifier = Modifier.weight(1f))
+                    Text("$count", fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun GapsCard(gaps: List<Gap>, hideNotes: Boolean) {
+    ReviewCard("Gaps") {
+        gaps.forEach { gap ->
+            Text(
+                if (gap.from == gap.to) shortDate(gap.from) else "${shortDate(gap.from)} to ${shortDate(gap.to)}",
+                fontWeight = FontWeight.Medium,
+            )
+            Text(
+                if (hideNotes) "🔒 Behind the privacy lock" else listOfNotNull(gap.reason?.label, gap.note).joinToString(" · ").ifEmpty { "Not answered yet" },
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+/** The month as a calendar: how much of each day got done, with gap days marked. */
+@Composable
+private fun MonthCalendar(summary: ReviewSummary) {
+    val byDay = summary.days.associateBy { it.day }
+    val first = summary.from
+    val blanks = first.dayOfWeek.isoDayNumber - 1
+    val cells: List<DayRecord?> = List(blanks) { null } + summary.days
+    ReviewCard("Calendar") {
+        Row {
+            (1..7).forEach { Text(weekdayShort(it).take(1), textAlign = TextAlign.Center, style = MaterialTheme.typography.labelSmall, modifier = Modifier.weight(1f)) }
+        }
+        cells.chunked(7).forEach { week ->
+            Row {
+                week.forEach { record ->
+                    Box(Modifier.weight(1f).aspectRatio(1f).padding(2.dp), contentAlignment = Alignment.Center) {
+                        if (record != null) {
+                            val inGap = summary.gaps.any { record.day >= it.from && record.day <= it.to }
+                            val share = if (record.due == 0) null else record.done.toFloat() / record.due
+                            val background = when {
+                                inGap -> MaterialTheme.colorScheme.tertiaryContainer
+                                share == null -> MaterialTheme.colorScheme.surfaceVariant
+                                share >= 1f -> MaterialTheme.colorScheme.primary
+                                share > 0f -> MaterialTheme.colorScheme.primaryContainer
+                                else -> MaterialTheme.colorScheme.errorContainer
+                            }
+                            Box(
+                                Modifier.fillMaxSize().background(background, RoundedCornerShape(8.dp)),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Text(
+                                    "${record.day.dayOfMonth}",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = if (share != null && share >= 1f && !inGap) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+                                )
+                            }
+                        }
+                    }
+                }
+                repeat(7 - week.size) { Spacer(Modifier.weight(1f)) }
+            }
+        }
+        Text(
+            "Dark: everything done · light: some · red: none · purple: a gap",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        @Suppress("UNUSED_VARIABLE") val unused = byDay
+    }
+}
+
+@Composable
+private fun StatsCard(summary: ReviewSummary, streaks: Streaks?) {
+    ReviewCard("Stats") {
+        fun line(label: String, value: String?) {
+            // Collected below; a plain function keeps the list readable.
+        }
+        val lines = buildList {
+            summary.mostConsistent?.let { add("Most consistent" to "${it.goal.icon} ${it.goal.name} · ${(it.consistency * 100).roundToInt()}%") }
+            summary.mostTicked?.let { add("Most ticked" to "${it.goal.icon} ${it.goal.name} · ${it.ticks}") }
+            summary.mostSkipped?.let { add("Most skipped" to "${it.goal.icon} ${it.goal.name} · ${it.skipped}") }
+            summary.mostMissed?.let { add("Most missed" to "${it.goal.icon} ${it.goal.name} · ${it.missed}") }
+            summary.bestWeekday?.let { add("Best day of the week" to weekdayShort(it)) }
+            summary.worstWeekday?.let { add("Hardest day of the week" to weekdayShort(it)) }
+            summary.goals.filter { it.points > 0 }.sortedByDescending { it.points }.take(3).forEach {
+                add("Points from ${it.goal.icon} ${it.goal.name}" to "+${it.points}")
+            }
+            streaks?.let {
+                add("Current main streak" to "${it.done} days")
+                add("Longest run in this stretch" to (summary.goals.maxOfOrNull { g -> g.longestRun }?.toString() ?: "0"))
+            }
+        }
+        if (lines.isEmpty()) Text("Not enough yet to say.", style = MaterialTheme.typography.bodyMedium)
+        lines.forEachIndexed { index, (label, value) ->
+            if (index > 0) HorizontalDivider()
+            Row(Modifier.padding(vertical = 4.dp)) {
+                Text(label, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+                Text(value, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+            }
+        }
+        Spacer(Modifier.height(2.dp))
+    }
+}

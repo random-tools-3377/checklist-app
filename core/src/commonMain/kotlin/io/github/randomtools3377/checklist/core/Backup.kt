@@ -25,12 +25,14 @@ data class Backup(
     val lapses: List<Lapse> = emptyList(),
     val penalties: List<Penalty> = emptyList(),
     val penaltyTasks: List<PenaltyTask> = emptyList(),
+    /** Gaps (format 3). */
+    val gaps: List<Gap> = emptyList(),
 ) {
     companion object {
         const val APP = "checklist"
 
         /** Raised whenever the file's layout changes in a way older versions can't read. */
-        const val FORMAT = 2
+        const val FORMAT = 3
 
         private val json = Json {
             prettyPrint = true

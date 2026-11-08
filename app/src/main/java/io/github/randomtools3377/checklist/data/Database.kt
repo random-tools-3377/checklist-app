@@ -132,6 +132,20 @@ data class LapseEntity(
     val note: String?,
     val forgotten: Boolean,
     val label: String,
+    /** The gap it falls in. Added in version 5. */
+    val gapId: Long? = null,
+)
+
+/** Stretches when it looks like the user stopped for a while. Added in version 5. */
+@Entity(tableName = "gaps")
+data class GapEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val fromDay: Long,
+    val toDay: Long,
+    val kind: String,
+    val createdAt: Long,
+    val reason: String?,
+    val note: String?,
 )
 
 /** Penalty tasks owed for going over the limit. Added in version 4. */
@@ -146,6 +160,8 @@ data class PenaltyEntity(
     val label: String?,
     val doneAt: Long?,
     val cancelledAt: Long?,
+    /** The gap it covers, for a gap check-in. Added in version 5. */
+    val gapId: Long? = null,
 )
 
 /** The user's own penalty tasks. Added in version 4. */
@@ -347,9 +363,45 @@ interface ChecklistDao {
     @Query("SELECT * FROM lapses WHERE day >= :since ORDER BY day, id")
     suspend fun lapsesSince(since: Long): List<LapseEntity>
 
-    /** Misses still waiting for a reason. */
-    @Query("SELECT * FROM lapses WHERE reason IS NULL AND forgotten = 0 AND kind = 'MISS' ORDER BY day, id")
+    /** Misses still waiting for a reason. Those inside a gap get the gap's one reason instead. */
+    @Query("SELECT * FROM lapses WHERE reason IS NULL AND forgotten = 0 AND kind = 'MISS' AND gapId IS NULL ORDER BY day, id")
     fun observeUnexplained(): Flow<List<LapseEntity>>
+
+    // Gaps and the review
+
+    @Query("SELECT * FROM lapses WHERE day >= :from AND day <= :to ORDER BY day, id")
+    suspend fun allLapses(from: Long, to: Long): List<LapseEntity>
+
+    @Query("SELECT * FROM entries WHERE day >= :from AND day <= :to ORDER BY day, id")
+    suspend fun entries(from: Long, to: Long): List<EntryEntity>
+
+    @Query("SELECT * FROM entries WHERE day >= :from AND day <= :to ORDER BY day, id")
+    fun observeEntries(from: Long, to: Long): Flow<List<EntryEntity>>
+
+    @Query("SELECT DISTINCT day FROM ticks WHERE day >= :from AND day <= :to")
+    suspend fun tickedDays(from: Long, to: Long): List<Long>
+
+    @Query("SELECT * FROM gaps ORDER BY fromDay, id")
+    suspend fun gaps(): List<GapEntity>
+
+    @Query("SELECT * FROM gaps ORDER BY fromDay, id")
+    fun observeGaps(): Flow<List<GapEntity>>
+
+    @Query("SELECT * FROM gaps WHERE reason IS NULL ORDER BY fromDay, id")
+    fun observeUnansweredGaps(): Flow<List<GapEntity>>
+
+    @Query("SELECT * FROM gaps WHERE id = :id")
+    suspend fun gap(id: Long): GapEntity?
+
+    @Insert
+    suspend fun insertGap(gap: GapEntity): Long
+
+    @Update
+    suspend fun updateGap(gap: GapEntity)
+
+    @Query("SELECT * FROM gaps") suspend fun allGaps(): List<GapEntity>
+    @Query("DELETE FROM gaps") suspend fun deleteGaps()
+    @Insert suspend fun insertGaps(rows: List<GapEntity>)
 
     @Query("SELECT * FROM entries WHERE lapseId = :lapseId")
     suspend fun entriesForLapse(lapseId: Long): List<EntryEntity>
@@ -407,11 +459,12 @@ interface ChecklistDao {
         LapseEntity::class,
         PenaltyEntity::class,
         PenaltyTaskEntity::class,
+        GapEntity::class,
     ],
-    version = 4,
+    version = 5,
     exportSchema = true,
-    // Version 4 only adds tables and columns, so Room works the migration out from the layouts.
-    autoMigrations = [AutoMigration(from = 3, to = 4)],
+    // Versions 4 and 5 only add tables and columns, so Room works the migrations out from the layouts.
+    autoMigrations = [AutoMigration(from = 3, to = 4), AutoMigration(from = 4, to = 5)],
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun dao(): ChecklistDao

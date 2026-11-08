@@ -28,7 +28,7 @@ private fun BroadcastReceiver.work(block: suspend () -> Unit) {
 /** The alarm went off: find misses if the day ended, show what is due, set the next alarm, refresh the widget. */
 class AlarmReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) = work {
-        runCatching { (context.applicationContext as ChecklistApplication).container.lapses.closeDays() }
+        runCatching { (context.applicationContext as ChecklistApplication).container.closeDays() }
         Reminders.fire(context)
         CalendarWidget.refresh(context)
     }

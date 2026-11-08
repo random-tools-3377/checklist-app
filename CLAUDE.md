@@ -152,6 +152,12 @@ The app has no network access unless the owner decides otherwise for this app.
 - One reason and one penalty task cover the whole stretch. Points still come off for every miss in
   it.
 - The stretch is marked in the history, with what the user wrote.
+- **Details (default):** a big point loss is 50 points or more taken off for going over the limit
+  within any 7 days in a row. Days with nothing due neither count toward a gap nor break one.
+  Gaps are looked for from the day tracking began (the first time the app checked for misses),
+  never further back, and at most 60 days back. A gap that is still unanswered grows if the
+  stretch carries on. Its misses need no reasons of their own and owe no penalty tasks of their
+  own; the gap's one penalty task covers them.
 
 ## Opening the app (default)
 
@@ -191,10 +197,8 @@ The app has no network access unless the owner decides otherwise for this app.
 - What can be put behind the lock **(default)**: reasons and notes for skips and misses, gap
   check-ins, the points history, the review and stats, the shop and bought rewards, and single
   goals marked private. Locked things don't show in the widget or reminders either.
-- So far the lock can cover the points history, the shop, and private goals; reasons, gap
-  check-ins and the review join with the review screen. A locked private goal's notification says
-  "A private goal". A phone with no screen lock can't be asked, so there the lock opens, with a
-  note **(default)**.
+- A locked private goal's notification says "A private goal". A phone with no screen lock can't
+  be asked, so there the lock opens, with a note **(default)**.
 - The app's preview in the recent-apps screen is hidden. On Android 13 and later that leaves
   screenshots working. On older phones it also blocks screenshots, so there it is a switch in the
   Privacy menu **(default)**.

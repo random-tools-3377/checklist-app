@@ -32,8 +32,10 @@ keeps the data.
 - 0.4.0: skips and misses with an allowance per goal, reasons, going over the limit (half the
   points and a penalty task right away), streaks, Skip on notifications, and a privacy lock for
   the things the user picks.
+- 0.5.0: gap check-ins, a review of each day, week and month with stats, and more for the
+  privacy lock.
 
-Next: gaps, the review screen and stats, then celebration GIFs.
+Next: celebration GIFs.
 
 ## How it is built
 

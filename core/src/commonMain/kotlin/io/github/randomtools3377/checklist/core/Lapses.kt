@@ -38,6 +38,9 @@ class Lapses(
         /** The last day checked for misses, as an ISO date. */
         const val CHECKED_THROUGH = "misses_checked_through"
 
+        /** The first day skips, misses and gaps are tracked from, as an ISO date. */
+        const val TRACKING_SINCE = "tracking_since"
+
         /** Days of history checked at most, so a long time away doesn't take forever. */
         const val MAX_DAYS_BACK = 400
     }
@@ -102,8 +105,9 @@ class Lapses(
         var penaltyId: Long? = null
         if (overLimit) {
             if (cost > 0) {
+                // Counted on the day it belongs to, so a week's losses add up where they happened.
                 store.addEntry(
-                    Entry(at = now, day = book.today(), kind = EntryKind.PENALTY, amount = -cost, goalId = goal.id, label = goal.name, lapseId = id),
+                    Entry(at = now, day = day, kind = EntryKind.PENALTY, amount = -cost, goalId = goal.id, label = goal.name, lapseId = id),
                 )
             }
             penaltyId = store.addPenalty(Penalty(lapseId = id, createdAt = now))
@@ -123,6 +127,7 @@ class Lapses(
         val checked = store.setting(CHECKED_THROUGH)?.let { LocalDate.parse(it) }
         if (checked == null) {
             store.putSetting(CHECKED_THROUGH, yesterday.toString())
+            store.putSetting(TRACKING_SINCE, today.toString())
             return@transaction emptyList()
         }
         if (checked >= yesterday) return@transaction emptyList()

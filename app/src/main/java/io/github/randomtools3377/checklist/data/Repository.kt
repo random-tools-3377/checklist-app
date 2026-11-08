@@ -22,6 +22,9 @@ const val SETTING_STREAK_VALUE = "streak_value"
 const val LOCK_HISTORY = "lock_history"
 const val LOCK_SHOP = "lock_shop"
 const val LOCK_PRIVATE = "lock_private"
+const val LOCK_REASONS = "lock_reasons"
+const val LOCK_GAPS = "lock_gaps"
+const val LOCK_REVIEW = "lock_review"
 
 /** What the habit editor saves. */
 data class HabitDraft(
@@ -241,6 +244,7 @@ class Repository(private val db: AppDatabase) {
                 lapses = dao.allLapses().map { it.toCore() },
                 penalties = dao.allPenalties().map { it.toCore() },
                 penaltyTasks = dao.allPenaltyTasks().map { it.toCore() },
+                gaps = dao.allGaps().map { it.toCore() },
             )
         }
         return Backup.encode(backup)
@@ -258,6 +262,7 @@ class Repository(private val db: AppDatabase) {
         dao.deleteLapses()
         dao.deletePenalties()
         dao.deletePenaltyTasks()
+        dao.deleteGaps()
         dao.insertGoals(backup.goals.map { it.toEntity() })
         dao.insertSteps(backup.steps.map { it.toEntity() })
         dao.insertTicks(backup.ticks.map { it.toEntity() })
@@ -268,5 +273,6 @@ class Repository(private val db: AppDatabase) {
         dao.insertLapses(backup.lapses.map { it.toEntity() })
         dao.insertPenalties(backup.penalties.map { it.toEntity() })
         dao.insertPenaltyTasks(backup.penaltyTasks.map { it.toEntity() })
+        dao.insertGaps(backup.gaps.map { it.toEntity() })
     }
 }

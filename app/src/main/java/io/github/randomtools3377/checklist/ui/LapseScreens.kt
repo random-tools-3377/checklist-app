@@ -157,7 +157,11 @@ fun PenaltyScreen(penalty: Penalty, makeUp: List<Goal>, tasks: List<PenaltyTask>
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Text("Penalty task", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-        Text("You went over the limit, so there's a penalty task to do now. It pays nothing.", style = MaterialTheme.typography.bodyMedium)
+        Text(
+            if (penalty.gapId != null) "There was a gap, so there's one penalty task for the whole stretch, to do now. It pays nothing."
+            else "You went over the limit, so there's a penalty task to do now. It pays nothing.",
+            style = MaterialTheme.typography.bodyMedium,
+        )
         val label = penalty.label
         if (penalty.choice != null && label != null) {
             Card(
@@ -356,5 +360,56 @@ fun LockedPanel(what: String, onUnlock: () -> Unit, modifier: Modifier = Modifie
         Text("$what is locked", style = MaterialTheme.typography.titleMedium)
         Text("It stays open until you leave the app.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Button(onClick = onUnlock, modifier = Modifier.testTag("unlock")) { Text("Unlock") }
+    }
+}
+
+/**
+ * The gap check-in: it looks like the user stopped for a while. One reason and an optional note
+ * cover the whole stretch, and are marked in the history. Points still came off for each miss.
+ */
+@Composable
+fun GapCheckInScreen(gap: io.github.randomtools3377.checklist.core.Gap, vm: MainViewModel) {
+    BackHandler {}
+    var reason by remember { mutableStateOf<Reason?>(null) }
+    var note by remember { mutableStateOf("") }
+    val cost by produceState(0 to 0, gap.id, gap.to) { value = vm.gapCost(gap) }
+    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).safeDrawingPadding().padding(16.dp).testTag("gap")) {
+        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text("Looks like you stopped for a while", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            Text(
+                if (gap.from == gap.to) shortDate(gap.from) else "${shortDate(gap.from)} to ${shortDate(gap.to)}",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.primary,
+            )
+            Text(
+                when (gap.kind) {
+                    io.github.randomtools3377.checklist.core.GapKind.NOTHING_TICKED -> "Nothing was ticked on these days."
+                    io.github.randomtools3377.checklist.core.GapKind.POINT_LOSS -> "A lot of points were lost in one week."
+                } + " What happened? One reason covers the whole stretch.",
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            val (misses, points) = cost
+            if (misses > 0) {
+                Text(
+                    "Points still come off for each miss: ${if (misses == 1) "1 miss" else "$misses misses"}" +
+                        if (points > 0) ", −$points points." else ".",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
+            ReasonChips(reason, "gap-reason") { reason = it }
+            OutlinedTextField(
+                value = note,
+                onValueChange = { note = it.take(300) },
+                label = { Text("What happened (optional)") },
+                modifier = Modifier.fillMaxWidth().testTag("gap-note"),
+            )
+            Text("It's marked in your history with what you write here.", style = MaterialTheme.typography.bodySmall)
+        }
+        Button(
+            onClick = { reason?.let { vm.explainGap(gap.id, it, note) } },
+            enabled = reason != null,
+            modifier = Modifier.fillMaxWidth().padding(top = 12.dp).testTag("gap-done"),
+        ) { Text("Carry on") }
     }
 }

@@ -69,4 +69,20 @@ interface Store {
 
     suspend fun setting(name: String): String?
     suspend fun putSetting(name: String, value: String)
+
+    // Gaps
+
+    /** Every skip and miss whose day falls from [from] to [to]. */
+    suspend fun allLapses(from: LocalDate, to: LocalDate): List<Lapse>
+
+    /** Ledger entries whose day falls from [from] to [to]. */
+    suspend fun entries(from: LocalDate, to: LocalDate): List<Entry>
+
+    /** Days from [from] to [to] with at least one tick (habit or step). */
+    suspend fun tickedDays(from: LocalDate, to: LocalDate): Set<LocalDate>
+
+    suspend fun gaps(): List<Gap>
+    suspend fun gap(id: Long): Gap?
+    suspend fun addGap(gap: Gap): Long
+    suspend fun updateGap(gap: Gap)
 }

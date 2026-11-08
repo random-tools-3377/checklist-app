@@ -2,7 +2,9 @@ package io.github.randomtools3377.checklist
 
 import android.app.Application
 import androidx.room.InvalidationTracker
+import androidx.room.withTransaction
 import io.github.randomtools3377.checklist.core.Book
+import io.github.randomtools3377.checklist.core.Gaps
 import io.github.randomtools3377.checklist.core.Lapses
 import io.github.randomtools3377.checklist.data.AppDatabase
 import io.github.randomtools3377.checklist.data.Repository
@@ -32,6 +34,18 @@ class Container(app: Application) {
     val db: AppDatabase = AppDatabase.open(app)
     val book = Book(RoomStore(db))
     val lapses = Lapses(RoomStore(db), book)
+    val gaps = Gaps(RoomStore(db), book)
+
+    /**
+     * Finds misses since the last check, then gaps. When the app opens, and when the day ends.
+     * Both in one transaction, so the misses a gap covers never show on their own first.
+     */
+    suspend fun closeDays() {
+        db.withTransaction {
+            lapses.closeDays()
+            gaps.find()
+        }
+    }
     val repository = Repository(db)
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)

@@ -4,6 +4,8 @@ import androidx.room.withTransaction
 import io.github.randomtools3377.checklist.core.Days
 import io.github.randomtools3377.checklist.core.Entry
 import io.github.randomtools3377.checklist.core.EntryKind
+import io.github.randomtools3377.checklist.core.Gap
+import io.github.randomtools3377.checklist.core.GapKind
 import io.github.randomtools3377.checklist.core.Goal
 import io.github.randomtools3377.checklist.core.GoalKind
 import io.github.randomtools3377.checklist.core.Lapse
@@ -73,6 +75,17 @@ class RoomStore(private val db: AppDatabase) : Store {
     override suspend fun penaltyTasks(): List<PenaltyTask> = dao.penaltyTasks().map { it.toCore() }
     override suspend fun setting(name: String): String? = dao.setting(name)
     override suspend fun putSetting(name: String, value: String) = dao.putSetting(SettingEntity(name, value))
+
+    override suspend fun allLapses(from: LocalDate, to: LocalDate): List<Lapse> =
+        dao.allLapses(from.toEpochDay(), to.toEpochDay()).map { it.toCore() }
+    override suspend fun entries(from: LocalDate, to: LocalDate): List<Entry> =
+        dao.entries(from.toEpochDay(), to.toEpochDay()).map { it.toCore() }
+    override suspend fun tickedDays(from: LocalDate, to: LocalDate): Set<LocalDate> =
+        dao.tickedDays(from.toEpochDay(), to.toEpochDay()).map { it.toDay() }.toSet()
+    override suspend fun gaps(): List<Gap> = dao.gaps().map { it.toCore() }
+    override suspend fun gap(id: Long): Gap? = dao.gap(id)?.toCore()
+    override suspend fun addGap(gap: Gap): Long = dao.insertGap(gap.toEntity())
+    override suspend fun updateGap(gap: Gap) = dao.updateGap(gap.toEntity())
 }
 
 fun GoalEntity.toCore() = Goal(
@@ -204,6 +217,7 @@ fun LapseEntity.toCore() = Lapse(
     note = note,
     forgotten = forgotten,
     label = label,
+    gapId = gapId,
 )
 
 fun Lapse.toEntity() = LapseEntity(
@@ -220,6 +234,7 @@ fun Lapse.toEntity() = LapseEntity(
     note = note,
     forgotten = forgotten,
     label = label,
+    gapId = gapId,
 )
 
 fun PenaltyEntity.toCore() = Penalty(
@@ -232,6 +247,7 @@ fun PenaltyEntity.toCore() = Penalty(
     label = label,
     doneAt = doneAt,
     cancelledAt = cancelledAt,
+    gapId = gapId,
 )
 
 fun Penalty.toEntity() = PenaltyEntity(
@@ -244,8 +260,29 @@ fun Penalty.toEntity() = PenaltyEntity(
     label = label,
     doneAt = doneAt,
     cancelledAt = cancelledAt,
+    gapId = gapId,
 )
 
 fun PenaltyTaskEntity.toCore() = PenaltyTask(id = id, name = name, archived = archived)
 
 fun PenaltyTask.toEntity() = PenaltyTaskEntity(id = id, name = name, archived = archived)
+
+fun GapEntity.toCore() = Gap(
+    id = id,
+    from = fromDay.toDay(),
+    to = toDay.toDay(),
+    kind = GapKind.valueOf(kind),
+    createdAt = createdAt,
+    reason = reason?.let { Reason.valueOf(it) },
+    note = note,
+)
+
+fun Gap.toEntity() = GapEntity(
+    id = id,
+    fromDay = from.toEpochDay(),
+    toDay = to.toEpochDay(),
+    kind = kind.name,
+    createdAt = createdAt,
+    reason = reason?.name,
+    note = note,
+)
