@@ -1,11 +1,12 @@
 package io.github.randomtools3377.checklist
 
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.junit4.ComposeTestRule
 import androidx.compose.ui.test.onNodeWithTag
-import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.printToString
@@ -28,8 +29,9 @@ fun ComposeTestRule.waitFor(timeoutMs: Long = 10_000, condition: () -> Boolean) 
 }
 
 /**
- * Taps [tag] after scrolling it fully into view. A tap lands on the middle of a button, so a
- * button half below the edge of a small screen would otherwise miss.
+ * Presses [tag] after scrolling it into view. It presses the button itself rather than a spot
+ * on the screen: on a small screen a list item can sit behind the bottom bar, where a tap at
+ * its middle would land on the bar instead.
  */
 fun ComposeTestRule.tap(tag: String) {
     val node = onNodeWithTag(tag)
@@ -38,7 +40,7 @@ fun ComposeTestRule.tap(tag: String) {
     } catch (e: Throwable) {
         // Not inside anything that scrolls: it is already where it is.
     }
-    node.performClick()
+    node.performSemanticsAction(SemanticsActions.OnClick)
 }
 
 /** Scrolls the list tagged [list] to the item holding [tag], then taps it. */
