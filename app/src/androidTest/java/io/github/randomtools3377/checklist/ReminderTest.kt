@@ -33,6 +33,16 @@ class ReminderTest {
 
     private fun showing(goalId: Long) = manager.activeNotifications.any { it.id == Reminders.notificationId(goalId) }
 
+    /** Posting a notification reaches the system a moment later, so look for a few seconds. */
+    private fun showsWithin(goalId: Long, millis: Long = 5_000): Boolean {
+        val end = System.currentTimeMillis() + millis
+        while (System.currentTimeMillis() < end) {
+            if (showing(goalId)) return true
+            Thread.sleep(100)
+        }
+        return showing(goalId)
+    }
+
     @Test
     fun aHabitNotifiesAtItsTimeUntilItIsDone() = runBlocking {
         app.container.db.clearAllTables()
@@ -48,12 +58,12 @@ class ReminderTest {
 
         forgetLastAlarm()
         Reminders.fire(context)
-        assertTrue("The reminder should show at its time", showing(goalId))
+        assertTrue("The reminder should show at its time", showsWithin(goalId))
 
         app.container.book.tickHabit(goalId)
         manager.cancelAll()
         forgetLastAlarm()
         Reminders.fire(context)
-        assertFalse("A done habit shouldn't remind again", showing(goalId))
+        assertFalse("A done habit shouldn't remind again", showsWithin(goalId, millis = 1_500))
     }
 }

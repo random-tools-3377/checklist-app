@@ -6,6 +6,8 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -96,7 +98,7 @@ fun MissesScreen(misses: List<Lapse>, vm: MainViewModel) {
             )
         }
         LazyColumn(
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.weight(1f).testTag("misses-list"),
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
@@ -112,7 +114,7 @@ fun MissesScreen(misses: List<Lapse>, vm: MainViewModel) {
                             style = MaterialTheme.typography.bodyMedium,
                             color = if (miss.overLimit) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
                         )
-                        ReasonChips(reasons[miss.id], "reason:${miss.label}") { reasons[miss.id] = it }
+                        ReasonChips(reasons[miss.id], "reason:${miss.label}:${miss.day}") { reasons[miss.id] = it }
                         OutlinedTextField(
                             value = notes[miss.id] ?: "",
                             onValueChange = { notes[miss.id] = it.take(200) },
@@ -120,7 +122,7 @@ fun MissesScreen(misses: List<Lapse>, vm: MainViewModel) {
                             modifier = Modifier.fillMaxWidth(),
                         )
                         if (miss.period != null) {
-                            TextButton(onClick = { vm.forgotToTick(miss.id) }, modifier = Modifier.testTag("forgot:${miss.label}")) {
+                            TextButton(onClick = { vm.forgotToTick(miss.id) }, modifier = Modifier.testTag("forgot:${miss.label}:${miss.day}")) {
                                 Text("I did it, I forgot to tick it")
                             }
                         }
@@ -145,7 +147,13 @@ fun PenaltyScreen(penalty: Penalty, makeUp: List<Goal>, tasks: List<PenaltyTask>
     BackHandler {} // no putting it off
     var newTask by remember { mutableStateOf("") }
     Column(
-        Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).safeDrawingPadding().padding(16.dp).testTag("penalty"),
+        Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .safeDrawingPadding()
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp)
+            .testTag("penalty"),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Text("Penalty task", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)

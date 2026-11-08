@@ -29,11 +29,11 @@ keeps the data.
   preview.
 - 0.3.0: notifications at set times with a Done button, and a calendar widget for the home
   screen.
+- 0.4.0: skips and misses with an allowance per goal, reasons, going over the limit (half the
+  points and a penalty task right away), streaks, Skip on notifications, and a privacy lock for
+  the things the user picks.
 
-Next: skips, misses, the allowance, penalties,
-streaks and the privacy lock; then gaps, the review screen and stats. The data is laid out so
-these fit in: every tick records the window it counts for, and the balance is the sum of a
-ledger whose entries have a kind, so penalties and refunds become new kinds of entry.
+Next: gaps, the review screen and stats, then celebration GIFs.
 
 ## How it is built
 
@@ -41,8 +41,9 @@ ledger whose entries have a kind, so penalties and refunds become new kinds of e
   with their unit tests. `app/` is the Android app, in Jetpack Compose.
 - On every push CI also runs the shared tests on an iPhone simulator, so the shared code stays
   ready for the iPhone app.
-- GitHub Actions, on every push: unit tests, an emulator test that ticks a goal and buys a
-  reward, a release build, the signature check and the network-permission check.
+- GitHub Actions, on every push: unit tests, emulator tests (ticking and buying, skips and
+  misses, reminders, backups and database updates), a release build, the signature check and
+  the network-permission check.
 - The release APK is built without secrets, then signed in a separate job that runs no build
   code. Its certificate must match the one in CLAUDE.md, or the build fails.
 - A push to `main` publishes a Release when `appVersionName` in `gradle.properties` has no

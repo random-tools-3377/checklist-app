@@ -47,24 +47,25 @@ class SkipOverTheLimitTest {
 
         // Skip it: over the limit, it needs a reason.
         app.onNodeWithTag("nav:today").performClick()
-        app.waitFor { !gone("skip:Run") }
-        app.onNodeWithTag("skip:Run").performClick()
+        app.waitFor { app.shownIn("today-list", "skip:Run") }
+        app.tap("skip:Run")
         app.waitFor { !gone("skip-reason:NO_TIME") }
-        app.onNodeWithTag("skip-reason:NO_TIME").performClick()
-        app.onNodeWithTag("confirm-skip").performClick()
+        app.tap("skip-reason:NO_TIME")
+        app.tap("confirm-skip")
 
         // The penalty task fills the screen. No penalty tasks yet, so write one and draw it.
         app.waitFor { !gone("penalty") }
         app.onNodeWithTag("new-penalty-task").performTextInput("20 push-ups")
-        app.onNodeWithTag("add-penalty-task").performClick()
+        app.tap("add-penalty-task")
         app.waitFor { !gone("draw-task") }
-        app.onNodeWithTag("draw-task").performClick()
+        app.tap("draw-task")
         app.waitFor { !gone("penalty-task") }
         app.onNodeWithTag("penalty-task").assertTextEquals("20 push-ups")
-        app.onNodeWithTag("penalty-done").performClick()
+        app.tap("penalty-done")
 
         // Back on Today: skipped, and half of 10 taken off.
-        app.waitFor { !gone("skipped:Run") }
+        app.waitFor { app.shownIn("today-list", "skipped:Run") }
+        app.toTopOfToday()
         app.onNodeWithTag("balance", useUnmergedTree = true).assertTextEquals("-5 points")
     }
 }
@@ -98,22 +99,24 @@ class MissesOnOpeningTest {
     @Test
     fun twoMissesNeedReasonsAndEachOverTheLimitOwesAPenalty() {
         // Two days missed, with no allowance: both are over the limit.
-        app.waitFor { app.onAllNodesWithTag("miss:Read").fetchSemanticsNodes().size == 2 }
-        app.onAllNodesWithTag("reason:Read:ILL")[0].performClick()
-        app.onAllNodesWithTag("reason:Read:NO_TIME")[1].performClick()
-        app.onNodeWithTag("misses-done").performClick()
+        val today = nowLocal().date
+        app.waitFor { !gone("misses-list") }
+        app.tapIn("misses-list", "reason:Read:${today.minusDays(2)}:ILL")
+        app.tapIn("misses-list", "reason:Read:${today.minusDays(1)}:NO_TIME")
+        app.tap("misses-done")
 
         // Then a penalty task for each: make up the missed goal, twice.
         repeat(2) {
             app.waitFor { !gone("makeup:Read") }
-            app.onNodeWithTag("makeup:Read").performClick()
+            app.tap("makeup:Read")
             app.waitFor { !gone("penalty-done") }
-            app.onNodeWithTag("penalty-done").performClick()
+            app.tap("penalty-done")
             app.waitForIdle()
         }
 
         // Then today's list. Half of 4 came off for each miss.
         app.waitFor { !gone("today-list") }
+        app.toTopOfToday()
         app.onNodeWithTag("balance", useUnmergedTree = true).assertTextEquals("-4 points")
     }
 }

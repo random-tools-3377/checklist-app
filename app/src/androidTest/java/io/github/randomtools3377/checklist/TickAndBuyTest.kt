@@ -34,6 +34,7 @@ class TickAndBuyTest {
     val rules: RuleChain = RuleChain.outerRule(FreshDatabase()).around(app)
 
     private fun balanceIs(text: String): Boolean = try {
+        if (!gone("today-list")) app.toTopOfToday()
         app.onNodeWithTag("balance", useUnmergedTree = true).assertTextEquals(text)
         true
     } catch (e: AssertionError) {
@@ -55,9 +56,10 @@ class TickAndBuyTest {
 
         // Tick it on today's list: the balance goes from 0 to 10.
         app.onNodeWithTag("nav:today").performClick()
-        app.waitFor { !gone("tick:Drink water") }
-        app.onNodeWithTag("balance", useUnmergedTree = true).assertTextEquals("0 points")
-        app.onNodeWithTag("tick:Drink water").performClick()
+        app.waitFor { !gone("today-list") }
+        app.waitFor { balanceIs("0 points") }
+        app.waitFor { app.shownIn("today-list", "tick:Drink water") }
+        app.tap("tick:Drink water")
         app.waitFor { balanceIs("10 points") }
 
         // A reward that costs 4.
