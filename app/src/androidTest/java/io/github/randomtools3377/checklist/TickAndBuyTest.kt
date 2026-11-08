@@ -34,7 +34,7 @@ class TickAndBuyTest {
     val rules: RuleChain = RuleChain.outerRule(FreshDatabase()).around(app)
 
     private fun balanceIs(text: String): Boolean = try {
-        app.onNodeWithTag("balance").assertTextEquals(text)
+        app.onNodeWithTag("balance", useUnmergedTree = true).assertTextEquals(text)
         true
     } catch (e: AssertionError) {
         false
@@ -56,7 +56,7 @@ class TickAndBuyTest {
         // Tick it on today's list: the balance goes from 0 to 10.
         app.onNodeWithTag("nav:today").performClick()
         app.waitUntil(10_000) { !gone("tick:Drink water") }
-        app.onNodeWithTag("balance").assertTextEquals("0 points")
+        app.onNodeWithTag("balance", useUnmergedTree = true).assertTextEquals("0 points")
         app.onNodeWithTag("tick:Drink water").performClick()
         app.waitUntil(10_000) { balanceIs("10 points") }
 
@@ -89,7 +89,7 @@ class TickAndBuyTest {
         app.onNodeWithTag("use:Coffee").performClick()
         app.onNodeWithTag("confirm-use").performClick()
         app.waitUntil(10_000) { gone("bought:Coffee") }
-        app.onNodeWithTag("balance").assertTextEquals("6 points")
+        app.onNodeWithTag("balance", useUnmergedTree = true).assertTextEquals("6 points")
     }
 
     @Test
@@ -105,6 +105,6 @@ class TickAndBuyTest {
         app.onNodeWithTag("buy:Trip").performClick()
         app.waitForIdle()
         assertTrue("Buying should not start at 0 points", gone("confirm-buy"))
-        app.onNodeWithTag("balance").assertTextEquals("0 points")
+        app.onNodeWithTag("balance", useUnmergedTree = true).assertTextEquals("0 points")
     }
 }
