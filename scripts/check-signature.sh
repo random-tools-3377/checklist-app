@@ -43,4 +43,5 @@ if [ "$digests" != "$expected" ]; then
   echo "::error::$apk is signed with the wrong certificate (SHA-256 $digests). It must be signed with the release key."
   exit 1
 fi
+echo "Certificate SHA-256: $digests"
 echo "Signature check passed: signed with the release certificate."
