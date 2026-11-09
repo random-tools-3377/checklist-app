@@ -85,6 +85,10 @@ data class Goal(
     val unit: String? = null,
     /** How hard it is, which suggests its points (see [Suggest]); null when not given. */
     val effort: Effort? = null,
+    /** Something to quit, like no sugar: ticked each day it was avoided, with "I slipped" (see [Lapses.slip]). */
+    val quit: Boolean = false,
+    /** A challenge on this habit, like 30 days in a row with a bonus (see [Challenges]). */
+    val challenge: Challenge? = null,
     val archived: Boolean = false,
     val position: Int = 0,
     val createdAt: Long = 0,
@@ -202,6 +206,9 @@ enum class EntryKind {
 
     /** A day when everything due was done (see [PerfectDays]). */
     PERFECT_DAY,
+
+    /** A challenge's bonus for finishing it (see [Challenges]). */
+    CHALLENGE,
 }
 
 /** One line in the points ledger. Positive amounts are earned, negative ones are spent. */

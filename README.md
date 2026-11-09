@@ -78,6 +78,7 @@ keeps the data.
 - 0.31.0: a day timeline, where a goal can be dragged to another time for that day.
 - 0.32.0: the phone's own calendar in the planner, the timeline and Today, read on the phone, with
   pacing leaving its events out.
+- 0.33.0: goals to quit, with "I slipped", and challenges of so many days in a row with a bonus.
 
 Every step in CLAUDE.md's build order is built. The iPhone app waits for a way to install it.
 

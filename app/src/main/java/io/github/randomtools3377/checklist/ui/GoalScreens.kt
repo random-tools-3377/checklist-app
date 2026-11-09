@@ -101,6 +101,7 @@ import io.github.randomtools3377.checklist.reminders.Reminders
 import io.github.randomtools3377.checklist.data.ProjectDraft
 import io.github.randomtools3377.checklist.data.TodoDraft
 import io.github.randomtools3377.checklist.core.Todos
+import io.github.randomtools3377.checklist.core.Challenge
 import io.github.randomtools3377.checklist.core.Difficulty
 import io.github.randomtools3377.checklist.core.Suggest
 import io.github.randomtools3377.checklist.core.Effort
@@ -471,6 +472,12 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Long)
     var unit by rememberSaveable { mutableStateOf("") }
     // How hard it is, by name, which suggests its points.
     var effort by rememberSaveable { mutableStateOf<String?>(null) }
+    // A goal to quit, and a challenge on it.
+    var quit by rememberSaveable { mutableStateOf(false) }
+    var challengeOn by rememberSaveable { mutableStateOf(false) }
+    var challengeDays by rememberSaveable { mutableStateOf("30") }
+    var challengeBonus by rememberSaveable { mutableStateOf("50") }
+    var challengeFrom by rememberSaveable { mutableStateOf<Long?>(null) }
     var showErrors by rememberSaveable { mutableStateOf(false) }
     var choosingRepeat by remember { mutableStateOf(false) }
     val context = LocalContext.current
@@ -506,6 +513,13 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Long)
                 amountText = goal.amount?.let { Amounts.format(it) }.orEmpty()
                 unit = goal.unit.orEmpty()
                 effort = goal.effort?.name
+                quit = goal.quit
+                goal.challenge?.let { c ->
+                    challengeOn = true
+                    challengeDays = c.days.toString()
+                    challengeBonus = c.bonus.toString()
+                    challengeFrom = c.from.toEpochDay()
+                }
                 goal.reminder?.let { r ->
                     notifyOnTime = r.onTime
                     alertBefore = r.minutesBefore
@@ -612,6 +626,10 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Long)
                         amount = if (hasAmount) amountValue else null,
                         unit = if (hasAmount) unit.trim() else null,
                         effort = effort?.let { Effort.valueOf(it) },
+                        quit = quit,
+                        challenge = challengeDays.toIntOrNull()?.takeIf { challengeOn && it in 2..3650 }?.let { days ->
+                            Challenge(days, challengeBonus.toIntOrNull() ?: 0, challengeFrom?.toDay() ?: vm.currentDay())
+                        },
                         finishBy = finishByMinute?.toTime(),
                         finishDay = if (choice == RepeatChoice.TIMES_PER) finishDay else null,
                         reminder = Reminder(
@@ -938,6 +956,53 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Long)
                     )
                 }
                 Switch(checked = keepReminding, onCheckedChange = { keepReminding = it }, modifier = Modifier.testTag("field:keep-reminding"))
+            }
+        }
+        // A goal to quit, and a challenge
+        HorizontalDivider()
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+            Column(Modifier.weight(1f)) {
+                Text("A goal to quit", style = MaterialTheme.typography.bodyLarge)
+                Text(
+                    "For something to stop, like no sugar. Tick \"Avoided\" each day; a day not ticked is a miss, and \"I slipped\" records it straight away.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Switch(checked = quit, onCheckedChange = { quit = it }, modifier = Modifier.testTag("field:quit"))
+        }
+        if (choice != RepeatChoice.TIMES_PER) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                Column(Modifier.weight(1f)) {
+                    Text("Challenge", style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        "So many days in a row, with a bonus at the end. A missed day starts it again from day 1; a skip doesn't count either way.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(
+                    checked = challengeOn,
+                    onCheckedChange = { on ->
+                        challengeOn = on
+                        if (on && challengeFrom == null) challengeFrom = vm.currentDay().toEpochDay()
+                    },
+                    modifier = Modifier.testTag("field:challenge"),
+                )
+            }
+            if (challengeOn) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    NumberField("Days in a row", challengeDays, { challengeDays = it.take(4) }, "field:challenge-days", modifier = Modifier.weight(1f))
+                    NumberField("Bonus", challengeBonus, { challengeBonus = it }, "field:challenge-bonus", modifier = Modifier.weight(1f))
+                }
+                challengeFrom?.let { from ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("Started ${shortDate(from.toDay())}", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+                        TextButton(onClick = { challengeFrom = vm.currentDay().toEpochDay() }, modifier = Modifier.testTag("challenge-restart")) {
+                            Text("Start again today")
+                        }
+                    }
+                }
             }
         }
         AllowanceAndPrivacy(

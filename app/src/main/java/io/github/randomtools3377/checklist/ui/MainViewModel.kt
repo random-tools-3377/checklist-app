@@ -14,6 +14,9 @@ import io.github.randomtools3377.checklist.core.Backup
 import io.github.randomtools3377.checklist.core.BackupError
 import io.github.randomtools3377.checklist.core.BuyResult
 import io.github.randomtools3377.checklist.core.Days
+import io.github.randomtools3377.checklist.core.ChallengeProgress
+import io.github.randomtools3377.checklist.core.Challenges
+import io.github.randomtools3377.checklist.core.Quit
 import io.github.randomtools3377.checklist.core.Check
 import io.github.randomtools3377.checklist.core.BusyTime
 import io.github.randomtools3377.checklist.core.Busy
@@ -220,6 +223,10 @@ data class TodayState(
     val boostedGoalId: Long? = null,
     /** Today's events in the phone's calendar, when it is shown. */
     val events: List<Busy> = emptyList(),
+    /** For goals to quit: days in a row avoided. */
+    val quitDays: Map<Long, Int> = emptyMap(),
+    /** For goals with a challenge: how far it has got. */
+    val challenges: Map<Long, ChallengeProgress> = emptyMap(),
 )
 
 /** What Today needs besides goals and ticks. */
@@ -447,6 +454,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 hasDayStart = s.dayStart != null,
                 boostedGoalId = if (boostOn) Boost.goalFor(day, raw.goals, lapses)?.id else null,
                 events = busy,
+                quitDays = raw.goals.filter { it.quit && !it.archived }.associate { it.id to Quit.daysWithout(it, raw.ticks, day) },
+                challenges = raw.goals.filter { it.challenge != null && !it.archived }.mapNotNull { goal ->
+                    Challenges.progress(goal, raw.ticks, lapses, emptyList(), day)?.let { goal.id to it }
+                }.toMap(),
                 lastTicks = (todayView.dueToday + todayView.thisWeek + todayView.thisMonth + todayView.thisYear).mapNotNull { row ->
                     raw.ticks.filter { it.stepId == null && it.countsToward(row.goal, row.window.start) }.maxByOrNull { it.at }?.let { row.goal.id to it }
                 }.toMap(),
@@ -1015,6 +1026,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             onResult(result)
             offerTickUndo(goalId, result) { book.undoHabitTick(goalId) }
         }
+    }
+
+    /** "I slipped" on a goal to quit: today is a miss now, and the misses screen asks why. */
+    fun slip(goalId: Long) {
+        viewModelScope.launch { lapses.slip(goalId) }
     }
 
     fun undoHabitTick(goalId: Long) {

@@ -62,6 +62,15 @@ import java.util.Locale
 const val GOAL_ICON = "⭐"
 const val REWARD_ICON = "🎁"
 
+/** For Today's cards: days without for goals to quit, challenge progress, and "I slipped". */
+class TodayExtras(
+    val quitDays: Map<Long, Int> = emptyMap(),
+    val challenges: Map<Long, io.github.randomtools3377.checklist.core.ChallengeProgress> = emptyMap(),
+    val onSlip: (Long) -> Unit = {},
+)
+
+val LocalTodayExtras = androidx.compose.runtime.compositionLocalOf { TodayExtras() }
+
 /** The goal boosted this week, which pays 50% more (see Boost in the shared code). */
 val LocalBoosted = androidx.compose.runtime.compositionLocalOf<Long?> { null }
 

@@ -177,8 +177,10 @@ class Lapses(
                     val window = repeat.window(day) ?: continue
                     if (window.end != day) continue // its time hasn't run out yet
                     val count = goal.timesDone(ticks.filter { it.countsToward(goal, window.start) })
-                    val skips = store.lapses(goal.id, window.start, window.end)
-                        .count { it.kind == LapseKind.SKIP && it.periodStart == window.start }
+                    val windowLapses = store.lapses(goal.id, window.start, window.end)
+                    // Already missed, by "I slipped" on a goal to quit: not twice.
+                    if (windowLapses.any { it.kind == LapseKind.MISS && it.periodStart == window.start && !it.forgotten }) continue
+                    val skips = windowLapses.count { it.kind == LapseKind.SKIP && it.periodStart == window.start }
                     val done = if (window.period == Period.DAILY) count >= goal.target || skips > 0 else count + skips >= goal.target
                     if (done) continue
                     val over = used(goal, day) >= book.difficulty(day).allowed(goal.allowed)
@@ -239,6 +241,24 @@ class Lapses(
         }
         store.updateLapse(lapse.copy(forgotten = true, reason = lapse.reason ?: Reason.FORGOT))
         true
+    }
+
+    /**
+     * "I slipped" on a goal to quit: today is a miss straight away, with a reason asked for like
+     * any miss, and over the limit a penalty. A tick for today ("Avoided") is taken back.
+     */
+    suspend fun slip(goalId: Long): Lapse? = store.transaction {
+        val goal = store.goal(goalId) ?: return@transaction null
+        val today = book.today()
+        val window = goal.repeat?.window(today) ?: return@transaction null
+        if (store.lapses(goal.id, window.start, window.end).any { it.kind == LapseKind.MISS && it.periodStart == window.start && !it.forgotten }) {
+            return@transaction null
+        }
+        while (store.habitTicks(goal.id, window.start).any { it.countsToward(goal, window.start) }) {
+            if (!book.undoHabitTick(goal.id)) break
+        }
+        val over = used(goal, today) >= book.difficulty(today).allowed(goal.allowed)
+        record(goal, LapseKind.MISS, today, window.period, window.start, over, null, null).lapse
     }
 
     /** The penalty task to do now, if any. */

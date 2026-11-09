@@ -783,6 +783,7 @@ private fun HabitCard(
     val cardSize = LocalCardSize.current
     val rate = LocalPayRate.current
     val boosted = LocalBoosted.current == goal.id
+    val extras = LocalTodayExtras.current
     Card(Modifier.fillMaxWidth()) {
       Column(Modifier.goalStrip(goal.color)) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(cardSize.padding)) {
@@ -796,6 +797,8 @@ private fun HabitCard(
                     if (boosted) add("🔥 50% more this week")
                     // A "since last done" goal not done on its day waits here until it is.
                     goal.repeat?.lateSince?.let { add("waiting since ${shortDate(it)}") }
+                    if (goal.quit) extras.quitDays[goal.id]?.let { add(if (it == 1) "🚭 1 day without" else "🚭 $it days without") }
+                    extras.challenges[goal.id]?.let { c -> add(if (c.finished) "🏁 challenge done" else "🏁 ${c.done} of ${c.days} days") }
                     if (!goal.hasAmount) goal.minutes?.let { add(minutesText(it)) }
                 }.joinToString(" · ")
                 Text(detail, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -884,6 +887,14 @@ private fun HabitCard(
                         modifier = Modifier.clickable { onNote(lastTick.id) }.padding(vertical = 4.dp).testTag("note:${goal.name}"),
                     )
                 }
+                if (goal.quit) {
+                    Text(
+                        "I slipped",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.clickable { extras.onSlip(goal.id) }.padding(vertical = 4.dp).testTag("slip:${goal.name}"),
+                    )
+                }
                 if (row.skipped) {
                     Text("Skipped", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.secondary, modifier = Modifier.testTag("skipped:${goal.name}"))
                 } else if (!row.done) {
@@ -963,6 +974,7 @@ private fun HabitCard(
                         .testTag("tick:${goal.name}"),
                     onClick = { if (shownDone && (!counted || row.isRoutine)) onUndo() else if (!shownDone) onTick(spot) },
                     routine = row.isRoutine,
+                    label = if (goal.quit) "Avoided" else "Done",
                 )
                 if (counted) {
                     Text(
@@ -1019,14 +1031,14 @@ private fun RoutineItemLine(item: StepRow, onTick: (Spot) -> Unit, onUndo: () ->
  * takes the tick back.
  */
 @Composable
-private fun TickButton(done: Boolean, counted: Boolean, description: String, modifier: Modifier, onClick: () -> Unit, routine: Boolean = false) {
+private fun TickButton(done: Boolean, counted: Boolean, description: String, modifier: Modifier, onClick: () -> Unit, routine: Boolean = false, label: String = "Done") {
     val semantics = Modifier.semantics { contentDescription = description }
     val padding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
     if (done) {
         Button(onClick = onClick, contentPadding = padding, modifier = modifier.then(semantics)) {
             Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(4.dp))
-            Text("Done")
+            Text(label)
         }
     } else {
         FilledTonalButton(onClick = onClick, contentPadding = padding, modifier = modifier.then(semantics)) {
@@ -1035,7 +1047,7 @@ private fun TickButton(done: Boolean, counted: Boolean, description: String, mod
             } else {
                 Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(4.dp))
-                Text("Done")
+                Text(label)
             }
         }
     }

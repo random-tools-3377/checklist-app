@@ -16,6 +16,7 @@ import io.github.randomtools3377.checklist.core.Reminder
 import io.github.randomtools3377.checklist.core.Repeat
 import io.github.randomtools3377.checklist.core.RewardSize
 import io.github.randomtools3377.checklist.core.Effort
+import io.github.randomtools3377.checklist.core.Challenge
 import io.github.randomtools3377.checklist.core.RepeatText
 import io.github.randomtools3377.checklist.core.RepeatKind
 import io.github.randomtools3377.checklist.core.Reward
@@ -119,6 +120,10 @@ data class HabitDraft(
     val unit: String? = null,
     /** How hard it is, which suggests its points. */
     val effort: Effort? = null,
+    /** A goal to quit, ticked each day it was avoided. */
+    val quit: Boolean = false,
+    /** A challenge on it, like 30 days in a row with a bonus at the end. */
+    val challenge: Challenge? = null,
 )
 
 /** One step in the project editor. [id] is 0 for a new step. */
@@ -230,6 +235,10 @@ class Repository(private val db: AppDatabase, private val celebrations: Celebrat
             amount = draft.amount?.let { Amounts.tidy(it) },
             unit = draft.unit?.trim()?.take(Amounts.UNIT_LENGTH)?.takeIf { it.isNotEmpty() && draft.amount != null },
             effort = draft.effort?.name,
+            quit = draft.quit,
+            challengeDays = draft.challenge?.days,
+            challengeBonus = draft.challenge?.bonus,
+            challengeFrom = draft.challenge?.from?.toEpochDay(),
         )
         val goalId = if (existing == null) dao.insertGoal(row) else row.id.also { dao.updateGoal(row) }
         // A routine's checklist: removed items are archived, so their past ticks still make sense.

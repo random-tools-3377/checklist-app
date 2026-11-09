@@ -65,6 +65,12 @@ data class GoalEntity(
     val unit: String? = null,
     /** How hard it is (Effort in the shared code), which suggests its points. Added in version 14. */
     val effort: String? = null,
+    /** A goal to quit, ticked each day it was avoided. Added in version 15. */
+    @androidx.room.ColumnInfo(defaultValue = "0") val quit: Boolean = false,
+    /** A challenge on it: so many days in a row, its bonus, and the day it started (see Challenges). Added in version 15. */
+    val challengeDays: Int? = null,
+    val challengeBonus: Int? = null,
+    val challengeFrom: Long? = null,
 )
 
 @Entity(tableName = "steps", indices = [Index("goalId")])
@@ -551,10 +557,10 @@ interface ChecklistDao {
         GapEntity::class,
         CheckEntity::class,
     ],
-    version = 14,
+    version = 15,
     exportSchema = true,
     // Versions 4 to 8 only add tables and columns, so Room works the migrations out from the layouts.
-    autoMigrations = [AutoMigration(from = 3, to = 4), AutoMigration(from = 4, to = 5), AutoMigration(from = 5, to = 6), AutoMigration(from = 6, to = 7), AutoMigration(from = 7, to = 8), AutoMigration(from = 8, to = 9), AutoMigration(from = 9, to = 10), AutoMigration(from = 10, to = 11), AutoMigration(from = 11, to = 12), AutoMigration(from = 12, to = 13), AutoMigration(from = 13, to = 14)],
+    autoMigrations = [AutoMigration(from = 3, to = 4), AutoMigration(from = 4, to = 5), AutoMigration(from = 5, to = 6), AutoMigration(from = 6, to = 7), AutoMigration(from = 7, to = 8), AutoMigration(from = 8, to = 9), AutoMigration(from = 9, to = 10), AutoMigration(from = 10, to = 11), AutoMigration(from = 11, to = 12), AutoMigration(from = 12, to = 13), AutoMigration(from = 13, to = 14), AutoMigration(from = 14, to = 15)],
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun dao(): ChecklistDao

@@ -304,7 +304,10 @@ fun ChecklistApp(vm: MainViewModel = viewModel()) {
                     },
                 ) { padding ->
                     when (tab) {
-                        AppTab.TODAY -> androidx.compose.runtime.CompositionLocalProvider(LocalBoosted provides today?.boostedGoalId) {
+                        AppTab.TODAY -> androidx.compose.runtime.CompositionLocalProvider(
+                            LocalBoosted provides today?.boostedGoalId,
+                            LocalTodayExtras provides TodayExtras(today?.quitDays.orEmpty(), today?.challenges.orEmpty(), vm::slip),
+                        ) {
                             TodayScreen(
                                 today, vm, celebrations,
                                 onAddGoal = { goTo(AppTab.GOALS); newGoal = true },

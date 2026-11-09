@@ -4,6 +4,7 @@ import androidx.room.withTransaction
 import io.github.randomtools3377.checklist.core.Repeat
 import io.github.randomtools3377.checklist.core.RewardSize
 import io.github.randomtools3377.checklist.core.Effort
+import io.github.randomtools3377.checklist.core.Challenge
 import io.github.randomtools3377.checklist.core.Mystery
 import io.github.randomtools3377.checklist.core.Celebration
 import io.github.randomtools3377.checklist.core.Check
@@ -139,6 +140,8 @@ fun GoalEntity.toCore() = Goal(
     amount = amount?.takeIf { it > 0 },
     unit = unit?.takeIf { it.isNotBlank() },
     effort = Effort.entries.firstOrNull { it.name == effort },
+    quit = quit,
+    challenge = if (challengeDays != null && challengeDays > 0 && challengeFrom != null) Challenge(challengeDays, challengeBonus ?: 0, challengeFrom.toDay()) else null,
     archived = archived,
     position = position,
     createdAt = createdAt,
@@ -173,6 +176,10 @@ fun Goal.toEntity() = GoalEntity(
     amount = amount,
     unit = unit,
     effort = effort?.name,
+    quit = quit,
+    challengeDays = challenge?.days,
+    challengeBonus = challenge?.bonus,
+    challengeFrom = challenge?.from?.toEpochDay(),
 )
 
 fun StepEntity.toCore() = Step(id = id, goalId = goalId, name = name, points = points, position = position, archived = archived)

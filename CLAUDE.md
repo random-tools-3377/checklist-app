@@ -399,7 +399,10 @@ Build order **(default)**, each step a Release the owner can try:
     calendar is off until turned on in Settings, which asks for the calendar permission; events
     are only read, from the calendars the user picks, and pacing counts them as busy time;
     all-day events are only shown. "I
-    slipped" on a goal to quit records the miss straight away. A skip neither counts toward a
+    slipped" on a goal to quit records the miss straight away and takes back that day's tick;
+    Today shows the days in a row avoided. A challenge starts at 30 days with a 50-point bonus,
+    is offered on habits not counted per week, month or year, and is paid by the tick that
+    finishes it (undoing the tick takes the bonus back). A skip neither counts toward a
     challenge nor restarts it; finishing pays its bonus, and the goal carries on as a habit. The
     streak bonus adds 10% to a tick's points from a 7-day main streak, 20% from 30 and 30% from
     100, rounded down, can be turned off, and goes with an undone tick. The mood check-in is five

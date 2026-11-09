@@ -120,6 +120,7 @@ class Book(
             )
         }
         if (finished) nextAfterDone(goal, day)
+        if (finished) bonus += payChallenge(goal, day, tickId, pay)
         TickResult.Ticked(points = pay(goal.points), bonus = bonus, finished = finished)
     }
 
@@ -181,6 +182,7 @@ class Book(
             )
         }
         if (finished) nextAfterDone(goal, day)
+        if (finished) bonus += payChallenge(goal, day, tickId, pay)
         TickResult.Ticked(points = points, bonus = bonus, finished = finished)
     }
 
@@ -316,6 +318,25 @@ class Book(
             if (result is TickResult.Ticked) return result
         }
         return TickResult.Ticked(points = 0, bonus = 0, finished = false)
+    }
+
+    /**
+     * The tick that finishes a challenge pays its bonus, once per attempt; undoing the tick takes
+     * it back. Returns what was paid.
+     */
+    private suspend fun payChallenge(goal: Goal, day: LocalDate, tickId: Long, pay: (Int) -> Int): Int {
+        val challenge = goal.challenge ?: return 0
+        val ticks = store.habitTicksSince(challenge.from.minusDays(7)).filter { it.goalId == goal.id }
+        val lapses = store.allLapses(challenge.from, day).filter { it.goalId == goal.id }
+        val bonuses = store.entries(challenge.from, day).filter { it.goalId == goal.id && it.kind == EntryKind.CHALLENGE }
+        val progress = Challenges.progress(goal, ticks, lapses, bonuses, day) ?: return 0
+        if (progress.done < progress.days || bonuses.any { it.day >= progress.startedOn }) return 0
+        val amount = pay(challenge.bonus)
+        if (amount <= 0) return 0
+        store.addEntry(
+            Entry(at = millis(), day = day, kind = EntryKind.CHALLENGE, amount = amount, goalId = goal.id, tickId = tickId, label = "${goal.name}: ${challenge.days} days"),
+        )
+        return amount
     }
 
     /** A "since last done" goal just done on [day]: it is next due [Repeat.interval] days on. */
