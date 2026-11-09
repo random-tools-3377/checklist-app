@@ -436,7 +436,10 @@ Build order **(default)**, each step a Release the owner can try:
     the next straight away if it is due and not done. Weekly planning is a card on Today from
     Monday until the week is planned or put off, opening last week's summary, this week's target and the week's goals to move. The
     quick-add widget adds a to-do from the home screen. The spreadsheet export is a CSV of the
-    points history and ticks, saved where the user picks.
+    points history, with the note on each tick, saved where the user picks; words that start
+    like a formula get a ' in front so a spreadsheet shows them as written. Restoring an
+    automatic backup lists the dated files in the chosen folder and goes through the same
+    confirm step as importing a file.
 
 ## Talking to the owner
 

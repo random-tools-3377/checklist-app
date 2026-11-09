@@ -1550,6 +1550,31 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** Writes the points history to [uri] as a spreadsheet. Reports a plain message either way. */
+    fun exportSpreadsheet(uri: Uri, onDone: (String) -> Unit) {
+        viewModelScope.launch {
+            val message = try {
+                val text = repository.historySpreadsheet()
+                withContext(Dispatchers.IO) {
+                    val resolver = getApplication<Application>().contentResolver
+                    val stream = resolver.openOutputStream(uri, "wt") ?: error("no stream")
+                    stream.use { it.write(text.toByteArray(Charsets.UTF_8)) }
+                }
+                "Saved. Open it in any spreadsheet app."
+            } catch (e: Exception) {
+                "Couldn't write the file."
+            }
+            onDone(message)
+        }
+    }
+
+    /** The automatic backups in the chosen folder, newest first, to pick one to restore. */
+    fun listAutoBackups(onList: (List<Pair<String, Uri>>) -> Unit) {
+        viewModelScope.launch {
+            onList(withContext(Dispatchers.IO) { Backups.autoBackups(getApplication()) })
+        }
+    }
+
     /** Reads a backup from [uri] without changing anything, so the user can confirm it first. */
     fun readBackup(uri: Uri, onRead: (Backup?, String?) -> Unit) {
         viewModelScope.launch {

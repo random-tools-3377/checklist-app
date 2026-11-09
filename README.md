@@ -85,6 +85,7 @@ keeps the data.
 - 0.36.0: reminders at the usual time, and habit chains.
 - 0.37.0: a quick-add to-do widget, and choosing several goals to change or remove together.
 - 0.38.0: weekly planning, and a year in review.
+- 0.39.0: the points history as a spreadsheet, and restoring an automatic backup.
 
 Every step in CLAUDE.md's build order is built. The iPhone app waits for a way to install it.
 

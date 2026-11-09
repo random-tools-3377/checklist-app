@@ -108,6 +108,30 @@ object Backups {
         }
     }
 
+    /** The app's own backups in the chosen folder, newest first, by name and address, to restore one. */
+    fun autoBackups(context: Context): List<Pair<String, Uri>> {
+        val tree = folder(context) ?: return emptyList()
+        return try {
+            val parentId = DocumentsContract.getTreeDocumentId(tree)
+            val children = DocumentsContract.buildChildDocumentsUriUsingTree(tree, parentId)
+            val found = mutableListOf<Pair<String, Uri>>()
+            context.contentResolver.query(
+                children,
+                arrayOf(DocumentsContract.Document.COLUMN_DOCUMENT_ID, DocumentsContract.Document.COLUMN_DISPLAY_NAME),
+                null, null, null,
+            )?.use { c ->
+                while (c.moveToNext()) {
+                    val id = c.getString(0) ?: continue
+                    val name = c.getString(1) ?: continue
+                    if (NAME.matches(name)) found += name to DocumentsContract.buildDocumentUriUsingTree(tree, id)
+                }
+            }
+            found.sortedByDescending { it.first }
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
     /** Deletes the app's own backups in the folder beyond the newest [KEEP]. Nothing else is touched. */
     private fun prune(context: Context, tree: Uri, parentId: String) {
         val resolver = context.contentResolver

@@ -376,6 +376,10 @@ fun SettingsScreen(
     val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
         if (uri != null) vm.exportTo(uri) { toast(it) }
     }
+    val spreadsheetLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri ->
+        if (uri != null) vm.exportSpreadsheet(uri) { toast(it) }
+    }
+    var autoBackups by remember { mutableStateOf<List<Pair<String, android.net.Uri>>?>(null) }
     val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
             vm.readBackup(uri) { backup, error ->
@@ -579,7 +583,7 @@ fun SettingsScreen(
                     )
                 }
             }
-            if (shows("Backup backup export import file automatic folder restore reminder")) {
+            if (shows("Backup backup export import file automatic folder restore reminder spreadsheet csv excel sheets history")) {
                 HorizontalDivider(Modifier.padding(top = 8.dp))
                 Section("Backup")
                 Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
@@ -628,6 +632,26 @@ fun SettingsScreen(
                             TextButton(onClick = { vm.setBackupFolder(null) }, modifier = Modifier.testTag("auto-backup-off")) { Text("Turn off") }
                         }
                     }
+                    if (backups.folderSet && !backups.folderGone) {
+                        TextButton(
+                            onClick = { vm.listAutoBackups { autoBackups = it } },
+                            modifier = Modifier.testTag("auto-backup-restore"),
+                        ) { Text("Restore an automatic backup") }
+                    }
+
+                    // The spreadsheet
+                    Spacer(Modifier.height(12.dp))
+                    Text("Points history as a spreadsheet", style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        "Every change to your balance, with the notes on your ticks, for Sheets, Excel or Numbers. " +
+                            "It can't be imported back: for that, use Export everything.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    TextButton(
+                        onClick = { spreadsheetLauncher.launch("checklist-history-${nowLocal().date}.csv") },
+                        modifier = Modifier.testTag("export-spreadsheet"),
+                    ) { Text("Export history as a spreadsheet") }
     
                     // The reminder
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(top = 4.dp)) {
@@ -738,6 +762,32 @@ fun SettingsScreen(
         )
     }
 
+    autoBackups?.let { list ->
+        AlertDialog(
+            onDismissRequest = { autoBackups = null },
+            title = { Text("Restore an automatic backup") },
+            text = {
+                Column(Modifier.verticalScroll(rememberScrollState())) {
+                    if (list.isEmpty()) Text("There are no automatic backups in the folder yet.")
+                    else Text("Pick one. You'll see what's in it before anything changes.", style = MaterialTheme.typography.bodySmall)
+                    list.forEach { (name, uri) ->
+                        val day = Regex("""\d{4}-\d{2}-\d{2}""").find(name)?.value
+                            ?.let { runCatching { kotlinx.datetime.LocalDate.parse(it) }.getOrNull() }
+                        TextButton(
+                            onClick = {
+                                autoBackups = null
+                                vm.readBackup(uri) { backup, error ->
+                                    if (backup != null) pendingImport = backup else toast(error ?: "Couldn't read that file.")
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth().testTag("auto-backup:$name"),
+                        ) { Text(day?.let { dateText(it) } ?: name, modifier = Modifier.fillMaxWidth()) }
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { autoBackups = null }) { Text("Cancel") } },
+        )
+    }
     pendingImport?.let { backup ->
         val habits = backup.goals.count { !it.archived && it.repeat != null }
         val projects = backup.goals.count { !it.archived && it.repeat == null }

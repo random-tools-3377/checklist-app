@@ -538,6 +538,15 @@ class Repository(private val db: AppDatabase, private val celebrations: Celebrat
 
     suspend fun removePenaltyTask(id: Long) = dao.removePenaltyTask(id)
 
+    /** The points history as a spreadsheet (CSV), with the notes on ticks. */
+    suspend fun historySpreadsheet(): String {
+        val (entries, notes) = db.withTransaction {
+            dao.allEntries().map { it.toCore() } to
+                dao.allTicks().map { it.toCore() }.filter { !it.note.isNullOrBlank() }.associate { it.id to it.note!! }
+        }
+        return io.github.randomtools3377.checklist.core.Spreadsheet.csv(entries, notes) { it.toLocalDateTime() }
+    }
+
     /** Everything in the app as a backup file's text. */
     suspend fun exportBackup(): String {
         val backup = db.withTransaction {

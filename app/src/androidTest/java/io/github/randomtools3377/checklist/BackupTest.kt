@@ -46,6 +46,23 @@ class BackupTest {
     )
 
     @Test
+    fun historyExportsAsASpreadsheet() = runTest {
+        val today = nowLocal().date
+        habit("Run, slowly", Repeat.everyDay(today))
+        val run = db.dao().activeGoals().single().id
+        book.tickHabit(run)
+        val tick = db.dao().allTicks().single().id
+        assertTrue(book.editTick(tick, null, "5 km"))
+
+        val lines = repository.historySpreadsheet().trimEnd().split("\r\n")
+
+        assertEquals(io.github.randomtools3377.checklist.core.Spreadsheet.HEADER, lines[0])
+        assertEquals(2, lines.size)
+        assertTrue(lines[1], Regex("""\d{4}-\d{2}-\d{2},\d{2}:\d{2},.*""").matches(lines[1]))
+        assertTrue(lines[1], lines[1].endsWith(",Ticked,\"Run, slowly\",10,5 km"))
+    }
+
+    @Test
     fun exportThenImportRestoresEverything() = runTest {
         val today = nowLocal().date
         habit("Water", Repeat.everyDay(today))
