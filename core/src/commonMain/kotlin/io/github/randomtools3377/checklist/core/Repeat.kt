@@ -31,6 +31,13 @@ enum class RepeatKind {
 
     /** Once, on the start date. */
     ONCE,
+
+    /**
+     * [Repeat.interval] days after it was last done. [Repeat.start] is the day it is next due.
+     * Not done that day, it is one miss, then it stays on Today until done with no more misses
+     * ([Repeat.lateSince]), and the next one counts from when it is done.
+     */
+    AFTER_DONE,
 }
 
 /**
@@ -59,6 +66,11 @@ data class Repeat(
     val day: Int = 1,
     /** Single days moved to another day of the same week (see [Moves]). */
     val moves: List<Move> = emptyList(),
+    /**
+     * For [RepeatKind.AFTER_DONE]: the day it was first due and not done, while it stays on Today
+     * after that. Null when it isn't late.
+     */
+    val lateSince: LocalDate? = null,
 ) {
     companion object {
         const val LAST_DAY = 0
@@ -109,7 +121,7 @@ data class Repeat(
         if (kind == RepeatKind.TIMES_PER) return window(from)?.let { from } ?: if (from < start) start else null
         val movedTo = moves.map { it.to }.filter { it >= from }.minOrNull()
         val byPattern = run {
-            if (kind == RepeatKind.ONCE) return@run start.takeIf { it >= from && moves.none { m -> m.from == start } }
+            if (kind == RepeatKind.ONCE || kind == RepeatKind.AFTER_DONE) return@run start.takeIf { it >= from && moves.none { m -> m.from == start } }
             var date = maxOf(from, start)
             repeat(limitDays) {
                 if (end != null && date > end) return@run null
@@ -135,7 +147,7 @@ data class Repeat(
                 if (weekOfMonth == LAST_WEEK) date.plusDays(7).month != date.month
                 else (date.dayOfMonth - 1) / 7 + 1 == weekOfMonth
         RepeatKind.YEARLY -> date.monthNumber == month && date.dayOfMonth == minOf(day, lengthOfMonth(date.year, month))
-        RepeatKind.ONCE -> date == start
+        RepeatKind.ONCE, RepeatKind.AFTER_DONE -> date == start
         RepeatKind.TIMES_PER -> true
     }
 

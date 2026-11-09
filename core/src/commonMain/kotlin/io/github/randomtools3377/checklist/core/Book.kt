@@ -119,6 +119,7 @@ class Book(
                 Entry(at = at, day = day, kind = EntryKind.BONUS, amount = bonus, goalId = goalId, tickId = tickId, label = goal.name),
             )
         }
+        if (finished) nextAfterDone(goal, day)
         TickResult.Ticked(points = pay(goal.points), bonus = bonus, finished = finished)
     }
 
@@ -179,6 +180,7 @@ class Book(
                 Entry(at = at, day = day, kind = EntryKind.BONUS, amount = bonus, goalId = goalId, tickId = tickId, label = goal.name),
             )
         }
+        if (finished) nextAfterDone(goal, day)
         TickResult.Ticked(points = points, bonus = bonus, finished = finished)
     }
 
@@ -196,6 +198,7 @@ class Book(
         }
         val repeat = goal?.repeat
         if (goal == null || !goal.isHabitLike || repeat == null) return@transaction false
+        if (repeat.kind == RepeatKind.AFTER_DONE && repeat.window(today()) == null) return@transaction undoAfterDone(goal, repeat)
         val start = repeat.window(today())?.start ?: return@transaction false
         val ticks = store.habitTicks(goalId, start).filter { it.countsToward(goal, start) }
         val last = ticks.maxByOrNull { it.id } ?: return@transaction false
@@ -313,6 +316,34 @@ class Book(
             if (result is TickResult.Ticked) return result
         }
         return TickResult.Ticked(points = 0, bonus = 0, finished = false)
+    }
+
+    /** A "since last done" goal just done on [day]: it is next due [Repeat.interval] days on. */
+    private suspend fun nextAfterDone(goal: Goal, day: LocalDate) {
+        val repeat = goal.repeat ?: return
+        if (repeat.kind != RepeatKind.AFTER_DONE) return
+        store.setRepeat(goal.id, repeat.copy(start = day.plusDays(repeat.interval.coerceAtLeast(1)), lateSince = null))
+    }
+
+    /**
+     * Takes back today's tick of a "since last done" goal that was done: it is due today again,
+     * and still late if it was late before (so it isn't missed twice).
+     */
+    private suspend fun undoAfterDone(goal: Goal, repeat: Repeat): Boolean {
+        val day = today()
+        val last = store.habitTicks(goal.id, day).filter { it.stepId == null }.maxByOrNull { it.id } ?: return false
+        removeTickAndItsEntries(last.id)
+        store.setRepeat(goal.id, repeat.copy(start = day, lateSince = lateSince(goal, day)))
+        return true
+    }
+
+    /** The first day of the current late stretch of a "since last done" goal before [day], if any. */
+    suspend fun lateSince(goal: Goal, day: LocalDate): LocalDate? {
+        val from = day.minusDays(400)
+        val lastDone = store.habitTicksSince(from).filter { it.goalId == goal.id && it.stepId == null && it.day < day }.maxOfOrNull { it.day }
+        return store.lapses(goal.id, from, day.minusDays(1))
+            .filter { !it.forgotten && (lastDone == null || it.day > lastDone) }
+            .minOfOrNull { it.day }
     }
 
     /** Done on a to-do with steps: ticks the steps still open, then the to-do. */

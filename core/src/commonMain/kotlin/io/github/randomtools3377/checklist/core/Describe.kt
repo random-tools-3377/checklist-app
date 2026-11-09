@@ -80,6 +80,8 @@ fun Repeat.describe(target: Int = 1): String {
         }
         RepeatKind.YEARLY -> "Every year on $day ${monthShort(month)}"
         RepeatKind.ONCE -> "Once, on ${dateText(start)}"
+        RepeatKind.AFTER_DONE -> (if (interval <= 1) "The day after it's done" else "$interval days after it's done") +
+            ", next on ${dateText(start)}"
     }
-    return if (end != null && kind != RepeatKind.ONCE) "$main, until ${dateText(end)}" else main
+    return if (end != null && kind != RepeatKind.ONCE && kind != RepeatKind.AFTER_DONE) "$main, until ${dateText(end)}" else main
 }

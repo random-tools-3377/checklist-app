@@ -20,7 +20,7 @@ object Moves {
     /** The days [goal]'s time on [from] can move to. Empty if it can't be moved. */
     fun choices(goal: Goal, from: LocalDate, today: LocalDate): List<LocalDate> {
         val repeat = goal.repeat ?: return emptyList()
-        if (goal.kind != GoalKind.HABIT || repeat.kind == RepeatKind.TIMES_PER) return emptyList()
+        if (goal.kind != GoalKind.HABIT || repeat.kind == RepeatKind.TIMES_PER || repeat.kind == RepeatKind.AFTER_DONE) return emptyList()
         if (from < today || !repeat.isDueOn(from)) return emptyList()
         val monday = Days.periodStart(from, Period.WEEKLY)
         return (0..6).map { monday.plusDays(it) }.filter { it >= today && it != from && !repeat.isDueOn(it) }

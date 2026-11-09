@@ -781,6 +781,8 @@ private fun HabitCard(
                     add("+${payFor(goal.points, rate, boosted)}" + if (counted) " each" else "")
                     if (counted && goal.bonus > 0) add("bonus +${payFor(goal.bonus, rate, boosted)}")
                     if (boosted) add("🔥 50% more this week")
+                    // A "since last done" goal not done on its day waits here until it is.
+                    goal.repeat?.lateSince?.let { add("waiting since ${shortDate(it)}") }
                     if (!goal.hasAmount) goal.minutes?.let { add(minutesText(it)) }
                 }.joinToString(" · ")
                 Text(detail, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)

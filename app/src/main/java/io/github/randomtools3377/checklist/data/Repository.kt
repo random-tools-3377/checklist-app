@@ -202,7 +202,13 @@ class Repository(private val db: AppDatabase, private val celebrations: Celebrat
             bonus = draft.bonus,
             // Days moved to another day stay moved when the schedule is edited.
             repeat = RepeatText.encode(
-                draft.repeat.copy(moves = Moves.keep(existing?.repeat?.let { RepeatText.decode(it).moves }.orEmpty(), nowLocal().date)),
+                draft.repeat.copy(
+                    moves = Moves.keep(existing?.repeat?.let { RepeatText.decode(it).moves }.orEmpty(), nowLocal().date),
+                    // A late "since last done" goal stays late when edited, so it isn't missed twice.
+                    lateSince = existing?.repeat?.let { RepeatText.decode(it) }
+                        ?.takeIf { it.kind == RepeatKind.AFTER_DONE && draft.repeat.kind == RepeatKind.AFTER_DONE && it.start == draft.repeat.start }
+                        ?.lateSince,
+                ),
             ),
             minutes = draft.minutes,
             atMinute = draft.at?.toMinuteOfDay(),

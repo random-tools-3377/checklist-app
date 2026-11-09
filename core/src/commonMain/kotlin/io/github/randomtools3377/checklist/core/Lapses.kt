@@ -147,9 +147,26 @@ class Lapses(
         val ticks = store.habitTicksSince(Days.earliestOpenDay(from).minusDays(7))
         val found = mutableListOf<Lapse>()
 
+        // "Since last done" goals move on day by day while they are late, so keep their latest repeat.
+        val repeats = goals.associate { it.id to it.repeat }.toMutableMap()
         var day = from
         while (day <= yesterday) {
             for (goal in goals) {
+                val afterDone = repeats[goal.id]?.takeIf { it.kind == RepeatKind.AFTER_DONE }
+                if (afterDone != null) {
+                    if (day != afterDone.start) continue
+                    if (goal.timesDone(ticks.filter { it.countsToward(goal, day) }) >= goal.target) continue
+                    val skipped = store.lapses(goal.id, day, day).any { it.kind == LapseKind.SKIP && it.periodStart == day && !it.forgotten }
+                    // One miss on the day it was due; after that it stays on Today with no more.
+                    if (!skipped && afterDone.lateSince == null) {
+                        val over = used(goal, day) >= book.difficulty(day).allowed(goal.allowed)
+                        found += record(goal, LapseKind.MISS, day, Period.DAILY, day, over, null, null).lapse
+                    }
+                    val moved = afterDone.copy(start = day.plusDays(1), lateSince = afterDone.lateSince ?: day)
+                    repeats[goal.id] = moved
+                    store.setRepeat(goal.id, moved)
+                    continue
+                }
                 if (goal.kind == GoalKind.TODO && goal.repeat == null) {
                     // An undated to-do done on this day takes it as its date; one not done waits.
                     if (store.habitTicks(goal.id, day).any { it.stepId == null }) store.setRepeat(goal.id, Repeat(RepeatKind.ONCE, day))
@@ -212,6 +229,10 @@ class Lapses(
             store.addEntry(
                 Entry(at = now, day = book.today(), kind = EntryKind.REFUND, amount = lapse.cost, goalId = goal.id, label = goal.name, lapseId = lapse.id),
             )
+        }
+        // A "since last done" goal done after all: the next one counts from that day.
+        goal.repeat?.takeIf { it.kind == RepeatKind.AFTER_DONE }?.let { r ->
+            store.setRepeat(goal.id, r.copy(start = maxOf(lapse.day.plusDays(r.interval.coerceAtLeast(1)), book.today()), lateSince = null))
         }
         store.penaltyForLapse(lapse.id)?.let { penalty ->
             if (penalty.doneAt == null && penalty.cancelledAt == null) store.updatePenalty(penalty.copy(cancelledAt = now))

@@ -422,6 +422,7 @@ private enum class RepeatChoice(val label: String) {
     MONTH_WEEKDAY("A weekday of the month, like the first Monday"),
     YEARLY("Once a year, on a date"),
     ONCE("Once, on a date"),
+    AFTER_DONE("Some days after it's last done"),
 }
 
 private val WeekOfMonthChoices = listOf(1 to "First", 2 to "Second", 3 to "Third", 4 to "Fourth", Repeat.LAST_WEEK to "Last")
@@ -523,6 +524,7 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Long)
                         RepeatKind.MONTH_WEEKDAY -> RepeatChoice.MONTH_WEEKDAY
                         RepeatKind.YEARLY -> RepeatChoice.YEARLY
                         RepeatKind.ONCE -> RepeatChoice.ONCE
+                        RepeatKind.AFTER_DONE -> RepeatChoice.AFTER_DONE
                     }
                     if (r.weekdays.isNotEmpty()) weekdays = r.weekdays.sorted()
                     if (r.monthDays.isNotEmpty()) monthDays = r.monthDays.sorted()
@@ -537,7 +539,7 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Long)
     }
 
     val intervalValue = interval.toIntOrNull()
-    val needsInterval = choice in setOf(RepeatChoice.EVERY_FEW_DAYS, RepeatChoice.WEEKDAYS, RepeatChoice.MONTH_DATES, RepeatChoice.MONTH_WEEKDAY)
+    val needsInterval = choice in setOf(RepeatChoice.EVERY_FEW_DAYS, RepeatChoice.WEEKDAYS, RepeatChoice.MONTH_DATES, RepeatChoice.MONTH_WEEKDAY, RepeatChoice.AFTER_DONE)
     val yearDayValue = yearDay.toIntOrNull()
     val repeat: Repeat? = run {
         val start = startDay.toDay()
@@ -558,6 +560,7 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Long)
                 if (yearDayValue == null || yearDayValue !in 1..lengthOfMonth(2024, yearMonth)) null
                 else Repeat(RepeatKind.YEARLY, start, end, month = yearMonth, day = yearDayValue)
             RepeatChoice.ONCE -> Repeat(RepeatKind.ONCE, start)
+            RepeatChoice.AFTER_DONE -> Repeat(RepeatKind.AFTER_DONE, start, interval = n)
         }
     }
 
@@ -733,9 +736,18 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Long)
                 NumberField("Day of the month", yearDay, { yearDay = it }, "field:year-day")
             }
             RepeatChoice.ONCE -> Unit
+            RepeatChoice.AFTER_DONE -> NumberField(
+                "How many days after it's done",
+                interval,
+                { interval = it },
+                "field:interval",
+                hint = "1 for the day after. Not done on its day, it's one miss, then it waits on Today until it's done.",
+            )
         }
         if (choice == RepeatChoice.ONCE) {
             DateSetting("On", startDay.toDay(), { picked -> picked?.let { startDay = it.toEpochDay() } }, "field:start", canClear = false)
+        } else if (choice == RepeatChoice.AFTER_DONE) {
+            DateSetting("Next due", startDay.toDay(), { picked -> picked?.let { startDay = it.toEpochDay() } }, "field:start", canClear = false)
         } else {
             DateSetting("Starts", startDay.toDay(), { picked -> picked?.let { startDay = it.toEpochDay() } }, "field:start", canClear = false)
             DateSetting("Ends", endDay?.toDay(), { endDay = it?.toEpochDay() }, "field:end", emptyText = "No end date")

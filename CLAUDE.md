@@ -360,7 +360,8 @@ Build order **(default)**, each step a Release the owner can try:
     (0.32.0); goals to quit and challenges (0.33.0); a streak bonus and a mood check-in (0.34.0).
 
     Decided: a "since last done" goal not done on its day is one miss as usual, then stays on
-    Today until done with no more misses, and the next one counts from when it is done. A goal to
+    Today until done with no more misses, and the next one counts from when it is done; editing it keeps it late, "I forgot to tick it" starts the next one from
+    the day it was missed, and it can't be moved to another day. A goal to
     quit is ticked each day it was avoided, like a habit, and a day not ticked is a miss. A
     missed day restarts a challenge from day 1. The difficulty setting changes the points goals
     pay and how many skips and misses are free, not reward prices, and ramps up on a schedule the

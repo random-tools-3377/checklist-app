@@ -73,7 +73,7 @@ object TodayList {
     ): TodayView {
         val active = goals.filter { !it.archived }.sortedWith(compareBy({ it.position }, { it.id }))
         val habits = active.filter { it.isHabitLike }.mapNotNull { goal ->
-            val window = goal.repeat?.window(day) ?: return@mapNotNull null
+            val window = goal.repeat?.window(day) ?: doneTodayAfterDone(goal, day, ticks) ?: return@mapNotNull null
             val skips = lapses.count { it.goalId == goal.id && it.kind == LapseKind.SKIP && it.periodStart == window.start && !it.forgotten }
             val windowTicks = ticks.filter { it.countsToward(goal, window.start) }
             val count = goal.timesDone(windowTicks)
@@ -119,4 +119,14 @@ object TodayList {
             },
         )
     }
+}
+
+/**
+ * A "since last done" goal done on [day] has already moved on to its next day; it still shows on
+ * [day], done, in the window its tick went to.
+ */
+private fun doneTodayAfterDone(goal: Goal, day: LocalDate, ticks: List<Tick>): Window? {
+    if (goal.repeat?.kind != RepeatKind.AFTER_DONE) return null
+    val tick = ticks.firstOrNull { it.goalId == goal.id && it.stepId == null && it.day == day } ?: return null
+    return Window(tick.periodStart, tick.periodStart, Period.DAILY)
 }

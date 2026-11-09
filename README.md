@@ -74,6 +74,7 @@ keeps the data.
 - 0.28.0: a boost for the goal missed most, a perfect-day bonus, and prices that rise on repeat
   buys.
 - 0.29.0: an Undo bar, and a quick settings tile that ticks the next goal.
+- 0.30.0: goals that repeat some days after they were last done.
 
 Every step in CLAUDE.md's build order is built. The iPhone app waits for a way to install it.
 
