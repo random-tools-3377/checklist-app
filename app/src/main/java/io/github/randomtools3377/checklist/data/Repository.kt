@@ -43,6 +43,11 @@ const val SETTING_TODAY_LAYOUT = "today_layout"
 const val SETTING_BACKDROP = "backdrop"
 const val SETTING_BACKDROP_DIM = "backdrop_dim"
 const val SETTING_PHOTO_STAMP = "photo_stamp"
+/** Today's sections in order, hidden ones marked (see Sections in the shared code). */
+const val SETTING_TODAY_SECTIONS = "today_sections"
+/** The tabs hidden from the bottom bar, and the one the app opens on. */
+const val SETTING_HIDDEN_TABS = "hidden_tabs"
+const val SETTING_FIRST_TAB = "first_tab"
 const val DEFAULT_SNOOZE_MINUTES = 10
 const val SETTING_TODAY_ORDER = "today_order"
 const val ORDER_RECOMMENDED = "recommended"

@@ -28,6 +28,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -65,7 +67,11 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.randomtools3377.checklist.core.Colors
+import io.github.randomtools3377.checklist.core.AppTabKind
 import io.github.randomtools3377.checklist.core.Schemes
+import io.github.randomtools3377.checklist.core.SectionChoice
+import io.github.randomtools3377.checklist.core.Sections
+import io.github.randomtools3377.checklist.core.TabChoice
 
 private val Rainbow = listOf(Color.Red, Color.Yellow, Color.Green, Color.Cyan, Color.Blue, Color.Magenta, Color.Red)
 
@@ -140,6 +146,65 @@ fun AppearanceScreen(appearance: Appearance, vm: MainViewModel, onAnyColour: () 
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             BackdropSetting(appearance, vm)
+
+            Spacer(Modifier.height(4.dp))
+            Text("Today's sections", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+            SectionsEditor(appearance.sections) { vm.setSections(it) }
+            Spacer(Modifier.height(4.dp))
+            Text("Tabs", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+            TabsEditor(appearance.tabs, vm)
+        }
+    }
+}
+
+/** Today's sections: tick to show, arrows to move. */
+@Composable
+private fun SectionsEditor(sections: List<SectionChoice>, onChange: (List<SectionChoice>) -> Unit) {
+    sections.forEachIndexed { index, choice ->
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+            androidx.compose.material3.Checkbox(
+                checked = choice.shown,
+                onCheckedChange = { onChange(Sections.toggle(sections, choice.section)) },
+                modifier = Modifier.testTag("section:${choice.section.name}"),
+            )
+            Text(choice.section.label, modifier = Modifier.weight(1f))
+            IconButton(onClick = { onChange(Sections.move(sections, index, -1)) }, enabled = index > 0, modifier = Modifier.testTag("section-up:${choice.section.name}")) {
+                Icon(Icons.Filled.KeyboardArrowUp, contentDescription = "Move ${choice.section.label} up")
+            }
+            IconButton(onClick = { onChange(Sections.move(sections, index, 1)) }, enabled = index < sections.lastIndex, modifier = Modifier.testTag("section-down:${choice.section.name}")) {
+                Icon(Icons.Filled.KeyboardArrowDown, contentDescription = "Move ${choice.section.label} down")
+            }
+        }
+    }
+}
+
+/** Which tabs show along the bottom, and the one the app opens on. Today always shows. */
+@Composable
+private fun TabsEditor(tabs: TabChoice, vm: MainViewModel) {
+    AppTabKind.entries.filter { it != AppTabKind.TODAY }.forEach { tab ->
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+            androidx.compose.material3.Checkbox(
+                checked = tab !in tabs.hidden,
+                onCheckedChange = { shown -> vm.setTabHidden(tab, hidden = !shown) },
+                modifier = Modifier.testTag("tab:${tab.name}"),
+            )
+            Text(tab.label)
+        }
+    }
+    Text(
+        "A hidden tab can still be opened from Settings.",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    Text("Opens on", style = MaterialTheme.typography.bodyLarge)
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        tabs.shown.forEach { tab ->
+            androidx.compose.material3.FilterChip(
+                selected = tabs.opensOn == tab,
+                onClick = { vm.setFirstTab(tab) },
+                label = { Text(tab.label) },
+                modifier = Modifier.testTag("first-tab:${tab.name}"),
+            )
         }
     }
 }

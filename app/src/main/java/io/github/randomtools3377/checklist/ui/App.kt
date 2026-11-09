@@ -26,6 +26,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -100,6 +101,16 @@ fun ChecklistApp(vm: MainViewModel = viewModel()) {
     val removedGoals by vm.removedGoals.collectAsStateWithLifecycle()
     val badges by vm.badges.collectAsStateWithLifecycle()
     val appearance by vm.appearance.collectAsStateWithLifecycle()
+    // The app opens on the tab chosen in Appearance, once the settings have been read.
+    var firstTabApplied by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(appearance.loaded) {
+        if (appearance.loaded && !firstTabApplied) {
+            firstTabApplied = true
+            val first = AppTab.entries[appearance.tabs.opensOn.ordinal]
+            if (first != AppTab.TODAY && stack.size == 1 && stack[0] == AppTab.TODAY.route) stack[0] = first.route
+        }
+    }
+    val shownTabs = AppTab.entries.filter { tab -> appearance.tabs.shown.any { it.ordinal == tab.ordinal } }
     val tickNotes by vm.tickNotes.collectAsStateWithLifecycle()
     val review by vm.review.collectAsStateWithLifecycle()
     val reviewPeriod by vm.reviewPeriod.collectAsStateWithLifecycle()
@@ -177,7 +188,12 @@ fun ChecklistApp(vm: MainViewModel = viewModel()) {
             }
             "removed" -> RemovedGoalsScreen(removedGoals, onRestore = { vm.restoreGoal(it.id) }, onBack = ::pop)
             "reward" -> androidx.compose.runtime.key(route) { RewardEditor(id, vm, onClose = ::pop) }
-            "settings" -> SettingsScreen(settings, vm, onAppearance = { push("appearance") }, onBack = ::pop)
+            "settings" -> SettingsScreen(
+                settings, vm,
+                onAppearance = { push("appearance") },
+                onOpenTab = { kind -> goTo(AppTab.entries[kind.ordinal]) },
+                onBack = ::pop,
+            )
             "appearance" -> AppearanceScreen(appearance, vm, onAnyColour = { push("colour") }, onBack = ::pop)
             "colour" -> AppColourScreen(appearance, onUse = { vm.setColor(it); pop() }, onBack = ::pop)
             "badges" -> if (settings.locks.review && !unlocked) {
@@ -198,6 +214,7 @@ fun ChecklistApp(vm: MainViewModel = viewModel()) {
                 val tab = AppTab.entries.firstOrNull { it.route == route } ?: AppTab.TODAY
                 TabScaffold(
                     tab = tab,
+                    tabs = shownTabs,
                     onTab = ::goTo,
                     onSettings = { push("settings") },
                     actions = {
@@ -298,6 +315,7 @@ private fun AddButton(label: String, tag: String, onClick: () -> Unit) {
 @Composable
 private fun TabScaffold(
     tab: AppTab,
+    tabs: List<AppTab>,
     onTab: (AppTab) -> Unit,
     onSettings: () -> Unit,
     actions: @Composable RowScope.() -> Unit,
@@ -320,7 +338,7 @@ private fun TabScaffold(
         },
         bottomBar = {
             NavigationBar {
-                for (item in AppTab.entries) {
+                for (item in tabs) {
                     NavigationBarItem(
                         selected = item == tab,
                         onClick = { onTab(item) },

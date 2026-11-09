@@ -9,6 +9,13 @@ import io.github.randomtools3377.checklist.core.Backup
 import io.github.randomtools3377.checklist.core.BackupError
 import io.github.randomtools3377.checklist.core.BuyResult
 import io.github.randomtools3377.checklist.core.Days
+import io.github.randomtools3377.checklist.data.SETTING_FIRST_TAB
+import io.github.randomtools3377.checklist.data.SETTING_HIDDEN_TABS
+import io.github.randomtools3377.checklist.data.SETTING_TODAY_SECTIONS
+import io.github.randomtools3377.checklist.core.AppTabKind
+import io.github.randomtools3377.checklist.core.TabChoice
+import io.github.randomtools3377.checklist.core.Sections
+import io.github.randomtools3377.checklist.core.SectionChoice
 import io.github.randomtools3377.checklist.data.SETTING_PHOTO_STAMP
 import io.github.randomtools3377.checklist.data.SETTING_BACKDROP_DIM
 import io.github.randomtools3377.checklist.data.SETTING_BACKDROP
@@ -345,6 +352,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         listOf(
             SETTING_THEME, SETTING_COLOR, SETTING_RECENT_COLORS, SETTING_TEXT_SIZE, SETTING_CARD_SIZE,
             SETTING_TODAY_LAYOUT, SETTING_BACKDROP, SETTING_BACKDROP_DIM, SETTING_PHOTO_STAMP,
+            SETTING_TODAY_SECTIONS, SETTING_HIDDEN_TABS, SETTING_FIRST_TAB,
         ).map { dao.observeSetting(it) },
     ) { v ->
         Appearance(
@@ -357,8 +365,24 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             backdrop = Backdrop.entries.firstOrNull { it.name == v[6] } ?: Backdrop.NONE,
             dim = v[7]?.toIntOrNull()?.coerceIn(Appearance.MIN_DIM, Appearance.MAX_DIM) ?: Appearance.DEFAULT_DIM,
             photoStamp = v[8].orEmpty(),
+            sections = Sections.decode(v[9]),
+            tabs = TabChoice.decode(v[10], v[11]),
+            loaded = true,
         )
     }.stateIn(viewModelScope, SharingStarted.Eagerly, Appearance())
+
+    fun setSections(choices: List<SectionChoice>) {
+        viewModelScope.launch { repository.setSetting(SETTING_TODAY_SECTIONS, Sections.encode(choices)) }
+    }
+
+    fun setTabHidden(tab: AppTabKind, hidden: Boolean) {
+        val now = appearance.value.tabs.hidden
+        viewModelScope.launch { repository.setSetting(SETTING_HIDDEN_TABS, TabChoice.encodeHidden(if (hidden) now + tab else now - tab)) }
+    }
+
+    fun setFirstTab(tab: AppTabKind) {
+        viewModelScope.launch { repository.setSetting(SETTING_FIRST_TAB, tab.name) }
+    }
 
     fun setTextSize(size: TextSize) {
         viewModelScope.launch { repository.setSetting(SETTING_TEXT_SIZE, size.name) }

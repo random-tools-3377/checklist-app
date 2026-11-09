@@ -19,6 +19,9 @@ import androidx.compose.ui.unit.sp
 import io.github.randomtools3377.checklist.core.Brightness
 import io.github.randomtools3377.checklist.core.Colors
 import io.github.randomtools3377.checklist.core.Schemes
+import io.github.randomtools3377.checklist.core.SectionChoice
+import io.github.randomtools3377.checklist.core.Sections
+import io.github.randomtools3377.checklist.core.TabChoice
 
 /** Light, dark, following the phone, or pure black. */
 enum class ThemeMode(val label: String) { LIGHT("Light"), DARK("Dark"), PHONE("Phone"), BLACK("Black") }
@@ -59,6 +62,12 @@ data class Appearance(
     val dim: Int = DEFAULT_DIM,
     /** Changes when a new photo is picked, so it is read again. */
     val photoStamp: String = "",
+    /** Today's sections in the user's order, each shown or hidden. */
+    val sections: List<SectionChoice> = Sections.DEFAULT,
+    /** Which tabs show, and the one the app opens on. */
+    val tabs: TabChoice = TabChoice(),
+    /** False until the settings have been read, so the first tab isn't picked from the defaults. */
+    val loaded: Boolean = false,
 ) {
     companion object {
         const val DEFAULT_DIM = 70

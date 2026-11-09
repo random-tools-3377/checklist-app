@@ -103,6 +103,7 @@ fun SettingsScreen(
     settings: Settings,
     vm: MainViewModel,
     onAppearance: () -> Unit,
+    onOpenTab: (io.github.randomtools3377.checklist.core.AppTabKind) -> Unit,
     onBack: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -152,7 +153,16 @@ fun SettingsScreen(
                     .padding(horizontal = 16.dp, vertical = 12.dp),
             ) {
                 Text("Appearance", style = MaterialTheme.typography.bodyLarge)
-                Text("Light, dark or black, and the app's colour", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                Text("Colours, Today's layout and sections, and the tabs", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+            }
+            // Tabs hidden from the bottom bar are still here.
+            val look by vm.appearance.collectAsState()
+            if (look.tabs.hidden.isNotEmpty()) {
+                Row(Modifier.padding(horizontal = 8.dp)) {
+                    look.tabs.hidden.sortedBy { it.ordinal }.forEach { tab ->
+                        TextButton(onClick = { onOpenTab(tab) }, modifier = Modifier.testTag("open-tab:${tab.name}")) { Text("Open ${tab.label}") }
+                    }
+                }
             }
             HorizontalDivider()
             Section("Your day")

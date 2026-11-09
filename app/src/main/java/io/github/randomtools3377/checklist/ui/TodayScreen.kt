@@ -21,6 +21,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.foundation.layout.Arrangement
 import io.github.randomtools3377.checklist.core.Categories
+import io.github.randomtools3377.checklist.core.TodaySection
 import io.github.randomtools3377.checklist.core.WeekProgress
 import io.github.randomtools3377.checklist.core.Badge
 import androidx.compose.foundation.combinedClickable
@@ -218,12 +219,6 @@ fun TodayScreen(
     ) {
         item {
             Text(longDate(view.day), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(bottom = 8.dp))
-            BalanceCard(view.balance, modifier = Modifier.clickable(onClick = onHistory), note = "Tap for your points history")
-            Spacer(Modifier.height(12.dp))
-            week?.let {
-                WeeklyTargetCard(it)
-                Spacer(Modifier.height(12.dp))
-            }
             if (newBadges.isNotEmpty()) {
                 NewBadgesCard(newBadges, onSee = onBadges, onDismiss = vm::badgesSeen)
                 Spacer(Modifier.height(12.dp))
@@ -232,107 +227,149 @@ fun TodayScreen(
                 BackupReminderCard(days, onBackUp = onSettings, onLater = vm::backupLater)
                 Spacer(Modifier.height(12.dp))
             }
-            StreakCard(screen.streaks, screen.streakSettings)
             if (screen.hiddenPrivate > 0) {
-                Spacer(Modifier.height(8.dp))
                 OutlinedButton(onClick = onUnlock, modifier = Modifier.fillMaxWidth().testTag("unlock-private")) {
                     Text(if (screen.hiddenPrivate == 1) "🔒 1 private goal · Unlock" else "🔒 ${screen.hiddenPrivate} private goals · Unlock")
                 }
+                Spacer(Modifier.height(12.dp))
             }
         }
-        if (categories.isNotEmpty()) {
-            item {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(top = 12.dp).testTag("today-categories"),
-                ) {
-                    FilterChip(selected = filter == null, onClick = { category = null }, label = { Text("All") }, modifier = Modifier.testTag("today-category:All"))
-                    categories.forEach { name ->
-                        FilterChip(
-                            selected = filter == name,
-                            onClick = { category = if (filter == name) null else name },
-                            label = { Text(name) },
-                            modifier = Modifier.testTag("today-category:$name"),
-                        )
+
+        // The category chips and the empty message go just before the first list of goals.
+        var goalsStarted = false
+        fun startGoals() {
+            if (goalsStarted) return
+            goalsStarted = true
+            if (categories.isNotEmpty()) {
+                item(key = "categories") {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(bottom = 4.dp).testTag("today-categories"),
+                    ) {
+                        FilterChip(selected = filter == null, onClick = { category = null }, label = { Text("All") }, modifier = Modifier.testTag("today-category:All"))
+                        categories.forEach { name ->
+                            FilterChip(
+                                selected = filter == name,
+                                onClick = { category = if (filter == name) null else name },
+                                label = { Text(name) },
+                                modifier = Modifier.testTag("today-category:$name"),
+                            )
+                        }
+                    }
+                }
+            }
+            if (view.isEmpty) {
+                item(key = "empty") {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.fillMaxWidth().padding(top = 36.dp),
+                    ) {
+                        Text("Nothing due today.", style = MaterialTheme.typography.titleMedium)
+                        Spacer(Modifier.height(8.dp))
+                        Text("Add a habit or a project, then tick it here to earn points.", textAlign = TextAlign.Center)
+                        Spacer(Modifier.height(16.dp))
+                        Button(onClick = onAddGoal) { Text("Add a goal") }
                     }
                 }
             }
         }
-        if (view.isEmpty) {
-            item {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier.fillMaxWidth().padding(top = 48.dp),
-                ) {
-                    Text("Nothing due today.", style = MaterialTheme.typography.titleMedium)
-                    Spacer(Modifier.height(8.dp))
-                    Text("Add a habit or a project, then tick it here to earn points.", textAlign = TextAlign.Center)
-                    Spacer(Modifier.height(16.dp))
-                    Button(onClick = onAddGoal) { Text("Add a goal") }
-                }
-            }
-        }
 
-        if (screen.plan.isNotEmpty()) {
-            item {
-                Spacer(Modifier.height(12.dp))
-                PaceCard(screen, onSettings)
-                Spacer(Modifier.height(12.dp))
-                OrderSwitch(screen.recommended) { vm.setTodayOrder(if (it) ORDER_RECOMMENDED else ORDER_OWN) }
-            }
-            if (plan.isNotEmpty()) item { SectionTitle("Today") }
-            if (grid) {
-                items(plan.chunked(2), key = { "today-tiles-${it.first().row.goal.id}" }) { pair ->
-                    TileRow(pair.map { it.row }, screen, ::tick) { details = it }
+        for (choice in look.sections) {
+            if (!choice.shown) continue
+            when (choice.section) {
+                TodaySection.BALANCE -> item(key = "balance") {
+                    BalanceCard(view.balance, modifier = Modifier.clickable(onClick = onHistory), note = "Tap for your points history")
+                    Spacer(Modifier.height(12.dp))
+                }
+                TodaySection.WEEKLY_TARGET -> week?.let { progress ->
+                    item(key = "weekly-target") {
+                        WeeklyTargetCard(progress)
+                        Spacer(Modifier.height(12.dp))
+                    }
+                }
+                TodaySection.STREAKS -> item(key = "streaks") {
+                    StreakCard(screen.streaks, screen.streakSettings)
+                    Spacer(Modifier.height(12.dp))
+                }
+                TodaySection.PACE -> if (screen.plan.isNotEmpty()) {
+                    item(key = "pace") {
+                        PaceCard(screen, onSettings)
+                        Spacer(Modifier.height(12.dp))
+                        OrderSwitch(screen.recommended) { vm.setTodayOrder(if (it) ORDER_RECOMMENDED else ORDER_OWN) }
+                    }
+                }
+                TodaySection.DUE_TODAY -> {
+                    startGoals()
+                    if (plan.isNotEmpty()) item(key = "title-today") { SectionTitle("Today") }
+                    if (grid) {
+                        items(plan.chunked(2), key = { "today-tiles-${it.first().row.goal.id}" }) { pair ->
+                            TileRow(pair.map { it.row }, screen, ::tick) { details = it }
+                        }
+                    } else {
+                        items(plan, key = { "today-${it.row.goal.id}" }) { planned ->
+                            HabitCard(
+                                row = planned.row,
+                                // A habit done several times a day shows its next one instead.
+                                timeLabel = if (screen.nextSlots.containsKey(planned.row.goal.id)) null else timeLabel(planned, screen),
+                                late = planned.late,
+                                paceLine = null,
+                                nextLine = nextLine(planned.row, screen),
+                                onTick = { spot -> tick(planned.row, spot) },
+                                onUndo = { if (planned.row.isRoutine) vm.undoRoutine(planned.row.goal.id) else vm.undoHabitTick(planned.row.goal.id) },
+                                onSkip = { skipping = planned.row.goal },
+                                onItem = { item, spot -> checkItem(planned.row, item, spot) },
+                                onUncheck = { item -> vm.uncheckItem(item.step.id) },
+                                onFocus = planned.row.goal.minutes?.let { minutes -> { vm.startFocus(planned.row.goal.id, minutes) } },
+                                lastTick = screen.lastTicks[planned.row.goal.id],
+                                onNote = { editingTick = it },
+                            )
+                            Spacer(Modifier.height(10.dp))
+                        }
+                    }
+                }
+                TodaySection.THIS_WEEK -> {
+                    startGoals()
+                    habitSection("This week", shown(view.thisWeek), screen, ::tick, vm, grid, { details = it }) { skipping = it }
+                }
+                TodaySection.THIS_MONTH -> {
+                    startGoals()
+                    habitSection("This month", shown(view.thisMonth), screen, ::tick, vm, grid, { details = it }) { skipping = it }
+                }
+                TodaySection.THIS_YEAR -> {
+                    startGoals()
+                    habitSection("This year", shown(view.thisYear), screen, ::tick, vm, grid, { details = it }) { skipping = it }
+                }
+                TodaySection.PROJECTS -> {
+                    startGoals()
+                    if (projects.isNotEmpty()) {
+                        item(key = "title-projects") { SectionTitle("Projects") }
+                        items(projects, key = { "project-${it.goal.id}" }) { project ->
+                            ProjectCard(
+                                project = project,
+                                paceLine = screen.longPaces[project.goal.id]?.let { paceText(it) },
+                                onTick = { step, spot ->
+                                    vm.tickStep(step.step.id) { result ->
+                                        celebrateTick(result, spot, bigWhenFinished = false)
+                                        if (result is TickResult.Ticked && result.finished) {
+                                            celebrations.show(
+                                                BigCelebration.ProjectFinished(
+                                                    project.goal.icon, project.goal.name, result.points + result.bonus,
+                                                    gif = project.goal.celebration?.takeIf { Celebration.isValid(it) },
+                                                ),
+                                            )
+                                        }
+                                    }
+                                },
+                                onUndo = { step -> vm.undoStep(step.step.id) },
+                            )
+                            Spacer(Modifier.height(10.dp))
+                        }
+                    }
                 }
             }
-            if (!grid) items(plan, key = { "today-${it.row.goal.id}" }) { planned ->
-                HabitCard(
-                    row = planned.row,
-                    // A habit done several times a day shows its next one instead.
-                    timeLabel = if (screen.nextSlots.containsKey(planned.row.goal.id)) null else timeLabel(planned, screen),
-                    late = planned.late,
-                    paceLine = null,
-                    nextLine = nextLine(planned.row, screen),
-                    onTick = { spot -> tick(planned.row, spot) },
-                    onUndo = { if (planned.row.isRoutine) vm.undoRoutine(planned.row.goal.id) else vm.undoHabitTick(planned.row.goal.id) },
-                    onSkip = { skipping = planned.row.goal },
-                    onItem = { item, spot -> checkItem(planned.row, item, spot) },
-                    onUncheck = { item -> vm.uncheckItem(item.step.id) },
-                    onFocus = planned.row.goal.minutes?.let { minutes -> { vm.startFocus(planned.row.goal.id, minutes) } },
-                    lastTick = screen.lastTicks[planned.row.goal.id],
-                    onNote = { editingTick = it },
-                )
-                Spacer(Modifier.height(10.dp))
-            }
         }
-        habitSection("This week", shown(view.thisWeek), screen, ::tick, vm, grid, { details = it }) { skipping = it }
-        habitSection("This month", shown(view.thisMonth), screen, ::tick, vm, grid, { details = it }) { skipping = it }
-        habitSection("This year", shown(view.thisYear), screen, ::tick, vm, grid, { details = it }) { skipping = it }
-        if (projects.isNotEmpty()) {
-            item { SectionTitle("Projects") }
-            items(projects, key = { "project-${it.goal.id}" }) { project ->
-                ProjectCard(
-                    project = project,
-                    paceLine = screen.longPaces[project.goal.id]?.let { paceText(it) },
-                    onTick = { step, spot ->
-                        vm.tickStep(step.step.id) { result ->
-                            celebrateTick(result, spot, bigWhenFinished = false)
-                            if (result is TickResult.Ticked && result.finished) {
-                                celebrations.show(
-                                    BigCelebration.ProjectFinished(
-                                        project.goal.icon, project.goal.name, result.points + result.bonus,
-                                        gif = project.goal.celebration?.takeIf { Celebration.isValid(it) },
-                                    ),
-                                )
-                            }
-                        }
-                    },
-                    onUndo = { step -> vm.undoStep(step.step.id) },
-                )
-                Spacer(Modifier.height(10.dp))
-            }
-        }
+        // With every list of goals hidden, still offer the empty message.
+        startGoals()
     }
     }
 }
