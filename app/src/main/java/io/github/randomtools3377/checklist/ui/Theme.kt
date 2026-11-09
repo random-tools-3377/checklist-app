@@ -90,6 +90,8 @@ data class Appearance(
     val celebrate: CelebrationStyle = CelebrationStyle(),
     val icon: io.github.randomtools3377.checklist.AppIcon = io.github.randomtools3377.checklist.AppIcon.GARDEN,
     val widgetStyle: io.github.randomtools3377.checklist.widget.WidgetStyle = io.github.randomtools3377.checklist.widget.WidgetStyle.SOLID,
+    /** Blue for good and vermillion for bad, apart for every common kind of colour blindness. */
+    val colourBlind: Boolean = false,
     /** False until the settings have been read, so the first tab isn't picked from the defaults. */
     val loaded: Boolean = false,
 ) {
@@ -108,6 +110,20 @@ val canMatchWallpaper: Boolean get() = Build.VERSION.SDK_INT >= Build.VERSION_CO
 
 /** The brightness the app is showing now, for colours worked out by hand (like a goal's strip). */
 val LocalBrightness = staticCompositionLocalOf { Brightness.LIGHT }
+
+/** Whether the colour-blind friendly look is on (Settings → Appearance). */
+val LocalColourBlind = staticCompositionLocalOf { false }
+
+/** The colour for good things, like points earned or being on time: the app's colour, or blue in the colour-blind friendly look. */
+@Composable
+fun goodColor(): Color =
+    if (LocalColourBlind.current) Color(io.github.randomtools3377.checklist.core.ColourBlind.good(LocalBrightness.current)) else MaterialTheme.colorScheme.primary
+
+/** The colour-blind friendly warning colours: vermillion in place of red. */
+private fun ColorScheme.colourBlind(brightness: Brightness): ColorScheme {
+    val (error, onError, container, onContainer) = io.github.randomtools3377.checklist.core.ColourBlind.warnings(brightness)
+    return copy(error = Color(error), onError = Color(onError), errorContainer = Color(container), onErrorContainer = Color(onContainer))
+}
 
 private fun Int.color() = Color(this)
 
@@ -188,7 +204,7 @@ fun ChecklistTheme(appearance: Appearance = Appearance(), content: @Composable (
     }
     val context = LocalContext.current
     val chosen = appearance.color
-    val colors = if (chosen == null && canMatchWallpaper) {
+    val built = if (chosen == null && canMatchWallpaper) {
         when (brightness) {
             Brightness.LIGHT -> dynamicLightColorScheme(context)
             Brightness.DARK -> dynamicDarkColorScheme(context)
@@ -197,9 +213,11 @@ fun ChecklistTheme(appearance: Appearance = Appearance(), content: @Composable (
     } else {
         schemeOf(chosen ?: Colors.GARDEN, brightness)
     }
+    val colors = if (appearance.colourBlind) built.colourBlind(brightness) else built
     val density = LocalDensity.current
     androidx.compose.runtime.CompositionLocalProvider(
         LocalBrightness provides brightness,
+        LocalColourBlind provides appearance.colourBlind,
         LocalCardSize provides appearance.cardSize,
         LocalDensity provides Density(density.density, density.fontScale * appearance.textSize.scale),
     ) {

@@ -130,7 +130,7 @@ fun HistoryScreen(
                         Text(
                             signed(entry.amount),
                             fontWeight = FontWeight.Bold,
-                            color = if (entry.amount < 0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                            color = if (entry.amount < 0) MaterialTheme.colorScheme.error else goodColor(),
                         )
                     }
                 }

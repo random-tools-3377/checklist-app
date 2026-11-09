@@ -6,13 +6,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.glance.GlanceTheme
 import androidx.glance.unit.ColorProvider
 import io.github.randomtools3377.checklist.core.Brightness
+import io.github.randomtools3377.checklist.core.ColourBlind
 import io.github.randomtools3377.checklist.core.Schemes
 
 /** How the widgets look (Settings → Appearance): solid in the app's colours, or see-through over the wallpaper. */
 enum class WidgetStyle(val label: String) { SOLID("Solid"), SEE_THROUGH("See-through") }
 
 /** The widget's style and the app's colour (null for the phone's), read when it is drawn. */
-data class WidgetLook(val style: WidgetStyle = WidgetStyle.SOLID, val color: Int? = null)
+data class WidgetLook(val style: WidgetStyle = WidgetStyle.SOLID, val color: Int? = null, val colourBlind: Boolean = false)
 
 val LocalWidgetLook = staticCompositionLocalOf { WidgetLook() }
 
@@ -38,6 +39,19 @@ private fun dayNight(day: Int, night: Int) = androidx.glance.color.ColorProvider
 @Composable
 fun widgetColors(): WidgetColors {
     val look = LocalWidgetLook.current
+    val colours = coloursFor(look)
+    if (!look.colourBlind) return colours
+    // Colour-blind friendly: vermillion in place of red.
+    val bad = if (look.style == WidgetStyle.SEE_THROUGH) fixed(ColourBlind.bad(Brightness.DARK).toLong() and 0xFFFFFFFFL)
+    else dayNight(ColourBlind.bad(Brightness.LIGHT), ColourBlind.bad(Brightness.DARK))
+    return WidgetColors(
+        colours.widgetBackground, colours.onSurface, colours.onSurfaceVariant, colours.primary,
+        colours.primaryContainer, colours.secondaryContainer, bad,
+    )
+}
+
+@Composable
+private fun coloursFor(look: WidgetLook): WidgetColors {
     if (look.style == WidgetStyle.SEE_THROUGH) {
         return WidgetColors(
             widgetBackground = fixed(0x61000000), onSurface = fixed(0xFFFFFFFF), onSurfaceVariant = fixed(0xD9FFFFFF),

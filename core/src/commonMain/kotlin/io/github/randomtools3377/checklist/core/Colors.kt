@@ -94,12 +94,12 @@ object Colors {
 
     // Lightness as people see it (CIELAB), which is what keeps text readable.
 
-    private fun linear(channel: Int): Double {
+    internal fun linear(channel: Int): Double {
         val c = channel / 255.0
         return if (c <= 0.04045) c / 12.92 else ((c + 0.055) / 1.055).pow(2.4)
     }
 
-    private fun gamma(c: Double): Int {
+    internal fun gamma(c: Double): Int {
         val v = if (c <= 0.0031308) 12.92 * c else 1.055 * c.pow(1 / 2.4) - 0.055
         return (v * 255).roundToInt().coerceIn(0, 255)
     }

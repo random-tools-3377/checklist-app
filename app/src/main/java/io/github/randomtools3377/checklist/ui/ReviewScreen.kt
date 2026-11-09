@@ -50,6 +50,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import io.github.randomtools3377.checklist.core.ColourBlind
 import io.github.randomtools3377.checklist.core.Badge
 import io.github.randomtools3377.checklist.core.DayRecord
 import io.github.randomtools3377.checklist.core.Gap
@@ -150,7 +151,7 @@ private fun ReviewCard(title: String, content: @Composable () -> Unit) {
 private fun PointsCard(summary: ReviewSummary) {
     ReviewCard(pointsTitle()) {
         Row(Modifier.fillMaxWidth()) {
-            PointsFigure("Earned", "+${summary.earned}", MaterialTheme.colorScheme.primary, Modifier.weight(1f))
+            PointsFigure("Earned", "+${summary.earned}", goodColor(), Modifier.weight(1f))
             PointsFigure("Spent", "−${summary.spent}", MaterialTheme.colorScheme.onSurface, Modifier.weight(1f))
             PointsFigure("Lost", "−${summary.lost}", MaterialTheme.colorScheme.error, Modifier.weight(1f))
         }
@@ -284,6 +285,8 @@ private fun GapsCard(gaps: List<Gap>, hideNotes: Boolean) {
 /** The month as a calendar: how much of each day got done, with gap days marked. */
 @Composable
 private fun MonthCalendar(summary: ReviewSummary) {
+    val colourBlind = LocalColourBlind.current
+    val brightness = LocalBrightness.current
     val byDay = summary.days.associateBy { it.day }
     val first = summary.from
     val blanks = first.dayOfWeek.isoDayNumber - 1
@@ -299,22 +302,41 @@ private fun MonthCalendar(summary: ReviewSummary) {
                         if (record != null) {
                             val inGap = summary.gaps.any { record.day >= it.from && record.day <= it.to }
                             val share = if (record.due == 0) null else record.done.toFloat() / record.due
+                            val all = share != null && share >= 1f && !inGap
                             val background = when {
                                 inGap -> MaterialTheme.colorScheme.tertiaryContainer
                                 share == null -> MaterialTheme.colorScheme.surfaceVariant
-                                share >= 1f -> MaterialTheme.colorScheme.primary
-                                share > 0f -> MaterialTheme.colorScheme.primaryContainer
+                                share >= 1f -> if (colourBlind) Color(ColourBlind.good(brightness)) else MaterialTheme.colorScheme.primary
+                                share > 0f -> if (colourBlind) Color(ColourBlind.goodContainer(brightness)) else MaterialTheme.colorScheme.primaryContainer
                                 else -> MaterialTheme.colorScheme.errorContainer
                             }
-                            Box(
+                            val text = when {
+                                all -> if (colourBlind) Color(ColourBlind.onGood(brightness)) else MaterialTheme.colorScheme.onPrimary
+                                !inGap && share == 0f -> MaterialTheme.colorScheme.onErrorContainer
+                                else -> MaterialTheme.colorScheme.onSurface
+                            }
+                            // Colour-blind friendly: a mark as well as a colour.
+                            val mark = if (!colourBlind) null else when {
+                                inGap -> "–"
+                                share == null -> null
+                                share >= 1f -> "✓"
+                                share > 0f -> "◐"
+                                else -> "✕"
+                            }
+                            Column(
                                 Modifier.fillMaxSize().background(background, RoundedCornerShape(8.dp)),
-                                contentAlignment = Alignment.Center,
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center,
                             ) {
-                                Text(
-                                    "${record.day.dayOfMonth}",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = if (share != null && share >= 1f && !inGap) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
-                                )
+                                Text("${record.day.dayOfMonth}", style = MaterialTheme.typography.labelMedium, color = text)
+                                if (mark != null) {
+                                    Text(
+                                        mark,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = text,
+                                        modifier = Modifier.testTag("day-mark:${record.day.dayOfMonth}"),
+                                    )
+                                }
                             }
                         }
                     }
@@ -323,9 +345,10 @@ private fun MonthCalendar(summary: ReviewSummary) {
             }
         }
         Text(
-            "Dark: everything done · light: some · red: none · purple: a gap",
+            if (colourBlind) "✓ everything done · ◐ some · ✕ none · – a gap" else "Dark: everything done · light: some · red: none · purple: a gap",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.testTag("review-calendar-key"),
         )
         @Suppress("UNUSED_VARIABLE") val unused = byDay
     }
@@ -372,7 +395,7 @@ private fun DayCharts(summary: ReviewSummary, period: Period) {
     val shares = days.map { if (it.due == 0) null else it.done * 100 / it.due }
     val earned = days.map { summary.earnedByDay[it.day] ?: 0 }
     val lost = days.map { summary.lostByDay[it.day] ?: 0 }
-    val primary = MaterialTheme.colorScheme.primary
+    val primary = goodColor()
     val error = MaterialTheme.colorScheme.error
     val faint = MaterialTheme.colorScheme.outlineVariant
     ReviewCard("Each day") {

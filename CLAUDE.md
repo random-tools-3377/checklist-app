@@ -444,7 +444,15 @@ Build order **(default)**, each step a Release the owner can try:
     holds each screen to a readable width (720 dp) in the middle; a short one (under 480 dp)
     lays the focus timer out side by side and shrinks the big celebrations to fit.
 
-16. Then an optional AI that runs on the phone, after 0.40.0 and the previews PDF.
+    Decided: a colour-blind friendly look (0.41.0). **Details (default):** a
+    switch in Settings → Appearance. Good things (points earned, everything done, on time) are
+    blue and bad things (points lost, nothing done, late, over the limit) are vermillion, the
+    pair from Okabe and Ito's palette, whatever the app's colour, in the app and the widgets.
+    Wherever colour alone said something, a mark says it too: the review calendar shows ✓, ◐,
+    ✕ and –. Goals are offered Okabe and Ito's colours. A test simulates the three common
+    kinds of colour blindness and checks the colours stay apart and readable.
+
+16. Then an optional AI that runs on the phone, after 0.41.0 and the previews PDF.
 
     Decided: it is a one-time download that works offline, and the app is complete without it.
     The app keeps no internet permission: a button opens the phone's browser to download the AI

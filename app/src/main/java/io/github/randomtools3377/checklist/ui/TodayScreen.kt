@@ -938,7 +938,7 @@ private fun HabitCard(
                         if (late) "$timeLabel · late" else timeLabel,
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.Medium,
-                        color = if (late) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                        color = if (late) MaterialTheme.colorScheme.error else goodColor(),
                     )
                 }
                 if (paceLine != null) {
@@ -950,7 +950,7 @@ private fun HabitCard(
                         text,
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.Medium,
-                        color = if (isLate) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                        color = if (isLate) MaterialTheme.colorScheme.error else goodColor(),
                         modifier = Modifier.testTag("next:${goal.name}"),
                     )
                 }

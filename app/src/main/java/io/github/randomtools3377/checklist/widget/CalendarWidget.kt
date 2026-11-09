@@ -277,4 +277,5 @@ private fun MonthGrid(month: List<DayCell>) {
 suspend fun widgetLook(dao: io.github.randomtools3377.checklist.data.ChecklistDao): WidgetLook = WidgetLook(
     style = WidgetStyle.entries.firstOrNull { it.name == dao.setting(io.github.randomtools3377.checklist.data.SETTING_WIDGET_STYLE) } ?: WidgetStyle.SOLID,
     color = dao.setting(io.github.randomtools3377.checklist.data.SETTING_COLOR)?.let { io.github.randomtools3377.checklist.core.Colors.parseHex(it) },
+    colourBlind = dao.setting(io.github.randomtools3377.checklist.core.ColourBlind.SETTING) == "1",
 )

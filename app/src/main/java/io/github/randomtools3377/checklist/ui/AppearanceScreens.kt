@@ -130,6 +130,22 @@ fun AppearanceScreen(appearance: Appearance, vm: MainViewModel, onAnyColour: () 
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                Column(Modifier.weight(1f)) {
+                    Text("Colour-blind friendly", style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        "Good things in blue and bad things in orange, like points earned and lost, whatever the app's colour. " +
+                            "The review calendar marks each day with ✓ or ✕ too, and goals get colours that stay apart.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                androidx.compose.material3.Switch(
+                    checked = appearance.colourBlind,
+                    onCheckedChange = vm::setColourBlind,
+                    modifier = Modifier.testTag("switch:colour-blind"),
+                )
+            }
 
             Spacer(Modifier.height(4.dp))
             Text("Today", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)

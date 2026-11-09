@@ -1803,7 +1803,9 @@ private fun GoalColourField(value: Int?, onValue: (Int?) -> Unit, vm: MainViewMo
     var picking by remember { mutableStateOf(false) }
     Text("Colour", style = MaterialTheme.typography.titleSmall)
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        val offered = (Colors.GOAL_COLORS + listOfNotNull(value)).distinct()
+        // The colour-blind friendly look offers colours that stay apart for every kind of colour blindness.
+        val palette = if (LocalColourBlind.current) io.github.randomtools3377.checklist.core.ColourBlind.GOAL_COLORS else Colors.GOAL_COLORS
+        val offered = (palette + listOfNotNull(value)).distinct()
         ColourDot(null, value == null, "No colour", "goal-colour:none") { onValue(null) }
         offered.forEach { c -> ColourDot(c, value == c, "Colour ${Colors.hex(c)}", "goal-colour:${Colors.hex(c)}") { onValue(c) } }
         Box(

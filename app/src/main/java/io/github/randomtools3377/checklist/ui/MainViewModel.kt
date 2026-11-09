@@ -491,7 +491,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             SETTING_TODAY_LAYOUT, SETTING_BACKDROP, SETTING_BACKDROP_DIM, SETTING_PHOTO_STAMP,
             SETTING_TODAY_SECTIONS, SETTING_HIDDEN_TABS, SETTING_FIRST_TAB,
             SETTING_FONT, SETTING_CELEBRATE_SOUND, SETTING_CELEBRATE_BUZZ, SETTING_CONFETTI, SETTING_DEFAULT_GIF,
-            SETTING_APP_ICON, SETTING_WIDGET_STYLE,
+            SETTING_APP_ICON, SETTING_WIDGET_STYLE, io.github.randomtools3377.checklist.core.ColourBlind.SETTING,
         ).map { dao.observeSetting(it) },
     ) { v ->
         Appearance(
@@ -515,6 +515,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             ),
             icon = AppIcons.of(v[17]),
             widgetStyle = WidgetStyle.entries.firstOrNull { it.name == v[18] } ?: WidgetStyle.SOLID,
+            colourBlind = v[19] == "1",
             loaded = true,
         )
     }.stateIn(viewModelScope, SharingStarted.Eagerly, Appearance())
@@ -530,6 +531,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun setWidgetStyle(style: WidgetStyle) {
         viewModelScope.launch { repository.setSetting(SETTING_WIDGET_STYLE, style.name) }
+    }
+
+    fun setColourBlind(on: Boolean) {
+        viewModelScope.launch { repository.setSetting(io.github.randomtools3377.checklist.core.ColourBlind.SETTING, if (on) "1" else "0") }
     }
 
     fun setFont(font: FontChoice) {

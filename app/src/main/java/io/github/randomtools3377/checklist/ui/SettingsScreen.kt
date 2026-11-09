@@ -413,7 +413,7 @@ fun SettingsScreen(
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp).testTag("settings-search"),
             )
-            if (shows("Appearance colours colors theme dark layout sections tabs font text size icon widget style"))
+            if (shows("Appearance colours colors theme dark layout sections tabs font text size icon widget style colour-blind color-blind colourblind colorblind accessibility"))
             Column(
                 Modifier
                     .fillMaxWidth()
