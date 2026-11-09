@@ -9,6 +9,7 @@ import io.github.randomtools3377.checklist.core.Lapses
 import io.github.randomtools3377.checklist.core.PointsName
 import io.github.randomtools3377.checklist.ui.PointsLabel
 import kotlinx.coroutines.withContext
+import io.github.randomtools3377.checklist.data.SETTING_APP_ICON
 import io.github.randomtools3377.checklist.data.SETTING_POINTS_NAME
 import io.github.randomtools3377.checklist.data.BackgroundPhoto
 import io.github.randomtools3377.checklist.data.AppDatabase
@@ -71,6 +72,13 @@ class Container(app: Application) {
             },
         )
         changes.tryEmit(Unit)
+        // The home-screen icon follows the setting, after a restore from a backup too.
+        scope.launch {
+            db.dao().observeSetting(SETTING_APP_ICON).collect { name ->
+                val icon = AppIcons.of(name)
+                if (AppIcons.current(app) != icon) runCatching { AppIcons.apply(app, icon) }
+            }
+        }
         // What points are called, for the screens, the widgets and the notifications alike.
         scope.launch {
             db.dao().observeSetting(SETTING_POINTS_NAME).collect { text ->

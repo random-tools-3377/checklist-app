@@ -9,6 +9,11 @@ import io.github.randomtools3377.checklist.core.Backup
 import io.github.randomtools3377.checklist.core.BackupError
 import io.github.randomtools3377.checklist.core.BuyResult
 import io.github.randomtools3377.checklist.core.Days
+import io.github.randomtools3377.checklist.data.SETTING_WIDGET_STYLE
+import io.github.randomtools3377.checklist.data.SETTING_APP_ICON
+import io.github.randomtools3377.checklist.widget.WidgetStyle
+import io.github.randomtools3377.checklist.AppIcons
+import io.github.randomtools3377.checklist.AppIcon
 import io.github.randomtools3377.checklist.data.SETTING_DEFAULT_GIF
 import io.github.randomtools3377.checklist.data.SETTING_CONFETTI
 import io.github.randomtools3377.checklist.data.SETTING_CELEBRATE_BUZZ
@@ -362,6 +367,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             SETTING_TODAY_LAYOUT, SETTING_BACKDROP, SETTING_BACKDROP_DIM, SETTING_PHOTO_STAMP,
             SETTING_TODAY_SECTIONS, SETTING_HIDDEN_TABS, SETTING_FIRST_TAB,
             SETTING_FONT, SETTING_CELEBRATE_SOUND, SETTING_CELEBRATE_BUZZ, SETTING_CONFETTI, SETTING_DEFAULT_GIF,
+            SETTING_APP_ICON, SETTING_WIDGET_STYLE,
         ).map { dao.observeSetting(it) },
     ) { v ->
         Appearance(
@@ -383,12 +389,23 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 confetti = ConfettiAmount.entries.firstOrNull { it.name == v[15] } ?: ConfettiAmount.SOME,
                 defaultGif = v[16]?.takeIf { Celebration.isValid(it) },
             ),
+            icon = AppIcons.of(v[17]),
+            widgetStyle = WidgetStyle.entries.firstOrNull { it.name == v[18] } ?: WidgetStyle.SOLID,
             loaded = true,
         )
     }.stateIn(viewModelScope, SharingStarted.Eagerly, Appearance())
 
     fun setPointsName(name: PointsName) {
         viewModelScope.launch { repository.setSetting(SETTING_POINTS_NAME, PointsName.encode(name)) }
+    }
+
+    /** The launcher icon follows the setting (see ChecklistApplication). */
+    fun setAppIcon(icon: AppIcon) {
+        viewModelScope.launch { repository.setSetting(SETTING_APP_ICON, icon.name) }
+    }
+
+    fun setWidgetStyle(style: WidgetStyle) {
+        viewModelScope.launch { repository.setSetting(SETTING_WIDGET_STYLE, style.name) }
     }
 
     fun setFont(font: FontChoice) {

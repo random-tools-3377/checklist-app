@@ -57,8 +57,9 @@ keeps the data.
   opens on.
 - 0.18.0: renaming points (coins, stars, XP or your own words), three bundled fonts, and
   celebration settings: sound, buzz, how much confetti and a GIF for every goal.
+- 0.19.0: app icon choices, and the widgets solid in the app's colours or see-through.
 
-Next: more features (the list is in CLAUDE.md). The iPhone app waits for a way to install it.
+Every step in CLAUDE.md's build order is built. The iPhone app waits for a way to install it.
 
 The emoji list is built from Unicode's emoji data via the MIT-licensed `unicode-emoji-json`
 package; its notice ships in `app/src/main/assets/emoji-NOTICE.txt`. The fonts Nunito, Atkinson

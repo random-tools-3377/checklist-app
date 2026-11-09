@@ -159,6 +159,17 @@ fun AppearanceScreen(appearance: Appearance, vm: MainViewModel, onAnyColour: () 
             Text("Personal", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
             PointsNameSetting(vm)
             Choice("Font", FontChoice.entries, appearance.font, { it.label }, "font") { vm.setFont(it) }
+            AppIconSetting(appearance.icon) { vm.setAppIcon(it) }
+            Choice("Widgets", io.github.randomtools3377.checklist.widget.WidgetStyle.entries, appearance.widgetStyle, { it.label }, "widget-style") { vm.setWidgetStyle(it) }
+            Text(
+                if (appearance.widgetStyle == io.github.randomtools3377.checklist.widget.WidgetStyle.SEE_THROUGH) {
+                    "White text on a see-through background, over your wallpaper."
+                } else {
+                    "In the app's colours, light or dark with the phone."
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             CelebrationSettings(appearance.celebrate, vm)
         }
     }
@@ -210,6 +221,38 @@ private fun PointsNameSetting(vm: MainViewModel) {
             dismissButton = { TextButton(onClick = { writing = false }) { Text("Cancel") } },
         )
     }
+}
+
+/** The app's icon on the home screen. */
+@Composable
+private fun AppIconSetting(current: io.github.randomtools3377.checklist.AppIcon, onPick: (io.github.randomtools3377.checklist.AppIcon) -> Unit) {
+    Text("App icon", style = MaterialTheme.typography.bodyLarge)
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        io.github.randomtools3377.checklist.AppIcon.entries.forEach { icon ->
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier
+                    .clickable { onPick(icon) }
+                    .semantics { selected = icon == current }
+                    .testTag("app-icon:${icon.name}")
+                    .padding(4.dp),
+            ) {
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .size(52.dp)
+                        .then(if (icon == current) Modifier.border(3.dp, MaterialTheme.colorScheme.onSurface, RoundedCornerShape(16.dp)).padding(4.dp) else Modifier)
+                        .background(Color(icon.color), RoundedCornerShape(12.dp)),
+                ) { Text("✓", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold) }
+                Text(icon.label, style = MaterialTheme.typography.labelMedium)
+            }
+        }
+    }
+    Text(
+        "Some home screens take a moment to show the new icon, or move it to the app list.",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
 }
 
 /** Celebrations: sound, buzz, how much confetti, and a GIF for every goal without its own. */

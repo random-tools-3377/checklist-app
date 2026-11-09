@@ -1,4 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="ic_launcher_background">#2E6B5E</color>
+    <!-- The other app icons, chosen in Settings → Appearance. -->
+    <color name="ic_launcher_sunset_background">#D9822B</color>
+    <color name="ic_launcher_ocean_background">#2F80C0</color>
+    <color name="ic_launcher_night_background">#161D1B</color>
 </resources>

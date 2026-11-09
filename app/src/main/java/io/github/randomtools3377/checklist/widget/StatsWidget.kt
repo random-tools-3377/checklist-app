@@ -55,7 +55,7 @@ import io.github.randomtools3377.checklist.data.toEpochDay
 import io.github.randomtools3377.checklist.ui.pointsText
 
 /** What the balance and streaks widget shows, read from the database each time it is drawn. */
-data class StatsData(val balance: Int, val streaks: Streaks, val due: Int, val done: Int, val week: WeekProgress?)
+data class StatsData(val balance: Int, val streaks: Streaks, val due: Int, val done: Int, val week: WeekProgress?, val look: WidgetLook = WidgetLook())
 
 /**
  * The balance and streaks widget. Small, it shows the balance, the main streak and how much of
@@ -66,7 +66,7 @@ class StatsWidget : GlanceAppWidget() {
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val data = load(context)
-        provideContent { GlanceTheme { StatsContent(data) } }
+        provideContent { GlanceTheme { androidx.compose.runtime.CompositionLocalProvider(LocalWidgetLook provides data.look) { StatsContent(data) } } }
     }
 
     companion object {
@@ -110,6 +110,7 @@ class StatsWidget : GlanceAppWidget() {
                 due = todayRecord?.due ?: 0,
                 done = todayRecord?.done ?: 0,
                 week = week,
+                look = widgetLook(dao),
             )
         }
     }
@@ -123,7 +124,7 @@ private fun days(n: Int) = if (n == 1) "1 day" else "$n days"
 
 @Composable
 private fun StatsContent(data: StatsData) {
-    val colors = GlanceTheme.colors
+    val colors = widgetColors()
     val wide = LocalSize.current.width >= 250.dp
     Row(
         verticalAlignment = Alignment.Top,
@@ -187,7 +188,7 @@ private fun StatsContent(data: StatsData) {
 
 @Composable
 private fun StreakLine(label: String, days: Int) {
-    val colors = GlanceTheme.colors
+    val colors = widgetColors()
     Row(modifier = GlanceModifier.fillMaxWidth().padding(vertical = 1.dp)) {
         Text(label, maxLines = 1, style = TextStyle(color = colors.onSurface, fontSize = 13.sp), modifier = GlanceModifier.defaultWeight())
         Text("$days", style = TextStyle(color = colors.primary, fontSize = 13.sp, fontWeight = FontWeight.Bold))

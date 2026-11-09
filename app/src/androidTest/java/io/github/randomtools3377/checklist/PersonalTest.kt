@@ -15,6 +15,9 @@ import io.github.randomtools3377.checklist.data.SETTING_CONFETTI
 import io.github.randomtools3377.checklist.data.SETTING_DEFAULT_GIF
 import io.github.randomtools3377.checklist.data.SETTING_FONT
 import io.github.randomtools3377.checklist.data.SETTING_POINTS_NAME
+import io.github.randomtools3377.checklist.data.SETTING_WIDGET_STYLE
+import io.github.randomtools3377.checklist.widget.StatsWidget
+import io.github.randomtools3377.checklist.widget.WidgetStyle
 import io.github.randomtools3377.checklist.data.nowLocal
 import kotlinx.coroutines.runBlocking
 import org.junit.Rule
@@ -66,6 +69,23 @@ class PersonalTest {
         app.onNodeWithContentDescription("Back").performClick()
         app.onNodeWithContentDescription("Back").performClick()
         app.waitFor { textOf("balance") == "0 stars ⭐" }
+    }
+
+    @Test
+    fun theAppIconAndWidgetStyleAreChosen() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        app.onNodeWithTag("settings").performClick()
+        app.waitFor { !gone("setting:appearance") }
+        app.tap("setting:appearance")
+        app.waitFor { !gone("app-icon:SUNSET") }
+        app.tap("app-icon:SUNSET")
+        app.waitFor { AppIcons.current(context) == AppIcon.SUNSET }
+        app.tap("widget-style:See-through")
+        app.waitFor { setting(SETTING_WIDGET_STYLE) == "SEE_THROUGH" }
+        app.waitFor { runBlocking { StatsWidget.load(context) }.look.style == WidgetStyle.SEE_THROUGH }
+        // Back to the usual icon, for the other tests.
+        app.tap("app-icon:GARDEN")
+        app.waitFor { AppIcons.current(context) == AppIcon.GARDEN }
     }
 
     @Test

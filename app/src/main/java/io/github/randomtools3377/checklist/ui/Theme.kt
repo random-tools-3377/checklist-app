@@ -88,6 +88,8 @@ data class Appearance(
     val tabs: TabChoice = TabChoice(),
     val font: FontChoice = FontChoice.PHONE,
     val celebrate: CelebrationStyle = CelebrationStyle(),
+    val icon: io.github.randomtools3377.checklist.AppIcon = io.github.randomtools3377.checklist.AppIcon.GARDEN,
+    val widgetStyle: io.github.randomtools3377.checklist.widget.WidgetStyle = io.github.randomtools3377.checklist.widget.WidgetStyle.SOLID,
     /** False until the settings have been read, so the first tab isn't picked from the defaults. */
     val loaded: Boolean = false,
 ) {

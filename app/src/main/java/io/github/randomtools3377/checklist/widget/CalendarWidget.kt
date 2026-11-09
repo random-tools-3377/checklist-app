@@ -60,7 +60,7 @@ import kotlinx.datetime.LocalDate
 import kotlinx.datetime.isoDayNumber
 
 /** What the widget shows, read from the database each time it is drawn. */
-data class WidgetData(val today: LocalDate, val agenda: List<AgendaItem>, val week: List<DayCell>, val month: List<DayCell>)
+data class WidgetData(val today: LocalDate, val agenda: List<AgendaItem>, val week: List<DayCell>, val month: List<DayCell>, val look: WidgetLook = WidgetLook())
 
 /**
  * The home-screen calendar. Small, it shows today's agenda with times and tick boxes. Wider, it
@@ -71,7 +71,7 @@ class CalendarWidget : GlanceAppWidget() {
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val data = load(context)
-        provideContent { GlanceTheme { Content(data) } }
+        provideContent { GlanceTheme { androidx.compose.runtime.CompositionLocalProvider(LocalWidgetLook provides data.look) { Content(data) } } }
     }
 
     companion object {
@@ -100,6 +100,7 @@ class CalendarWidget : GlanceAppWidget() {
                 agenda = CalendarView.agenda(today, goals, ticks),
                 week = CalendarView.week(today, goals, ticks),
                 month = CalendarView.month(today, goals, ticks),
+                look = widgetLook(dao),
             )
         }
     }
@@ -124,7 +125,7 @@ class ToggleTick : ActionCallback {
 @Composable
 private fun Content(data: WidgetData) {
     val size = LocalSize.current
-    val colors = GlanceTheme.colors
+    val colors = widgetColors()
     Column(
         modifier = GlanceModifier
             .fillMaxSize()
@@ -163,7 +164,7 @@ private fun Content(data: WidgetData) {
 
 @Composable
 private fun Agenda(items: List<AgendaItem>) {
-    val colors = GlanceTheme.colors
+    val colors = widgetColors()
     if (items.isEmpty()) {
         Text("Nothing due today", style = TextStyle(color = colors.onSurfaceVariant, fontSize = 13.sp))
         return
@@ -209,7 +210,7 @@ private fun dot(cell: DayCell): String = when {
 
 @Composable
 private fun WeekStrip(week: List<DayCell>) {
-    val colors = GlanceTheme.colors
+    val colors = widgetColors()
     Row(modifier = GlanceModifier.fillMaxWidth()) {
         week.forEach { cell ->
             Column(
@@ -232,7 +233,7 @@ private fun WeekStrip(week: List<DayCell>) {
 
 @Composable
 private fun MonthGrid(month: List<DayCell>) {
-    val colors = GlanceTheme.colors
+    val colors = widgetColors()
     Column(modifier = GlanceModifier.fillMaxWidth()) {
         Row(modifier = GlanceModifier.fillMaxWidth()) {
             (1..7).forEach { iso ->
@@ -269,3 +270,9 @@ private fun MonthGrid(month: List<DayCell>) {
         }
     }
 }
+
+/** The widgets' style and the app's colour, from Settings. */
+suspend fun widgetLook(dao: io.github.randomtools3377.checklist.data.ChecklistDao): WidgetLook = WidgetLook(
+    style = WidgetStyle.entries.firstOrNull { it.name == dao.setting(io.github.randomtools3377.checklist.data.SETTING_WIDGET_STYLE) } ?: WidgetStyle.SOLID,
+    color = dao.setting(io.github.randomtools3377.checklist.data.SETTING_COLOR)?.let { io.github.randomtools3377.checklist.core.Colors.parseHex(it) },
+)

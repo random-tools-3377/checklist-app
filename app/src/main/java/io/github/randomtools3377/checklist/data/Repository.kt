@@ -57,6 +57,9 @@ const val SETTING_CELEBRATE_SOUND = "celebrate_sound"
 const val SETTING_CELEBRATE_BUZZ = "celebrate_buzz"
 const val SETTING_CONFETTI = "confetti"
 const val SETTING_DEFAULT_GIF = "default_gif"
+/** The app's home-screen icon (see AppIcon), and the widgets' style (see WidgetStyle). */
+const val SETTING_APP_ICON = "app_icon"
+const val SETTING_WIDGET_STYLE = "widget_style"
 const val DEFAULT_SNOOZE_MINUTES = 10
 const val SETTING_TODAY_ORDER = "today_order"
 const val ORDER_RECOMMENDED = "recommended"
