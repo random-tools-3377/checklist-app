@@ -51,6 +51,8 @@ keeps the data.
 - 0.14.0: mystery rewards in the shop, and a balance and streaks widget.
 - 0.15.0: light, dark, phone or pure black; the app's colour from ready-made ones, the
   wallpaper or any colour from a colour picker; and a colour for each goal.
+- 0.16.0: Today as a grid of big tiles, card and text sizes, and a gradient or the user's own
+  photo behind Today.
 
 Next: more features (the list is in CLAUDE.md). The iPhone app waits for a way to install it.
 

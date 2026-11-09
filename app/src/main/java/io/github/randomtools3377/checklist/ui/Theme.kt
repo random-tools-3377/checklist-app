@@ -10,12 +10,39 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.TextUnit
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import io.github.randomtools3377.checklist.core.Brightness
 import io.github.randomtools3377.checklist.core.Colors
 import io.github.randomtools3377.checklist.core.Schemes
 
 /** Light, dark, following the phone, or pure black. */
 enum class ThemeMode(val label: String) { LIGHT("Light"), DARK("Dark"), PHONE("Phone"), BLACK("Black") }
+
+/** How roomy goal cards are. */
+enum class CardSize(val label: String, val padding: Dp, val icon: TextUnit, val tile: Dp) {
+    COMPACT("Compact", 8.dp, 24.sp, 120.dp),
+    COMFORTABLE("Comfortable", 12.dp, 30.sp, 150.dp),
+    LARGE("Large", 16.dp, 38.sp, 180.dp),
+}
+
+/** The app's own text size, on top of the phone's. */
+enum class TextSize(val label: String, val scale: Float) {
+    SMALL("Small", 0.9f),
+    NORMAL("Normal", 1f),
+    LARGE("Large", 1.15f),
+    LARGER("Larger", 1.3f),
+}
+
+/** Today as a list of cards, or a grid of big tiles. */
+enum class TodayLayout(val label: String) { LIST("List"), GRID("Grid") }
+
+/** What is behind Today: nothing, a gradient of the app's colour, or the user's own photo, dimmed. */
+enum class Backdrop(val label: String) { NONE("None"), GRADIENT("Gradient"), PHOTO("My photo") }
 
 /** How the app looks, from Settings → Appearance. */
 data class Appearance(
@@ -24,7 +51,24 @@ data class Appearance(
     val color: Int? = null,
     /** Colours picked lately, newest first, offered again in the colour picker. */
     val recent: List<Int> = emptyList(),
-)
+    val textSize: TextSize = TextSize.NORMAL,
+    val cardSize: CardSize = CardSize.COMFORTABLE,
+    val layout: TodayLayout = TodayLayout.LIST,
+    val backdrop: Backdrop = Backdrop.NONE,
+    /** How much the photo is faded toward the background colour, so text on it stays readable, in percent. */
+    val dim: Int = DEFAULT_DIM,
+    /** Changes when a new photo is picked, so it is read again. */
+    val photoStamp: String = "",
+) {
+    companion object {
+        const val DEFAULT_DIM = 70
+        const val MIN_DIM = 40
+        const val MAX_DIM = 90
+    }
+}
+
+/** How roomy goal cards are, from Settings → Appearance. */
+val LocalCardSize = staticCompositionLocalOf { CardSize.COMFORTABLE }
 
 /** Whether this phone can match the app's colours to the wallpaper. */
 val canMatchWallpaper: Boolean get() = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
@@ -88,7 +132,12 @@ fun ChecklistTheme(appearance: Appearance = Appearance(), content: @Composable (
     } else {
         schemeOf(chosen ?: Colors.GARDEN, brightness)
     }
-    androidx.compose.runtime.CompositionLocalProvider(LocalBrightness provides brightness) {
+    val density = LocalDensity.current
+    androidx.compose.runtime.CompositionLocalProvider(
+        LocalBrightness provides brightness,
+        LocalCardSize provides appearance.cardSize,
+        LocalDensity provides Density(density.density, density.fontScale * appearance.textSize.scale),
+    ) {
         MaterialTheme(colorScheme = colors, content = content)
     }
 }

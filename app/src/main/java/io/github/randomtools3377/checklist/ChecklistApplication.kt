@@ -6,6 +6,7 @@ import androidx.room.withTransaction
 import io.github.randomtools3377.checklist.core.Book
 import io.github.randomtools3377.checklist.core.Gaps
 import io.github.randomtools3377.checklist.core.Lapses
+import io.github.randomtools3377.checklist.data.BackgroundPhoto
 import io.github.randomtools3377.checklist.data.AppDatabase
 import io.github.randomtools3377.checklist.data.CelebrationFiles
 import io.github.randomtools3377.checklist.data.Repository
@@ -49,7 +50,8 @@ class Container(app: Application) {
         }
     }
     val celebrationFiles = CelebrationFiles(app.filesDir)
-    val repository = Repository(db, celebrationFiles)
+    val backgroundPhoto = BackgroundPhoto(app.filesDir)
+    val repository = Repository(db, celebrationFiles, backgroundPhoto)
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val changes = MutableSharedFlow<Unit>(replay = 1, extraBufferCapacity = 1)

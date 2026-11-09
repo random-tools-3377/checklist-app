@@ -9,6 +9,12 @@ import io.github.randomtools3377.checklist.core.Backup
 import io.github.randomtools3377.checklist.core.BackupError
 import io.github.randomtools3377.checklist.core.BuyResult
 import io.github.randomtools3377.checklist.core.Days
+import io.github.randomtools3377.checklist.data.SETTING_PHOTO_STAMP
+import io.github.randomtools3377.checklist.data.SETTING_BACKDROP_DIM
+import io.github.randomtools3377.checklist.data.SETTING_BACKDROP
+import io.github.randomtools3377.checklist.data.SETTING_TODAY_LAYOUT
+import io.github.randomtools3377.checklist.data.SETTING_CARD_SIZE
+import io.github.randomtools3377.checklist.data.SETTING_TEXT_SIZE
 import io.github.randomtools3377.checklist.data.SETTING_RECENT_COLORS
 import io.github.randomtools3377.checklist.data.SETTING_COLOR
 import io.github.randomtools3377.checklist.data.SETTING_THEME
@@ -336,16 +342,57 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     // How the app looks
 
     val appearance: StateFlow<Appearance> = combine(
-        dao.observeSetting(SETTING_THEME),
-        dao.observeSetting(SETTING_COLOR),
-        dao.observeSetting(SETTING_RECENT_COLORS),
-    ) { theme, color, recent ->
+        listOf(
+            SETTING_THEME, SETTING_COLOR, SETTING_RECENT_COLORS, SETTING_TEXT_SIZE, SETTING_CARD_SIZE,
+            SETTING_TODAY_LAYOUT, SETTING_BACKDROP, SETTING_BACKDROP_DIM, SETTING_PHOTO_STAMP,
+        ).map { dao.observeSetting(it) },
+    ) { v ->
         Appearance(
-            theme = ThemeMode.entries.firstOrNull { it.name == theme } ?: ThemeMode.PHONE,
-            color = color?.let { Colors.parseHex(it) },
-            recent = recent.orEmpty().split(",").mapNotNull { Colors.parseHex(it) },
+            theme = ThemeMode.entries.firstOrNull { it.name == v[0] } ?: ThemeMode.PHONE,
+            color = v[1]?.let { Colors.parseHex(it) },
+            recent = v[2].orEmpty().split(",").mapNotNull { Colors.parseHex(it) },
+            textSize = TextSize.entries.firstOrNull { it.name == v[3] } ?: TextSize.NORMAL,
+            cardSize = CardSize.entries.firstOrNull { it.name == v[4] } ?: CardSize.COMFORTABLE,
+            layout = TodayLayout.entries.firstOrNull { it.name == v[5] } ?: TodayLayout.LIST,
+            backdrop = Backdrop.entries.firstOrNull { it.name == v[6] } ?: Backdrop.NONE,
+            dim = v[7]?.toIntOrNull()?.coerceIn(Appearance.MIN_DIM, Appearance.MAX_DIM) ?: Appearance.DEFAULT_DIM,
+            photoStamp = v[8].orEmpty(),
         )
     }.stateIn(viewModelScope, SharingStarted.Eagerly, Appearance())
+
+    fun setTextSize(size: TextSize) {
+        viewModelScope.launch { repository.setSetting(SETTING_TEXT_SIZE, size.name) }
+    }
+
+    fun setCardSize(size: CardSize) {
+        viewModelScope.launch { repository.setSetting(SETTING_CARD_SIZE, size.name) }
+    }
+
+    fun setTodayLayout(layout: TodayLayout) {
+        viewModelScope.launch { repository.setSetting(SETTING_TODAY_LAYOUT, layout.name) }
+    }
+
+    /** A photo needs picking first; without one, My photo shows nothing behind Today. */
+    fun setBackdrop(backdrop: Backdrop) {
+        viewModelScope.launch { repository.setSetting(SETTING_BACKDROP, backdrop.name) }
+    }
+
+    fun setBackdropDim(percent: Int) {
+        viewModelScope.launch { repository.setSetting(SETTING_BACKDROP_DIM, percent.coerceIn(Appearance.MIN_DIM, Appearance.MAX_DIM).toString()) }
+    }
+
+    /** Copies a photo from the Photo Picker in and puts it behind Today. */
+    fun pickPhoto(uri: android.net.Uri, onError: (String) -> Unit) {
+        viewModelScope.launch {
+            val ok = withContext(Dispatchers.IO) { container.backgroundPhoto.add(getApplication<android.app.Application>(), uri) }
+            if (ok) {
+                repository.setSetting(SETTING_PHOTO_STAMP, System.currentTimeMillis().toString())
+                repository.setSetting(SETTING_BACKDROP, Backdrop.PHOTO.name)
+            } else {
+                onError("That photo couldn't be read. Try another one.")
+            }
+        }
+    }
 
     fun setTheme(mode: ThemeMode) {
         viewModelScope.launch { repository.setSetting(SETTING_THEME, mode.name) }

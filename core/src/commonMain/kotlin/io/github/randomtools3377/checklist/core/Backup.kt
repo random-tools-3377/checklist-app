@@ -32,15 +32,17 @@ data class Backup(
     /**
      * Routine items ticked (format 5). A routine's items are its steps. Format 6 adds the user's
      * own reasons and notes on ticks; format 7 adds goals' categories; format 8 adds mystery
-     * rewards' prizes; format 9 adds goals' colours.
+     * rewards' prizes; format 9 adds goals' colours; format 10 the photo behind Today.
      */
     val checks: List<Check> = emptyList(),
+    /** The user's own photo behind Today, in base64 (format 10). */
+    val background: String? = null,
 ) {
     companion object {
         const val APP = "checklist"
 
         /** Raised whenever the file's layout changes in a way older versions can't read. */
-        const val FORMAT = 9
+        const val FORMAT = 10
 
         private val json = Json {
             prettyPrint = true

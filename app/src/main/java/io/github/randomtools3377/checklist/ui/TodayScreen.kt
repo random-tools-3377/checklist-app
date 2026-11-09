@@ -23,6 +23,11 @@ import androidx.compose.foundation.layout.Arrangement
 import io.github.randomtools3377.checklist.core.Categories
 import io.github.randomtools3377.checklist.core.WeekProgress
 import io.github.randomtools3377.checklist.core.Badge
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.background
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.material3.AlertDialog
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
@@ -104,6 +109,10 @@ fun TodayScreen(
     val view = screen.view
     val backup by vm.backupState.collectAsStateWithLifecycle()
     val week by vm.weekProgress.collectAsStateWithLifecycle()
+    val look by vm.appearance.collectAsStateWithLifecycle()
+    val grid = look.layout == TodayLayout.GRID
+    // In the grid, holding a tile opens its full card here.
+    var details by remember { mutableStateOf<Long?>(null) }
     val newBadges by vm.newBadges.collectAsStateWithLifecycle()
     var editingTick by remember { mutableStateOf<Long?>(null) }
     editingTick?.let { id -> EditTickDialog(id, vm) { editingTick = null } }
@@ -164,6 +173,40 @@ fun TodayScreen(
         }
     }
 
+    details?.let { id ->
+        val row = (screen.plan.map { it.row } + view.thisWeek + view.thisMonth + view.thisYear).firstOrNull { it.goal.id == id }
+        if (row == null) {
+            details = null
+        } else {
+            AlertDialog(
+                onDismissRequest = { details = null },
+                confirmButton = { TextButton(onClick = { details = null }, modifier = Modifier.testTag("close-details")) { Text("Close") } },
+                text = {
+                    HabitCard(
+                        row = row,
+                        timeLabel = screen.plan.firstOrNull { it.row.goal.id == id }?.takeIf { !screen.nextSlots.containsKey(id) }?.let { timeLabel(it, screen) },
+                        late = screen.plan.firstOrNull { it.row.goal.id == id }?.late ?: false,
+                        paceLine = screen.longPaces[id]?.let { paceText(it) },
+                        nextLine = nextLine(row, screen),
+                        onTick = { spot -> tick(row, spot) },
+                        onUndo = { if (row.isRoutine) vm.undoRoutine(id) else vm.undoHabitTick(id) },
+                        onSkip = {
+                            details = null
+                            skipping = row.goal
+                        },
+                        onItem = { item, spot -> checkItem(row, item, spot) },
+                        onUncheck = { item -> vm.uncheckItem(item.step.id) },
+                        onFocus = row.goal.minutes?.let { minutes -> { details = null; vm.startFocus(id, minutes) } },
+                        lastTick = screen.lastTicks[id],
+                        onNote = { details = null; editingTick = it },
+                    )
+                },
+            )
+        }
+    }
+
+    Box(Modifier.fillMaxSize()) {
+    TodayBackdrop(look)
     LazyColumn(
         modifier = Modifier.fillMaxSize().testTag("today-list"),
         contentPadding = PaddingValues(
@@ -238,7 +281,12 @@ fun TodayScreen(
                 OrderSwitch(screen.recommended) { vm.setTodayOrder(if (it) ORDER_RECOMMENDED else ORDER_OWN) }
             }
             if (plan.isNotEmpty()) item { SectionTitle("Today") }
-            items(plan, key = { "today-${it.row.goal.id}" }) { planned ->
+            if (grid) {
+                items(plan.chunked(2), key = { "today-tiles-${it.first().row.goal.id}" }) { pair ->
+                    TileRow(pair.map { it.row }, screen, ::tick) { details = it }
+                }
+            }
+            if (!grid) items(plan, key = { "today-${it.row.goal.id}" }) { planned ->
                 HabitCard(
                     row = planned.row,
                     // A habit done several times a day shows its next one instead.
@@ -258,9 +306,9 @@ fun TodayScreen(
                 Spacer(Modifier.height(10.dp))
             }
         }
-        habitSection("This week", shown(view.thisWeek), screen, ::tick, vm) { skipping = it }
-        habitSection("This month", shown(view.thisMonth), screen, ::tick, vm) { skipping = it }
-        habitSection("This year", shown(view.thisYear), screen, ::tick, vm) { skipping = it }
+        habitSection("This week", shown(view.thisWeek), screen, ::tick, vm, grid, { details = it }) { skipping = it }
+        habitSection("This month", shown(view.thisMonth), screen, ::tick, vm, grid, { details = it }) { skipping = it }
+        habitSection("This year", shown(view.thisYear), screen, ::tick, vm, grid, { details = it }) { skipping = it }
         if (projects.isNotEmpty()) {
             item { SectionTitle("Projects") }
             items(projects, key = { "project-${it.goal.id}" }) { project ->
@@ -285,6 +333,7 @@ fun TodayScreen(
                 Spacer(Modifier.height(10.dp))
             }
         }
+    }
     }
 }
 
@@ -341,10 +390,16 @@ private fun LazyListScope.habitSection(
     screen: TodayState,
     tick: (HabitRow, Spot) -> Unit,
     vm: MainViewModel,
+    grid: Boolean,
+    onDetails: (Long) -> Unit,
     onSkip: (Goal) -> Unit,
 ) {
     if (rows.isEmpty()) return
     item { SectionTitle(title) }
+    if (grid) {
+        items(rows.chunked(2), key = { "tiles-${it.first().goal.id}" }) { pair -> TileRow(pair, screen, tick, onDetails) }
+        return
+    }
     items(rows, key = { "habit-${it.goal.id}" }) { row ->
         HabitCard(
             row = row,
@@ -451,10 +506,11 @@ private fun HabitCard(
     val goal = row.goal
     val spot = remember { Spot() }
     val counted = goal.target > 1 || row.isRoutine
+    val cardSize = LocalCardSize.current
     Card(Modifier.fillMaxWidth()) {
       Column(Modifier.goalStrip(goal.color)) {
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(12.dp)) {
-            Text(goal.icon, fontSize = 30.sp, modifier = Modifier.width(44.dp), textAlign = TextAlign.Center)
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(cardSize.padding)) {
+            Text(goal.icon, fontSize = cardSize.icon, modifier = Modifier.width(44.dp), textAlign = TextAlign.Center)
             Spacer(Modifier.width(8.dp))
             Column(Modifier.weight(1f)) {
                 Text(goal.name, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
@@ -627,10 +683,11 @@ private fun TickButton(done: Boolean, counted: Boolean, description: String, mod
 @Composable
 private fun ProjectCard(project: ProjectRow, paceLine: String?, onTick: (StepRow, Spot) -> Unit, onUndo: (StepRow) -> Unit) {
     val goal = project.goal
+    val cardSize = LocalCardSize.current
     Card(Modifier.fillMaxWidth()) {
-        Column(Modifier.goalStrip(goal.color).padding(12.dp)) {
+        Column(Modifier.goalStrip(goal.color).padding(cardSize.padding)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(goal.icon, fontSize = 30.sp, modifier = Modifier.width(44.dp), textAlign = TextAlign.Center)
+                Text(goal.icon, fontSize = cardSize.icon, modifier = Modifier.width(44.dp), textAlign = TextAlign.Center)
                 Spacer(Modifier.width(8.dp))
                 Column(Modifier.weight(1f)) {
                     Text(goal.name, style = MaterialTheme.typography.titleMedium)
@@ -742,6 +799,116 @@ private fun NewBadgesCard(badges: List<Badge>, onSee: () -> Unit, onDismiss: () 
                 Button(onClick = onSee, modifier = Modifier.testTag("see-badges")) { Text("See badges") }
                 Spacer(Modifier.width(8.dp))
                 TextButton(onClick = onDismiss, modifier = Modifier.testTag("badges-ok")) { Text("OK") }
+            }
+        }
+    }
+}
+
+/** Two big tiles side by side, for Today as a grid. */
+@Composable
+private fun TileRow(rows: List<HabitRow>, screen: TodayState, tick: (HabitRow, Spot) -> Unit, onDetails: (Long) -> Unit) {
+    Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp)) {
+        rows.forEach { row ->
+            GoalTile(row, tileLine(row, screen), Modifier.weight(1f), onTap = { spot ->
+                val done = row.count >= row.goal.target
+                when {
+                    // A routine's items, and taking back a counted goal, are on its card.
+                    row.isRoutine -> onDetails(row.goal.id)
+                    done && row.goal.target > 1 -> onDetails(row.goal.id)
+                    else -> tick(row, spot)
+                }
+            }, onHold = { onDetails(row.goal.id) })
+        }
+        if (rows.size == 1) Spacer(Modifier.weight(1f))
+    }
+}
+
+/** What a tile says under its name. */
+private fun tileLine(row: HabitRow, screen: TodayState): String {
+    val goal = row.goal
+    return when {
+        row.count >= goal.target -> "Done ✓"
+        row.isRoutine -> "${row.items.count { it.done }} of ${row.items.size} items"
+        goal.target > 1 -> buildString {
+            append("${row.count} of ${goal.target}")
+            screen.nextSlots[goal.id]?.let { append(" · next by ${momentText(it.at, screen.view.day)}") }
+        }
+        row.skipped -> "Skipped"
+        else -> listOfNotNull("+${goal.points}", goal.minutes?.let { minutesText(it) }).joinToString(" · ")
+    }
+}
+
+/** A goal as a big tile: tap to tick it, hold it for its card with every button. */
+@androidx.compose.runtime.Composable
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+private fun GoalTile(row: HabitRow, line: String, modifier: Modifier, onTap: (Spot) -> Unit, onHold: () -> Unit) {
+    val goal = row.goal
+    val spot = remember { Spot() }
+    val done = row.count >= goal.target
+    val cardSize = LocalCardSize.current
+    val strip = goal.color?.let { androidx.compose.ui.graphics.Color(io.github.randomtools3377.checklist.core.Schemes.goalStrip(it, LocalBrightness.current)) }
+        ?: MaterialTheme.colorScheme.primary
+    Card(
+        modifier = modifier
+            .height(cardSize.tile)
+            .onGloballyPositioned { spot.center = it.boundsInRoot().center }
+            .combinedClickable(
+                onClickLabel = if (done) "Details" else "Tick",
+                onLongClickLabel = "Details, skip or focus",
+                onClick = { onTap(spot) },
+                onLongClick = onHold,
+            )
+            .semantics { contentDescription = "${goal.name}: $line" }
+            .testTag("tile:${goal.name}"),
+        colors = if (done) {
+            CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary)
+        } else {
+            CardDefaults.cardColors()
+        },
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+            modifier = Modifier
+                .fillMaxSize()
+                .drawBehind { if (!done) drawRect(strip, size = androidx.compose.ui.geometry.Size(size.width, 8.dp.toPx())) }
+                .padding(8.dp),
+        ) {
+            Text(goal.icon, fontSize = cardSize.icon * 1.4f)
+            Text(goal.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(line, style = MaterialTheme.typography.bodySmall, maxLines = 2, textAlign = TextAlign.Center)
+        }
+    }
+}
+
+/** What is behind Today: nothing, a gradient of the app's colour, or the user's photo, faded toward the background. */
+@Composable
+private fun TodayBackdrop(look: Appearance) {
+    when (look.backdrop) {
+        Backdrop.NONE -> Unit
+        Backdrop.GRADIENT -> Box(
+            Modifier
+                .fillMaxSize()
+                .background(androidx.compose.ui.graphics.Brush.verticalGradient(listOf(MaterialTheme.colorScheme.primaryContainer, MaterialTheme.colorScheme.background)))
+                .testTag("backdrop:gradient"),
+        )
+        Backdrop.PHOTO -> {
+            val context = androidx.compose.ui.platform.LocalContext.current
+            val image by androidx.compose.runtime.produceState<androidx.compose.ui.graphics.ImageBitmap?>(null, look.photoStamp) {
+                value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    runCatching {
+                        android.graphics.BitmapFactory.decodeFile(java.io.File(context.filesDir, "background.jpg").path)?.asImageBitmap()
+                    }.getOrNull()
+                }
+            }
+            image?.let {
+                androidx.compose.foundation.Image(
+                    it,
+                    contentDescription = null,
+                    contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize(),
+                )
+                Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background.copy(alpha = look.dim / 100f)).testTag("backdrop:photo"))
             }
         }
     }

@@ -123,7 +123,77 @@ fun AppearanceScreen(appearance: Appearance, vm: MainViewModel, onAnyColour: () 
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+
+            Spacer(Modifier.height(4.dp))
+            Text("Today", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+            Choice("Layout", TodayLayout.entries, appearance.layout, { it.label }, "layout") { vm.setTodayLayout(it) }
+            Text(
+                if (appearance.layout == TodayLayout.GRID) "Big tiles, two to a row. Tap a tile to tick it; hold it for its details, skip or focus." else "A card for each goal, with its buttons.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Choice("Card size", CardSize.entries, appearance.cardSize, { it.label }, "card-size") { vm.setCardSize(it) }
+            Choice("Text size", TextSize.entries, appearance.textSize, { it.label }, "text-size") { vm.setTextSize(it) }
+            Text(
+                "On top of the phone's own text size.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            BackdropSetting(appearance, vm)
         }
+    }
+}
+
+/** A labelled row of choices, one of which is picked. */
+@Composable
+private fun <T> Choice(label: String, options: List<T>, selected: T, name: (T) -> String, tag: String, onPick: (T) -> Unit) {
+    Text(label, style = MaterialTheme.typography.bodyLarge)
+    SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+        options.forEachIndexed { index, option ->
+            SegmentedButton(
+                selected = option == selected,
+                onClick = { onPick(option) },
+                shape = SegmentedButtonDefaults.itemShape(index = index, count = options.size),
+                modifier = Modifier.testTag("$tag:${name(option)}"),
+            ) { Text(name(option), maxLines = 1) }
+        }
+    }
+}
+
+/** What is behind Today: nothing, a gradient, or the user's own photo, dimmed so text stays readable. */
+@Composable
+private fun BackdropSetting(appearance: Appearance, vm: MainViewModel) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val picker = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia(),
+    ) { uri ->
+        if (uri != null) vm.pickPhoto(uri) { android.widget.Toast.makeText(context, it, android.widget.Toast.LENGTH_LONG).show() }
+    }
+    fun pickPhoto() = picker.launch(
+        androidx.activity.result.PickVisualMediaRequest(androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia.ImageOnly),
+    )
+    Choice("Background", Backdrop.entries, appearance.backdrop, { it.label }, "backdrop") { choice ->
+        if (choice == Backdrop.PHOTO && appearance.photoStamp.isEmpty()) pickPhoto() else vm.setBackdrop(choice)
+    }
+    if (appearance.backdrop == Backdrop.PHOTO) {
+        TextButton(onClick = { pickPhoto() }, modifier = Modifier.testTag("pick-photo")) {
+            Text(if (appearance.photoStamp.isEmpty()) "Pick a photo" else "Pick another photo")
+        }
+        Text("Dimmed ${appearance.dim}%", style = MaterialTheme.typography.bodyMedium)
+        var dim by remember(appearance.dim) { mutableStateOf(appearance.dim.toFloat()) }
+        androidx.compose.material3.Slider(
+            value = dim,
+            onValueChange = { dim = it },
+            onValueChangeFinished = { vm.setBackdropDim(dim.toInt()) },
+            valueRange = Appearance.MIN_DIM.toFloat()..Appearance.MAX_DIM.toFloat(),
+            steps = (Appearance.MAX_DIM - Appearance.MIN_DIM) / 10 - 1,
+            modifier = Modifier.testTag("backdrop-dim"),
+        )
+        Text(
+            "The photo is faded toward the background colour so text on it stays readable. It is copied into the app and goes in your backup file.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 

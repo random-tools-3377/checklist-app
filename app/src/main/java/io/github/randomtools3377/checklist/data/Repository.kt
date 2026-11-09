@@ -35,6 +35,14 @@ const val SETTING_THEME = "theme"
 const val SETTING_COLOR = "color"
 /** Colours picked lately, as "#RRGGBB" separated by commas. */
 const val SETTING_RECENT_COLORS = "recent_colors"
+/** The app's own text size, card size and Today's layout (see Appearance). */
+const val SETTING_TEXT_SIZE = "text_size"
+const val SETTING_CARD_SIZE = "card_size"
+const val SETTING_TODAY_LAYOUT = "today_layout"
+/** What is behind Today, how much a photo is dimmed, and when the photo was picked. */
+const val SETTING_BACKDROP = "backdrop"
+const val SETTING_BACKDROP_DIM = "backdrop_dim"
+const val SETTING_PHOTO_STAMP = "photo_stamp"
 const val DEFAULT_SNOOZE_MINUTES = 10
 const val SETTING_TODAY_ORDER = "today_order"
 const val ORDER_RECOMMENDED = "recommended"
@@ -106,7 +114,7 @@ data class RewardDraft(
 )
 
 /** Adding, editing, ordering and removing goals and rewards; settings; export and import. */
-class Repository(private val db: AppDatabase, private val celebrations: CelebrationFiles) {
+class Repository(private val db: AppDatabase, private val celebrations: CelebrationFiles, private val background: BackgroundPhoto? = null) {
     private val dao = db.dao()
 
     /** Deletes picked GIFs that no goal uses any more. */
@@ -348,7 +356,8 @@ class Repository(private val db: AppDatabase, private val celebrations: Celebrat
         val files = backup.goals.mapNotNull { Celebration.ownFile(it.celebration) }.toSet()
             .mapNotNull { name -> celebrations.read(name)?.let { name to Base64.getEncoder().encodeToString(it) } }
             .toMap()
-        return Backup.encode(backup.copy(files = files))
+        val photo = background?.read()?.let { Base64.getEncoder().encodeToString(it) }
+        return Backup.encode(backup.copy(files = files, background = photo))
     }
 
     /** Replaces everything in the app with [backup]. All or nothing, then the picked GIFs. */
@@ -364,6 +373,10 @@ class Repository(private val db: AppDatabase, private val celebrations: Celebrat
                 continue
             }
             celebrations.write(name, bytes)
+        }
+        background?.let { photo ->
+            val bytes = backup.background?.let { data -> runCatching { Base64.getDecoder().decode(data) }.getOrNull() }
+            if (bytes != null) photo.write(bytes) else photo.delete()
         }
     }
 
