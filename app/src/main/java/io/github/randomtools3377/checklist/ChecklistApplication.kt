@@ -6,6 +6,10 @@ import androidx.room.withTransaction
 import io.github.randomtools3377.checklist.core.Book
 import io.github.randomtools3377.checklist.core.Gaps
 import io.github.randomtools3377.checklist.core.Lapses
+import io.github.randomtools3377.checklist.core.PointsName
+import io.github.randomtools3377.checklist.ui.PointsLabel
+import kotlinx.coroutines.withContext
+import io.github.randomtools3377.checklist.data.SETTING_POINTS_NAME
 import io.github.randomtools3377.checklist.data.BackgroundPhoto
 import io.github.randomtools3377.checklist.data.AppDatabase
 import io.github.randomtools3377.checklist.data.CelebrationFiles
@@ -67,6 +71,14 @@ class Container(app: Application) {
             },
         )
         changes.tryEmit(Unit)
+        // What points are called, for the screens, the widgets and the notifications alike.
+        scope.launch {
+            db.dao().observeSetting(SETTING_POINTS_NAME).collect { text ->
+                val name = PointsName.decode(text)
+                PointsName.current = name
+                withContext(Dispatchers.Main) { PointsLabel.name = name }
+            }
+        }
         scope.launch {
             changes.debounce(400).collect {
                 runCatching { Reminders.reschedule(app) }

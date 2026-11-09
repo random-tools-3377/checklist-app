@@ -122,7 +122,7 @@ fun MissesScreen(misses: List<Lapse>, vm: MainViewModel) {
                         Text(
                             buildString {
                                 append("Missed ${shortDate(miss.day)}")
-                                if (miss.overLimit) append(" · over the limit: −${miss.cost} points and a penalty task")
+                                if (miss.overLimit) append(" · over the limit: −${pointsText(miss.cost)} and a penalty task")
                             },
                             style = MaterialTheme.typography.bodyMedium,
                             color = if (miss.overLimit) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
@@ -399,15 +399,15 @@ fun GapCheckInScreen(gap: io.github.randomtools3377.checklist.core.Gap, vm: Main
             Text(
                 when (gap.kind) {
                     io.github.randomtools3377.checklist.core.GapKind.NOTHING_TICKED -> "Nothing was ticked on these days."
-                    io.github.randomtools3377.checklist.core.GapKind.POINT_LOSS -> "A lot of points were lost in one week."
+                    io.github.randomtools3377.checklist.core.GapKind.POINT_LOSS -> "A lot of ${pointsWord()} were lost in one week."
                 } + " What happened? One reason covers the whole stretch.",
                 style = MaterialTheme.typography.bodyMedium,
             )
             val (misses, points) = cost
             if (misses > 0) {
                 Text(
-                    "Points still come off for each miss: ${if (misses == 1) "1 miss" else "$misses misses"}" +
-                        if (points > 0) ", −$points points." else ".",
+                    "${pointsTitle()} still come off for each miss: ${if (misses == 1) "1 miss" else "$misses misses"}" +
+                        if (points > 0) ", −${pointsText(points)}." else ".",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.error,
                 )

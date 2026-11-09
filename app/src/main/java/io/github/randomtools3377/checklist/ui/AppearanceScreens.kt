@@ -68,6 +68,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.randomtools3377.checklist.core.Colors
 import io.github.randomtools3377.checklist.core.AppTabKind
+import io.github.randomtools3377.checklist.core.PointsName
 import io.github.randomtools3377.checklist.core.Schemes
 import io.github.randomtools3377.checklist.core.SectionChoice
 import io.github.randomtools3377.checklist.core.Sections
@@ -149,29 +150,120 @@ fun AppearanceScreen(appearance: Appearance, vm: MainViewModel, onAnyColour: () 
 
             Spacer(Modifier.height(4.dp))
             Text("Today's sections", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
-            SectionsEditor(appearance.sections) { vm.setSections(it) }
+            SectionsEditor(appearance.sections) { change -> vm.changeSections(change) }
             Spacer(Modifier.height(4.dp))
             Text("Tabs", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
             TabsEditor(appearance.tabs, vm)
+
+            Spacer(Modifier.height(4.dp))
+            Text("Personal", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+            PointsNameSetting(vm)
+            Choice("Font", FontChoice.entries, appearance.font, { it.label }, "font") { vm.setFont(it) }
+            CelebrationSettings(appearance.celebrate, vm)
         }
     }
 }
 
+/** What points are called: points, coins 🪙, stars ⭐, XP, gems 💎, or the user's own words. */
+@Composable
+private fun PointsNameSetting(vm: MainViewModel) {
+    val current = PointsLabel.name
+    var writing by remember { mutableStateOf(false) }
+    Text("${pointsTitle()} are called", style = MaterialTheme.typography.bodyLarge)
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        PointsName.PRESETS.forEach { preset ->
+            androidx.compose.material3.FilterChip(
+                selected = current == preset,
+                onClick = { vm.setPointsName(preset) },
+                label = { Text(listOf(preset.title, preset.emoji).filter { it.isNotEmpty() }.joinToString(" ")) },
+                modifier = Modifier.testTag("points-name:${preset.many}"),
+            )
+        }
+        androidx.compose.material3.FilterChip(
+            selected = current !in PointsName.PRESETS,
+            onClick = { writing = true },
+            label = { Text(if (current !in PointsName.PRESETS) "${current.title} ${current.emoji}".trim() else "Your own…") },
+            modifier = Modifier.testTag("points-name:own"),
+        )
+    }
+    if (writing) {
+        var one by remember { mutableStateOf(current.one) }
+        var many by remember { mutableStateOf(current.many) }
+        var emoji by remember { mutableStateOf(current.emoji) }
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { writing = false },
+            title = { Text("Your own name") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(one, { one = it.take(PointsName.LENGTH) }, label = { Text("For one, like \"bean\"") }, singleLine = true, modifier = Modifier.testTag("field:points-one"))
+                    OutlinedTextField(many, { many = it.take(PointsName.LENGTH) }, label = { Text("For more, like \"beans\"") }, singleLine = true, modifier = Modifier.testTag("field:points-many"))
+                    OutlinedTextField(emoji, { emoji = it.take(8) }, label = { Text("An emoji, if you like") }, singleLine = true, modifier = Modifier.testTag("field:points-emoji"))
+                    Text("For example: ${PointsName.of(one, many, emoji).amount(126)}", style = MaterialTheme.typography.bodySmall)
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    vm.setPointsName(PointsName.of(one, many, emoji))
+                    writing = false
+                }, modifier = Modifier.testTag("save-points-name")) { Text("Use it") }
+            },
+            dismissButton = { TextButton(onClick = { writing = false }) { Text("Cancel") } },
+        )
+    }
+}
+
+/** Celebrations: sound, buzz, how much confetti, and a GIF for every goal without its own. */
+@Composable
+private fun CelebrationSettings(style: CelebrationStyle, vm: MainViewModel) {
+    Text("Celebrations", style = MaterialTheme.typography.bodyLarge)
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+        Text("Sound", modifier = Modifier.weight(1f))
+        androidx.compose.material3.Switch(style.sound, { vm.setCelebrationSound(it) }, modifier = Modifier.testTag("celebrate:sound"))
+    }
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+        Text("Buzz", modifier = Modifier.weight(1f))
+        androidx.compose.material3.Switch(style.buzz, { vm.setCelebrationBuzz(it) }, modifier = Modifier.testTag("celebrate:buzz"))
+    }
+    Choice("Confetti", ConfettiAmount.entries, style.confetti, { it.label }, "confetti") { vm.setConfetti(it) }
+    Text("A GIF for every goal", style = MaterialTheme.typography.bodyLarge)
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        androidx.compose.material3.FilterChip(
+            selected = style.defaultGif == null,
+            onClick = { vm.setDefaultGif(null) },
+            label = { Text("None") },
+            modifier = Modifier.testTag("default-gif:none"),
+        )
+        io.github.randomtools3377.checklist.core.Celebration.BUILT_IN.forEach { name ->
+            androidx.compose.material3.FilterChip(
+                selected = style.defaultGif == name,
+                onClick = { vm.setDefaultGif(name) },
+                label = { Text(builtInLabel(name)) },
+                modifier = Modifier.testTag("default-gif:$name"),
+            )
+        }
+    }
+    Text(
+        "With a GIF chosen, finishing any goal without its own fills the screen with it. Sound plays at your phone's sound volume.",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+}
+
 /** Today's sections: tick to show, arrows to move. */
 @Composable
-private fun SectionsEditor(sections: List<SectionChoice>, onChange: (List<SectionChoice>) -> Unit) {
+private fun SectionsEditor(sections: List<SectionChoice>, onChange: ((List<SectionChoice>) -> List<SectionChoice>) -> Unit) {
     sections.forEachIndexed { index, choice ->
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
             androidx.compose.material3.Checkbox(
                 checked = choice.shown,
-                onCheckedChange = { onChange(Sections.toggle(sections, choice.section)) },
+                onCheckedChange = { onChange { now -> Sections.toggle(now, choice.section) } },
                 modifier = Modifier.testTag("section:${choice.section.name}"),
             )
             Text(choice.section.label, modifier = Modifier.weight(1f))
-            IconButton(onClick = { onChange(Sections.move(sections, index, -1)) }, enabled = index > 0, modifier = Modifier.testTag("section-up:${choice.section.name}")) {
+            IconButton(onClick = { onChange { now -> Sections.move(now, now.indexOfFirst { it.section == choice.section }, -1) } }, enabled = index > 0, modifier = Modifier.testTag("section-up:${choice.section.name}")) {
                 Icon(Icons.Filled.KeyboardArrowUp, contentDescription = "Move ${choice.section.label} up")
             }
-            IconButton(onClick = { onChange(Sections.move(sections, index, 1)) }, enabled = index < sections.lastIndex, modifier = Modifier.testTag("section-down:${choice.section.name}")) {
+            IconButton(onClick = { onChange { now -> Sections.move(now, now.indexOfFirst { it.section == choice.section }, 1) } }, enabled = index < sections.lastIndex, modifier = Modifier.testTag("section-down:${choice.section.name}")) {
                 Icon(Icons.Filled.KeyboardArrowDown, contentDescription = "Move ${choice.section.label} down")
             }
         }
@@ -431,7 +523,7 @@ private fun LookPreview(seed: Int) {
             Row(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text("Balance", color = Color(s.onPrimaryContainer), style = MaterialTheme.typography.labelLarge)
-                    Text("126 points", color = Color(s.onPrimaryContainer), fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                    Text(pointsText(126), color = Color(s.onPrimaryContainer), fontSize = 24.sp, fontWeight = FontWeight.Bold)
                 }
                 Text("12-day streak", color = Color(s.onPrimaryContainer), fontWeight = FontWeight.Bold)
             }

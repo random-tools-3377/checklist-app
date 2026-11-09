@@ -4,6 +4,11 @@ import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Typography
+import androidx.compose.ui.text.font.Font
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import io.github.randomtools3377.checklist.R
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.runtime.Composable
@@ -41,6 +46,21 @@ enum class TextSize(val label: String, val scale: Float) {
     LARGER("Larger", 1.3f),
 }
 
+/** The app's font: the phone's own, or one of three that come with the app. */
+enum class FontChoice(val label: String) { PHONE("Phone's"), ROUNDED("Rounded"), CLEAR("Easy to read"), SERIF("Serif") }
+
+/** How much confetti a celebration throws. */
+enum class ConfettiAmount(val label: String, val amount: Float) { NONE("None", 0f), SOME("Some", 1f), LOTS("Lots", 2.5f) }
+
+/** Celebration settings: sound, buzz, how much confetti, and a GIF for every goal without its own. */
+data class CelebrationStyle(
+    val sound: Boolean = false,
+    val buzz: Boolean = true,
+    val confetti: ConfettiAmount = ConfettiAmount.SOME,
+    /** A built-in GIF name (see Celebration in the shared code), or null for the usual burst. */
+    val defaultGif: String? = null,
+)
+
 /** Today as a list of cards, or a grid of big tiles. */
 enum class TodayLayout(val label: String) { LIST("List"), GRID("Grid") }
 
@@ -66,6 +86,8 @@ data class Appearance(
     val sections: List<SectionChoice> = Sections.DEFAULT,
     /** Which tabs show, and the one the app opens on. */
     val tabs: TabChoice = TabChoice(),
+    val font: FontChoice = FontChoice.PHONE,
+    val celebrate: CelebrationStyle = CelebrationStyle(),
     /** False until the settings have been read, so the first tab isn't picked from the defaults. */
     val loaded: Boolean = false,
 ) {
@@ -110,6 +132,38 @@ private fun schemeOf(seed: Int, brightness: Brightness): ColorScheme {
     )
 }
 
+private val Rounded = FontFamily(Font(R.font.nunito_regular), Font(R.font.nunito_bold, FontWeight.Bold))
+private val Clear = FontFamily(Font(R.font.atkinson_regular), Font(R.font.atkinson_bold, FontWeight.Bold))
+private val Serif = FontFamily(Font(R.font.lora_regular), Font(R.font.lora_bold, FontWeight.Bold))
+
+/** Every text style in the chosen font. */
+private fun typographyOf(font: FontChoice): Typography {
+    val base = Typography()
+    val family = when (font) {
+        FontChoice.PHONE -> return base
+        FontChoice.ROUNDED -> Rounded
+        FontChoice.CLEAR -> Clear
+        FontChoice.SERIF -> Serif
+    }
+    return Typography(
+        displayLarge = base.displayLarge.copy(fontFamily = family),
+        displayMedium = base.displayMedium.copy(fontFamily = family),
+        displaySmall = base.displaySmall.copy(fontFamily = family),
+        headlineLarge = base.headlineLarge.copy(fontFamily = family),
+        headlineMedium = base.headlineMedium.copy(fontFamily = family),
+        headlineSmall = base.headlineSmall.copy(fontFamily = family),
+        titleLarge = base.titleLarge.copy(fontFamily = family),
+        titleMedium = base.titleMedium.copy(fontFamily = family),
+        titleSmall = base.titleSmall.copy(fontFamily = family),
+        bodyLarge = base.bodyLarge.copy(fontFamily = family),
+        bodyMedium = base.bodyMedium.copy(fontFamily = family),
+        bodySmall = base.bodySmall.copy(fontFamily = family),
+        labelLarge = base.labelLarge.copy(fontFamily = family),
+        labelMedium = base.labelMedium.copy(fontFamily = family),
+        labelSmall = base.labelSmall.copy(fontFamily = family),
+    )
+}
+
 /** The wallpaper's dark colours on pure black. */
 private fun ColorScheme.onBlack(): ColorScheme = copy(
     background = Color.Black, surface = Color.Black, surfaceDim = Color.Black,
@@ -147,6 +201,6 @@ fun ChecklistTheme(appearance: Appearance = Appearance(), content: @Composable (
         LocalCardSize provides appearance.cardSize,
         LocalDensity provides Density(density.density, density.fontScale * appearance.textSize.scale),
     ) {
-        MaterialTheme(colorScheme = colors, content = content)
+        MaterialTheme(colorScheme = colors, typography = typographyOf(appearance.font), content = content)
     }
 }

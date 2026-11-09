@@ -9,6 +9,14 @@ import io.github.randomtools3377.checklist.core.Backup
 import io.github.randomtools3377.checklist.core.BackupError
 import io.github.randomtools3377.checklist.core.BuyResult
 import io.github.randomtools3377.checklist.core.Days
+import io.github.randomtools3377.checklist.data.SETTING_DEFAULT_GIF
+import io.github.randomtools3377.checklist.data.SETTING_CONFETTI
+import io.github.randomtools3377.checklist.data.SETTING_CELEBRATE_BUZZ
+import io.github.randomtools3377.checklist.data.SETTING_CELEBRATE_SOUND
+import io.github.randomtools3377.checklist.data.SETTING_FONT
+import io.github.randomtools3377.checklist.data.SETTING_POINTS_NAME
+import io.github.randomtools3377.checklist.core.Celebration
+import io.github.randomtools3377.checklist.core.PointsName
 import io.github.randomtools3377.checklist.data.SETTING_FIRST_TAB
 import io.github.randomtools3377.checklist.data.SETTING_HIDDEN_TABS
 import io.github.randomtools3377.checklist.data.SETTING_TODAY_SECTIONS
@@ -353,6 +361,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             SETTING_THEME, SETTING_COLOR, SETTING_RECENT_COLORS, SETTING_TEXT_SIZE, SETTING_CARD_SIZE,
             SETTING_TODAY_LAYOUT, SETTING_BACKDROP, SETTING_BACKDROP_DIM, SETTING_PHOTO_STAMP,
             SETTING_TODAY_SECTIONS, SETTING_HIDDEN_TABS, SETTING_FIRST_TAB,
+            SETTING_FONT, SETTING_CELEBRATE_SOUND, SETTING_CELEBRATE_BUZZ, SETTING_CONFETTI, SETTING_DEFAULT_GIF,
         ).map { dao.observeSetting(it) },
     ) { v ->
         Appearance(
@@ -367,17 +376,56 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             photoStamp = v[8].orEmpty(),
             sections = Sections.decode(v[9]),
             tabs = TabChoice.decode(v[10], v[11]),
+            font = FontChoice.entries.firstOrNull { it.name == v[12] } ?: FontChoice.PHONE,
+            celebrate = CelebrationStyle(
+                sound = v[13] == "1",
+                buzz = v[14] != "0",
+                confetti = ConfettiAmount.entries.firstOrNull { it.name == v[15] } ?: ConfettiAmount.SOME,
+                defaultGif = v[16]?.takeIf { Celebration.isValid(it) },
+            ),
             loaded = true,
         )
     }.stateIn(viewModelScope, SharingStarted.Eagerly, Appearance())
 
-    fun setSections(choices: List<SectionChoice>) {
-        viewModelScope.launch { repository.setSetting(SETTING_TODAY_SECTIONS, Sections.encode(choices)) }
+    fun setPointsName(name: PointsName) {
+        viewModelScope.launch { repository.setSetting(SETTING_POINTS_NAME, PointsName.encode(name)) }
+    }
+
+    fun setFont(font: FontChoice) {
+        viewModelScope.launch { repository.setSetting(SETTING_FONT, font.name) }
+    }
+
+    // Each celebration setting is saved on its own, so quick taps on two of them can't undo each other.
+
+    fun setCelebrationSound(on: Boolean) {
+        viewModelScope.launch { repository.setSetting(SETTING_CELEBRATE_SOUND, if (on) "1" else "0") }
+    }
+
+    fun setCelebrationBuzz(on: Boolean) {
+        viewModelScope.launch { repository.setSetting(SETTING_CELEBRATE_BUZZ, if (on) "1" else "0") }
+    }
+
+    fun setConfetti(amount: ConfettiAmount) {
+        viewModelScope.launch { repository.setSetting(SETTING_CONFETTI, amount.name) }
+    }
+
+    fun setDefaultGif(gif: String?) {
+        viewModelScope.launch { repository.setSetting(SETTING_DEFAULT_GIF, gif.orEmpty()) }
+    }
+
+    /** Changes Today's sections from what is saved, so quick taps each build on the last. */
+    fun changeSections(change: (List<SectionChoice>) -> List<SectionChoice>) {
+        viewModelScope.launch {
+            val now = Sections.decode(dao.setting(SETTING_TODAY_SECTIONS))
+            repository.setSetting(SETTING_TODAY_SECTIONS, Sections.encode(change(now)))
+        }
     }
 
     fun setTabHidden(tab: AppTabKind, hidden: Boolean) {
-        val now = appearance.value.tabs.hidden
-        viewModelScope.launch { repository.setSetting(SETTING_HIDDEN_TABS, TabChoice.encodeHidden(if (hidden) now + tab else now - tab)) }
+        viewModelScope.launch {
+            val now = TabChoice.decode(dao.setting(SETTING_HIDDEN_TABS), null).hidden
+            repository.setSetting(SETTING_HIDDEN_TABS, TabChoice.encodeHidden(if (hidden) now + tab else now - tab))
+        }
     }
 
     fun setFirstTab(tab: AppTabKind) {

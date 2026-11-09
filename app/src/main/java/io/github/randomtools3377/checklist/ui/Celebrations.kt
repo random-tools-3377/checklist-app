@@ -76,13 +76,26 @@ class Celebrations {
     private val bursts = mutableStateListOf<Burst>()
     private var big by mutableStateOf<BigCelebration?>(null)
 
+    /** Sound, buzz, how much confetti and a GIF for every goal, from Settings → Appearance. */
+    var style by mutableStateOf(CelebrationStyle())
+
+    /** The sounds, once the app has loaded them. */
+    var sounds: Sounds? = null
+
     /** A burst at [at] (in window coordinates) showing [label], like "+10". */
     fun burst(at: Offset, label: String, big: Boolean = false) {
         bursts += Burst(nextId++, at, label, big)
+        if (style.sound) sounds?.tick()
     }
 
     fun show(celebration: BigCelebration) {
         big = celebration
+        if (style.sound) sounds?.big()
+    }
+
+    /** A buzz, unless buzzing is off. */
+    fun buzz(haptics: androidx.compose.ui.hapticfeedback.HapticFeedback) {
+        if (style.buzz) haptics.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
     }
 
     @Composable
@@ -90,12 +103,12 @@ class Celebrations {
         Box(Modifier.fillMaxSize()) {
             for (burst in bursts.toList()) {
                 key(burst.id) {
-                    BurstEffect(burst) { bursts.remove(burst) }
+                    BurstEffect(burst, style.confetti.amount) { bursts.remove(burst) }
                 }
             }
             big?.let { celebration ->
                 key(celebration) {
-                    BigEffect(celebration) { big = null }
+                    BigEffect(celebration, style.confetti.amount) { big = null }
                 }
             }
         }
@@ -105,10 +118,10 @@ class Celebrations {
 private class Particle(val angle: Float, val distance: Float, val radius: Float, val color: Color)
 
 @Composable
-private fun BurstEffect(burst: Burst, onEnd: () -> Unit) {
+private fun BurstEffect(burst: Burst, amount: Float, onEnd: () -> Unit) {
     val progress = remember { Animatable(0f) }
     val particles = remember {
-        val count = if (burst.big) 36 else 16
+        val count = ((if (burst.big) 36 else 16) * amount).toInt()
         List(count) {
             Particle(
                 angle = (2 * PI * it / count).toFloat() + Random.nextFloat() * 0.4f,
@@ -160,11 +173,11 @@ private fun Modifier.offsetTo(at: Offset, rise: Float): Modifier =
 private class Piece(val x: Float, val delay: Float, val speed: Float, val sway: Float, val spin: Float, val w: Float, val h: Float, val color: Color)
 
 @Composable
-private fun BigEffect(celebration: BigCelebration, onEnd: () -> Unit) {
+private fun BigEffect(celebration: BigCelebration, amount: Float, onEnd: () -> Unit) {
     val fall = remember { Animatable(0f) }
     val pop = remember { Animatable(0.3f) }
     val pieces = remember {
-        List(if (celebration is BigCelebration.ProjectFinished) 120 else 60) {
+        List(((if (celebration is BigCelebration.ProjectFinished) 120 else 60) * amount).toInt()) {
             Piece(
                 x = Random.nextFloat(),
                 delay = Random.nextFloat() * 0.35f,
@@ -228,7 +241,7 @@ private fun BigEffect(celebration: BigCelebration, onEnd: () -> Unit) {
                     Text(celebration.name, color = Color.White, fontSize = 22.sp, textAlign = TextAlign.Center)
                     if (celebration.points > 0) {
                         Spacer(Modifier.height(16.dp))
-                        Text("+${celebration.points} points", color = Color(0xFFFFC145), fontSize = 26.sp, fontWeight = FontWeight.Bold)
+                        Text("+" + pointsText(celebration.points), color = Color(0xFFFFC145), fontSize = 26.sp, fontWeight = FontWeight.Bold)
                     }
                 }
                 is BigCelebration.GoalFinished -> {
@@ -237,7 +250,7 @@ private fun BigEffect(celebration: BigCelebration, onEnd: () -> Unit) {
                     Text("${celebration.icon} ${celebration.name}", color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
                     if (celebration.points > 0) {
                         Spacer(Modifier.height(12.dp))
-                        Text("+${celebration.points} points", color = Color(0xFFFFC145), fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                        Text("+" + pointsText(celebration.points), color = Color(0xFFFFC145), fontSize = 24.sp, fontWeight = FontWeight.Bold)
                     }
                 }
                 is BigCelebration.Bought -> {

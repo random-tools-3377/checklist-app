@@ -296,7 +296,7 @@ private fun RemoveButton(what: String, name: String, onRemove: () -> Unit) {
         AlertDialog(
             onDismissRequest = { asking = false },
             title = { Text("Remove $name?") },
-            text = { Text("It disappears from your lists. Points it already earned stay in your balance.") },
+            text = { Text("It disappears from your lists. ${pointsTitle()} it already earned stay in your balance.") },
             confirmButton = {
                 TextButton(onClick = { asking = false; onRemove() }, modifier = Modifier.testTag("confirm-remove")) {
                     Text("Remove", color = MaterialTheme.colorScheme.error)
@@ -449,7 +449,7 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Long)
     }
 
     val nameError = if (name.isBlank()) "Give it a name" else null
-    val pointsError = if (points.toIntOrNull() == null) "How many points it pays" else null
+    val pointsError = if (points.toIntOrNull() == null) "How many ${pointsWord()} it pays" else null
     val targetValue = target.toIntOrNull()
     val routine = items.any { it.name.isNotBlank() }
     val targetError = if (!routine && (targetValue == null || targetValue !in 1..999)) "From 1 to 999" else null
@@ -527,7 +527,7 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Long)
             modifier = Modifier.fillMaxWidth().testTag("field:name"),
         )
         NumberField(
-            label = "Points for each tick",
+            label = "${pointsTitle()} for each tick",
             value = points,
             onValueChange = { points = it },
             tag = "field:points",
@@ -642,7 +642,7 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Long)
         HorizontalDivider()
         Text("Checklist (optional)", style = MaterialTheme.typography.titleSmall)
         Text(
-            "Add items to make it a routine, like water, stretch, make bed. You tick them one by one, and it's done, and pays its points, when every item is ticked.",
+            "Add items to make it a routine, like water, stretch, make bed. You tick them one by one, and it's done, and pays its ${pointsWord()}, when every item is ticked.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -758,7 +758,7 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Long)
             onPrivate = { isPrivate = it },
         )
         Text(
-            "Changes apply from now on. Points already earned stay as they were.",
+            "Changes apply from now on. ${pointsTitle()} already earned stay as they were.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -913,7 +913,7 @@ fun ProjectEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Lon
     val nameError = if (name.isBlank()) "Give it a name" else null
     val stepsError = when {
         filled.isEmpty() -> "Add at least one step"
-        filled.any { it.points.toIntOrNull() == null } -> "Each step needs its points"
+        filled.any { it.points.toIntOrNull() == null } -> "Each step needs its ${pointsWord()}"
         else -> null
     }
 
@@ -972,7 +972,7 @@ fun ProjectEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Lon
                     OutlinedTextField(
                         value = step.points,
                         onValueChange = { text -> steps[index] = step.copy(points = text.filter { it.isDigit() }.take(6)) },
-                        label = { Text("Points") },
+                        label = { Text(pointsTitle()) },
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         modifier = Modifier.width(96.dp).testTag("field:step-points-$index"),
@@ -1136,11 +1136,11 @@ private fun AllowanceAndPrivacy(
     HorizontalDivider()
     Text("Skips and misses", style = MaterialTheme.typography.titleSmall)
     NumberField(
-        label = if (per == null) "Allowed before it costs points" else "Allowed per ${if (per == Period.MONTHLY) "month" else "week"}",
+        label = if (per == null) "Allowed before it costs ${pointsWord()}" else "Allowed per ${if (per == Period.MONTHLY) "month" else "week"}",
         value = allowance,
         onValueChange = onAllowance,
         tag = "field:allowance",
-        hint = "Within this, a skip needs nothing and a miss only a reason. Over it, each costs half the points and a penalty task.",
+        hint = "Within this, a skip needs nothing and a miss only a reason. Over it, each costs half the ${pointsWord()} and a penalty task.",
     )
     if (per != null) {
         SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {

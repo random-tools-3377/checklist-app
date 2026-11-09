@@ -204,7 +204,7 @@ fun SettingsScreen(
             StreakSettingsRow(settings.streak) { vm.setStreakSettings(it) }
 
             HorizontalDivider(Modifier.padding(top = 8.dp))
-            Section("Weekly points target")
+            Section("Weekly target")
             WeeklyTargetSetting(vm)
 
             HorizontalDivider(Modifier.padding(top = 8.dp))
@@ -230,7 +230,7 @@ fun SettingsScreen(
                 Column(Modifier.weight(1f)) {
                     Text("Weekly summary", style = MaterialTheme.typography.bodyLarge)
                     Text(
-                        "Sunday at 6 pm: how much got done, the points, and your best goal. It opens the review.",
+                        "Sunday at 6 pm: how much got done, the ${pointsWord()}, and your best goal. It opens the review.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -578,14 +578,14 @@ private fun GapSettingsRow(current: GapSettings, onChange: (GapSettings) -> Unit
             hint = "From 2 to 60. Days with nothing due don't count.",
         )
         NumberField(
-            label = "Or points lost within a week",
+            label = "Or ${pointsWord()} lost within a week",
             value = points,
             onValueChange = {
                 points = it
                 it.toIntOrNull()?.takeIf { n -> n >= 1 }?.let { n -> onChange(current.copy(points = n)) }
             },
             tag = "setting:gap-points",
-            hint = "Points taken off for going over the limit, within any 7 days in a row.",
+            hint = "${pointsTitle()} taken off for going over the limit, within any 7 days in a row.",
         )
     }
 }
@@ -670,13 +670,13 @@ private fun WeeklyTargetSetting(vm: MainViewModel) {
     var text by remember(target) { mutableStateOf(if (target > 0) target.toString() else "") }
     Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
         Text(
-            "Points to earn each week, Monday to Sunday. Today shows how far along you are. Leave it empty for none.",
+            "${pointsTitle()} to earn each week, Monday to Sunday. Today shows how far along you are. Leave it empty for none.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Row(verticalAlignment = Alignment.CenterVertically) {
             NumberField(
-                label = "Points a week",
+                label = "${pointsTitle()} a week",
                 value = text,
                 onValueChange = { text = it.take(5) },
                 tag = "setting:weekly-target",

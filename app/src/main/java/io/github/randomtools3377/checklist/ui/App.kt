@@ -63,6 +63,15 @@ private val RoutesSaver = listSaver<SnapshotStateList<String>, String>(
 @Composable
 fun ChecklistApp(vm: MainViewModel = viewModel()) {
     val celebrations = remember { Celebrations() }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    androidx.compose.runtime.DisposableEffect(Unit) {
+        val sounds = Sounds(context.applicationContext)
+        celebrations.sounds = sounds
+        onDispose {
+            celebrations.sounds = null
+            sounds.release()
+        }
+    }
     val stack = rememberSaveable(saver = RoutesSaver) { mutableListOf(AppTab.TODAY.route).toMutableStateList() }
     var showBought by rememberSaveable { mutableStateOf(false) }
     var newGoal by remember { mutableStateOf(false) }
@@ -101,6 +110,7 @@ fun ChecklistApp(vm: MainViewModel = viewModel()) {
     val removedGoals by vm.removedGoals.collectAsStateWithLifecycle()
     val badges by vm.badges.collectAsStateWithLifecycle()
     val appearance by vm.appearance.collectAsStateWithLifecycle()
+    celebrations.style = appearance.celebrate
     // The app opens on the tab chosen in Appearance, once the settings have been read.
     var firstTabApplied by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(appearance.loaded) {

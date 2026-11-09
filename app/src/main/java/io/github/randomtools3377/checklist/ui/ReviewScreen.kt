@@ -144,7 +144,7 @@ private fun ReviewCard(title: String, content: @Composable () -> Unit) {
 
 @Composable
 private fun PointsCard(summary: ReviewSummary) {
-    ReviewCard("Points") {
+    ReviewCard(pointsTitle()) {
         Row(Modifier.fillMaxWidth()) {
             PointsFigure("Earned", "+${summary.earned}", MaterialTheme.colorScheme.primary, Modifier.weight(1f))
             PointsFigure("Spent", "−${summary.spent}", MaterialTheme.colorScheme.onSurface, Modifier.weight(1f))
@@ -289,7 +289,7 @@ private fun StatsCard(summary: ReviewSummary, streaks: Streaks?) {
             summary.bestWeekday?.let { add("Best day of the week" to weekdayShort(it)) }
             summary.worstWeekday?.let { add("Hardest day of the week" to weekdayShort(it)) }
             summary.goals.filter { it.points > 0 }.sortedByDescending { it.points }.take(3).forEach {
-                add("Points from ${it.goal.icon} ${it.goal.name}" to "+${it.points}")
+                add("${pointsTitle()} from ${it.goal.icon} ${it.goal.name}" to "+${it.points}")
             }
             streaks?.let {
                 add("Current main streak" to "${it.done} days")
@@ -335,7 +335,7 @@ private fun DayCharts(summary: ReviewSummary, period: Period) {
         )
         DayLabels(days.map { it.day }, period)
         Spacer(Modifier.height(6.dp))
-        Text("Points", style = MaterialTheme.typography.labelLarge)
+        Text(pointsTitle(), style = MaterialTheme.typography.labelLarge)
         BarChart(
             up = earned,
             down = lost,
@@ -343,7 +343,7 @@ private fun DayCharts(summary: ReviewSummary, period: Period) {
             downColor = error,
             marks = List(days.size) { null },
             lineColor = faint,
-            description = "Points each day: " + days.indices.joinToString("; ") { i ->
+            description = "${pointsTitle()} each day: " + days.indices.joinToString("; ") { i ->
                 "${dayName(days[i].day, period)} +${earned[i]}" + if (lost[i] > 0) ", −${lost[i]} lost" else ""
             },
             tag = "chart:points",
@@ -352,9 +352,9 @@ private fun DayCharts(summary: ReviewSummary, period: Period) {
         val best = days.indices.filter { earned[it] > 0 }.maxByOrNull { earned[it] }
         Text(
             listOfNotNull(
-                best?.let { "Most points: ${shortDate(days[it].day)}, +${earned[it]}" },
-                if (lost.any { it > 0 }) "red below the line: points lost" else null,
-            ).joinToString(" · ").ifEmpty { "No points earned yet in this stretch." },
+                best?.let { "Most ${pointsWord()}: ${shortDate(days[it].day)}, +${earned[it]}" },
+                if (lost.any { it > 0 }) "red below the line: ${pointsWord()} lost" else null,
+            ).joinToString(" · ").ifEmpty { "No ${pointsWord()} earned yet in this stretch." },
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -441,6 +441,6 @@ private fun CategoriesCard(summary: ReviewSummary) {
                 LinearProgressIndicator(progress = { category.consistency.toFloat() }, modifier = Modifier.fillMaxWidth())
             }
         }
-        Text("Points come from ticks and bonuses.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("${pointsTitle()} come from ticks and bonuses.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }

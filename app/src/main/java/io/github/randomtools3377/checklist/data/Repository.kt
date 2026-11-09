@@ -48,6 +48,15 @@ const val SETTING_TODAY_SECTIONS = "today_sections"
 /** The tabs hidden from the bottom bar, and the one the app opens on. */
 const val SETTING_HIDDEN_TABS = "hidden_tabs"
 const val SETTING_FIRST_TAB = "first_tab"
+/** What points are called, as "coin|coins|🪙" (see PointsName in the shared code). */
+const val SETTING_POINTS_NAME = "points_name"
+/** The app's font (see FontChoice). */
+const val SETTING_FONT = "font"
+/** Celebrations: sound and buzz ("1" or "0"), how much confetti, and a GIF for every goal. */
+const val SETTING_CELEBRATE_SOUND = "celebrate_sound"
+const val SETTING_CELEBRATE_BUZZ = "celebrate_buzz"
+const val SETTING_CONFETTI = "confetti"
+const val SETTING_DEFAULT_GIF = "default_gif"
 const val DEFAULT_SNOOZE_MINUTES = 10
 const val SETTING_TODAY_ORDER = "today_order"
 const val ORDER_RECOMMENDED = "recommended"

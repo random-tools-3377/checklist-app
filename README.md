@@ -55,11 +55,15 @@ keeps the data.
   photo behind Today.
 - 0.17.0: choosing, hiding and ordering Today's sections; choosing the tabs and the one the app
   opens on.
+- 0.18.0: renaming points (coins, stars, XP or your own words), three bundled fonts, and
+  celebration settings: sound, buzz, how much confetti and a GIF for every goal.
 
 Next: more features (the list is in CLAUDE.md). The iPhone app waits for a way to install it.
 
 The emoji list is built from Unicode's emoji data via the MIT-licensed `unicode-emoji-json`
-package; its notice ships in `app/src/main/assets/emoji-NOTICE.txt`.
+package; its notice ships in `app/src/main/assets/emoji-NOTICE.txt`. The fonts Nunito, Atkinson
+Hyperlegible and Lora are under the SIL Open Font License; their notices ship in
+`app/src/main/assets/fonts-NOTICE.txt`. The celebration sounds are made by `tools/make-sounds.py`.
 
 ## How it is built
 

@@ -145,11 +145,11 @@ fun ShopScreen(
                         vm.buy(reward.id) { result ->
                             when (result) {
                                 is BuyResult.Bought -> {
-                                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    celebrations.buzz(haptics)
                                     celebrations.show(BigCelebration.Bought(reward.icon, result.prize ?: reward.name, mystery = result.prize != null))
                                 }
                                 is BuyResult.TooExpensive ->
-                                    Toast.makeText(context, "Not enough points for ${reward.name} yet.", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, "Not enough ${pointsWord()} for ${reward.name} yet.", Toast.LENGTH_SHORT).show()
                                 BuyResult.NotFound -> Unit
                             }
                         }
@@ -327,7 +327,7 @@ fun RewardEditor(id: Long, vm: MainViewModel, onClose: () -> Unit) {
             modifier = Modifier.fillMaxWidth().testTag("field:name"),
         )
         NumberField(
-            label = "Price in points",
+            label = "Price in ${pointsWord()}",
             value = price,
             onValueChange = { price = it },
             tag = "field:price",

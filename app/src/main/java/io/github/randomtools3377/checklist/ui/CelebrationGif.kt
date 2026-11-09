@@ -94,7 +94,7 @@ fun CelebrationGif(celebration: String, modifier: Modifier = Modifier) {
     )
 }
 
-private fun builtInLabel(name: String): String = when (name) {
+internal fun builtInLabel(name: String): String = when (name) {
     "confetti" -> "Confetti"
     "star" -> "Star"
     "fireworks" -> "Fireworks"

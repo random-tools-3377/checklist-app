@@ -140,7 +140,7 @@ fun TodayScreen(
 
     fun celebrateTick(result: TickResult, spot: Spot, bigWhenFinished: Boolean) {
         if (result !is TickResult.Ticked) return
-        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+        celebrations.buzz(haptics)
         val total = result.points + result.bonus
         celebrations.burst(spot.center, "+$total", big = bigWhenFinished && result.finished)
     }
@@ -148,10 +148,10 @@ fun TodayScreen(
     fun tick(row: HabitRow, spot: Spot) {
         val action: (Long, (TickResult) -> Unit) -> Unit = if (row.isRoutine) vm::finishRoutine else vm::tickHabit
         action(row.goal.id) { result ->
-            val gif = row.goal.celebration?.takeIf { Celebration.isValid(it) }
+            val gif = row.goal.celebration?.takeIf { Celebration.isValid(it) } ?: celebrations.style.defaultGif
             if (gif != null && result is TickResult.Ticked && result.finished) {
                 // Its own GIF, full screen.
-                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                celebrations.buzz(haptics)
                 celebrations.show(BigCelebration.GoalFinished(row.goal.icon, row.goal.name, result.points + result.bonus, gif))
             } else {
                 celebrateTick(result, spot, row.goal.target > 1)
@@ -163,9 +163,9 @@ fun TodayScreen(
     fun checkItem(row: HabitRow, item: StepRow, spot: Spot) {
         vm.checkItem(item.step.id) { result ->
             if (result is TickResult.Ticked && result.finished) {
-                val gif = row.goal.celebration?.takeIf { Celebration.isValid(it) }
+                val gif = row.goal.celebration?.takeIf { Celebration.isValid(it) } ?: celebrations.style.defaultGif
                 if (gif != null) {
-                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                    celebrations.buzz(haptics)
                     celebrations.show(BigCelebration.GoalFinished(row.goal.icon, row.goal.name, result.points + result.bonus, gif))
                 } else {
                     celebrateTick(result, spot, bigWhenFinished = true)
@@ -266,7 +266,7 @@ fun TodayScreen(
                     ) {
                         Text("Nothing due today.", style = MaterialTheme.typography.titleMedium)
                         Spacer(Modifier.height(8.dp))
-                        Text("Add a habit or a project, then tick it here to earn points.", textAlign = TextAlign.Center)
+                        Text("Add a habit or a project, then tick it here to earn ${pointsWord()}.", textAlign = TextAlign.Center)
                         Spacer(Modifier.height(16.dp))
                         Button(onClick = onAddGoal) { Text("Add a goal") }
                     }
@@ -278,7 +278,7 @@ fun TodayScreen(
             if (!choice.shown) continue
             when (choice.section) {
                 TodaySection.BALANCE -> item(key = "balance") {
-                    BalanceCard(view.balance, modifier = Modifier.clickable(onClick = onHistory), note = "Tap for your points history")
+                    BalanceCard(view.balance, modifier = Modifier.clickable(onClick = onHistory), note = "Tap for your ${pointsWord()} history")
                     Spacer(Modifier.height(12.dp))
                 }
                 TodaySection.WEEKLY_TARGET -> week?.let { progress ->
@@ -354,7 +354,7 @@ fun TodayScreen(
                                             celebrations.show(
                                                 BigCelebration.ProjectFinished(
                                                     project.goal.icon, project.goal.name, result.points + result.bonus,
-                                                    gif = project.goal.celebration?.takeIf { Celebration.isValid(it) },
+                                                    gif = project.goal.celebration?.takeIf { Celebration.isValid(it) } ?: celebrations.style.defaultGif,
                                                 ),
                                             )
                                         }

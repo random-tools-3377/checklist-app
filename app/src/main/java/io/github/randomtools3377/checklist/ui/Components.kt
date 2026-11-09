@@ -62,7 +62,19 @@ import java.util.Locale
 const val GOAL_ICON = "⭐"
 const val REWARD_ICON = "🎁"
 
-fun pointsText(points: Int): String = if (points == 1 || points == -1) "$points point" else "$points points"
+/** What points are called (Settings → Appearance). Reading it in a screen redraws the screen when it changes. */
+object PointsLabel {
+    var name by androidx.compose.runtime.mutableStateOf(io.github.randomtools3377.checklist.core.PointsName.DEFAULT)
+}
+
+/** "126 points", or "126 coins 🪙" with points renamed. */
+fun pointsText(points: Int): String = PointsLabel.name.amount(points)
+
+/** "points", or what the user calls them. */
+fun pointsWord(n: Int = 2): String = PointsLabel.name.word(n)
+
+/** "Points", or what the user calls them, for headings. */
+fun pointsTitle(): String = PointsLabel.name.title
 
 private val ShortDate = DateTimeFormatter.ofPattern("EEE d MMM", Locale.getDefault())
 private val LongDate = DateTimeFormatter.ofPattern("EEEE d MMMM", Locale.getDefault())

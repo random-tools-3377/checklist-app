@@ -19,7 +19,7 @@ data class WeeklySummary(
      */
     fun describe(target: Int = 0): String = buildList {
         add(if (due == 0) "Nothing was due" else "$done of $due done ($percent%)")
-        add("+$earned points")
+        add("+" + PointsName.current.amount(earned))
         if (target > 0) add(if (earned >= target) "🎯 target reached" else "🎯 $earned of $target")
         if (lost > 0) add("−$lost lost")
         if (missed > 0) add(if (missed == 1) "1 missed" else "$missed missed")

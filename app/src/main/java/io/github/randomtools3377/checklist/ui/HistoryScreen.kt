@@ -64,7 +64,7 @@ fun HistoryScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Points history") },
+                title = { Text("${pointsTitle()} history") },
                 navigationIcon = {
                     IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") }
                 },
@@ -72,7 +72,7 @@ fun HistoryScreen(
         },
     ) { padding ->
         if (locked) {
-            LockedPanel("Your points history", onUnlock, Modifier.padding(padding))
+            LockedPanel("Your ${pointsWord()} history", onUnlock, Modifier.padding(padding))
             return@Scaffold
         }
         if (entries == null) return@Scaffold
@@ -83,7 +83,7 @@ fun HistoryScreen(
             if (entries.isEmpty()) {
                 item {
                     Text(
-                        "No points yet. Tick a goal and it shows up here.",
+                        "No ${pointsWord()} yet. Tick a goal and it shows up here.",
                         textAlign = TextAlign.Center,
                         modifier = Modifier.fillMaxWidth().padding(top = 48.dp),
                     )
