@@ -113,7 +113,8 @@ fun TodayScreen(
     }
 
     fun tick(row: HabitRow, spot: Spot) {
-        vm.tickHabit(row.goal.id) { result ->
+        val action: (Long, (TickResult) -> Unit) -> Unit = if (row.isRoutine) vm::finishRoutine else vm::tickHabit
+        action(row.goal.id) { result ->
             val gif = row.goal.celebration?.takeIf { Celebration.isValid(it) }
             if (gif != null && result is TickResult.Ticked && result.finished) {
                 // Its own GIF, full screen.
@@ -121,6 +122,21 @@ fun TodayScreen(
                 celebrations.show(BigCelebration.GoalFinished(row.goal.icon, row.goal.name, result.points + result.bonus, gif))
             } else {
                 celebrateTick(result, spot, row.goal.target > 1)
+            }
+        }
+    }
+
+    /** A routine's item; the last one finishes the routine and celebrates like a tick. */
+    fun checkItem(row: HabitRow, item: StepRow, spot: Spot) {
+        vm.checkItem(item.step.id) { result ->
+            if (result is TickResult.Ticked && result.finished) {
+                val gif = row.goal.celebration?.takeIf { Celebration.isValid(it) }
+                if (gif != null) {
+                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                    celebrations.show(BigCelebration.GoalFinished(row.goal.icon, row.goal.name, result.points + result.bonus, gif))
+                } else {
+                    celebrateTick(result, spot, bigWhenFinished = true)
+                }
             }
         }
     }
@@ -182,8 +198,10 @@ fun TodayScreen(
                     paceLine = null,
                     nextLine = nextLine(planned.row, screen),
                     onTick = { spot -> tick(planned.row, spot) },
-                    onUndo = { vm.undoHabitTick(planned.row.goal.id) },
+                    onUndo = { if (planned.row.isRoutine) vm.undoRoutine(planned.row.goal.id) else vm.undoHabitTick(planned.row.goal.id) },
                     onSkip = { skipping = planned.row.goal },
+                    onItem = { item, spot -> checkItem(planned.row, item, spot) },
+                    onUncheck = { item -> vm.uncheckItem(item.step.id) },
                 )
                 Spacer(Modifier.height(10.dp))
             }
@@ -282,8 +300,10 @@ private fun LazyListScope.habitSection(
             late = false,
             paceLine = screen.longPaces[row.goal.id]?.let { paceText(it) },
             onTick = { spot -> tick(row, spot) },
-            onUndo = { vm.undoHabitTick(row.goal.id) },
+            onUndo = { if (row.isRoutine) vm.undoRoutine(row.goal.id) else vm.undoHabitTick(row.goal.id) },
             onSkip = { onSkip(row.goal) },
+            onItem = { item, _ -> vm.checkItem(item.step.id) },
+            onUncheck = { item -> vm.uncheckItem(item.step.id) },
         )
         Spacer(Modifier.height(10.dp))
     }
@@ -370,11 +390,14 @@ private fun HabitCard(
     onUndo: () -> Unit,
     onSkip: () -> Unit,
     nextLine: Pair<String, Boolean>? = null,
+    onItem: (StepRow, Spot) -> Unit = { _, _ -> },
+    onUncheck: (StepRow) -> Unit = {},
 ) {
     val goal = row.goal
     val spot = remember { Spot() }
-    val counted = goal.target > 1
+    val counted = goal.target > 1 || row.isRoutine
     Card(Modifier.fillMaxWidth()) {
+      Column {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(12.dp)) {
             Text(goal.icon, fontSize = 30.sp, modifier = Modifier.width(44.dp), textAlign = TextAlign.Center)
             Spacer(Modifier.width(8.dp))
@@ -440,19 +463,21 @@ private fun HabitCard(
                     done = shownDone,
                     counted = counted,
                     description = when {
-                        shownDone && !counted -> "Undo ${goal.name}"
+                        shownDone && (!counted || row.isRoutine) -> "Undo ${goal.name}"
                         shownDone -> "${goal.name} is done"
+                        row.isRoutine -> "Tick every item of ${goal.name}"
                         counted -> "Add one to ${goal.name}"
                         else -> "Mark ${goal.name} done"
                     },
                     modifier = Modifier
                         .onGloballyPositioned { spot.center = it.boundsInRoot().center }
                         .testTag("tick:${goal.name}"),
-                    onClick = { if (shownDone && !counted) onUndo() else if (!shownDone) onTick(spot) },
+                    onClick = { if (shownDone && (!counted || row.isRoutine)) onUndo() else if (!shownDone) onTick(spot) },
+                    routine = row.isRoutine,
                 )
                 if (counted) {
                     Text(
-                        "${row.count} of ${goal.target}",
+                        if (row.isRoutine) "${row.items.count { it.done }} of ${row.items.size}" else "${row.count} of ${goal.target}",
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(top = 2.dp).testTag("count:${goal.name}"),
@@ -460,6 +485,41 @@ private fun HabitCard(
                 }
             }
         }
+        // A routine's checklist, ticked item by item.
+        if (row.isRoutine) {
+            Column(Modifier.padding(start = 64.dp, end = 12.dp, bottom = 8.dp)) {
+                row.items.forEach { item ->
+                    RoutineItemLine(item, onTick = { onItem(item, it) }, onUndo = { onUncheck(item) })
+                }
+            }
+        }
+      }
+    }
+}
+
+/** One item of a routine: a box to tick and its name. */
+@Composable
+private fun RoutineItemLine(item: StepRow, onTick: (Spot) -> Unit, onUndo: () -> Unit) {
+    val spot = remember { Spot() }
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { if (item.done) onUndo() else onTick(spot) }
+            .semantics { contentDescription = if (item.done) "Untick ${item.step.name}" else "Tick ${item.step.name}" }
+            .testTag("item:${item.step.name}")
+            .padding(vertical = 4.dp),
+    ) {
+        androidx.compose.material3.Checkbox(
+            checked = item.done,
+            onCheckedChange = null,
+            modifier = Modifier.onGloballyPositioned { spot.center = it.boundsInRoot().center },
+        )
+        Spacer(Modifier.width(4.dp))
+        Text(
+            item.step.name,
+            color = if (item.done) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
+        )
     }
 }
 
@@ -469,7 +529,7 @@ private fun HabitCard(
  * takes the tick back.
  */
 @Composable
-private fun TickButton(done: Boolean, counted: Boolean, description: String, modifier: Modifier, onClick: () -> Unit) {
+private fun TickButton(done: Boolean, counted: Boolean, description: String, modifier: Modifier, onClick: () -> Unit, routine: Boolean = false) {
     val semantics = Modifier.semantics { contentDescription = description }
     val padding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
     if (done) {
@@ -480,7 +540,7 @@ private fun TickButton(done: Boolean, counted: Boolean, description: String, mod
         }
     } else {
         FilledTonalButton(onClick = onClick, contentPadding = padding, modifier = modifier.then(semantics)) {
-            if (counted) {
+            if (counted && !routine) {
                 Text("+1", fontSize = 18.sp, fontWeight = FontWeight.Bold)
             } else {
                 Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(18.dp))

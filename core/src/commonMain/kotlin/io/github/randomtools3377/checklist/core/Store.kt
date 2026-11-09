@@ -25,6 +25,11 @@ interface Store {
     /** Every step tick of the project. */
     suspend fun stepTicks(goalId: Long): List<Tick>
 
+    /** A routine's items ticked in the window that starts on [periodStart]. */
+    suspend fun checks(goalId: Long, periodStart: LocalDate): List<Check>
+    suspend fun addCheck(check: Check): Long
+    suspend fun removeCheck(id: Long)
+
     suspend fun addTick(tick: Tick): Long
     suspend fun removeTick(tickId: Long)
 

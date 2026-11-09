@@ -52,6 +52,8 @@ data class HabitDraft(
     val celebration: String? = null,
     /** A time for each one, for a habit done several times a day. */
     val times: List<LocalTime> = emptyList(),
+    /** A routine's checklist. Empty for a plain habit. */
+    val items: List<StepDraft> = emptyList(),
 )
 
 /** One step in the project editor. [id] is 0 for a new step. */
@@ -114,8 +116,24 @@ class Repository(private val db: AppDatabase, private val celebrations: Celebrat
             isPrivate = draft.private,
             celebration = draft.celebration?.takeIf { Celebration.isValid(it) },
         )
-        if (existing == null) dao.insertGoal(row) else dao.updateGoal(row)
+        val goalId = if (existing == null) dao.insertGoal(row) else row.id.also { dao.updateGoal(row) }
+        // A routine's checklist: removed items are archived, so their past ticks still make sense.
+        if (draft.items.isNotEmpty() || dao.activeSteps(goalId).isNotEmpty()) saveSteps(goalId, draft.items)
         pruneCelebrations()
+    }
+
+    /** Saves a goal's steps in order: new ones added, changed ones updated, left-out ones archived. */
+    private suspend fun saveSteps(goalId: Long, steps: List<StepDraft>) {
+        val kept = steps.map { it.id }.filter { it != 0L }.toSet()
+        dao.activeSteps(goalId).filter { it.id !in kept }.forEach { dao.updateStep(it.copy(archived = true)) }
+        steps.forEachIndexed { position, step ->
+            val old = if (step.id != 0L) dao.step(step.id) else null
+            if (old == null || old.goalId != goalId) {
+                dao.insertStep(StepEntity(goalId = goalId, name = step.name, points = step.points, position = position, archived = false))
+            } else {
+                dao.updateStep(old.copy(name = step.name, points = step.points, position = position))
+            }
+        }
     }
 
     suspend fun saveProject(draft: ProjectDraft): Unit = db.withTransaction {
@@ -268,6 +286,7 @@ class Repository(private val db: AppDatabase, private val celebrations: Celebrat
                 penalties = dao.allPenalties().map { it.toCore() },
                 penaltyTasks = dao.allPenaltyTasks().map { it.toCore() },
                 gaps = dao.allGaps().map { it.toCore() },
+                checks = dao.allChecks().map { it.toCore() },
             )
         }
         // The GIFs the user picked go in the file too, so a restore brings them back.
@@ -305,6 +324,7 @@ class Repository(private val db: AppDatabase, private val celebrations: Celebrat
         dao.deletePenalties()
         dao.deletePenaltyTasks()
         dao.deleteGaps()
+        dao.deleteChecks()
         dao.insertGoals(backup.goals.map { it.toEntity() })
         dao.insertSteps(backup.steps.map { it.toEntity() })
         dao.insertTicks(backup.ticks.map { it.toEntity() })
@@ -316,5 +336,6 @@ class Repository(private val db: AppDatabase, private val celebrations: Celebrat
         dao.insertPenalties(backup.penalties.map { it.toEntity() })
         dao.insertPenaltyTasks(backup.penaltyTasks.map { it.toEntity() })
         dao.insertGaps(backup.gaps.map { it.toEntity() })
+        dao.insertChecks(backup.checks.map { it.toEntity() })
     }
 }

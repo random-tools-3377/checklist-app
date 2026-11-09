@@ -101,7 +101,21 @@ data class Reminder(
     }
 }
 
-/** One step of a project. */
+/**
+ * One item of a routine, ticked for the window that starts on [periodStart]. A routine is a habit
+ * whose steps are a checklist: it is done when every item is ticked.
+ */
+@Serializable
+data class Check(
+    val id: Long = 0,
+    val goalId: Long,
+    val stepId: Long,
+    val periodStart: LocalDate,
+    /** When it was ticked, in epoch milliseconds. */
+    val at: Long,
+)
+
+/** One step of a project, or one item of a routine. */
 @Serializable
 data class Step(
     val id: Long = 0,

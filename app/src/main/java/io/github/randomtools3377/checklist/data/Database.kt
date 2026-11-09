@@ -140,6 +140,17 @@ data class LapseEntity(
     val gapId: Long? = null,
 )
 
+/** A routine's items ticked in a window. A routine is a habit whose steps are a checklist. Added in version 8. */
+@Entity(tableName = "checks", indices = [Index("goalId", "periodStart")])
+data class CheckEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val goalId: Long,
+    val stepId: Long,
+    /** Epoch day the window starts on. */
+    val periodStart: Long,
+    val at: Long,
+)
+
 /** Stretches when it looks like the user stopped for a while. Added in version 5. */
 @Entity(tableName = "gaps")
 data class GapEntity(
@@ -403,6 +414,22 @@ interface ChecklistDao {
     @Update
     suspend fun updateGap(gap: GapEntity)
 
+    // Routines
+
+    @Query("SELECT * FROM checks WHERE goalId = :goalId AND periodStart = :periodStart ORDER BY id")
+    suspend fun checks(goalId: Long, periodStart: Long): List<CheckEntity>
+
+    @Query("SELECT * FROM checks WHERE periodStart >= :since ORDER BY id")
+    fun observeChecksSince(since: Long): Flow<List<CheckEntity>>
+
+    @Insert suspend fun insertCheck(row: CheckEntity): Long
+
+    @Query("DELETE FROM checks WHERE id = :id") suspend fun deleteCheck(id: Long)
+
+    @Query("SELECT * FROM checks") suspend fun allChecks(): List<CheckEntity>
+    @Query("DELETE FROM checks") suspend fun deleteChecks()
+    @Insert suspend fun insertChecks(rows: List<CheckEntity>)
+
     @Query("SELECT * FROM gaps") suspend fun allGaps(): List<GapEntity>
     @Query("DELETE FROM gaps") suspend fun deleteGaps()
     @Insert suspend fun insertGaps(rows: List<GapEntity>)
@@ -464,11 +491,12 @@ interface ChecklistDao {
         PenaltyEntity::class,
         PenaltyTaskEntity::class,
         GapEntity::class,
+        CheckEntity::class,
     ],
-    version = 7,
+    version = 8,
     exportSchema = true,
-    // Versions 4 and 5 only add tables and columns, so Room works the migrations out from the layouts.
-    autoMigrations = [AutoMigration(from = 3, to = 4), AutoMigration(from = 4, to = 5), AutoMigration(from = 5, to = 6), AutoMigration(from = 6, to = 7)],
+    // Versions 4 to 8 only add tables and columns, so Room works the migrations out from the layouts.
+    autoMigrations = [AutoMigration(from = 3, to = 4), AutoMigration(from = 4, to = 5), AutoMigration(from = 5, to = 6), AutoMigration(from = 6, to = 7), AutoMigration(from = 7, to = 8)],
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun dao(): ChecklistDao

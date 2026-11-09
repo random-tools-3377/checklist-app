@@ -7,7 +7,15 @@ import kotlinx.datetime.LocalDate
  * how many skips it has there. A skip covers the whole day for a single-day habit, or one of the
  * times for a "times per" habit.
  */
-data class HabitRow(val goal: Goal, val count: Int, val window: Window, val skips: Int = 0) {
+data class HabitRow(
+    val goal: Goal,
+    val count: Int,
+    val window: Window,
+    val skips: Int = 0,
+    /** A routine's checklist, each item with whether it is ticked in this window. Empty for other habits. */
+    val items: List<StepRow> = emptyList(),
+) {
+    val isRoutine: Boolean get() = items.isNotEmpty()
     val skipped: Boolean get() = skips > 0 && count < goal.target
     val done: Boolean
         get() = count >= goal.target || if (window.period == Period.DAILY) skips > 0 else count + skips >= goal.target
@@ -50,12 +58,20 @@ object TodayList {
         ticks: List<Tick>,
         balance: Int,
         lapses: List<Lapse> = emptyList(),
+        /** Routine items ticked; only those in each routine's current window count. */
+        checks: List<Check> = emptyList(),
     ): TodayView {
         val active = goals.filter { !it.archived }.sortedWith(compareBy({ it.position }, { it.id }))
         val habits = active.filter { it.kind == GoalKind.HABIT }.mapNotNull { goal ->
             val window = goal.repeat?.window(day) ?: return@mapNotNull null
             val skips = lapses.count { it.goalId == goal.id && it.kind == LapseKind.SKIP && it.periodStart == window.start && !it.forgotten }
-            HabitRow(goal, ticks.count { it.countsToward(goal, window.start) }, window, skips)
+            val count = ticks.count { it.countsToward(goal, window.start) }
+            // A routine's items: ticked if ticked in this window, or all of them once it is done.
+            val ticked = checks.filter { it.goalId == goal.id && it.periodStart == window.start }.map { it.stepId }.toSet()
+            val items = steps.filter { it.goalId == goal.id && !it.archived }
+                .sortedWith(compareBy({ it.position }, { it.id }))
+                .map { StepRow(it, it.id in ticked || count >= goal.target) }
+            HabitRow(goal, count, window, skips, items)
         }
         val stepTicks = ticks.filter { it.stepId != null }.associateBy { it.stepId }
         val projects = active.filter { it.kind == GoalKind.PROJECT }.map { goal ->

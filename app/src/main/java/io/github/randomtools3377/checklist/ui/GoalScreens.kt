@@ -288,6 +288,9 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit) {
     var atMinute by rememberSaveable { mutableStateOf<Int?>(null) }
     // A time for each one, for a habit done several times a day; -1 where not set yet.
     var eachTimeOn by rememberSaveable { mutableStateOf(false) }
+    // A routine's checklist.
+    val items = rememberSaveable(saver = StepFieldsSaver) { mutableListOf<StepField>().toMutableStateList() }
+    var nextItemKey by rememberSaveable { mutableStateOf(1L) }
     var eachTimes by rememberSaveable { mutableStateOf(listOf<Int>()) }
     var finishByMinute by rememberSaveable { mutableStateOf<Int?>(null) }
     var finishDay by rememberSaveable { mutableStateOf<Int?>(null) }
@@ -306,7 +309,8 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit) {
 
     LaunchedEffect(id) {
         if (!loaded) {
-            vm.loadGoal(id)?.first?.let { goal ->
+            vm.loadGoal(id)?.let { (goal, existingItems) ->
+                existingItems.forEach { items += StepField(nextItemKey++, it.id, it.name, "0") }
                 name = goal.name
                 icon = goal.icon
                 points = goal.points.toString()
@@ -387,7 +391,8 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit) {
     val nameError = if (name.isBlank()) "Give it a name" else null
     val pointsError = if (points.toIntOrNull() == null) "How many points it pays" else null
     val targetValue = target.toIntOrNull()
-    val targetError = if (targetValue == null || targetValue !in 1..999) "From 1 to 999" else null
+    val routine = items.any { it.name.isNotBlank() }
+    val targetError = if (!routine && (targetValue == null || targetValue !in 1..999)) "From 1 to 999" else null
     val end = endDay
     val repeatError = when {
         repeat == null -> "Finish choosing how often"
@@ -395,7 +400,7 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit) {
         else -> null
     }
     val minutesValue = minutes.toIntOrNull()?.takeIf { it > 0 }
-    val counted = (targetValue ?: 1) > 1
+    val counted = !routine && (targetValue ?: 1) > 1
     // Done several times on each day it's due: it can have a time for each one.
     val severalADay = counted && choice != RepeatChoice.TIMES_PER
     val eachTimesSet = if (severalADay && eachTimeOn) eachTimes.filter { it >= 0 }.distinct().sorted().take(targetValue ?: 1) else emptyList()
@@ -414,11 +419,12 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit) {
                         icon = icon,
                         points = points.toInt(),
                         repeat = repeat,
-                        target = targetValue ?: 1,
+                        target = if (routine) 1 else targetValue ?: 1,
                         bonus = if (counted) bonus.toIntOrNull() ?: 0 else 0,
                         minutes = minutesValue,
                         at = if (severalADay) null else atMinute?.toTime(),
                         times = eachTimesSet.map { it.toTime() },
+                        items = items.filter { it.name.isNotBlank() }.map { StepDraft(it.id, it.name.trim(), 0) },
                         finishBy = finishByMinute?.toTime(),
                         finishDay = if (choice == RepeatChoice.TIMES_PER) finishDay else null,
                         reminder = Reminder(
@@ -548,14 +554,16 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit) {
             Period.YEARLY -> "year"
             else -> "week"
         }
-        NumberField(
-            label = if (choice == RepeatChoice.TIMES_PER) "Times per $perWord" else "Times each day it's due",
-            value = target,
-            onValueChange = { target = it },
-            tag = "field:target",
-            error = if (showErrors) targetError else null,
-            hint = if (choice == RepeatChoice.TIMES_PER) null else "More than 1 makes it a counted goal, like 8 glasses of water",
-        )
+        if (!routine) {
+            NumberField(
+                label = if (choice == RepeatChoice.TIMES_PER) "Times per $perWord" else "Times each day it's due",
+                value = target,
+                onValueChange = { target = it },
+                tag = "field:target",
+                error = if (showErrors) targetError else null,
+                hint = if (choice == RepeatChoice.TIMES_PER) null else "More than 1 makes it a counted goal, like 8 glasses of water",
+            )
+        }
         if (counted) {
             NumberField(
                 label = "Bonus for finishing all of them",
@@ -564,6 +572,34 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit) {
                 tag = "field:bonus",
                 hint = "Paid on top of each tick",
             )
+        }
+
+        // A checklist inside makes it a routine.
+        HorizontalDivider()
+        Text("Checklist (optional)", style = MaterialTheme.typography.titleSmall)
+        Text(
+            "Add items to make it a routine, like water, stretch, make bed. You tick them one by one, and it's done, and pays its points, when every item is ticked.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        items.forEachIndexed { index, item ->
+            key(item.key) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    OutlinedTextField(
+                        value = item.name,
+                        onValueChange = { items[index] = item.copy(name = it.take(60)) },
+                        label = { Text("Item ${index + 1}") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f).testTag("field:item-$index"),
+                    )
+                    IconButton(onClick = { items.removeAt(index) }) {
+                        Icon(Icons.Filled.Close, contentDescription = "Remove item ${index + 1}")
+                    }
+                }
+            }
+        }
+        TextButton(onClick = { items += StepField(nextItemKey++, 0L, "", "0") }, modifier = Modifier.testTag("add-item")) {
+            Text(if (items.isEmpty()) "Add a checklist" else "Add an item")
         }
 
         // Time

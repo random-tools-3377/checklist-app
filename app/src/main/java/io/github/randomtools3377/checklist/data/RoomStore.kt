@@ -2,6 +2,7 @@ package io.github.randomtools3377.checklist.data
 
 import androidx.room.withTransaction
 import io.github.randomtools3377.checklist.core.Celebration
+import io.github.randomtools3377.checklist.core.Check
 import io.github.randomtools3377.checklist.core.Days
 import io.github.randomtools3377.checklist.core.Entry
 import io.github.randomtools3377.checklist.core.EntryKind
@@ -52,6 +53,10 @@ class RoomStore(private val db: AppDatabase) : Store {
 
     override suspend fun stepTick(stepId: Long): Tick? = dao.stepTick(stepId)?.toCore()
     override suspend fun stepTicks(goalId: Long): List<Tick> = dao.stepTicks(goalId).map { it.toCore() }
+    override suspend fun checks(goalId: Long, periodStart: LocalDate): List<Check> =
+        dao.checks(goalId, periodStart.toEpochDay()).map { it.toCore() }
+    override suspend fun addCheck(check: Check): Long = dao.insertCheck(check.toEntity())
+    override suspend fun removeCheck(id: Long) = dao.deleteCheck(id)
     override suspend fun addTick(tick: Tick): Long = dao.insertTick(tick.toEntity())
     override suspend fun removeTick(tickId: Long) = dao.deleteTick(tickId)
 
@@ -278,6 +283,10 @@ fun Penalty.toEntity() = PenaltyEntity(
 fun PenaltyTaskEntity.toCore() = PenaltyTask(id = id, name = name, archived = archived)
 
 fun PenaltyTask.toEntity() = PenaltyTaskEntity(id = id, name = name, archived = archived)
+
+fun CheckEntity.toCore() = Check(id = id, goalId = goalId, stepId = stepId, periodStart = periodStart.toDay(), at = at)
+
+fun Check.toEntity() = CheckEntity(id = id, goalId = goalId, stepId = stepId, periodStart = periodStart.toEpochDay(), at = at)
 
 fun GapEntity.toCore() = Gap(
     id = id,

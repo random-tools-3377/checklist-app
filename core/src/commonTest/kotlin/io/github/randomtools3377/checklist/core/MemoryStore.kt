@@ -31,6 +31,10 @@ class MemoryStore : Store {
         ticks.filter { it.goalId == goalId && it.stepId == null && it.periodStart == periodStart }
     override suspend fun stepTick(stepId: Long): Tick? = ticks.find { it.stepId == stepId }
     override suspend fun stepTicks(goalId: Long): List<Tick> = ticks.filter { it.goalId == goalId && it.stepId != null }
+    val checks = mutableListOf<Check>()
+    override suspend fun checks(goalId: Long, periodStart: LocalDate): List<Check> = checks.filter { it.goalId == goalId && it.periodStart == periodStart }
+    override suspend fun addCheck(check: Check): Long = nextId++.also { checks += check.copy(id = it) }
+    override suspend fun removeCheck(id: Long) { checks.removeAll { it.id == id } }
     override suspend fun addTick(tick: Tick): Long = nextId++.also { ticks += tick.copy(id = it) }
     override suspend fun removeTick(tickId: Long) { ticks.removeAll { it.id == tickId } }
     override suspend fun addEntry(entry: Entry): Long = nextId++.also { entries += entry.copy(id = it) }

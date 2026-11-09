@@ -255,11 +255,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 .mapValues { it.value!! }
             Raw(goals.map { it.toCore() }, steps.map { it.toCore() }, ticks, balance, usual)
         }
-        val lapsesFlow = dao.observeLapsesSince(since.toEpochDay()).map { rows -> rows.map { it.toCore() } }
-        combine(view, lapsesFlow, now, settings, unlocked) { raw, lapses, moment, s, isUnlocked ->
+        val lapsesFlow = combine(
+            dao.observeLapsesSince(since.toEpochDay()).map { rows -> rows.map { it.toCore() } },
+            dao.observeChecksSince(since.toEpochDay()).map { rows -> rows.map { it.toCore() } },
+        ) { lapses, checks -> lapses to checks }
+        combine(view, lapsesFlow, now, settings, unlocked) { raw, (lapses, checks), moment, s, isUnlocked ->
             val hidePrivate = s.locks.privateGoals && !isUnlocked
             val shownGoals = if (hidePrivate) raw.goals.filter { !it.private } else raw.goals
-            val todayView = TodayList.build(day, shownGoals, raw.steps, raw.ticks, raw.balance, lapses)
+            val todayView = TodayList.build(day, shownGoals, raw.steps, raw.ticks, raw.balance, lapses, checks)
             val usual = raw.usual
             val records = StreakCounter.records(day.minusDays(STREAK_DAYS), day, raw.goals, raw.ticks.filter { it.stepId == null }, lapses)
             val streaks = StreakCounter.count(records, day, s.streak)
@@ -545,6 +548,24 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch { book.undoHabitTick(goalId) }
     }
 
+    /** Ticks one item of a routine; the last one ticks the routine. */
+    fun checkItem(stepId: Long, onResult: (TickResult) -> Unit = {}) {
+        viewModelScope.launch { onResult(book.checkItem(stepId)) }
+    }
+
+    fun uncheckItem(stepId: Long) {
+        viewModelScope.launch { book.uncheckItem(stepId) }
+    }
+
+    /** "Done" on a routine: every item still open, and so the routine. */
+    fun finishRoutine(goalId: Long, onResult: (TickResult) -> Unit = {}) {
+        viewModelScope.launch { onResult(book.finishRoutine(goalId)) }
+    }
+
+    fun undoRoutine(goalId: Long) {
+        viewModelScope.launch { book.undoRoutine(goalId) }
+    }
+
     fun tickStep(stepId: Long, onResult: (TickResult) -> Unit = {}) {
         viewModelScope.launch { onResult(book.tickStep(stepId)) }
     }
@@ -569,7 +590,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     suspend fun loadGoal(id: Long): Pair<Goal, List<Step>>? {
         val goal = repository.goal(id) ?: return null
-        val steps = if (goal.kind == GoalKind.PROJECT) repository.steps(id) else emptyList()
+        // A project's steps, or a routine's checklist.
+        val steps = repository.steps(id)
         return goal to steps
     }
 
