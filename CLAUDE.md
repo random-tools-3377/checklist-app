@@ -393,7 +393,9 @@ Build order **(default)**, each step a Release the owner can try:
     costs 25% more for each time it was already bought that week, back to its price on Monday;
     a return refunds what was paid and takes it off the count. Each of these can be turned off.
     The Undo bar shows for 5 seconds after a tick, removing a goal or buying a reward. The quick settings tile ticks the next goal in Today's order and
-    leaves out locked ones. Dragging on the timeline changes a goal's time for that day only. The
+    leaves out locked ones. Dragging on the timeline changes a goal's time for that day only, snapping to quarter
+    hours; tapping a goal picks a time, and "Usual time" puts it back. The timeline opens from
+    Today and from each day in the planner, and reminders, pacing and the order follow it. The
     calendar is off until turned on in Settings, which asks for the calendar permission; events
     are only read, from the calendars the user picks, and pacing counts them as busy time. "I
     slipped" on a goal to quit records the miss straight away. A skip neither counts toward a

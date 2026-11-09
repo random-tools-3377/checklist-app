@@ -7,6 +7,7 @@ import io.github.randomtools3377.checklist.core.Categories
 import io.github.randomtools3377.checklist.core.Celebration
 import io.github.randomtools3377.checklist.core.Goal
 import io.github.randomtools3377.checklist.core.Moves
+import io.github.randomtools3377.checklist.core.Retimes
 import io.github.randomtools3377.checklist.core.Todos
 import io.github.randomtools3377.checklist.core.Mystery
 import io.github.randomtools3377.checklist.core.GoalKind
@@ -204,6 +205,7 @@ class Repository(private val db: AppDatabase, private val celebrations: Celebrat
             repeat = RepeatText.encode(
                 draft.repeat.copy(
                     moves = Moves.keep(existing?.repeat?.let { RepeatText.decode(it).moves }.orEmpty(), nowLocal().date),
+                    retimes = existing?.repeat?.let { RepeatText.decode(it).retimes }.orEmpty(),
                     // A late "since last done" goal stays late when edited, so it isn't missed twice.
                     lateSince = existing?.repeat?.let { RepeatText.decode(it) }
                         ?.takeIf { it.kind == RepeatKind.AFTER_DONE && draft.repeat.kind == RepeatKind.AFTER_DONE && it.start == draft.repeat.start }
@@ -362,6 +364,13 @@ class Repository(private val db: AppDatabase, private val celebrations: Celebrat
         saveReward(RewardDraft(id = 0, name = "A fancy coffee", icon = "☕", price = 30))
         saveReward(RewardDraft(id = 0, name = "A film night", icon = "🎬", price = 100))
         dao.putSetting(SettingEntity(SETTING_GUIDE, "done"))
+    }
+
+    /** Gives a goal a clock time for [day] only (from the timeline), or back to its usual time with null. */
+    suspend fun retimeGoal(goalId: Long, day: LocalDate, minute: Int?, today: LocalDate): Unit = db.withTransaction {
+        val row = dao.goal(goalId) ?: return@withTransaction
+        val repeat = row.repeat?.let { RepeatText.decode(it) } ?: return@withTransaction
+        dao.updateGoal(row.copy(repeat = RepeatText.encode(Retimes.set(repeat, day, minute, today))))
     }
 
     /** Moves one day's goal to another day of the same week; false if that move isn't allowed. */

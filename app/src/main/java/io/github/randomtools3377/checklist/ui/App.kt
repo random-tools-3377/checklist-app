@@ -240,6 +240,16 @@ fun ChecklistApp(vm: MainViewModel = viewModel()) {
             } else {
                 BalanceCheckScreen(balanceCheck, vm, onBack = ::pop)
             }
+            "timeline" -> {
+                val day = planDays.getOrNull(id.toInt())
+                TimelineScreen(
+                    view = day,
+                    title = day?.let { if (id == 0L) "Today" else shortDate(it.day) } ?: "",
+                    firstHour = settings.dayStart?.hour ?: 6,
+                    onRetime = { goalId, minute -> day?.let { vm.retime(goalId, it.day, minute) } },
+                    onBack = ::pop,
+                )
+            }
             "done" -> DoneListScreen(doneList, onOpen = { goal -> push(editRoute(goal)) }, onBack = ::pop)
             "removed" -> RemovedGoalsScreen(removedGoals, onRestore = { vm.restoreGoal(it.id) }, onBack = ::pop)
             "reward" -> androidx.compose.runtime.key(route) { RewardEditor(id, vm, onClose = ::pop) }
@@ -302,6 +312,7 @@ fun ChecklistApp(vm: MainViewModel = viewModel()) {
                                 onBadges = { push("badges") },
                                 onEditTodo = { id -> push("todo/$id") },
                                 onGuide = { push("guide") },
+                                onTimeline = { push("timeline/0") },
                                 skipRequest = skipRequest,
                                 onSkipRequestHandled = vm::clearSkipRequest,
                                 padding = padding,
@@ -319,7 +330,7 @@ fun ChecklistApp(vm: MainViewModel = viewModel()) {
                             doneCount = doneList.size,
                             onDoneList = { push("done") },
                         )
-                        AppTab.PLAN -> PlanScreen(planDays, vm, padding)
+                        AppTab.PLAN -> PlanScreen(planDays, vm, padding, onTimeline = { index -> push("timeline/$index") })
                         AppTab.REVIEW -> if (settings.locks.review && !unlocked) {
                             LockedPanel("The review", unlock, Modifier.padding(padding))
                         } else {

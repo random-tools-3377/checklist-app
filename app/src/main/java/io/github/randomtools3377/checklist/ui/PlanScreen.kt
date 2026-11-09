@@ -51,7 +51,7 @@ import kotlinx.datetime.isoDayNumber
  * with its time, and a day's goal can be moved to another day of the same week.
  */
 @Composable
-fun PlanScreen(days: List<TodayView>, vm: MainViewModel, padding: PaddingValues) {
+fun PlanScreen(days: List<TodayView>, vm: MainViewModel, padding: PaddingValues, onTimeline: (Int) -> Unit = {}) {
     var selected by rememberSaveable { mutableStateOf(0) }
     var moving by remember { mutableStateOf<Pair<Goal, LocalDate>?>(null) }
     if (days.isEmpty()) return
@@ -80,7 +80,14 @@ fun PlanScreen(days: List<TodayView>, vm: MainViewModel, padding: PaddingValues)
                 }
             }
         }
-        item { Text(longDate(view.day), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 4.dp)) }
+        item {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                Text(longDate(view.day), style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f).padding(top = 4.dp))
+                if (view.dueToday.isNotEmpty()) {
+                    androidx.compose.material3.TextButton(onClick = { onTimeline(selected) }, modifier = Modifier.testTag("plan-timeline")) { Text("Timeline") }
+                }
+            }
+        }
         val due = view.dueToday.sortedWith(compareBy({ it.goal.at ?: it.goal.times.minOrNull() }, { it.goal.position }))
         if (due.isEmpty() && view.thisWeek.isEmpty() && view.projects.none { it.goal.deadline == view.day }) {
             item { Text("Nothing due.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }

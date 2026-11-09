@@ -1021,6 +1021,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** A goal's clock time for one day only, from the timeline; null puts back its usual time. */
+    fun retime(goalId: Long, day: LocalDate, minute: Int?) {
+        viewModelScope.launch { repository.retimeGoal(goalId, day, minute, currentDay()) }
+    }
+
     /** Stop pressed on the timing notification, for this goal: Today asks how much was done. */
     val stopRequest = MutableStateFlow<Long?>(null)
 

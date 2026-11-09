@@ -71,6 +71,8 @@ data class Repeat(
      * after that. Null when it isn't late.
      */
     val lateSince: LocalDate? = null,
+    /** Clock times changed for single days on the timeline (see [Retimes]). */
+    val retimes: List<Retime> = emptyList(),
 ) {
     companion object {
         const val LAST_DAY = 0

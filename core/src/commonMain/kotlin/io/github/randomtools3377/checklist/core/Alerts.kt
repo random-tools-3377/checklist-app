@@ -57,8 +57,8 @@ object Alerts {
             while (day <= to.date) {
                 val firstOfDay = alerts.size
                 if (repeat.isDueOn(day)) {
-                    val at = goal.at
-                    val slots = Pace.slots(goal, day, PaceSettings(dayEndHour, null)).filter { it.fixed }
+                    val at = Retimes.timeOn(goal, day)
+                    val slots = Pace.slots(Retimes.on(goal, day), day, PaceSettings(dayEndHour, null)).filter { it.fixed }
                     if (slots.isNotEmpty()) {
                         // A time for each one, each with its own reminder.
                         for (slot in slots) {

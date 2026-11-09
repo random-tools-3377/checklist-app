@@ -26,7 +26,7 @@ object CalendarView {
                 val count = goal.timesDone(ticks.filter { it.countsToward(goal, window.start) })
                 // A habit done several times a day shows its next set time, or its first.
                 val times = goal.times.sorted()
-                AgendaItem(goal, count, goal.at ?: times.getOrNull(count) ?: times.firstOrNull())
+                AgendaItem(goal, count, Retimes.on(goal, day).at ?: times.getOrNull(count) ?: times.firstOrNull())
             }
         // To-dos without a date wait at the end, open or done today.
         val todos = goals

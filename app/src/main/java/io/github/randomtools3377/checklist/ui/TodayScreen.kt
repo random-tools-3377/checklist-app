@@ -109,6 +109,7 @@ fun TodayScreen(
     onBadges: () -> Unit,
     onEditTodo: (Long) -> Unit,
     onGuide: () -> Unit,
+    onTimeline: () -> Unit = {},
     skipRequest: Long?,
     onSkipRequestHandled: () -> Unit,
     padding: PaddingValues,
@@ -287,7 +288,10 @@ fun TodayScreen(
         ),
     ) {
         item {
-            Text(longDate(view.day), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(bottom = 8.dp))
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                Text(longDate(view.day), style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f).padding(bottom = 8.dp))
+                if (view.dueToday.isNotEmpty()) TextButton(onClick = onTimeline, modifier = Modifier.testTag("open-timeline")) { Text("Timeline") }
+            }
             if (welcome) {
                 WelcomeCard(onTour = onGuide, onExamples = { vm.addExamples() }, onClose = vm::closeWelcome)
                 Spacer(Modifier.height(12.dp))

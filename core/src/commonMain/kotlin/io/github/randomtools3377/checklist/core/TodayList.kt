@@ -72,7 +72,7 @@ object TodayList {
         checks: List<Check> = emptyList(),
     ): TodayView {
         val active = goals.filter { !it.archived }.sortedWith(compareBy({ it.position }, { it.id }))
-        val habits = active.filter { it.isHabitLike }.mapNotNull { goal ->
+        val habits = active.filter { it.isHabitLike }.map { Retimes.on(it, day) }.mapNotNull { goal ->
             val window = goal.repeat?.window(day) ?: doneTodayAfterDone(goal, day, ticks) ?: return@mapNotNull null
             val skips = lapses.count { it.goalId == goal.id && it.kind == LapseKind.SKIP && it.periodStart == window.start && !it.forgotten }
             val windowTicks = ticks.filter { it.countsToward(goal, window.start) }
