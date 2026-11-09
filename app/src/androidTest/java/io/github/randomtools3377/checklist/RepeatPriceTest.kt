@@ -26,6 +26,7 @@ class RepeatPriceTest {
         override fun before() = runBlocking {
             val c = (InstrumentationRegistry.getInstrumentation().targetContext.applicationContext as ChecklistApplication).container
             c.db.clearAllTables()
+            c.db.dao().putSetting(io.github.randomtools3377.checklist.data.SettingEntity(io.github.randomtools3377.checklist.core.Feature.REPEAT_PRICE.key, io.github.randomtools3377.checklist.core.Feature.REPEAT_PRICE.onValue))
             c.repository.saveHabit(
                 HabitDraft(
                     id = 0, name = "Read", icon = "📖", points = 100, repeat = Repeat.everyDay(nowLocal().date), target = 1, bonus = 0,

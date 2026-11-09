@@ -131,6 +131,7 @@ fun ChecklistApp(vm: MainViewModel = viewModel()) {
     val balanceCheck by vm.balanceCheck.collectAsStateWithLifecycle()
     val calendarEvents by vm.calendarEvents.collectAsStateWithLifecycle()
     val moods by vm.reviewMoods.collectAsStateWithLifecycle()
+    val features by vm.features.collectAsStateWithLifecycle()
     val badges by vm.badges.collectAsStateWithLifecycle()
     val appearance by vm.appearance.collectAsStateWithLifecycle()
     val planDays by vm.planDays.collectAsStateWithLifecycle()
@@ -260,9 +261,11 @@ fun ChecklistApp(vm: MainViewModel = viewModel()) {
                 settings, vm,
                 onAppearance = { push("appearance") },
                 onGuide = { push("guide") },
+                onFeatures = { push("features") },
                 onOpenTab = { kind -> goTo(AppTab.entries[kind.ordinal]) },
                 onBack = ::pop,
             )
+            "features" -> FeaturesScreen(vm, onAppearance = { push("appearance") }, onBack = ::pop)
             "appearance" -> AppearanceScreen(appearance, vm, onAnyColour = { push("colour") }, onBack = ::pop)
             "colour" -> AppColourScreen(appearance, onUse = { vm.setColor(it); pop() }, onBack = ::pop)
             "badges" -> if (settings.locks.review && !unlocked) {
@@ -379,6 +382,9 @@ fun ChecklistApp(vm: MainViewModel = viewModel()) {
                 onHabit = { newGoal = false; push("habit/0") },
                 onProject = { newGoal = false; push("project/0") },
                 onTodo = { newGoal = false; push("todo/0") },
+                // To-dos are an extra: offered when turned on, or while there are some.
+                showTodo = io.github.randomtools3377.checklist.core.Feature.TODOS in features ||
+                    goals?.goals.orEmpty().any { it.kind == GoalKind.TODO },
                 onDismiss = { newGoal = false },
             )
         }

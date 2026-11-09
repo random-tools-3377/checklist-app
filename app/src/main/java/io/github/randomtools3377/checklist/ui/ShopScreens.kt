@@ -93,8 +93,11 @@ fun ShopScreen(
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
             note = if (view.balance < 0) "The shop opens again once you are back above zero." else null,
         )
-        TextButton(onClick = onBalanceCheck, modifier = Modifier.padding(start = 8.dp).testTag("balance-check")) {
-            Text("Balance check: are prices and ${pointsWord()} right?")
+        val features by vm.features.collectAsStateWithLifecycle()
+        if (io.github.randomtools3377.checklist.core.Feature.BALANCE_CHECK in features) {
+            TextButton(onClick = onBalanceCheck, modifier = Modifier.padding(start = 8.dp).testTag("balance-check")) {
+                Text("Balance check: are prices and ${pointsWord()} right?")
+            }
         }
         TabRow(selectedTabIndex = if (showBought) 1 else 0) {
             Tab(selected = !showBought, onClick = { onShowBought(false) }, text = { Text("Rewards") }, modifier = Modifier.testTag("tab:rewards"))
@@ -313,6 +316,9 @@ private fun WorthField(
     val perDay by vm.usualAtNormal.collectAsStateWithLifecycle()
     val budget by vm.treatBudget.collectAsStateWithLifecycle()
     var budgetText by rememberSaveable { mutableStateOf("") }
+    val features by vm.features.collectAsStateWithLifecycle()
+    // An extra: shown when turned on, or when this reward already has a value.
+    if (io.github.randomtools3377.checklist.core.Feature.SUGGESTIONS !in features && size == null && money.isBlank()) return
     Text("What is it worth?", style = MaterialTheme.typography.titleSmall)
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
         RewardSize.entries.forEach { choice ->

@@ -47,7 +47,7 @@ class Book(
 
     /** Whether [goal] is the boosted goal (see [Boost]) in the week of [day]. */
     suspend fun boosted(goal: Goal, day: LocalDate): Boolean {
-        if (store.setting(Boost.SETTING) == "0") return false
+        if (!Feature.isOn(store, Feature.BOOST)) return false
         val monday = Boost.weekOf(day)
         val lapses = store.allLapses(monday.minusDays(Boost.DAYS), monday.minusDays(1))
         return Boost.goalFor(day, store.activeGoals(), lapses)?.id == goal.id
@@ -63,7 +63,7 @@ class Book(
 
     /** The streak bonus on [day], from the main streak to the end of the day before (see [StreakBonus]). */
     suspend fun streakPercent(day: LocalDate): Int {
-        if (store.setting(StreakBonus.SETTING) == "0") return 100
+        if (!Feature.isOn(store, Feature.STREAK_BONUS)) return 100
         val settings = StreakBonus.settingsOf(store.setting(StreakBonus.TARGET), store.setting(StreakBonus.VALUE))
         val yesterday = day.minusDays(1)
         val from = day.minusDays(120)
@@ -446,7 +446,7 @@ class Book(
             purchase.returnedAt == null &&
                 Days.dayOf(kotlinx.datetime.Instant.fromEpochMilliseconds(purchase.at).toLocalDateTime(zone), dayEnd) >= monday
         }
-        return RepeatPrice.now(reward.price, thisWeek, on = store.setting(RepeatPrice.SETTING) != "0")
+        return RepeatPrice.now(reward.price, thisWeek, on = Feature.isOn(store, Feature.REPEAT_PRICE))
     }
 
     /** Takes a bought reward out of the inventory because it has been used. */

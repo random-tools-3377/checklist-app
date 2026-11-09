@@ -78,7 +78,8 @@ class PerfectDays(private val store: Store, private val book: Book) {
         /** The last day looked at. */
         const val THROUGH = "perfect_through"
 
-        suspend fun bonus(store: Store): Int = store.setting(BONUS)?.toIntOrNull()?.coerceIn(0, 10_000) ?: DEFAULT_BONUS
+        /** The bonus while the feature is on; off (0) until the user turns it on. */
+        suspend fun bonus(store: Store): Int = store.setting(BONUS)?.toIntOrNull()?.coerceIn(0, 10_000) ?: 0
     }
 
     /** Pays the bonus for every perfect day that ended since the last time. Returns what was paid. */

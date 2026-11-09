@@ -101,6 +101,7 @@ import io.github.randomtools3377.checklist.reminders.Reminders
 import io.github.randomtools3377.checklist.data.ProjectDraft
 import io.github.randomtools3377.checklist.data.TodoDraft
 import io.github.randomtools3377.checklist.core.Todos
+import io.github.randomtools3377.checklist.core.Feature
 import io.github.randomtools3377.checklist.core.Challenge
 import io.github.randomtools3377.checklist.core.Difficulty
 import io.github.randomtools3377.checklist.core.Suggest
@@ -359,7 +360,7 @@ private fun describe(goal: Goal, stepCount: Int): String = when (goal.kind) {
 
 /** Asks whether the new goal is a habit or a project. */
 @Composable
-fun NewGoalDialog(onHabit: () -> Unit, onProject: () -> Unit, onDismiss: () -> Unit, onTodo: () -> Unit = {}) {
+fun NewGoalDialog(onHabit: () -> Unit, onProject: () -> Unit, onDismiss: () -> Unit, onTodo: () -> Unit = {}, showTodo: Boolean = true) {
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("New goal") },
@@ -377,7 +378,7 @@ fun NewGoalDialog(onHabit: () -> Unit, onProject: () -> Unit, onDismiss: () -> U
                         Text("Done once, step by step", style = MaterialTheme.typography.bodySmall)
                     }
                 }
-                OutlinedButton(onClick = onTodo, modifier = Modifier.fillMaxWidth().testTag("new-todo")) {
+                if (showTodo) OutlinedButton(onClick = onTodo, modifier = Modifier.fillMaxWidth().testTag("new-todo")) {
                     Column(Modifier.padding(vertical = 6.dp)) {
                         Text("To-do", style = MaterialTheme.typography.titleMedium)
                         Text("A one-off task, with or without a date", style = MaterialTheme.typography.bodySmall)
@@ -958,9 +959,10 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Long)
                 Switch(checked = keepReminding, onCheckedChange = { keepReminding = it }, modifier = Modifier.testTag("field:keep-reminding"))
             }
         }
-        // A goal to quit, and a challenge
-        HorizontalDivider()
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+        // A goal to quit, and a challenge: extras, shown when turned on or already in use here.
+        val features by vm.features.collectAsStateWithLifecycle()
+        if (Feature.QUIT in features || quit || Feature.CHALLENGES in features || challengeOn) HorizontalDivider()
+        if (Feature.QUIT in features || quit) Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
             Column(Modifier.weight(1f)) {
                 Text("A goal to quit", style = MaterialTheme.typography.bodyLarge)
                 Text(
@@ -971,7 +973,7 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Long)
             }
             Switch(checked = quit, onCheckedChange = { quit = it }, modifier = Modifier.testTag("field:quit"))
         }
-        if (choice != RepeatChoice.TIMES_PER) {
+        if (choice != RepeatChoice.TIMES_PER && (Feature.CHALLENGES in features || challengeOn)) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.weight(1f)) {
                     Text("Challenge", style = MaterialTheme.typography.bodyLarge)
@@ -1512,6 +1514,9 @@ private fun EffortField(
     label: String = "How hard is it?",
 ) {
     val rate by vm.currentDifficulty.collectAsStateWithLifecycle()
+    val features by vm.features.collectAsStateWithLifecycle()
+    // An extra: shown when turned on, or when this one already has a difficulty.
+    if (Feature.SUGGESTIONS !in features && effort == null) return
     Text(label, style = MaterialTheme.typography.titleSmall)
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
         Effort.entries.forEach { e ->

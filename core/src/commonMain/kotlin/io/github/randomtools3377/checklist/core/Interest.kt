@@ -17,7 +17,8 @@ class Interest(private val store: Store, private val book: Book) {
         /** The last Sunday interest was worked out for. */
         const val THROUGH = "interest_through"
 
-        suspend fun percent(store: Store): Int = store.setting(PERCENT)?.toIntOrNull()?.coerceIn(0, 100) ?: DEFAULT_PERCENT
+        /** The percentage while the feature is on; off (0) until the user turns it on. */
+        suspend fun percent(store: Store): Int = store.setting(PERCENT)?.toIntOrNull()?.coerceIn(0, 100) ?: 0
     }
 
     /** Pays the interest of every week that ended since the last time. Returns what was paid. */

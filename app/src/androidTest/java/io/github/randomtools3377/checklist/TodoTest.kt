@@ -22,7 +22,10 @@ import org.junit.runner.RunWith
 class TodoTest {
     class Empty : ExternalResource() {
         override fun before() = runBlocking {
-            (InstrumentationRegistry.getInstrumentation().targetContext.applicationContext as ChecklistApplication).container.db.clearAllTables()
+            val c = (InstrumentationRegistry.getInstrumentation().targetContext.applicationContext as ChecklistApplication).container
+            c.db.clearAllTables()
+            // To-dos are an extra, off until turned on.
+            c.db.dao().putSetting(io.github.randomtools3377.checklist.data.SettingEntity(io.github.randomtools3377.checklist.core.Feature.TODOS.key, "1"))
         }
     }
 

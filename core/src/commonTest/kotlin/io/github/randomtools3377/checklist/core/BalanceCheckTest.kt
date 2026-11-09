@@ -58,6 +58,7 @@ class BalanceCheckTest {
         val clock = TestClock(LocalDateTime(2026, 11, 4, 10, 0)) // a Wednesday
         val book = Book(store, clock) { kotlinx.datetime.TimeZone.UTC }
         val interest = Interest(store, book)
+        store.putSetting(Feature.INTEREST.key, Feature.INTEREST.onValue)
         assertTrue(interest.pay().isEmpty()) // starts counting from here
         store.addEntry(Entry(at = 0, day = LocalDate(2026, 11, 5), kind = EntryKind.TICK, amount = 120, label = "Read"))
 

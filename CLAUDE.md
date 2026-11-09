@@ -412,6 +412,32 @@ Build order **(default)**, each step a Release the owner can try:
     next day, and it can be turned off. Point changes stack by
     multiplying (difficulty, the boost, the streak bonus) and are rounded down once.
 
+15. Then, chosen by the owner: keeping the app uncluttered with a Features page, and a search
+    and clearer sections in Settings (0.35.0); reminders at the usual time and habit chains
+    (0.36.0); a quick-add widget and editing several goals at once (0.37.0); weekly planning and a
+    year in review (0.38.0); a spreadsheet export and restoring an automatic backup (0.39.0);
+    tablet and landscape layouts (0.40.0); and the previews PDF brought up to date.
+
+    Decided: the app stays uncluttered. One Features page in Settings lists every optional
+    feature with a switch. The core (goals, ticking, points, the shop, skips and misses,
+    reminders, streaks, the review, backups and the lock) is on; extras start off and are turned
+    on there. Anything empty hides on its own, like an empty To-dos box, and an extra already in
+    use stays shown.
+
+    **Details (default):** the extras are to-dos on Today, the timeline, the mood check-in, the
+    phone's calendar, suggested points and prices, the balance check, savings interest, the boost,
+    the perfect-day bonus, the streak bonus, rising prices on repeat buys, goals to quit,
+    challenges, reminders at the usual time, habit chains and weekly planning; the Plan tab stays
+    in Appearance → Tabs. The Undo bar, search, the Done list, editing several goals, the year in
+    review, the spreadsheet export and restoring a backup are part of the core, since they only
+    show when there is something to act on. A reminder at the usual time is for a goal with no
+    time and no reminder, at the time of day it is usually ticked (from at least 5 ticks over the
+    last 4 weeks). A habit chain names the goal that comes before; ticking that one reminds of
+    the next straight away if it is due and not done. Weekly planning is a card on Today on
+    Mondays, opening last week's summary, this week's target and the week's goals to move. The
+    quick-add widget adds a to-do from the home screen. The spreadsheet export is a CSV of the
+    points history and ticks, saved where the user picks.
+
 ## Talking to the owner
 
 - Short and plain. The owner is not an Android developer. Say what changed, what to try, and what

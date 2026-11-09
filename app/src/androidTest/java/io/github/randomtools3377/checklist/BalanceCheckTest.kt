@@ -25,6 +25,7 @@ class BalanceCheckTest {
     class EarnedTwentyToday : ExternalResource() {
         override fun before() = runBlocking {
             container.db.clearAllTables()
+            container.db.dao().putSetting(io.github.randomtools3377.checklist.data.SettingEntity(io.github.randomtools3377.checklist.core.Feature.BALANCE_CHECK.key, io.github.randomtools3377.checklist.core.Feature.BALANCE_CHECK.onValue))
             container.repository.saveHabit(
                 HabitDraft(
                     id = 0, name = "Read", icon = "📖", points = 20, repeat = Repeat.everyDay(nowLocal().date), target = 1, bonus = 0,

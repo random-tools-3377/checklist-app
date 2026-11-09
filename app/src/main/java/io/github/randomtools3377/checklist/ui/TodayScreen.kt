@@ -22,6 +22,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.foundation.layout.Arrangement
 import io.github.randomtools3377.checklist.core.Categories
 import io.github.randomtools3377.checklist.core.Moves
+import io.github.randomtools3377.checklist.core.Feature
 import io.github.randomtools3377.checklist.core.payFor
 import io.github.randomtools3377.checklist.core.TodaySection
 import io.github.randomtools3377.checklist.core.WeekProgress
@@ -144,6 +145,7 @@ fun TodayScreen(
     val newBadges by vm.newBadges.collectAsStateWithLifecycle()
     val welcome by vm.showWelcome.collectAsStateWithLifecycle()
     val boosts by vm.boosts.collectAsStateWithLifecycle()
+    val features by vm.features.collectAsStateWithLifecycle()
     val askMood by vm.askMood.collectAsStateWithLifecycle()
     val todayMood by vm.todayMood.collectAsStateWithLifecycle()
     // A note for today's mood, while it is being written.
@@ -314,7 +316,9 @@ fun TodayScreen(
         item {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                 Text(longDate(view.day), style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f).padding(bottom = 8.dp))
-                if (view.dueToday.isNotEmpty()) TextButton(onClick = onTimeline, modifier = Modifier.testTag("open-timeline")) { Text("Timeline") }
+                if (view.dueToday.isNotEmpty() && Feature.TIMELINE in features) {
+                    TextButton(onClick = onTimeline, modifier = Modifier.testTag("open-timeline")) { Text("Timeline") }
+                }
             }
             if (welcome) {
                 WelcomeCard(onTour = onGuide, onExamples = { vm.addExamples() }, onClose = vm::closeWelcome)
@@ -410,9 +414,12 @@ fun TodayScreen(
                         Spacer(Modifier.height(12.dp))
                     }
                 }
-                TodaySection.STREAKS -> item(key = "streaks") {
-                    StreakCard(screen.streaks, screen.streakSettings)
-                    Spacer(Modifier.height(12.dp))
+                // Nothing to count yet: no streak card.
+                TodaySection.STREAKS -> if (!(view.isEmpty && screen.streaks.done == 0 && screen.streaks.perfect == 0)) {
+                    item(key = "streaks") {
+                        StreakCard(screen.streaks, screen.streakSettings)
+                        Spacer(Modifier.height(12.dp))
+                    }
                 }
                 TodaySection.PACE -> if (screen.plan.isNotEmpty() || screen.events.isNotEmpty()) {
                     if (screen.events.isNotEmpty()) item(key = "events") {
@@ -471,7 +478,8 @@ fun TodayScreen(
                         }
                     }
                 }
-                TodaySection.TODOS -> {
+                // An extra: shown when turned on, or while there are to-dos.
+                TodaySection.TODOS -> if (Feature.TODOS in features || view.todos.isNotEmpty()) {
                     startGoals()
                     item(key = "title-todos") { SectionTitle("To-dos") }
                     item(key = "todo-add") {

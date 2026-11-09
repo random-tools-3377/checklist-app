@@ -21,7 +21,8 @@ class StreakBonusTest {
         assertEquals(11, payFor(10, Difficulty.NORMAL, boosted = false, streakPercent = 110))
         assertEquals(24, payFor(10, Difficulty.EASY, boosted = true, streakPercent = 110)) // 10 × 1.5 × 1.5 × 1.1, rounded down once
 
-        // Seven days done in a row before today: today's tick pays 10% more.
+        // Off to start with; on, seven days done in a row before today make today's tick pay 10% more.
+        store.putSetting(Feature.STREAK_BONUS.key, Feature.STREAK_BONUS.onValue)
         val read = store.addGoal(Goal(kind = GoalKind.HABIT, name = "Read", icon = "📖", points = 10, repeat = Repeat.everyDay(monday.minusDays(7))))
         (1..7).forEach { d ->
             val day = monday.minusDays(d)

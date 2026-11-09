@@ -19,6 +19,8 @@ class BoostsTest {
 
     @Test
     fun theGoalMissedMostIsBoostedForTheWeek() = runTest {
+        assertTrue(!book.boosted(Goal(kind = GoalKind.HABIT, name = "x", icon = "x", points = 1, repeat = null), monday)) // off to start with
+        store.putSetting(Feature.BOOST.key, Feature.BOOST.onValue)
         val read = store.addGoal(Goal(kind = GoalKind.HABIT, name = "Read", icon = "📖", points = 5, repeat = Repeat.everyDay(monday.minusDays(40)), position = 0))
         val run = store.addGoal(Goal(kind = GoalKind.HABIT, name = "Run", icon = "🏃", points = 10, repeat = Repeat.everyDay(monday.minusDays(40)), position = 1))
         listOf(3, 5).forEach { store.addLapse(miss(read.id, monday.minusDays(it))) }
@@ -39,6 +41,7 @@ class BoostsTest {
 
     @Test
     fun aPerfectDayPaysWhenItEnds() = runTest {
+        store.putSetting(Feature.PERFECT_DAY.key, Feature.PERFECT_DAY.onValue)
         val read = store.addGoal(Goal(kind = GoalKind.HABIT, name = "Read", icon = "📖", points = 5, repeat = Repeat.everyDay(monday)))
         val days = PerfectDays(store, book)
         assertTrue(days.pay().isEmpty()) // starts looking from today
@@ -57,6 +60,7 @@ class BoostsTest {
 
     @Test
     fun aRewardCostsMoreEachTimeItIsBoughtInAWeek() = runTest {
+        store.putSetting(Feature.REPEAT_PRICE.key, Feature.REPEAT_PRICE.onValue)
         val coffee = store.addReward(Reward(name = "Coffee", icon = "☕", price = 20))
         store.addEntry(Entry(at = 0, day = monday, kind = EntryKind.TICK, amount = 200, label = "Start"))
         assertEquals(20, (book.buy(coffee.id) as BuyResult.Bought).price)

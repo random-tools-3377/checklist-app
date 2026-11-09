@@ -2,6 +2,8 @@
 
 package io.github.randomtools3377.checklist.ui
 
+import io.github.randomtools3377.checklist.core.Feature
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.foundation.layout.Arrangement
@@ -231,56 +233,6 @@ private fun CalendarSettings(vm: MainViewModel) {
     }
 }
 
-/** The boost on the goal missed most, the perfect-day bonus, and prices that rise on repeat buys. */
-@Composable
-private fun BoostSettings(vm: MainViewModel) {
-    val boosts by vm.boosts.collectAsState()
-    Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        SwitchLine(
-            "Boost the goal missed most",
-            "Each week, the goal missed most over the last 4 weeks pays 50% more, to make it more tempting.",
-            boosts.boost,
-            "boost",
-        ) { vm.setBoost(it) }
-        Text("Perfect-day bonus", style = MaterialTheme.typography.bodyLarge)
-        Text(
-            "Paid when a day ends with everything due done, none of it skipped.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            listOf(0, 5, 10, 20).forEach { choice ->
-                androidx.compose.material3.FilterChip(
-                    selected = boosts.perfectDayBonus == choice,
-                    onClick = { vm.setPerfectDayBonus(choice) },
-                    label = { Text(if (choice == 0) "Off" else "+$choice") },
-                    modifier = Modifier.testTag("perfect-bonus:$choice"),
-                )
-            }
-        }
-        val streakBonus by vm.streakBonusOn.collectAsState()
-        SwitchLine(
-            "Streak bonus",
-            "Goals pay 10% more from a 7-day main streak, 20% from 30 days and 30% from 100.",
-            streakBonus,
-            "streak-bonus",
-        ) { vm.setStreakBonus(it) }
-        val mood by vm.askMoodOn.collectAsState()
-        SwitchLine(
-            "Mood check-in",
-            "Today asks once a day how you feel, and the review shows it beside how much got done.",
-            mood,
-            "mood",
-        ) { vm.setMoodCheckIn(it) }
-        SwitchLine(
-            "Prices rise on repeat buys",
-            "A reward costs 25% more for each time it was already bought this week, back to its price on Monday.",
-            boosts.repeatPrice,
-            "repeat-price",
-        ) { vm.setRepeatPrice(it) }
-    }
-}
-
 @Composable
 private fun SwitchLine(title: String, hint: String, on: Boolean, tag: String, onChange: (Boolean) -> Unit) {
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
@@ -292,25 +244,79 @@ private fun SwitchLine(title: String, hint: String, on: Boolean, tag: String, on
     }
 }
 
-/** Savings interest: a positive balance grows a little at the end of each week. */
+/**
+ * The Features page: every optional feature with a switch. They start off so the app stays
+ * simple; one already in use stays shown wherever it is used, even when turned off here.
+ */
 @Composable
-private fun InterestSetting(vm: MainViewModel) {
-    val percent by vm.interestPercent.collectAsState()
-    Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("Savings interest", style = MaterialTheme.typography.bodyLarge)
-        Text(
-            "Unspent ${pointsWord()} grow at the end of each week, to help save for big rewards. Paid on Mondays, in the history.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            listOf(0, 1, 2, 5).forEach { choice ->
-                androidx.compose.material3.FilterChip(
-                    selected = percent == choice,
-                    onClick = { vm.setInterest(choice) },
-                    label = { Text(if (choice == 0) "Off" else "$choice%") },
-                    modifier = Modifier.testTag("interest:$choice"),
-                )
+fun FeaturesScreen(vm: MainViewModel, onAppearance: () -> Unit, onBack: () -> Unit) {
+    val features by vm.features.collectAsState()
+    val interest by vm.interestPercent.collectAsState()
+    val boosts by vm.boosts.collectAsState()
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Features") },
+                navigationIcon = {
+                    IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") }
+                },
+            )
+        },
+    ) { padding ->
+        Column(
+            Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .verticalScroll(rememberScrollState())
+                .testTag("features"),
+        ) {
+            Text(
+                "Extras start off, to keep the app simple. Turn on what you'd like to use; turn off what you don't. " +
+                    "Anything already in use stays where it is.",
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+            )
+            Feature.entries.groupBy { it.group }.forEach { (group, inGroup) ->
+                HorizontalDivider(Modifier.padding(top = 8.dp))
+                Section(group)
+                inGroup.forEach { feature ->
+                    if (feature == Feature.CALENDAR) {
+                        CalendarSettings(vm)
+                        return@forEach
+                    }
+                    Column(Modifier.padding(horizontal = 16.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        SwitchLine(feature.title, feature.about, feature in features, "feature:${feature.name}") { vm.setFeature(feature, it) }
+                        // How much, for the two that pay an amount.
+                        if (feature == Feature.INTEREST && feature in features) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                listOf(1, 2, 5).forEach { choice ->
+                                    androidx.compose.material3.FilterChip(
+                                        selected = interest == choice,
+                                        onClick = { vm.setInterest(choice) },
+                                        label = { Text("$choice% a week") },
+                                        modifier = Modifier.testTag("interest:$choice"),
+                                    )
+                                }
+                            }
+                        }
+                        if (feature == Feature.PERFECT_DAY && feature in features) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                listOf(5, 10, 20).forEach { choice ->
+                                    androidx.compose.material3.FilterChip(
+                                        selected = boosts.perfectDayBonus == choice,
+                                        onClick = { vm.setPerfectDayBonus(choice) },
+                                        label = { Text("+$choice") },
+                                        modifier = Modifier.testTag("perfect-bonus:$choice"),
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            HorizontalDivider(Modifier.padding(top = 8.dp))
+            TextButton(onClick = onAppearance, modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp).testTag("features-tabs")) {
+                Text("Choose which tabs show, like Plan, in Appearance")
             }
         }
     }
@@ -349,6 +355,7 @@ fun SettingsScreen(
     vm: MainViewModel,
     onAppearance: () -> Unit,
     onGuide: () -> Unit,
+    onFeatures: () -> Unit = {},
     onOpenTab: (io.github.randomtools3377.checklist.core.AppTabKind) -> Unit,
     onBack: () -> Unit,
 ) {
@@ -359,6 +366,8 @@ fun SettingsScreen(
 
     fun toast(message: String) = Toast.makeText(context, message, Toast.LENGTH_LONG).show()
 
+    var query by rememberSaveable { mutableStateOf("") }
+    fun shows(words: String): Boolean = query.isBlank() || query.trim().split(Regex("\\s+")).all { words.contains(it, ignoreCase = true) }
     val backups by vm.backupState.collectAsState()
     androidx.compose.runtime.LaunchedEffect(Unit) { vm.refreshBackup() }
     val folderLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
@@ -391,6 +400,16 @@ fun SettingsScreen(
                 .padding(padding)
                 .verticalScroll(rememberScrollState()),
         ) {
+            // Search: only the sections whose name or contents match stay.
+            OutlinedTextField(
+                value = query,
+                onValueChange = { query = it.take(40) },
+                placeholder = { Text("Search settings") },
+                leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp).testTag("settings-search"),
+            )
+            if (shows("Appearance colours colors theme dark layout sections tabs font text size icon widget style"))
             Column(
                 Modifier
                     .fillMaxWidth()
@@ -401,6 +420,22 @@ fun SettingsScreen(
                 Text("Appearance", style = MaterialTheme.typography.bodyLarge)
                 Text("Colours, Today's layout and sections, and the tabs", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
             }
+            if (shows("Features extras to-dos todos timeline mood calendar suggested points prices balance interest boost perfect day streak bonus repeat quit challenges"))
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onFeatures)
+                    .testTag("setting:features")
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+            ) {
+                Text("Features", style = MaterialTheme.typography.bodyLarge)
+                Text(
+                    "Turn extras on or off: to-dos, the timeline, bonuses and more. They start off, to keep the app simple.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
+            if (shows("How the app works guide examples help"))
             Column(
                 Modifier
                     .fillMaxWidth()
@@ -420,247 +455,253 @@ fun SettingsScreen(
                     }
                 }
             }
-            HorizontalDivider()
-            Section("Difficulty")
-            DifficultySettings(vm)
-            InterestSetting(vm)
-            BoostSettings(vm)
-            HorizontalDivider()
-            Section("Phone calendar")
-            CalendarSettings(vm)
-            HorizontalDivider()
-            Section("Your day")
-            Column(
-                Modifier
-                    .fillMaxWidth()
-                    .clickable { choosingHour = true }
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
-            ) {
-                Text("My day ends at", style = MaterialTheme.typography.bodyLarge)
-                Text(hourText(settings.dayEndHour), color = MaterialTheme.colorScheme.primary)
-                Text(
-                    "Ticks before this time count for the day before, so a late night still counts as that day.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+            if (shows("Difficulty difficulty easy hard level ramp harder treat budget money points pay")) {
+                HorizontalDivider()
+                Section("Difficulty")
+                DifficultySettings(vm)
             }
-            Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-                TimeSetting(
-                    label = "My day starts at",
-                    time = settings.dayStart,
-                    onChange = { vm.setDayStart(it) },
-                    tag = "setting:day-start",
-                    emptyText = "Not set",
-                    hint = "Goals done several times a day are spread out from then to the finish time, and the morning plan comes then.",
-                )
-                TimeSetting(
-                    label = "Finish each day's goals by",
-                    time = settings.defaultFinish,
-                    onChange = { vm.setDefaultFinish(it) },
-                    tag = "setting:finish",
-                    emptyText = "Not set, so today's pace is off",
-                    hint = "Today shows how fast to go to be done by then. A goal can have its own finish time instead.",
-                )
-            }
-
-            HorizontalDivider(Modifier.padding(top = 8.dp))
-            Section("Streaks")
-            StreakSettingsRow(settings.streak) { vm.setStreakSettings(it) }
-
-            HorizontalDivider(Modifier.padding(top = 8.dp))
-            Section("Weekly target")
-            WeeklyTargetSetting(vm)
-
-            HorizontalDivider(Modifier.padding(top = 8.dp))
-            Section("Penalty tasks")
-            PenaltyTaskList(vm)
-
-            HorizontalDivider(Modifier.padding(top = 8.dp))
-            Section("Reasons for skips and misses")
-            OwnReasons(vm)
-
-            HorizontalDivider(Modifier.padding(top = 8.dp))
-            Section("Gaps")
-            GapSettingsRow(settings.gaps) { vm.setGapSettings(it) }
-
-            HorizontalDivider(Modifier.padding(top = 8.dp))
-            Section("Notifications")
-            NotificationSettings()
-            val weekly by vm.weeklySummary.collectAsState()
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
-            ) {
-                Column(Modifier.weight(1f)) {
-                    Text("Weekly summary", style = MaterialTheme.typography.bodyLarge)
+            if (shows("Your day day ends starts finish time late night pace")) {
+                HorizontalDivider()
+                Section("Your day")
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .clickable { choosingHour = true }
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                ) {
+                    Text("My day ends at", style = MaterialTheme.typography.bodyLarge)
+                    Text(hourText(settings.dayEndHour), color = MaterialTheme.colorScheme.primary)
                     Text(
-                        "Sunday at 6 pm: how much got done, the ${pointsWord()}, and your best goal. It opens the review.",
+                        "Ticks before this time count for the day before, so a late night still counts as that day.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                Switch(checked = weekly, onCheckedChange = { vm.setWeeklySummary(it) }, modifier = Modifier.testTag("setting:weekly"))
-            }
-            val snooze by vm.snoozeMinutes.collectAsState()
-            Column(Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
-                Text("Snooze for", style = MaterialTheme.typography.bodyLarge)
-                Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)) {
-                    listOf(10 to "10 min", 30 to "30 min", 60 to "1 hour").forEach { (minutes, label) ->
-                        androidx.compose.material3.FilterChip(
-                            selected = snooze == minutes,
-                            onClick = { vm.setSnoozeMinutes(minutes) },
-                            label = { Text(label) },
-                            modifier = Modifier.testTag("snooze:$minutes"),
-                        )
-                    }
-                }
-                Text(
-                    "Snooze on a reminder brings it back after this long, unless it's done by then.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
-            ) {
-                Column(Modifier.weight(1f)) {
-                    Text("Morning plan", style = MaterialTheme.typography.bodyLarge)
-                    Text(
-                        if (settings.dayStart == null) "Set when your day starts, above, and it comes then: today's list, what to do first, and the pace."
-                        else "When your day starts: today's list, what to do first, and the pace.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                    TimeSetting(
+                        label = "My day starts at",
+                        time = settings.dayStart,
+                        onChange = { vm.setDayStart(it) },
+                        tag = "setting:day-start",
+                        emptyText = "Not set",
+                        hint = "Goals done several times a day are spread out from then to the finish time, and the morning plan comes then.",
+                    )
+                    TimeSetting(
+                        label = "Finish each day's goals by",
+                        time = settings.defaultFinish,
+                        onChange = { vm.setDefaultFinish(it) },
+                        tag = "setting:finish",
+                        emptyText = "Not set, so today's pace is off",
+                        hint = "Today shows how fast to go to be done by then. A goal can have its own finish time instead.",
                     )
                 }
-                Switch(
-                    checked = settings.morningPlan,
-                    onCheckedChange = { vm.setMorningPlan(it) },
-                    modifier = Modifier.testTag("setting:morning-plan"),
-                )
             }
-
-            HorizontalDivider(Modifier.padding(top = 8.dp))
-            Section("Backup")
-            Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-                Text(
-                    "Phone backup is off for this app, so this file is your backup. Keep it somewhere safe. " +
-                        "It also moves your data to another phone, Android or iPhone.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Spacer(Modifier.height(8.dp))
-                Row {
-                    FilledTonalButton(
-                        onClick = { exportLauncher.launch("checklist-backup-${nowLocal().date}.json") },
-                        modifier = Modifier.testTag("export"),
-                    ) { Text("Export everything") }
-                    Spacer(Modifier.padding(4.dp))
-                    OutlinedButton(
-                        onClick = { importLauncher.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) },
-                        modifier = Modifier.testTag("import"),
-                    ) { Text("Import a backup") }
-                }
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    backups.lastBackup?.let { "Last backup: ${momentText(it.toLocalDateTime(), nowLocal().date)}" } ?: "No backup yet.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.testTag("last-backup"),
-                )
-
-                // The automatic backup
-                Spacer(Modifier.height(12.dp))
-                Text("Automatic backup", style = MaterialTheme.typography.bodyLarge)
-                Text(
-                    when {
-                        backups.folderGone -> "The folder can't be reached any more. Choose it again."
-                        backups.folderSet -> "On: each day you use the app, a dated backup is saved in ${backups.folderName ?: "your folder"}. The last ${Backups.KEEP} are kept."
-                        else -> "Off. Choose a folder and each day you use the app, a dated backup is saved there. The last ${Backups.KEEP} are kept."
-                    },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = if (backups.folderGone) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Row {
-                    TextButton(onClick = { folderLauncher.launch(null) }, modifier = Modifier.testTag("auto-backup-folder")) {
-                        Text(if (backups.folderSet) "Change folder" else "Choose a folder")
-                    }
-                    if (backups.folderSet) {
-                        TextButton(onClick = { vm.setBackupFolder(null) }, modifier = Modifier.testTag("auto-backup-off")) { Text("Turn off") }
-                    }
-                }
-
-                // The reminder
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(top = 4.dp)) {
+            if (shows("Streaks streak target percent days in a row")) {
+                HorizontalDivider(Modifier.padding(top = 8.dp))
+                Section("Streaks")
+                StreakSettingsRow(settings.streak) { vm.setStreakSettings(it) }
+            }
+            if (shows("Weekly target weekly target points week")) {
+                HorizontalDivider(Modifier.padding(top = 8.dp))
+                Section("Weekly target")
+                WeeklyTargetSetting(vm)
+            }
+            if (shows("Penalty tasks penalty tasks limit")) {
+                HorizontalDivider(Modifier.padding(top = 8.dp))
+                Section("Penalty tasks")
+                PenaltyTaskList(vm)
+            }
+            if (shows("Reasons for skips and misses reasons skips misses own")) {
+                HorizontalDivider(Modifier.padding(top = 8.dp))
+                Section("Reasons for skips and misses")
+                OwnReasons(vm)
+            }
+            if (shows("Gaps gaps stopped days loss")) {
+                HorizontalDivider(Modifier.padding(top = 8.dp))
+                Section("Gaps")
+                GapSettingsRow(settings.gaps) { vm.setGapSettings(it) }
+            }
+            if (shows("Notifications notifications reminders weekly summary snooze morning plan alarm")) {
+                HorizontalDivider(Modifier.padding(top = 8.dp))
+                Section("Notifications")
+                NotificationSettings()
+                val weekly by vm.weeklySummary.collectAsState()
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+                ) {
                     Column(Modifier.weight(1f)) {
-                        Text("Backup reminder", style = MaterialTheme.typography.bodyLarge)
+                        Text("Weekly summary", style = MaterialTheme.typography.bodyLarge)
                         Text(
-                            "Today reminds you when your last backup is over a week old.",
+                            "Sunday at 6 pm: how much got done, the ${pointsWord()}, and your best goal. It opens the review.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
-                    Switch(checked = backups.reminderOn, onCheckedChange = { vm.setBackupReminder(it) }, modifier = Modifier.testTag("setting:backup-reminder"))
+                    Switch(checked = weekly, onCheckedChange = { vm.setWeeklySummary(it) }, modifier = Modifier.testTag("setting:weekly"))
                 }
-            }
-
-            HorizontalDivider(Modifier.padding(top = 8.dp))
-            Section("Privacy")
-            Text(
-                "Pick what sits behind the lock. Unlocking uses your phone's own lock, and stays open until you leave the app.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
-            )
-            LockSwitch("Points history", settings.locks.history, "lock:history") { vm.setLock(LOCK_HISTORY, it) }
-            LockSwitch("The shop and bought rewards", settings.locks.shop, "lock:shop") { vm.setLock(LOCK_SHOP, it) }
-            LockSwitch("Goals marked private", settings.locks.privateGoals, "lock:private") { vm.setLock(LOCK_PRIVATE, it) }
-            LockSwitch("Reasons and notes for skips and misses", settings.locks.reasons, "lock:reasons") { vm.setLock(LOCK_REASONS, it) }
-            LockSwitch("Gap check-ins", settings.locks.gaps, "lock:gaps") { vm.setLock(LOCK_GAPS, it) }
-            LockSwitch("The review and stats", settings.locks.review, "lock:review") { vm.setLock(LOCK_REVIEW, it) }
-            if (settings.locks.privateGoals) {
-                Text(
-                    "While locked, private goals are left off the widget, and their notifications don't name them.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 16.dp),
-                )
-            }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                Text(
-                    "The app's preview is hidden in the recent-apps screen.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                )
-            } else {
+                val snooze by vm.snoozeMinutes.collectAsState()
+                Column(Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
+                    Text("Snooze for", style = MaterialTheme.typography.bodyLarge)
+                    Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)) {
+                        listOf(10 to "10 min", 30 to "30 min", 60 to "1 hour").forEach { (minutes, label) ->
+                            androidx.compose.material3.FilterChip(
+                                selected = snooze == minutes,
+                                onClick = { vm.setSnoozeMinutes(minutes) },
+                                label = { Text(label) },
+                                modifier = Modifier.testTag("snooze:$minutes"),
+                            )
+                        }
+                    }
+                    Text(
+                        "Snooze on a reminder brings it back after this long, unless it's done by then.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
                 ) {
                     Column(Modifier.weight(1f)) {
-                        Text("Hide in recent apps", style = MaterialTheme.typography.bodyLarge)
+                        Text("Morning plan", style = MaterialTheme.typography.bodyLarge)
                         Text(
-                            "On this phone, hiding the preview also blocks screenshots of the app.",
+                            if (settings.dayStart == null) "Set when your day starts, above, and it comes then: today's list, what to do first, and the pace."
+                            else "When your day starts: today's list, what to do first, and the pace.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                     Switch(
-                        checked = hideInRecents,
-                        onCheckedChange = {
-                            hideInRecents = it
-                            Privacy.setHideInRecents(context, it)
-                            context.findActivity()?.let { activity -> Privacy.apply(activity) }
-                        },
+                        checked = settings.morningPlan,
+                        onCheckedChange = { vm.setMorningPlan(it) },
+                        modifier = Modifier.testTag("setting:morning-plan"),
                     )
                 }
             }
-            Text(
-                "This app has no internet access and is left out of phone backups. Everything stays on this phone.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-            )
-
+            if (shows("Backup backup export import file automatic folder restore reminder")) {
+                HorizontalDivider(Modifier.padding(top = 8.dp))
+                Section("Backup")
+                Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                    Text(
+                        "Phone backup is off for this app, so this file is your backup. Keep it somewhere safe. " +
+                            "It also moves your data to another phone, Android or iPhone.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Row {
+                        FilledTonalButton(
+                            onClick = { exportLauncher.launch("checklist-backup-${nowLocal().date}.json") },
+                            modifier = Modifier.testTag("export"),
+                        ) { Text("Export everything") }
+                        Spacer(Modifier.padding(4.dp))
+                        OutlinedButton(
+                            onClick = { importLauncher.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) },
+                            modifier = Modifier.testTag("import"),
+                        ) { Text("Import a backup") }
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        backups.lastBackup?.let { "Last backup: ${momentText(it.toLocalDateTime(), nowLocal().date)}" } ?: "No backup yet.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.testTag("last-backup"),
+                    )
+    
+                    // The automatic backup
+                    Spacer(Modifier.height(12.dp))
+                    Text("Automatic backup", style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        when {
+                            backups.folderGone -> "The folder can't be reached any more. Choose it again."
+                            backups.folderSet -> "On: each day you use the app, a dated backup is saved in ${backups.folderName ?: "your folder"}. The last ${Backups.KEEP} are kept."
+                            else -> "Off. Choose a folder and each day you use the app, a dated backup is saved there. The last ${Backups.KEEP} are kept."
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (backups.folderGone) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Row {
+                        TextButton(onClick = { folderLauncher.launch(null) }, modifier = Modifier.testTag("auto-backup-folder")) {
+                            Text(if (backups.folderSet) "Change folder" else "Choose a folder")
+                        }
+                        if (backups.folderSet) {
+                            TextButton(onClick = { vm.setBackupFolder(null) }, modifier = Modifier.testTag("auto-backup-off")) { Text("Turn off") }
+                        }
+                    }
+    
+                    // The reminder
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(top = 4.dp)) {
+                        Column(Modifier.weight(1f)) {
+                            Text("Backup reminder", style = MaterialTheme.typography.bodyLarge)
+                            Text(
+                                "Today reminds you when your last backup is over a week old.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Switch(checked = backups.reminderOn, onCheckedChange = { vm.setBackupReminder(it) }, modifier = Modifier.testTag("setting:backup-reminder"))
+                    }
+                }
+            }
+            if (shows("Privacy privacy lock fingerprint private hide recents screenshots")) {
+                HorizontalDivider(Modifier.padding(top = 8.dp))
+                Section("Privacy")
+                Text(
+                    "Pick what sits behind the lock. Unlocking uses your phone's own lock, and stays open until you leave the app.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                )
+                LockSwitch("Points history", settings.locks.history, "lock:history") { vm.setLock(LOCK_HISTORY, it) }
+                LockSwitch("The shop and bought rewards", settings.locks.shop, "lock:shop") { vm.setLock(LOCK_SHOP, it) }
+                LockSwitch("Goals marked private", settings.locks.privateGoals, "lock:private") { vm.setLock(LOCK_PRIVATE, it) }
+                LockSwitch("Reasons and notes for skips and misses", settings.locks.reasons, "lock:reasons") { vm.setLock(LOCK_REASONS, it) }
+                LockSwitch("Gap check-ins", settings.locks.gaps, "lock:gaps") { vm.setLock(LOCK_GAPS, it) }
+                LockSwitch("The review and stats", settings.locks.review, "lock:review") { vm.setLock(LOCK_REVIEW, it) }
+                if (settings.locks.privateGoals) {
+                    Text(
+                        "While locked, private goals are left off the widget, and their notifications don't name them.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 16.dp),
+                    )
+                }
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    Text(
+                        "The app's preview is hidden in the recent-apps screen.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                    )
+                } else {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text("Hide in recent apps", style = MaterialTheme.typography.bodyLarge)
+                            Text(
+                                "On this phone, hiding the preview also blocks screenshots of the app.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Switch(
+                            checked = hideInRecents,
+                            onCheckedChange = {
+                                hideInRecents = it
+                                Privacy.setHideInRecents(context, it)
+                                context.findActivity()?.let { activity -> Privacy.apply(activity) }
+                            },
+                        )
+                    }
+                }
+                Text(
+                    "This app has no internet access and is left out of phone backups. Everything stays on this phone.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                )
+            }
             HorizontalDivider(Modifier.padding(top = 8.dp))
             Text(
                 "Version ${BuildConfig.VERSION_NAME}",

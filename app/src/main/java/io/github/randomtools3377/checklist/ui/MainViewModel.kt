@@ -14,6 +14,7 @@ import io.github.randomtools3377.checklist.core.Backup
 import io.github.randomtools3377.checklist.core.BackupError
 import io.github.randomtools3377.checklist.core.BuyResult
 import io.github.randomtools3377.checklist.core.Days
+import io.github.randomtools3377.checklist.core.Feature
 import io.github.randomtools3377.checklist.core.StreakBonus
 import io.github.randomtools3377.checklist.core.Mood
 import io.github.randomtools3377.checklist.core.ChallengeProgress
@@ -242,7 +243,7 @@ private data class Extras(val lapses: List<Lapse>, val checks: List<Check>, val 
 class Undoable(val message: String, val undo: () -> Unit)
 
 /** Which extras are on: the boost, the perfect-day bonus (0 is off) and repeat-buy prices. */
-data class Boosts(val boost: Boolean = true, val perfectDayBonus: Int = PerfectDays.DEFAULT_BONUS, val repeatPrice: Boolean = true)
+data class Boosts(val boost: Boolean = false, val perfectDayBonus: Int = 0, val repeatPrice: Boolean = false)
 
 /** What the balance check shows: usual earnings now, and each reward and goal judged. */
 data class BalanceCheckView(val perDay: Double?, val rate: Difficulty, val rewards: List<RewardCheck>, val goals: List<GoalCheck>)
@@ -412,7 +413,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             dao.observeSetting(Boost.SETTING),
             calendarEvents,
             dao.observeSetting(StreakBonus.SETTING),
-        ) { lapses, checks, boost, events, streakBonus -> Extras(lapses, checks, boost != "0", events, streakBonus != "0") }
+        ) { lapses, checks, boost, events, streakBonus -> Extras(lapses, checks, Feature.BOOST.isOn(boost), events, Feature.STREAK_BONUS.isOn(streakBonus)) }
         combine(view, lapsesFlow, now, settings, unlocked) { raw, (lapses, checks, boostOn, events, streakBonusOn), moment, s, isUnlocked ->
             val busy = BusyTime.on(events, day, s.dayEndHour)
             val hidePrivate = s.locks.privateGoals && !isUnlocked
@@ -918,7 +919,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Whether Today asks how the user feels: on, not answered and not put off today. */
     val askMood: StateFlow<Boolean> = combine(today, todayMood, dao.observeSetting(SETTING_MOOD), dao.observeSetting(SETTING_MOOD_SKIPPED)) { day, mood, on, skipped ->
-        on != "0" && mood == null && skipped != day.toString()
+        Feature.MOOD.isOn(on) && mood == null && skipped != day.toString()
     }.state(false)
 
     fun setMood(score: Int, note: String? = null) {
@@ -930,14 +931,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** Whether the mood check-in is on (it is unless turned off). */
-    val askMoodOn: StateFlow<Boolean> = dao.observeSetting(SETTING_MOOD).map { it != "0" }.state(true)
+    val askMoodOn: StateFlow<Boolean> = dao.observeSetting(SETTING_MOOD).map { Feature.MOOD.isOn(it) }.state(false)
 
     fun setMoodCheckIn(on: Boolean) {
         viewModelScope.launch { repository.setSetting(SETTING_MOOD, if (on) "1" else "0") }
     }
 
     /** The streak bonus, on unless turned off. */
-    val streakBonusOn: StateFlow<Boolean> = dao.observeSetting(StreakBonus.SETTING).map { it != "0" }.state(true)
+    val streakBonusOn: StateFlow<Boolean> = dao.observeSetting(StreakBonus.SETTING).map { Feature.STREAK_BONUS.isOn(it) }.state(false)
 
     fun setStreakBonus(on: Boolean) {
         viewModelScope.launch { repository.setSetting(StreakBonus.SETTING, if (on) "1" else "0") }
@@ -1030,7 +1031,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         // Rewards bought this week cost more each time (see RepeatPrice): from Monday, when the day ends.
         val weekStart = LocalDateTime(Boost.weekOf(day), LocalTime(settings.value.dayEndHour, 0)).toInstant(TimeZone.currentSystemDefault()).toEpochMilliseconds()
         val thisWeek = combine(dao.observePurchasesSince(weekStart), dao.observeSetting(RepeatPrice.SETTING)) { list, on ->
-            (on != "0") to list.filter { it.returnedAt == null }.groupingBy { it.rewardId }.eachCount()
+            Feature.REPEAT_PRICE.isOn(on) to list.filter { it.returnedAt == null }.groupingBy { it.rewardId }.eachCount()
         }
         combine(dao.observeBalance(), dao.observeRewards(), dao.observeUnusedPurchases(), pointsPerDay, thisWeek) { balance, rewards, bought, perDay, (on, counts) ->
             ShopView(
@@ -1272,13 +1273,13 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Savings interest on a positive balance each week, as a whole percentage; 0 is off. */
     val interestPercent: StateFlow<Int> =
-        dao.observeSetting(Interest.PERCENT).map { it?.toIntOrNull()?.coerceIn(0, 100) ?: Interest.DEFAULT_PERCENT }.state(Interest.DEFAULT_PERCENT)
+        dao.observeSetting(Interest.PERCENT).map { it?.toIntOrNull()?.coerceIn(0, 100) ?: 0 }.state(0)
 
     /** The boost, the perfect-day bonus and repeat-buy prices, each of which can be turned off. */
     val boosts: StateFlow<Boosts> = combine(
         dao.observeSetting(Boost.SETTING), dao.observeSetting(PerfectDays.BONUS), dao.observeSetting(RepeatPrice.SETTING),
     ) { boost, perfect, repeat ->
-        Boosts(boost != "0", perfect?.toIntOrNull()?.coerceIn(0, 10_000) ?: PerfectDays.DEFAULT_BONUS, repeat != "0")
+        Boosts(Feature.BOOST.isOn(boost), perfect?.toIntOrNull()?.coerceIn(0, 10_000) ?: 0, Feature.REPEAT_PRICE.isOn(repeat))
     }.state(Boosts())
 
     fun setBoost(on: Boolean) {
@@ -1366,6 +1367,16 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         val shown = if (s.locks.privateGoals && !isUnlocked) all.filter { !it.private } else all
         DoneList.of(shown, steps.map { it.toCore() }, (stepTicks + todoTicks).map { it.toCore() })
     }.state(emptyList())
+
+    /** The optional features turned on (see Feature). Off until the user turns them on. */
+    val features: StateFlow<Set<Feature>> = combine(Feature.entries.map { dao.observeSetting(it.key) }) { values ->
+        Feature.entries.filterIndexed { i, feature -> feature.isOn(values[i]) }.toSet()
+    }.state(emptySet())
+
+    /** Turns a feature on or off. The phone calendar also needs its permission (see Settings). */
+    fun setFeature(feature: Feature, on: Boolean) {
+        viewModelScope.launch { repository.setSetting(feature.key, if (on) feature.onValue else "0") }
+    }
 
     /** The welcome card on Today: for someone new, until it is answered or a goal is added. */
     val showWelcome: StateFlow<Boolean> = combine(dao.observeSetting(SETTING_GUIDE), dao.observeGoals(), dao.observeRemovedGoals()) { guide, goals, removed ->

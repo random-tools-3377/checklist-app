@@ -59,6 +59,7 @@ fun PlanScreen(days: List<TodayView>, vm: MainViewModel, padding: PaddingValues,
     val today = days.first().day
     val view = days[selected.coerceIn(days.indices)]
     val events by vm.calendarEvents.collectAsStateWithLifecycle()
+    val features by vm.features.collectAsStateWithLifecycle()
     val settings by vm.settings.collectAsStateWithLifecycle()
     val dayEvents = io.github.randomtools3377.checklist.core.BusyTime.on(events, view.day, settings.dayEndHour)
     LazyColumn(
@@ -87,7 +88,7 @@ fun PlanScreen(days: List<TodayView>, vm: MainViewModel, padding: PaddingValues,
         item {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                 Text(longDate(view.day), style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f).padding(top = 4.dp))
-                if (view.dueToday.isNotEmpty()) {
+                if (view.dueToday.isNotEmpty() && io.github.randomtools3377.checklist.core.Feature.TIMELINE in features) {
                     androidx.compose.material3.TextButton(onClick = { onTimeline(selected) }, modifier = Modifier.testTag("plan-timeline")) { Text("Timeline") }
                 }
             }

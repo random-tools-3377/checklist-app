@@ -80,6 +80,8 @@ keeps the data.
   pacing leaving its events out.
 - 0.33.0: goals to quit, with "I slipped", and challenges of so many days in a row with a bonus.
 - 0.34.0: a streak bonus, and a daily mood check-in shown in the review.
+- 0.35.0: a Features page where extras are turned on, starting off; empty things hide; search in
+  Settings.
 
 Every step in CLAUDE.md's build order is built. The iPhone app waits for a way to install it.
 

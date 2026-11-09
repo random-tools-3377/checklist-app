@@ -25,6 +25,7 @@ class TimelineTest {
         override fun before() = runBlocking {
             val c = (InstrumentationRegistry.getInstrumentation().targetContext.applicationContext as ChecklistApplication).container
             c.db.clearAllTables()
+            c.db.dao().putSetting(io.github.randomtools3377.checklist.data.SettingEntity(io.github.randomtools3377.checklist.core.Feature.TIMELINE.key, io.github.randomtools3377.checklist.core.Feature.TIMELINE.onValue))
             c.repository.saveHabit(
                 HabitDraft(
                     id = 0, name = "Run", icon = "🏃", points = 5, repeat = Repeat.everyDay(nowLocal().date), target = 1, bonus = 0,
