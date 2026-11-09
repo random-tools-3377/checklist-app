@@ -98,6 +98,7 @@ fun ChecklistApp(vm: MainViewModel = viewModel()) {
     val unlock = rememberUnlock(vm)
     val gap by vm.unansweredGap.collectAsStateWithLifecycle()
     val removedGoals by vm.removedGoals.collectAsStateWithLifecycle()
+    val tickNotes by vm.tickNotes.collectAsStateWithLifecycle()
     val review by vm.review.collectAsStateWithLifecycle()
     val reviewPeriod by vm.reviewPeriod.collectAsStateWithLifecycle()
     val allGaps by vm.gaps.collectAsStateWithLifecycle()
@@ -181,6 +182,8 @@ fun ChecklistApp(vm: MainViewModel = viewModel()) {
                 locked = settings.locks.history && !unlocked,
                 onUnlock = unlock,
                 onBack = ::pop,
+                notes = tickNotes,
+                vm = vm,
             )
             else -> {
                 val tab = AppTab.entries.firstOrNull { it.route == route } ?: AppTab.TODAY

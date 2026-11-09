@@ -77,6 +77,8 @@ data class TickEntity(
     val day: Long,
     val period: String?,
     val periodStart: Long,
+    /** A note about it, like "ran 5 km". Added in version 9. */
+    val note: String? = null,
 )
 
 /** The points ledger. The balance is the sum of [amount]. */
@@ -138,6 +140,8 @@ data class LapseEntity(
     val label: String,
     /** The gap it falls in. Added in version 5. */
     val gapId: Long? = null,
+    /** The words of the user's own reason, when reason is OTHER. Added in version 9. */
+    val reasonText: String? = null,
 )
 
 /** A routine's items ticked in a window. A routine is a habit whose steps are a checklist. Added in version 8. */
@@ -161,6 +165,8 @@ data class GapEntity(
     val createdAt: Long,
     val reason: String?,
     val note: String?,
+    /** The words of the user's own reason, when reason is OTHER. Added in version 9. */
+    val reasonText: String? = null,
 )
 
 /** Penalty tasks owed for going over the limit. Added in version 4. */
@@ -257,6 +263,19 @@ interface ChecklistDao {
 
     @Query("DELETE FROM ticks WHERE id = :id")
     suspend fun deleteTick(id: Long)
+
+    @Query("SELECT * FROM ticks WHERE id = :id")
+    suspend fun tick(id: Long): TickEntity?
+
+    @Update
+    suspend fun updateTick(tick: TickEntity)
+
+    @Update
+    suspend fun updateEntry(entry: EntryEntity)
+
+    /** Ticks that have a note, for the points history. */
+    @Query("SELECT * FROM ticks WHERE note IS NOT NULL")
+    fun observeTickNotes(): Flow<List<TickEntity>>
 
     // Ledger
 
@@ -496,10 +515,10 @@ interface ChecklistDao {
         GapEntity::class,
         CheckEntity::class,
     ],
-    version = 8,
+    version = 9,
     exportSchema = true,
     // Versions 4 to 8 only add tables and columns, so Room works the migrations out from the layouts.
-    autoMigrations = [AutoMigration(from = 3, to = 4), AutoMigration(from = 4, to = 5), AutoMigration(from = 5, to = 6), AutoMigration(from = 6, to = 7), AutoMigration(from = 7, to = 8)],
+    autoMigrations = [AutoMigration(from = 3, to = 4), AutoMigration(from = 4, to = 5), AutoMigration(from = 5, to = 6), AutoMigration(from = 6, to = 7), AutoMigration(from = 7, to = 8), AutoMigration(from = 8, to = 9)],
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun dao(): ChecklistDao

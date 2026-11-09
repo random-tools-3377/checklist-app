@@ -46,6 +46,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -64,16 +65,27 @@ import io.github.randomtools3377.checklist.core.SkipResult
 import io.github.randomtools3377.checklist.core.StreakSettings
 import io.github.randomtools3377.checklist.core.Streaks
 
-/** Reason chips, shared by misses and skips over the limit. */
+/** A reason as picked: one of the four, or one of the user's own by its words. */
+data class ReasonChoice(val reason: Reason, val text: String? = null)
+
+/** Reason chips, shared by misses, skips over the limit and gap check-ins: the four, then the user's own. */
 @Composable
-private fun ReasonChips(selected: Reason?, tagPrefix: String, onPick: (Reason) -> Unit) {
+private fun ReasonChips(selected: ReasonChoice?, tagPrefix: String, own: List<String>, onPick: (ReasonChoice) -> Unit) {
     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        Reason.entries.forEach { reason ->
+        Reason.entries.filter { it != Reason.OTHER }.forEach { reason ->
             FilterChip(
-                selected = selected == reason,
-                onClick = { onPick(reason) },
+                selected = selected?.reason == reason,
+                onClick = { onPick(ReasonChoice(reason)) },
                 label = { Text(reason.label) },
                 modifier = Modifier.testTag("$tagPrefix:${reason.name}"),
+            )
+        }
+        own.forEach { text ->
+            FilterChip(
+                selected = selected?.reason == Reason.OTHER && selected.text == text,
+                onClick = { onPick(ReasonChoice(Reason.OTHER, text)) },
+                label = { Text(text) },
+                modifier = Modifier.testTag("$tagPrefix:own:$text"),
             )
         }
     }
@@ -86,7 +98,8 @@ private fun ReasonChips(selected: Reason?, tagPrefix: String, onPick: (Reason) -
 @Composable
 fun MissesScreen(misses: List<Lapse>, vm: MainViewModel) {
     BackHandler {} // can't be skipped
-    val reasons = remember { mutableStateMapOf<Long, Reason>() }
+    val reasons = remember { mutableStateMapOf<Long, ReasonChoice>() }
+    val own by vm.ownReasons.collectAsStateWithLifecycle()
     val notes = remember { mutableStateMapOf<Long, String>() }
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).safeDrawingPadding().testTag("misses")) {
         Column(Modifier.padding(16.dp)) {
@@ -114,7 +127,7 @@ fun MissesScreen(misses: List<Lapse>, vm: MainViewModel) {
                             style = MaterialTheme.typography.bodyMedium,
                             color = if (miss.overLimit) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
                         )
-                        ReasonChips(reasons[miss.id], "reason:${miss.label}:${miss.day}") { reasons[miss.id] = it }
+                        ReasonChips(reasons[miss.id], "reason:${miss.label}:${miss.day}", own) { reasons[miss.id] = it }
                         OutlinedTextField(
                             value = notes[miss.id] ?: "",
                             onValueChange = { notes[miss.id] = it.take(200) },
@@ -131,7 +144,7 @@ fun MissesScreen(misses: List<Lapse>, vm: MainViewModel) {
             }
         }
         Button(
-            onClick = { misses.forEach { miss -> reasons[miss.id]?.let { vm.explain(miss.id, it, notes[miss.id]) } } },
+            onClick = { misses.forEach { miss -> reasons[miss.id]?.let { vm.explain(miss.id, it.reason, notes[miss.id], it.text) } } },
             enabled = misses.all { reasons[it.id] != null },
             modifier = Modifier.fillMaxWidth().padding(16.dp).testTag("misses-done"),
         ) { Text("Carry on") }
@@ -237,8 +250,9 @@ fun PenaltyScreen(penalty: Penalty, makeUp: List<Goal>, tasks: List<PenaltyTask>
 @Composable
 fun SkipDialog(goal: Goal, vm: MainViewModel, onDone: () -> Unit) {
     val check by produceState<SkipCheck?>(null, goal.id) { value = vm.checkSkip(goal.id) }
-    var reason by remember { mutableStateOf<Reason?>(null) }
+    var reason by remember { mutableStateOf<ReasonChoice?>(null) }
     var note by remember { mutableStateOf("") }
+    val own by vm.ownReasons.collectAsStateWithLifecycle()
     val allowed = check as? SkipCheck.Allowed
     AlertDialog(
         onDismissRequest = onDone,
@@ -258,7 +272,7 @@ fun SkipDialog(goal: Goal, vm: MainViewModel, onDone: () -> Unit) {
                                 "It needs a reason, costs ${pointsText(allowed.cost)}, and there's a penalty task to do right away.",
                             color = MaterialTheme.colorScheme.error,
                         )
-                        ReasonChips(reason, "skip-reason") { reason = it }
+                        ReasonChips(reason, "skip-reason", own) { reason = it }
                         OutlinedTextField(value = note, onValueChange = { note = it.take(200) }, label = { Text("Note (optional)") })
                     }
                 }
@@ -267,7 +281,7 @@ fun SkipDialog(goal: Goal, vm: MainViewModel, onDone: () -> Unit) {
         confirmButton = {
             TextButton(
                 onClick = {
-                    vm.skip(goal.id, reason, note) { if (it !is SkipResult.NeedsReason) onDone() }
+                    vm.skip(goal.id, reason?.reason, note, reason?.text) { if (it !is SkipResult.NeedsReason) onDone() }
                 },
                 enabled = allowed != null && (!allowed.overLimit || reason != null),
                 modifier = Modifier.testTag("confirm-skip"),
@@ -370,7 +384,8 @@ fun LockedPanel(what: String, onUnlock: () -> Unit, modifier: Modifier = Modifie
 @Composable
 fun GapCheckInScreen(gap: io.github.randomtools3377.checklist.core.Gap, vm: MainViewModel) {
     BackHandler {}
-    var reason by remember { mutableStateOf<Reason?>(null) }
+    var reason by remember { mutableStateOf<ReasonChoice?>(null) }
+    val own by vm.ownReasons.collectAsStateWithLifecycle()
     var note by remember { mutableStateOf("") }
     val cost by produceState(0 to 0, gap.id, gap.to) { value = vm.gapCost(gap) }
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).safeDrawingPadding().padding(16.dp).testTag("gap")) {
@@ -397,7 +412,7 @@ fun GapCheckInScreen(gap: io.github.randomtools3377.checklist.core.Gap, vm: Main
                     color = MaterialTheme.colorScheme.error,
                 )
             }
-            ReasonChips(reason, "gap-reason") { reason = it }
+            ReasonChips(reason, "gap-reason", own) { reason = it }
             OutlinedTextField(
                 value = note,
                 onValueChange = { note = it.take(300) },
@@ -407,7 +422,7 @@ fun GapCheckInScreen(gap: io.github.randomtools3377.checklist.core.Gap, vm: Main
             Text("It's marked in your history with what you write here.", style = MaterialTheme.typography.bodySmall)
         }
         Button(
-            onClick = { reason?.let { vm.explainGap(gap.id, it, note) } },
+            onClick = { reason?.let { vm.explainGap(gap.id, it.reason, note, it.text) } },
             enabled = reason != null,
             modifier = Modifier.fillMaxWidth().padding(top = 12.dp).testTag("gap-done"),
         ) { Text("Carry on") }

@@ -135,7 +135,14 @@ class Gaps(private val store: Store, private val book: Book) {
     private suspend fun cover(gap: Gap) {
         for (lapse in store.allLapses(gap.from, gap.to)) {
             if (lapse.kind != LapseKind.MISS || lapse.forgotten || lapse.gapId == gap.id) continue
-            store.updateLapse(lapse.copy(gapId = gap.id, reason = lapse.reason ?: gap.reason, note = lapse.note ?: gap.note))
+            store.updateLapse(
+                lapse.copy(
+                    gapId = gap.id,
+                    reason = lapse.reason ?: gap.reason,
+                    note = lapse.note ?: gap.note,
+                    reasonText = if (lapse.reason == null) gap.reasonText else lapse.reasonText,
+                ),
+            )
             store.penaltyForLapse(lapse.id)?.let { penalty ->
                 if (penalty.doneAt == null && penalty.cancelledAt == null && penalty.choice == null) {
                     store.updatePenalty(penalty.copy(cancelledAt = book.millis()))
@@ -145,12 +152,18 @@ class Gaps(private val store: Store, private val book: Book) {
     }
 
     /** Answers the gap check-in: one reason and an optional note for the whole stretch. */
-    suspend fun explain(gapId: Long, reason: Reason, note: String?) = store.transaction {
+    suspend fun explain(gapId: Long, reason: Reason, note: String?, reasonText: String? = null) = store.transaction {
         val gap = store.gap(gapId) ?: return@transaction
-        val answered = gap.copy(reason = reason, note = note?.takeIf { it.isNotBlank() })
+        val answered = gap.copy(
+            reason = reason,
+            note = note?.takeIf { it.isNotBlank() },
+            reasonText = reasonText?.takeIf { reason == Reason.OTHER && it.isNotBlank() },
+        )
         store.updateGap(answered)
         for (lapse in store.allLapses(gap.from, gap.to)) {
-            if (lapse.gapId == gap.id && lapse.reason == null) store.updateLapse(lapse.copy(reason = reason, note = answered.note))
+            if (lapse.gapId == gap.id && lapse.reason == null) {
+                store.updateLapse(lapse.copy(reason = reason, note = answered.note, reasonText = answered.reasonText))
+            }
         }
     }
 }

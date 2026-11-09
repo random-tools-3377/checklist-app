@@ -25,6 +25,7 @@ import io.github.randomtools3377.checklist.core.TodayList
 import io.github.randomtools3377.checklist.core.TodayPace
 import io.github.randomtools3377.checklist.core.TodayView
 import io.github.randomtools3377.checklist.core.Usual
+import io.github.randomtools3377.checklist.core.countsToward
 import io.github.randomtools3377.checklist.core.minusDays
 import io.github.randomtools3377.checklist.core.usualMinuteOfDay
 import io.github.randomtools3377.checklist.core.Gap
@@ -64,6 +65,7 @@ import io.github.randomtools3377.checklist.data.SETTING_DAY_END_HOUR
 import io.github.randomtools3377.checklist.data.Backups
 import io.github.randomtools3377.checklist.data.DEFAULT_SNOOZE_MINUTES
 import io.github.randomtools3377.checklist.data.SETTING_DAY_START
+import io.github.randomtools3377.checklist.data.SETTING_OWN_REASONS
 import io.github.randomtools3377.checklist.data.SETTING_SNOOZE
 import io.github.randomtools3377.checklist.data.SETTING_WEEKLY
 import io.github.randomtools3377.checklist.reminders.Focus
@@ -130,6 +132,8 @@ data class TodayState(
     val nextSlots: Map<Long, Slot> = emptyMap(),
     /** "My day starts at" is set, so repetitions can be spread over the day. */
     val hasDayStart: Boolean = false,
+    /** Each ticked habit's latest tick in its window, to add a note to. */
+    val lastTicks: Map<Long, Tick> = emptyMap(),
 )
 
 /** What the privacy lock covers, as chosen in Settings. */
@@ -294,6 +298,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 streaks, s.streak, hiddenPrivate = raw.goals.count { it.private && !it.archived } - shownGoals.count { it.private && !it.archived },
                 nextSlots = nextSlots,
                 hasDayStart = s.dayStart != null,
+                lastTicks = (todayView.dueToday + todayView.thisWeek + todayView.thisMonth + todayView.thisYear).mapNotNull { row ->
+                    raw.ticks.filter { it.stepId == null && it.countsToward(row.goal, row.window.start) }.maxByOrNull { it.at }?.let { row.goal.id to it }
+                }.toMap(),
             )
         }
     }.state(null)
@@ -468,8 +475,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         return inGap.size to inGap.sumOf { it.cost }
     }
 
-    fun explainGap(gapId: Long, reason: Reason, note: String?) {
-        viewModelScope.launch { container.gaps.explain(gapId, reason, note) }
+    fun explainGap(gapId: Long, reason: Reason, note: String?, reasonText: String? = null) {
+        viewModelScope.launch { container.gaps.explain(gapId, reason, note, reasonText) }
     }
 
     fun setGapSettings(settings: GapSettings) {
@@ -524,13 +531,41 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     suspend fun checkSkip(goalId: Long): SkipCheck = lapses.checkSkip(goalId)
 
-    fun skip(goalId: Long, reason: Reason?, note: String?, onResult: (SkipResult) -> Unit = {}) {
-        viewModelScope.launch { onResult(lapses.skip(goalId, reason, note)) }
+    fun skip(goalId: Long, reason: Reason?, note: String?, reasonText: String? = null, onResult: (SkipResult) -> Unit = {}) {
+        viewModelScope.launch { onResult(lapses.skip(goalId, reason, note, reasonText)) }
     }
 
-    fun explain(lapseId: Long, reason: Reason, note: String?) {
-        viewModelScope.launch { lapses.explain(lapseId, reason, note) }
+    fun explain(lapseId: Long, reason: Reason, note: String?, reasonText: String? = null) {
+        viewModelScope.launch { lapses.explain(lapseId, reason, note, reasonText) }
     }
+
+    /** The user's own miss reasons, offered after the four. */
+    val ownReasons: StateFlow<List<String>> = dao.observeSetting(SETTING_OWN_REASONS)
+        .map { text -> text?.split('\n')?.map { it.trim() }?.filter { it.isNotEmpty() }.orEmpty() }
+        .state(emptyList())
+
+    fun addOwnReason(text: String) {
+        val reason = text.trim().take(40)
+        if (reason.isEmpty() || Reason.entries.any { it.label.equals(reason, ignoreCase = true) }) return
+        val list = (ownReasons.value.filter { !it.equals(reason, ignoreCase = true) } + reason).take(12)
+        viewModelScope.launch { repository.setSetting(SETTING_OWN_REASONS, list.joinToString("\n")) }
+    }
+
+    fun removeOwnReason(text: String) {
+        viewModelScope.launch { repository.setSetting(SETTING_OWN_REASONS, ownReasons.value.filter { it != text }.joinToString("\n")) }
+    }
+
+    /** Fixes a tick: when it was really done, on the same day, and its note. */
+    fun editTick(tickId: Long, at: Long?, note: String?) {
+        viewModelScope.launch { book.editTick(tickId, at, note) }
+    }
+
+    suspend fun loadTick(tickId: Long): Tick? = dao.tick(tickId)?.toCore()
+
+    /** Each tick's note, for the history. */
+    val tickNotes: StateFlow<Map<Long, String>> = dao.observeTickNotes()
+        .map { rows -> rows.mapNotNull { row -> row.note?.let { row.id to it } }.toMap() }
+        .state(emptyMap())
 
     fun forgotToTick(lapseId: Long) {
         viewModelScope.launch { lapses.forgotToTick(lapseId) }

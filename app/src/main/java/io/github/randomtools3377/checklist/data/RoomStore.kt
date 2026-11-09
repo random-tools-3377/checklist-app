@@ -57,6 +57,9 @@ class RoomStore(private val db: AppDatabase) : Store {
         dao.checks(goalId, periodStart.toEpochDay()).map { it.toCore() }
     override suspend fun addCheck(check: Check): Long = dao.insertCheck(check.toEntity())
     override suspend fun removeCheck(id: Long) = dao.deleteCheck(id)
+    override suspend fun tick(id: Long): Tick? = dao.tick(id)?.toCore()
+    override suspend fun updateTick(tick: Tick) = dao.updateTick(tick.toEntity())
+    override suspend fun updateEntry(entry: Entry) = dao.updateEntry(entry.toEntity())
     override suspend fun addTick(tick: Tick): Long = dao.insertTick(tick.toEntity())
     override suspend fun removeTick(tickId: Long) = dao.deleteTick(tickId)
 
@@ -164,6 +167,7 @@ fun TickEntity.toCore() = Tick(
     day = day.toDay(),
     period = period?.let { Period.valueOf(it) },
     periodStart = periodStart.toDay(),
+    note = note,
 )
 
 fun Tick.toEntity() = TickEntity(
@@ -174,6 +178,7 @@ fun Tick.toEntity() = TickEntity(
     day = day.toEpochDay(),
     period = period?.name,
     periodStart = periodStart.toEpochDay(),
+    note = note,
 )
 
 fun EntryEntity.toCore() = Entry(
@@ -235,6 +240,7 @@ fun LapseEntity.toCore() = Lapse(
     forgotten = forgotten,
     label = label,
     gapId = gapId,
+    reasonText = reasonText,
 )
 
 fun Lapse.toEntity() = LapseEntity(
@@ -252,6 +258,7 @@ fun Lapse.toEntity() = LapseEntity(
     forgotten = forgotten,
     label = label,
     gapId = gapId,
+    reasonText = reasonText,
 )
 
 fun PenaltyEntity.toCore() = Penalty(
@@ -296,6 +303,7 @@ fun GapEntity.toCore() = Gap(
     createdAt = createdAt,
     reason = reason?.let { Reason.valueOf(it) },
     note = note,
+    reasonText = reasonText,
 )
 
 fun Gap.toEntity() = GapEntity(
@@ -306,4 +314,5 @@ fun Gap.toEntity() = GapEntity(
     createdAt = createdAt,
     reason = reason?.name,
     note = note,
+    reasonText = reasonText,
 )

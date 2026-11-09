@@ -94,6 +94,8 @@ fun TodayScreen(
     if (screen == null) return
     val view = screen.view
     val backup by vm.backupState.collectAsStateWithLifecycle()
+    var editingTick by remember { mutableStateOf<Long?>(null) }
+    editingTick?.let { id -> EditTickDialog(id, vm) { editingTick = null } }
     val haptics = LocalHapticFeedback.current
     var skipping by remember { mutableStateOf<Goal?>(null) }
     LaunchedEffect(skipRequest, screen.plan) {
@@ -203,6 +205,8 @@ fun TodayScreen(
                     onItem = { item, spot -> checkItem(planned.row, item, spot) },
                     onUncheck = { item -> vm.uncheckItem(item.step.id) },
                     onFocus = planned.row.goal.minutes?.let { minutes -> { vm.startFocus(planned.row.goal.id, minutes) } },
+                    lastTick = screen.lastTicks[planned.row.goal.id],
+                    onNote = { editingTick = it },
                 )
                 Spacer(Modifier.height(10.dp))
             }
@@ -394,6 +398,8 @@ private fun HabitCard(
     onItem: (StepRow, Spot) -> Unit = { _, _ -> },
     onUncheck: (StepRow) -> Unit = {},
     onFocus: (() -> Unit)? = null,
+    lastTick: io.github.randomtools3377.checklist.core.Tick? = null,
+    onNote: (Long) -> Unit = {},
 ) {
     val goal = row.goal
     val spot = remember { Spot() }
@@ -439,6 +445,15 @@ private fun HabitCard(
                         style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.clickable(onClick = onFocus).padding(vertical = 4.dp).testTag("focus:${goal.name}"),
+                    )
+                }
+                // A note about the latest tick, like "ran 5 km".
+                if (lastTick != null) {
+                    Text(
+                        lastTick.note?.let { "“$it”" } ?: "Add a note",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.clickable { onNote(lastTick.id) }.padding(vertical = 4.dp).testTag("note:${goal.name}"),
                     )
                 }
                 if (row.skipped) {

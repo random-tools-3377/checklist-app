@@ -20,7 +20,14 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.foundation.clickable
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import kotlinx.datetime.toInstant
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -43,7 +50,17 @@ private fun kindText(kind: EntryKind): String = when (kind) {
 
 /** Every change to the balance, newest first, grouped by day. */
 @Composable
-fun HistoryScreen(entries: List<Entry>?, gaps: List<Gap>, locked: Boolean, onUnlock: () -> Unit, onBack: () -> Unit) {
+fun HistoryScreen(
+    entries: List<Entry>?,
+    gaps: List<Gap>,
+    locked: Boolean,
+    onUnlock: () -> Unit,
+    onBack: () -> Unit,
+    notes: Map<Long, String> = emptyMap(),
+    vm: MainViewModel? = null,
+) {
+    var editing by remember { mutableStateOf<Long?>(null) }
+    if (vm != null) editing?.let { id -> EditTickDialog(id, vm) { editing = null } }
     Scaffold(
         topBar = {
             TopAppBar(
@@ -86,9 +103,21 @@ fun HistoryScreen(entries: List<Entry>?, gaps: List<Gap>, locked: Boolean, onUnl
                     HorizontalDivider()
                 }
                 items(onDay, key = { "entry-${it.id}" }) { entry ->
-                    Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    // A tick can be fixed: when it was done, and a note about it.
+                    val tickId = entry.tickId?.takeIf { entry.kind == EntryKind.TICK }
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .then(if (tickId != null && vm != null) Modifier.clickable { editing = tickId } else Modifier)
+                            .padding(vertical = 8.dp)
+                            .testTag("entry:${entry.label}"),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
                         Column(Modifier.weight(1f)) {
                             Text(entry.label, style = MaterialTheme.typography.bodyLarge)
+                            tickId?.let { notes[it] }?.let { note ->
+                                Text("“$note”", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
+                            }
                             Text(
                                 "${kindText(entry.kind)} · ${timeText(entry.at.toLocalDateTime().time)}",
                                 style = MaterialTheme.typography.bodySmall,
@@ -109,6 +138,47 @@ fun HistoryScreen(entries: List<Entry>?, gaps: List<Gap>, locked: Boolean, onUnl
 
 private fun signed(amount: Int): String = if (amount > 0) "+$amount" else "$amount"
 
+/**
+ * Fixes a tick: the time it was really done, on the same day, and a note about it, like
+ * "ran 5 km". The points stay as they were.
+ */
+@Composable
+fun EditTickDialog(tickId: Long, vm: MainViewModel, onDone: () -> Unit) {
+    val tick by produceState<io.github.randomtools3377.checklist.core.Tick?>(null, tickId) { value = vm.loadTick(tickId) }
+    val loaded = tick ?: return
+    val start = remember(loaded.id) { loaded.at.toLocalDateTime() }
+    var time by remember(loaded.id) { mutableStateOf(start.time) }
+    var note by remember(loaded.id) { mutableStateOf(loaded.note ?: "") }
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDone,
+        title = { Text("This tick") },
+        text = {
+            Column(verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)) {
+                TimeSetting("Done at", time, { it?.let { picked -> time = picked } }, "edit-tick-time")
+                androidx.compose.material3.OutlinedTextField(
+                    value = note,
+                    onValueChange = { note = it.take(io.github.randomtools3377.checklist.core.Book.NOTE_LENGTH) },
+                    label = { Text("Note (optional)") },
+                    placeholder = { Text("Like \"ran 5 km\"") },
+                    modifier = Modifier.fillMaxWidth().testTag("edit-tick-note"),
+                )
+            }
+        },
+        confirmButton = {
+            androidx.compose.material3.TextButton(
+                onClick = {
+                    val at = kotlinx.datetime.LocalDateTime(start.date, time)
+                        .toInstant(kotlinx.datetime.TimeZone.currentSystemDefault()).toEpochMilliseconds()
+                    vm.editTick(loaded.id, at.takeIf { time != start.time }, note)
+                    onDone()
+                },
+                modifier = Modifier.testTag("edit-tick-save"),
+            ) { Text("Save") }
+        },
+        dismissButton = { androidx.compose.material3.TextButton(onClick = onDone) { Text("Cancel") } },
+    )
+}
+
 /** A gap, marked in the history. */
 @Composable
 fun GapMark(gap: Gap) {
@@ -122,7 +192,7 @@ fun GapMark(gap: Gap) {
                 style = MaterialTheme.typography.titleSmall,
                 color = MaterialTheme.colorScheme.onTertiaryContainer,
             )
-            val said = listOfNotNull(gap.reason?.label, gap.note).joinToString(" · ")
+            val said = listOfNotNull(io.github.randomtools3377.checklist.core.reasonLabel(gap.reason, gap.reasonText), gap.note).joinToString(" · ")
             if (said.isNotEmpty()) {
                 Text(said, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onTertiaryContainer)
             }

@@ -35,6 +35,9 @@ interface Store {
 
     suspend fun addEntry(entry: Entry): Long
     suspend fun entriesForTicks(tickIds: List<Long>): List<Entry>
+    suspend fun tick(id: Long): Tick?
+    suspend fun updateTick(tick: Tick)
+    suspend fun updateEntry(entry: Entry)
     suspend fun removeEntry(entryId: Long)
 
     /** Sum of the whole ledger. */

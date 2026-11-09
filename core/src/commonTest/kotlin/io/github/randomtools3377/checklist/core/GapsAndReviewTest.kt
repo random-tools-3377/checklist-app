@@ -115,7 +115,7 @@ class ReviewTest {
         assertEquals(3, runSummary.currentRun)
         val readSummary = summary.goals.first { it.goal.id == 2L }
         assertEquals(listOf(2, 2, 1, 0), listOf(readSummary.due, readSummary.done, readSummary.skipped, readSummary.missed))
-        assertEquals(listOf(Reason.NO_TIME to 1), summary.reasons)
+        assertEquals(listOf("No time" to 1), summary.reasons)
         assertEquals(listOf(60, 15, 5), listOf(summary.earned, summary.spent, summary.lost))
         assertEquals("Run", summary.mostMissed?.goal?.name)
         assertEquals("Read", summary.mostSkipped?.goal?.name)

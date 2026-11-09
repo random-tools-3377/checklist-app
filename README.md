@@ -45,6 +45,7 @@ keeps the data.
 - 0.9.0: routines, a habit with a checklist inside.
 - 0.10.0: a focus timer, a weekly summary, filling in times every few hours, copying a goal
   and bringing back a removed one.
+- 0.11.0: the user's own miss reasons, notes on ticks, and fixing when a tick was done.
 
 Next: more features (the list is in CLAUDE.md). The iPhone app waits for a way to install it.
 

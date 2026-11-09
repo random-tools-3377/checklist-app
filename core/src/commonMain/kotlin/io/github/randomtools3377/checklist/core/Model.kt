@@ -143,6 +143,8 @@ data class Tick(
     val period: Period?,
     /** First day of that window. The same as [day] for a project step. */
     val periodStart: LocalDate,
+    /** A note the user wrote about it, like "ran 5 km". */
+    val note: String? = null,
 )
 
 /**
@@ -216,7 +218,14 @@ enum class Reason(val label: String) {
     NO_TIME("No time"),
     ILL("Ill"),
     CHOSE_NOT("Chose not to"),
+
+    /** One of the user's own reasons; its words are kept beside it. */
+    OTHER("Other"),
 }
+
+/** A reason as the user sees it: one of the four, or the words of one of their own. */
+fun reasonLabel(reason: Reason?, text: String?): String? =
+    if (reason == Reason.OTHER) text?.takeIf { it.isNotBlank() } ?: Reason.OTHER.label else reason?.label
 
 /**
  * A skip or a miss. [day] is the day it belongs to: the day it was due, or the last day of a
@@ -246,6 +255,8 @@ data class Lapse(
     val label: String,
     /** The gap it falls in, whose one reason covers it. */
     val gapId: Long? = null,
+    /** The words of the user's own reason, when [reason] is OTHER. */
+    val reasonText: String? = null,
 )
 
 /**
@@ -262,6 +273,8 @@ data class Gap(
     val createdAt: Long,
     val reason: Reason? = null,
     val note: String? = null,
+    /** The words of the user's own reason, when [reason] is OTHER. */
+    val reasonText: String? = null,
 )
 
 @Serializable

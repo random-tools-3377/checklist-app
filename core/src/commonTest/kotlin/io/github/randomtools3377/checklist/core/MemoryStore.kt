@@ -39,6 +39,9 @@ class MemoryStore : Store {
     override suspend fun removeTick(tickId: Long) { ticks.removeAll { it.id == tickId } }
     override suspend fun addEntry(entry: Entry): Long = nextId++.also { entries += entry.copy(id = it) }
     override suspend fun entriesForTicks(tickIds: List<Long>): List<Entry> = entries.filter { it.tickId in tickIds }
+    override suspend fun tick(id: Long): Tick? = ticks.find { it.id == id }
+    override suspend fun updateTick(tick: Tick) { ticks[ticks.indexOfFirst { it.id == tick.id }] = tick }
+    override suspend fun updateEntry(entry: Entry) { entries[entries.indexOfFirst { it.id == entry.id }] = entry }
     override suspend fun removeEntry(entryId: Long) { entries.removeAll { it.id == entryId } }
     override suspend fun balance(): Int = entries.sumOf { it.amount }
     override suspend fun reward(id: Long): Reward? = rewards.find { it.id == id }

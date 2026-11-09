@@ -28,8 +28,8 @@ data class ReviewSummary(
     val from: LocalDate,
     val to: LocalDate,
     val goals: List<GoalSummary>,
-    /** How often each reason was given, most first. */
-    val reasons: List<Pair<Reason, Int>>,
+    /** How often each reason was given, most first, as the user sees it (their own ones by their words). */
+    val reasons: List<Pair<String, Int>>,
     val earned: Int,
     val spent: Int,
     val lost: Int,
@@ -107,7 +107,7 @@ object Review {
             GoalSummary(goal, due, done, skipped, missed, goalTicks.size, points, longest, if (to >= today) run else 0)
         }
 
-        val reasons = live.filter { it.day >= from && it.day <= to }.mapNotNull { it.reason }.groupingBy { it }.eachCount().toList().sortedByDescending { it.second }
+        val reasons = live.filter { it.day >= from && it.day <= to }.mapNotNull { reasonLabel(it.reason, it.reasonText) }.groupingBy { it }.eachCount().toList().sortedByDescending { it.second }
         fun sum(vararg kinds: EntryKind) = inRange.filter { it.kind in kinds }.sumOf { it.amount }
         return ReviewSummary(
             from = from,

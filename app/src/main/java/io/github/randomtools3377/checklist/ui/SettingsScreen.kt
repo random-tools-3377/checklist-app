@@ -186,6 +186,10 @@ fun SettingsScreen(
             PenaltyTaskList(vm)
 
             HorizontalDivider(Modifier.padding(top = 8.dp))
+            Section("Reasons for skips and misses")
+            OwnReasons(vm)
+
+            HorizontalDivider(Modifier.padding(top = 8.dp))
             Section("Gaps")
             GapSettingsRow(settings.gaps) { vm.setGapSettings(it) }
 
@@ -557,6 +561,43 @@ private fun GapSettingsRow(current: GapSettings, onChange: (GapSettings) -> Unit
             tag = "setting:gap-points",
             hint = "Points taken off for going over the limit, within any 7 days in a row.",
         )
+    }
+}
+
+/** The user's own reasons, offered after forgot, no time, ill and chose not to. */
+@Composable
+private fun OwnReasons(vm: MainViewModel) {
+    val own by vm.ownReasons.collectAsState()
+    var text by remember { mutableStateOf("") }
+    Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+        Text(
+            "Forgot, no time, ill and chose not to are always there. Add your own, like \"Travelling\" or \"Raining\".",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        own.forEach { reason ->
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("• $reason", modifier = Modifier.weight(1f))
+                TextButton(onClick = { vm.removeOwnReason(reason) }, modifier = Modifier.testTag("remove-reason:$reason")) { Text("Remove") }
+            }
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            OutlinedTextField(
+                value = text,
+                onValueChange = { text = it.take(40) },
+                label = { Text("Your own reason") },
+                singleLine = true,
+                modifier = Modifier.weight(1f).testTag("setting:new-reason"),
+            )
+            TextButton(
+                onClick = {
+                    vm.addOwnReason(text)
+                    text = ""
+                },
+                enabled = text.isNotBlank(),
+                modifier = Modifier.testTag("add-reason"),
+            ) { Text("Add") }
+        }
     }
 }
 

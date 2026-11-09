@@ -174,7 +174,7 @@ private fun ReasonsCard(summary: ReviewSummary, hidden: Boolean) {
             summary.reasons.isEmpty() -> Text("No skips or misses with a reason.", style = MaterialTheme.typography.bodyMedium)
             else -> summary.reasons.forEach { (reason, count) ->
                 Row {
-                    Text(reason.label, modifier = Modifier.weight(1f))
+                    Text(reason, modifier = Modifier.weight(1f))
                     Text("$count", fontWeight = FontWeight.Bold)
                 }
             }
@@ -191,7 +191,7 @@ private fun GapsCard(gaps: List<Gap>, hideNotes: Boolean) {
                 fontWeight = FontWeight.Medium,
             )
             Text(
-                if (hideNotes) "🔒 Behind the privacy lock" else listOfNotNull(gap.reason?.label, gap.note).joinToString(" · ").ifEmpty { "Not answered yet" },
+                if (hideNotes) "🔒 Behind the privacy lock" else listOfNotNull(io.github.randomtools3377.checklist.core.reasonLabel(gap.reason, gap.reasonText), gap.note).joinToString(" · ").ifEmpty { "Not answered yet" },
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

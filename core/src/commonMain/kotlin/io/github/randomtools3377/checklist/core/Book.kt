@@ -38,10 +38,27 @@ class Book(
 ) {
     fun millis(): Long = clock.now().toEpochMilliseconds()
 
+    companion object {
+        /** A tick's note is kept short, like "ran 5 km". */
+        const val NOTE_LENGTH = 200
+    }
+
     /** The user's current day, after the day-end setting. */
     suspend fun today(): LocalDate = Days.dayOf(clock.now().toLocalDateTime(timeZone()), store.dayEndHour())
 
     suspend fun balance(): Int = store.balance()
+
+    /**
+     * Changes a tick: its time on the same day (when it was really done), and its note. The
+     * points stay as they were; the ledger's entries for it move to the new time too.
+     */
+    suspend fun editTick(tickId: Long, at: Long?, note: String?): Boolean = store.transaction {
+        val tick = store.tick(tickId) ?: return@transaction false
+        val newAt = at ?: tick.at
+        store.updateTick(tick.copy(at = newAt, note = note?.trim()?.takeIf { it.isNotEmpty() }?.take(NOTE_LENGTH)))
+        if (newAt != tick.at) store.entriesForTicks(listOf(tickId)).forEach { store.updateEntry(it.copy(at = newAt)) }
+        true
+    }
 
     /** Ticks a habit once for its current period, paying its points and, on finishing, its bonus. */
     suspend fun tickHabit(goalId: Long): TickResult = store.transaction {

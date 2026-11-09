@@ -74,14 +74,14 @@ class Lapses(
      * Skips the habit for today (for a "times per" habit, one of its times). Within the
      * allowance no reason is needed. Over the limit, [reason] is required.
      */
-    suspend fun skip(goalId: Long, reason: Reason?, note: String?): SkipResult = store.transaction {
+    suspend fun skip(goalId: Long, reason: Reason?, note: String?, reasonText: String? = null): SkipResult = store.transaction {
         val check = checkSkip(goalId)
         if (check !is SkipCheck.Allowed) return@transaction SkipResult.NotAllowed(check)
         if (check.overLimit && reason == null) return@transaction SkipResult.NeedsReason
         val goal = store.goal(goalId)!!
         val today = book.today()
         val window = goal.repeat!!.window(today)!!
-        record(goal, LapseKind.SKIP, today, window.period, window.start, check.overLimit, reason, note)
+        record(goal, LapseKind.SKIP, today, window.period, window.start, check.overLimit, reason, note, reasonText)
     }
 
     /** Saves a skip or miss, with its penalty when over the limit. */
@@ -94,12 +94,14 @@ class Lapses(
         overLimit: Boolean,
         reason: Reason?,
         note: String?,
+        reasonText: String? = null,
     ): SkipResult.Skipped {
         val now = book.millis()
         val cost = if (overLimit) cost(goal) else 0
         val lapse = Lapse(
             goalId = goal.id, kind = kind, day = day, period = period, periodStart = periodStart, at = now,
             overLimit = overLimit, cost = cost, reason = reason, note = note?.takeIf { it.isNotBlank() }, label = goal.name,
+            reasonText = reasonText?.takeIf { reason == Reason.OTHER && it.isNotBlank() },
         )
         val id = store.addLapse(lapse)
         var penaltyId: Long? = null
@@ -165,9 +167,15 @@ class Lapses(
     }
 
     /** Gives a miss (or a skip over the limit) its reason and an optional note. */
-    suspend fun explain(lapseId: Long, reason: Reason, note: String?) = store.transaction {
+    suspend fun explain(lapseId: Long, reason: Reason, note: String?, reasonText: String? = null) = store.transaction {
         val lapse = store.lapse(lapseId) ?: return@transaction
-        store.updateLapse(lapse.copy(reason = reason, note = note?.takeIf { it.isNotBlank() }))
+        store.updateLapse(
+            lapse.copy(
+                reason = reason,
+                note = note?.takeIf { it.isNotBlank() },
+                reasonText = reasonText?.takeIf { reason == Reason.OTHER && it.isNotBlank() },
+            ),
+        )
     }
 
     /**
