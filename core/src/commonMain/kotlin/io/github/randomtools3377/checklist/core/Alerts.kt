@@ -3,6 +3,7 @@ package io.github.randomtools3377.checklist.core
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.LocalTime
+import kotlinx.datetime.isoDayNumber
 
 enum class AlertKind {
     /** At the habit's clock time. */
@@ -19,6 +20,12 @@ enum class AlertKind {
 
     /** "Keep reminding": again, some minutes after the first reminder, while it isn't done. */
     AGAIN,
+
+    /** The weekly summary, on Sunday. Not for one goal. */
+    WEEKLY,
+
+    /** A focus timer ran out. */
+    FOCUS_DONE,
 }
 
 /**
@@ -119,6 +126,17 @@ object Alerts {
             }
         }
         return result
+    }
+
+    /** The weekly summaries from [from] (included) to [to] (not included): Sundays at [at]. */
+    fun weekly(from: LocalDateTime, to: LocalDateTime, at: LocalTime, dayEndHour: Int): List<Alert> {
+        val alerts = mutableListOf<Alert>()
+        var day = from.date.minusDays(1)
+        while (day <= to.date) {
+            if (day.dayOfWeek.isoDayNumber == 7) alerts += Alert(MORNING_GOAL, day, Pace.on(day, at, dayEndHour), AlertKind.WEEKLY)
+            day = day.plusDays(1)
+        }
+        return alerts.filter { it.at >= from && it.at < to }
     }
 
     /** The goal id a morning plan carries: it is about the whole day, not one goal. */

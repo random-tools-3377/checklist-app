@@ -49,10 +49,17 @@ class MainActivity : FragmentActivity() {
             vm.requestSkip(goal)
             intent?.removeExtra(EXTRA_SKIP)
         }
+        intent?.getStringExtra(EXTRA_OPEN)?.let { tab ->
+            vm.openTab.value = tab
+            intent.removeExtra(EXTRA_OPEN)
+        }
     }
 
     companion object {
         /** Opens the skip dialog for this goal: a notification's Skip that needs a reason. */
         const val EXTRA_SKIP = "skip_goal"
+
+        /** Opens a tab, like "review" from the weekly summary. */
+        const val EXTRA_OPEN = "open_tab"
     }
 }

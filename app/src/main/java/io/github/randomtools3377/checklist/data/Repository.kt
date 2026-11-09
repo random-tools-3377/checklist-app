@@ -19,6 +19,7 @@ const val SETTING_DEFAULT_FINISH = "default_finish_minute"
 const val SETTING_DAY_START = "day_start_minute"
 const val SETTING_MORNING_PLAN = "morning_plan"
 const val SETTING_SNOOZE = "snooze_minutes"
+const val SETTING_WEEKLY = "weekly_summary"
 const val DEFAULT_SNOOZE_MINUTES = 10
 const val SETTING_TODAY_ORDER = "today_order"
 const val ORDER_RECOMMENDED = "recommended"
@@ -187,6 +188,21 @@ class Repository(private val db: AppDatabase, private val celebrations: Celebrat
             }
         }
         pruneCelebrations()
+    }
+
+    /** A copy of a goal, with its steps or checklist, named "… (copy)", at the end of the list. Returns its id. */
+    suspend fun duplicateGoal(id: Long): Long? = db.withTransaction {
+        val goal = dao.goal(id) ?: return@withTransaction null
+        val copyId = dao.insertGoal(
+            goal.copy(id = 0, name = (goal.name.take(53) + " (copy)"), archived = false, position = dao.nextGoalPosition(), createdAt = nowMillis()),
+        )
+        dao.activeSteps(id).forEach { step -> dao.insertStep(step.copy(id = 0, goalId = copyId)) }
+        copyId
+    }
+
+    /** Brings a removed goal back, at the end of the list. Its past stays as it was. */
+    suspend fun restoreGoal(id: Long) = db.withTransaction {
+        dao.goal(id)?.let { dao.updateGoal(it.copy(archived = false, position = dao.nextGoalPosition())) }
     }
 
     /** Removes a goal from the lists. Points it already paid stay in the balance. */

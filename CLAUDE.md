@@ -295,8 +295,20 @@ Build order **(default)**, each step a Release the owner can try:
 10. More, chosen as useful for a schedule and checklist **(default, in this order)**: a focus
     timer for goals with a length; a weekly summary; "every few hours" goals; the user's own
     miss reasons; duplicating a goal and bringing back a removed one; fixing a tick's time;
-    notes on ticks; categories; charts in the review; badges; colours; a balance and streaks
-    widget; a mystery reward and a weekly points target.
+    notes on ticks; categories; charts in the review; badges; a balance and streaks widget; a
+    mystery reward and a weekly points target.
+11. Customising the look, after all of step 10. Decided: dark mode choices (light, dark, follow
+    the phone, pure black); an accent colour from a palette, any colour from a colour picker,
+    or matched to the wallpaper; a colour for each goal (its card, the calendar, the widget),
+    also from the palette or the colour picker; a background behind Today (a
+    gradient or the user's own photo, dimmed); card size and the app's own text size; Today as
+    a grid of big tiles; choosing, hiding and ordering Today's sections; choosing the tabs and
+    the one that opens first; renaming points (coins, XP, an emoji); app icon choices; a few
+    bundled fonts; celebration settings (sound, buzz, how much confetti, a default GIF for
+    every goal) and the widget's style. **(default:** ready-made colour themes too, like
+    Ocean, Forest and Sunset; the colour picker has a colour square, a hue slider and a hex
+    code box, and the app builds the whole theme from the picked colour so text stays
+    readable**)**.
 
 ## Talking to the owner
 

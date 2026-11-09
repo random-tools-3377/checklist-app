@@ -65,6 +65,10 @@ import io.github.randomtools3377.checklist.data.Backups
 import io.github.randomtools3377.checklist.data.DEFAULT_SNOOZE_MINUTES
 import io.github.randomtools3377.checklist.data.SETTING_DAY_START
 import io.github.randomtools3377.checklist.data.SETTING_SNOOZE
+import io.github.randomtools3377.checklist.data.SETTING_WEEKLY
+import io.github.randomtools3377.checklist.reminders.Focus
+import io.github.randomtools3377.checklist.reminders.FocusState
+import io.github.randomtools3377.checklist.reminders.Reminders
 import io.github.randomtools3377.checklist.core.BackupReminder
 import io.github.randomtools3377.checklist.data.SETTING_DEFAULT_FINISH
 import io.github.randomtools3377.checklist.data.SETTING_MORNING_PLAN
@@ -324,6 +328,54 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun closeDays() {
         viewModelScope.launch { container.closeDays() }
         autoBackup()
+        refreshFocus()
+    }
+
+    // The focus timer
+
+    val focus = MutableStateFlow<FocusState?>(null)
+
+    private fun refreshFocus() {
+        focus.value = Focus.current(getApplication())
+        viewModelScope.launch { Reminders.reschedule(getApplication()) }
+    }
+
+    fun startFocus(goalId: Long, minutes: Int) {
+        Focus.start(getApplication(), goalId, minutes)
+        refreshFocus()
+    }
+
+    fun pauseFocus() {
+        Focus.pause(getApplication())
+        refreshFocus()
+    }
+
+    fun resumeFocus() {
+        Focus.resume(getApplication())
+        refreshFocus()
+    }
+
+    fun stopFocus() {
+        Focus.stop(getApplication())
+        refreshFocus()
+    }
+
+    /** Time's up, or "Done now": the goal is ticked. */
+    fun finishFocus(onResult: (TickResult) -> Unit) {
+        val goalId = focus.value?.goalId ?: return
+        stopFocus()
+        tickHabit(goalId, onResult)
+    }
+
+    /** A tab to open, asked for by a notification (the weekly summary opens the review). */
+    val openTab = MutableStateFlow<String?>(null)
+
+    // The weekly summary
+
+    val weeklySummary: StateFlow<Boolean> = dao.observeSetting(SETTING_WEEKLY).map { it != "0" }.state(true)
+
+    fun setWeeklySummary(on: Boolean) {
+        viewModelScope.launch { repository.setSetting(SETTING_WEEKLY, if (on) "1" else "0") }
     }
 
     // Backups: the reminder, and the automatic backup to a folder
@@ -609,6 +661,17 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             repository.saveProject(draft)
             onDone()
         }
+    }
+
+    /** Goals the user removed, to bring back. */
+    val removedGoals: StateFlow<List<Goal>> = dao.observeRemovedGoals().map { rows -> rows.map { it.toCore() } }.state(emptyList())
+
+    fun duplicateGoal(id: Long, onDone: (Long) -> Unit) {
+        viewModelScope.launch { repository.duplicateGoal(id)?.let(onDone) }
+    }
+
+    fun restoreGoal(id: Long) {
+        viewModelScope.launch { repository.restoreGoal(id) }
     }
 
     fun removeGoal(id: Long, onDone: () -> Unit) {

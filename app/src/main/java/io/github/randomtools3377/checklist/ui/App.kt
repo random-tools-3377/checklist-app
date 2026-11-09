@@ -37,6 +37,7 @@ import androidx.compose.runtime.toMutableStateList
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.randomtools3377.checklist.core.GoalKind
@@ -96,6 +97,7 @@ fun ChecklistApp(vm: MainViewModel = viewModel()) {
     val skipRequest by vm.skipRequest.collectAsStateWithLifecycle()
     val unlock = rememberUnlock(vm)
     val gap by vm.unansweredGap.collectAsStateWithLifecycle()
+    val removedGoals by vm.removedGoals.collectAsStateWithLifecycle()
     val review by vm.review.collectAsStateWithLifecycle()
     val reviewPeriod by vm.reviewPeriod.collectAsStateWithLifecycle()
     val allGaps by vm.gaps.collectAsStateWithLifecycle()
@@ -125,13 +127,53 @@ fun ChecklistApp(vm: MainViewModel = viewModel()) {
         return
     }
 
+    // A notification can ask for a tab, like the weekly summary opening the review.
+    val openTab by vm.openTab.collectAsStateWithLifecycle()
+    androidx.compose.runtime.LaunchedEffect(openTab) {
+        val asked = openTab ?: return@LaunchedEffect
+        AppTab.entries.firstOrNull { it.route == asked }?.let { goTo(it) }
+        vm.openTab.value = null
+    }
+
+    // The focus timer fills the screen while it runs.
+    val focusState by vm.focus.collectAsStateWithLifecycle()
+    focusState?.let { state ->
+        val goal = goals?.goals?.find { it.id == state.goalId }
+        val config = androidx.compose.ui.platform.LocalConfiguration.current
+        val density = androidx.compose.ui.platform.LocalDensity.current
+        val center = with(density) { androidx.compose.ui.geometry.Offset(config.screenWidthDp.dp.toPx() / 2, config.screenHeightDp.dp.toPx() / 2) }
+        Box(Modifier.fillMaxSize()) {
+            FocusScreen(
+                state, goal,
+                onPause = vm::pauseFocus,
+                onResume = vm::resumeFocus,
+                onStop = vm::stopFocus,
+                onDone = {
+                    vm.finishFocus { result ->
+                        if (result is io.github.randomtools3377.checklist.core.TickResult.Ticked) {
+                            celebrations.burst(center, "+${result.points + result.bonus}", big = true)
+                        }
+                    }
+                },
+            )
+            celebrations.Overlay()
+        }
+        return
+    }
+
     Box(Modifier.fillMaxSize()) {
         val parts = route.split("/")
         val id = parts.getOrNull(1)?.toLongOrNull() ?: 0L
         when (parts[0]) {
-            "habit" -> HabitEditor(id, vm, onClose = ::pop)
-            "project" -> ProjectEditor(id, vm, onClose = ::pop)
-            "reward" -> RewardEditor(id, vm, onClose = ::pop)
+            // Each editor screen keeps its own fields, so opening a copy doesn't carry the last one's over.
+            "habit" -> androidx.compose.runtime.key(route) {
+                HabitEditor(id, vm, onClose = ::pop, onOpen = { copy -> pop(); push("habit/$copy") })
+            }
+            "project" -> androidx.compose.runtime.key(route) {
+                ProjectEditor(id, vm, onClose = ::pop, onOpen = { copy -> pop(); push("project/$copy") })
+            }
+            "removed" -> RemovedGoalsScreen(removedGoals, onRestore = { vm.restoreGoal(it.id) }, onBack = ::pop)
+            "reward" -> androidx.compose.runtime.key(route) { RewardEditor(id, vm, onClose = ::pop) }
             "settings" -> SettingsScreen(settings, vm, onBack = ::pop)
             "history" -> HistoryScreen(
                 history,
@@ -181,6 +223,8 @@ fun ChecklistApp(vm: MainViewModel = viewModel()) {
                             onMove = { goal, by -> vm.moveGoal(goal.id, by) },
                             onUnlock = unlock,
                             padding = padding,
+                            removed = removedGoals.size,
+                            onRemoved = { push("removed") },
                         )
                         AppTab.REVIEW -> if (settings.locks.review && !unlocked) {
                             LockedPanel("The review", unlock, Modifier.padding(padding))

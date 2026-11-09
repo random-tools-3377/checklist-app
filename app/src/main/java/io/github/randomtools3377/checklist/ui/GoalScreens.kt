@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
@@ -91,6 +92,8 @@ import io.github.randomtools3377.checklist.data.toMinuteOfDay
 import io.github.randomtools3377.checklist.data.toTime
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.isoDayNumber
+import io.github.randomtools3377.checklist.core.Pace
+import kotlinx.datetime.LocalTime
 
 // The list of goals
 
@@ -102,6 +105,8 @@ fun GoalsScreen(
     onMove: (Goal, Int) -> Unit,
     onUnlock: () -> Unit,
     padding: PaddingValues,
+    removed: Int = 0,
+    onRemoved: () -> Unit = {},
 ) {
     if (view == null) return
     val habits = view.goals.filter { it.kind == GoalKind.HABIT }
@@ -142,6 +147,43 @@ fun GoalsScreen(
         }
         goalSection("Habits", habits, view, reordering, onEdit, onMove)
         goalSection("Projects", projects, view, reordering, onEdit, onMove)
+        if (removed > 0 && !reordering) {
+            item {
+                TextButton(onClick = onRemoved, modifier = Modifier.padding(top = 8.dp).testTag("removed-goals")) {
+                    Text(if (removed == 1) "1 removed goal" else "$removed removed goals")
+                }
+            }
+        }
+    }
+}
+
+/** Goals the user removed, each with a button to bring it back. */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+fun RemovedGoalsScreen(goals: List<Goal>, onRestore: (Goal) -> Unit, onBack: () -> Unit) {
+    androidx.compose.material3.Scaffold(
+        topBar = {
+            androidx.compose.material3.TopAppBar(
+                title = { Text("Removed goals") },
+                navigationIcon = {
+                    IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") }
+                },
+            )
+        },
+    ) { padding ->
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = padding.calculateTopPadding() + 8.dp, bottom = padding.calculateBottomPadding() + 24.dp),
+        ) {
+            if (goals.isEmpty()) item { Text("Nothing removed.", modifier = Modifier.padding(top = 24.dp)) }
+            items(goals, key = { it.id }) { goal ->
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+                    Text(goal.icon, fontSize = 26.sp, modifier = Modifier.width(40.dp))
+                    Text(goal.name, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                    TextButton(onClick = { onRestore(goal) }, modifier = Modifier.testTag("restore:${goal.name}")) { Text("Bring back") }
+                }
+            }
+        }
     }
 }
 
@@ -244,7 +286,9 @@ private fun RemoveButton(what: String, name: String, onRemove: () -> Unit) {
             title = { Text("Remove $name?") },
             text = { Text("It disappears from your lists. Points it already earned stay in your balance.") },
             confirmButton = {
-                TextButton(onClick = { asking = false; onRemove() }) { Text("Remove", color = MaterialTheme.colorScheme.error) }
+                TextButton(onClick = { asking = false; onRemove() }, modifier = Modifier.testTag("confirm-remove")) {
+                    Text("Remove", color = MaterialTheme.colorScheme.error)
+                }
             },
             dismissButton = { TextButton(onClick = { asking = false }) { Text("Cancel") } },
         )
@@ -266,7 +310,7 @@ private enum class RepeatChoice(val label: String) {
 private val WeekOfMonthChoices = listOf(1 to "First", 2 to "Second", 3 to "Third", 4 to "Fourth", Repeat.LAST_WEEK to "Last")
 
 @Composable
-fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit) {
+fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Long) -> Unit = {}) {
     val today = remember { nowLocal().date }
     var loaded by rememberSaveable { mutableStateOf(id == 0L) }
     var name by rememberSaveable { mutableStateOf("") }
@@ -614,6 +658,7 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit) {
         )
         if (severalADay) {
             EachTimeSetting(
+                dayStart = remember { vm.settings.value.dayStart },
                 count = targetValue ?: 1,
                 on = eachTimeOn,
                 onOn = { on ->
@@ -698,7 +743,10 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit) {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         CelebrationPicker(celebration) { celebration = it }
-        if (id != 0L) RemoveButton("habit", name) { vm.removeGoal(id, onClose) }
+        if (id != 0L) {
+            TextButton(onClick = { vm.duplicateGoal(id, onOpen) }, modifier = Modifier.testTag("duplicate")) { Text("Make a copy of this habit") }
+            RemoveButton("habit", name) { vm.removeGoal(id, onClose) }
+        }
     }
 
     if (choosingRepeat) {
@@ -804,7 +852,7 @@ private val StepFieldsSaver = listSaver<MutableList<StepField>, Any>(
 )
 
 @Composable
-fun ProjectEditor(id: Long, vm: MainViewModel, onClose: () -> Unit) {
+fun ProjectEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Long) -> Unit = {}) {
     var loaded by rememberSaveable { mutableStateOf(id == 0L) }
     var name by rememberSaveable { mutableStateOf("") }
     var icon by rememberSaveable { mutableStateOf(GOAL_ICON) }
@@ -953,7 +1001,10 @@ fun ProjectEditor(id: Long, vm: MainViewModel, onClose: () -> Unit) {
             PrivateSwitch(isPrivate) { isPrivate = it }
         }
         CelebrationPicker(celebration) { celebration = it }
-        if (id != 0L) RemoveButton("project", name) { vm.removeGoal(id, onClose) }
+        if (id != 0L) {
+            TextButton(onClick = { vm.duplicateGoal(id, onOpen) }, modifier = Modifier.testTag("duplicate")) { Text("Make a copy of this project") }
+            RemoveButton("project", name) { vm.removeGoal(id, onClose) }
+        }
     }
 }
 
@@ -962,7 +1013,7 @@ fun ProjectEditor(id: Long, vm: MainViewModel, onClose: () -> Unit) {
  * when the day starts and the finish time.
  */
 @Composable
-private fun EachTimeSetting(count: Int, on: Boolean, onOn: (Boolean) -> Unit, times: List<Int>, onTimes: (List<Int>) -> Unit) {
+private fun EachTimeSetting(dayStart: LocalTime?, count: Int, on: Boolean, onOn: (Boolean) -> Unit, times: List<Int>, onTimes: (List<Int>) -> Unit) {
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.weight(1f)) {
             Text("A time for each one", style = MaterialTheme.typography.bodyLarge)
@@ -976,6 +1027,19 @@ private fun EachTimeSetting(count: Int, on: Boolean, onOn: (Boolean) -> Unit, ti
     }
     if (!on) return
     val shown = minOf(count, MAX_EACH_TIMES)
+    // A quick fill: every few hours from the first time set, or when the day starts.
+    val from = times.firstOrNull { it >= 0 }?.toTime() ?: dayStart ?: LocalTime(8, 0)
+    Text("Fill in every few hours, from ${timeText(from)}:", style = MaterialTheme.typography.bodyMedium)
+    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        listOf(1, 2, 3, 4).forEach { hours ->
+            FilterChip(
+                selected = false,
+                onClick = { onTimes(Pace.everyFewHours(from, hours, shown).map { it.toMinuteOfDay() }) },
+                label = { Text(if (hours == 1) "Every hour" else "$hours h") },
+                modifier = Modifier.testTag("fill:$hours"),
+            )
+        }
+    }
     val padded = (times + List(maxOf(0, shown - times.size)) { -1 }).take(shown)
     padded.forEachIndexed { i, minute ->
         TimeSetting(

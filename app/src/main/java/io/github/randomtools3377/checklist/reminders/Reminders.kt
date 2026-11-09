@@ -25,6 +25,11 @@ import io.github.randomtools3377.checklist.data.LOCK_PRIVATE
 import io.github.randomtools3377.checklist.core.countsToward
 import io.github.randomtools3377.checklist.core.plusDays
 import io.github.randomtools3377.checklist.core.MorningPlan
+import io.github.randomtools3377.checklist.core.Review
+import io.github.randomtools3377.checklist.core.WeeklySummary
+import io.github.randomtools3377.checklist.core.minusDays
+import io.github.randomtools3377.checklist.data.LOCK_REVIEW
+import io.github.randomtools3377.checklist.data.SETTING_WEEKLY
 import io.github.randomtools3377.checklist.core.PaceSettings
 import io.github.randomtools3377.checklist.core.TodayList
 import io.github.randomtools3377.checklist.core.ordinal
@@ -88,9 +93,16 @@ object Reminders {
         val from = Pace.plusMinutes(now, 1)
         val to = Pace.plusMinutes(now, LOOK_AHEAD_DAYS * 24 * 60L)
         val defaultFinish = dao.setting(SETTING_DEFAULT_FINISH)?.toIntOrNull()?.toTime()
-        val nextAlert = (Alerts.between(goals, from, to, dayEnd, defaultFinish) + mornings(dao, from, to, dayEnd)).minOfOrNull { it.at }
+        val nextAlert = (Alerts.between(goals, from, to, dayEnd, defaultFinish) + mornings(dao, from, to, dayEnd) + weeklies(dao, from, to, dayEnd))
+            .minOfOrNull { it.at }
         val dayTurns = LocalDateTime(Days.dayOf(now, dayEnd).plusDays(1), LocalTime(dayEnd, 0))
-        val wake = listOfNotNull(nextAlert?.millis(), dayTurns.millis(), Snoozes.next(context)?.coerceAtLeast(System.currentTimeMillis() + 1_000)).min()
+        val soon = System.currentTimeMillis() + 1_000
+        val wake = listOfNotNull(
+            nextAlert?.millis(),
+            dayTurns.millis(),
+            Snoozes.next(context)?.coerceAtLeast(soon),
+            Focus.alarmAt(context)?.coerceAtLeast(soon),
+        ).min()
         setAlarm(context, wake)
     }
 
@@ -130,6 +142,15 @@ object Reminders {
             .sortedBy { it.at }
         if (mornings(dao, since.local(), until.local(), dayEnd).any { it.at.millis() > since }) {
             showMorningPlan(context, dayEnd)
+        }
+        weeklies(dao, since.local(), until.local(), dayEnd).lastOrNull { it.at.millis() > since }?.let { showWeekly(context, it.day) }
+        // A focus timer that ran out while the app was closed.
+        Focus.current(context)?.takeIf { it.running && it.endsAt <= until }?.let { focus ->
+            Focus.stop(context)
+            dao.goal(focus.goalId)?.toCore()?.let { goal ->
+                val at = nowLocal()
+                show(context, goal, Alert(goal.id, Days.dayOf(at, dayEnd), at, AlertKind.FOCUS_DONE), count = 0, hidden = dao.setting(LOCK_PRIVATE) == "1" && goal.private, skip = null)
+            }
         }
         if (due.isNotEmpty()) {
             val earliest = due.minOf { it.day }.startOfYear()
@@ -222,6 +243,55 @@ object Reminders {
 
     /** The morning plan's notification. Goals use 1000 and up. */
     private const val MORNING_ID = 900
+    private const val WEEKLY_ID = 901
+
+    /** The weekly summaries between [from] and [to], unless turned off. */
+    private suspend fun weeklies(dao: io.github.randomtools3377.checklist.data.ChecklistDao, from: LocalDateTime, to: LocalDateTime, dayEnd: Int): List<Alert> {
+        if (dao.setting(SETTING_WEEKLY) == "0") return emptyList()
+        return Alerts.weekly(from, to, WeeklySummary.AT, dayEnd)
+    }
+
+    /** The weekly summary: how the week up to [day] went. Opens the review. Behind the lock, only that it's ready. */
+    private suspend fun showWeekly(context: Context, day: kotlinx.datetime.LocalDate) {
+        if (!canNotify(context)) return
+        val dao = (context.applicationContext as ChecklistApplication).container.db.dao()
+        if (dao.activeGoals().isEmpty()) return
+        val (from, to) = Review.range(day, io.github.randomtools3377.checklist.core.Period.WEEKLY)
+        val since = Days.earliestOpenDay(from).minusDays(7)
+        val review = Review.summarize(
+            from = from,
+            to = to,
+            today = day,
+            goals = dao.allGoals().map { it.toCore() },
+            ticks = dao.habitTicksSince(since.toEpochDay()).map { it.toCore() },
+            lapses = dao.lapsesSince(since.toEpochDay()).map { it.toCore() },
+            entries = dao.entries(from.toEpochDay(), to.toEpochDay()).map { it.toCore() },
+            gaps = dao.allGaps().map { it.toCore() },
+        )
+        val locked = dao.setting(LOCK_REVIEW) == "1"
+        val text = if (locked) "Your weekly review is ready." else WeeklySummary.of(review).describe()
+        val open = PendingIntent.getActivity(
+            context,
+            WEEKLY_ID,
+            Intent(context, MainActivity::class.java)
+                .putExtra(MainActivity.EXTRA_OPEN, "review")
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+        val notification = NotificationCompat.Builder(context, CHANNEL)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle("Your week")
+            .setContentText(text)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+            .setContentIntent(open)
+            .setAutoCancel(true)
+            .build()
+        try {
+            NotificationManagerCompat.from(context).notify(WEEKLY_ID, notification)
+        } catch (e: SecurityException) {
+            // Notifications were turned off in the meantime.
+        }
+    }
 
     // Ticks from the start of the year cover every window an alert can fall in.
     private fun kotlinx.datetime.LocalDate.startOfYear() = Days.earliestOpenDay(this)
@@ -238,6 +308,8 @@ object Reminders {
             AlertKind.REMINDER -> "Reminder"
             AlertKind.MORNING -> "Your plan for today"
             AlertKind.AGAIN -> "Still to do"
+            AlertKind.WEEKLY -> "Your week"
+            AlertKind.FOCUS_DONE -> "Time's up: tap Done to tick it"
         }
         val details = buildList {
             add(whenText)

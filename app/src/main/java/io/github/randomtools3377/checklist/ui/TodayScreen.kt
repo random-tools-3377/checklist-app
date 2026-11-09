@@ -202,6 +202,7 @@ fun TodayScreen(
                     onSkip = { skipping = planned.row.goal },
                     onItem = { item, spot -> checkItem(planned.row, item, spot) },
                     onUncheck = { item -> vm.uncheckItem(item.step.id) },
+                    onFocus = planned.row.goal.minutes?.let { minutes -> { vm.startFocus(planned.row.goal.id, minutes) } },
                 )
                 Spacer(Modifier.height(10.dp))
             }
@@ -392,6 +393,7 @@ private fun HabitCard(
     nextLine: Pair<String, Boolean>? = null,
     onItem: (StepRow, Spot) -> Unit = { _, _ -> },
     onUncheck: (StepRow) -> Unit = {},
+    onFocus: (() -> Unit)? = null,
 ) {
     val goal = row.goal
     val spot = remember { Spot() }
@@ -428,6 +430,14 @@ private fun HabitCard(
                         fontWeight = FontWeight.Medium,
                         color = if (isLate) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
                         modifier = Modifier.testTag("next:${goal.name}"),
+                    )
+                }
+                if (onFocus != null && !row.done && goal.minutes != null) {
+                    Text(
+                        "▶ Focus for ${minutesText(goal.minutes)}",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.clickable(onClick = onFocus).padding(vertical = 4.dp).testTag("focus:${goal.name}"),
                     )
                 }
                 if (row.skipped) {

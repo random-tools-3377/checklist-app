@@ -43,6 +43,8 @@ keeps the data.
   automatic backup to a folder the user picks.
 
 - 0.9.0: routines, a habit with a checklist inside.
+- 0.10.0: a focus timer, a weekly summary, filling in times every few hours, copying a goal
+  and bringing back a removed one.
 
 Next: more features (the list is in CLAUDE.md). The iPhone app waits for a way to install it.
 

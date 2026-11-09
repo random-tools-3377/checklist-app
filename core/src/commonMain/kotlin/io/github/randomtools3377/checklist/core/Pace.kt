@@ -95,6 +95,16 @@ object Pace {
         return (1..goal.target).map { k -> Slot(k, plusMinutes(start, span * k / goal.target), fixed = false) }
     }
 
+    /**
+     * Times for a habit done several times a day, every [hours] hours from [start], at most
+     * [count] of them and none past midnight. "Every 2 hours from 8 am" for 4 gives 8, 10, 12, 2.
+     */
+    fun everyFewHours(start: LocalTime, hours: Int, count: Int): List<LocalTime> {
+        if (hours <= 0 || count <= 0) return emptyList()
+        val first = start.hour * 60 + start.minute
+        return (0 until count).map { first + it * hours * 60 }.takeWhile { it < 24 * 60 }.map { LocalTime(it / 60, it % 60) }
+    }
+
     /** The next repetition of [row] still to do today, if its times are set or spread out. */
     fun nextSlot(row: HabitRow, day: LocalDate, settings: PaceSettings): Slot? =
         if (row.done) null else slots(row.goal, day, settings).getOrNull(row.count)

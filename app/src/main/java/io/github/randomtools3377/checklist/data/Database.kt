@@ -211,6 +211,9 @@ interface ChecklistDao {
     @Update
     suspend fun updateGoal(goal: GoalEntity)
 
+    @Query("SELECT * FROM goals WHERE archived = 1 ORDER BY name, id")
+    fun observeRemovedGoals(): Flow<List<GoalEntity>>
+
     @Query("SELECT COALESCE(MAX(position), -1) + 1 FROM goals")
     suspend fun nextGoalPosition(): Int
 

@@ -192,6 +192,21 @@ fun SettingsScreen(
             HorizontalDivider(Modifier.padding(top = 8.dp))
             Section("Notifications")
             NotificationSettings()
+            val weekly by vm.weeklySummary.collectAsState()
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text("Weekly summary", style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        "Sunday at 6 pm: how much got done, the points, and your best goal. It opens the review.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(checked = weekly, onCheckedChange = { vm.setWeeklySummary(it) }, modifier = Modifier.testTag("setting:weekly"))
+            }
             val snooze by vm.snoozeMinutes.collectAsState()
             Column(Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
                 Text("Snooze for", style = MaterialTheme.typography.bodyLarge)
