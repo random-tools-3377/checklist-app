@@ -73,6 +73,7 @@ keeps the data.
 - 0.27.0: a balance check of prices and points, and savings interest.
 - 0.28.0: a boost for the goal missed most, a perfect-day bonus, and prices that rise on repeat
   buys.
+- 0.29.0: an Undo bar, and a quick settings tile that ticks the next goal.
 
 Every step in CLAUDE.md's build order is built. The iPhone app waits for a way to install it.
 

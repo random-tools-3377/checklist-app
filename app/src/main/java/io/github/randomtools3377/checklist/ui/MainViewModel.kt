@@ -212,6 +212,9 @@ data class TodayState(
     val boostedGoalId: Long? = null,
 )
 
+/** Something just done, which the Undo bar can take back for a few seconds. */
+class Undoable(val message: String, val undo: () -> Unit)
+
 /** Which extras are on: the boost, the perfect-day bonus (0 is off) and repeat-buy prices. */
 data class Boosts(val boost: Boolean = true, val perfectDayBonus: Int = PerfectDays.DEFAULT_BONUS, val repeatPrice: Boolean = true)
 
@@ -946,8 +949,26 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     // Ticking and the shop. Results come back on the main thread.
 
+    /** What the Undo bar offers to take back: the last tick, removed goal or purchase. */
+    val undoBar = kotlinx.coroutines.flow.MutableSharedFlow<Undoable>(extraBufferCapacity = 4)
+
+    private fun offerUndo(message: String, undo: suspend () -> Unit) {
+        undoBar.tryEmit(Undoable(message) { viewModelScope.launch { undo() } })
+    }
+
+    private suspend fun offerTickUndo(goalId: Long, result: TickResult, undo: suspend () -> Unit) {
+        if (result !is TickResult.Ticked) return
+        val name = repository.goal(goalId)?.name ?: return
+        val paid = result.points + result.bonus
+        offerUndo(if (paid > 0) "$name · +$paid" else "$name ticked", undo)
+    }
+
     fun tickHabit(goalId: Long, onResult: (TickResult) -> Unit = {}) {
-        viewModelScope.launch { onResult(book.tickHabit(goalId)) }
+        viewModelScope.launch {
+            val result = book.tickHabit(goalId)
+            onResult(result)
+            offerTickUndo(goalId, result) { book.undoHabitTick(goalId) }
+        }
     }
 
     fun undoHabitTick(goalId: Long) {
@@ -960,6 +981,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             val result = book.logAmount(goalId, amount, seconds)
             if (seconds != null) repository.setSetting(SETTING_STOPWATCH, "")
             onResult(result)
+            offerTickUndo(goalId, result) { book.undoHabitTick(goalId) }
         }
     }
 
@@ -1019,7 +1041,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Ticks one item of a routine; the last one ticks the routine. */
     fun checkItem(stepId: Long, onResult: (TickResult) -> Unit = {}) {
-        viewModelScope.launch { onResult(book.checkItem(stepId)) }
+        viewModelScope.launch {
+            val result = book.checkItem(stepId)
+            onResult(result)
+            val step = dao.step(stepId)
+            if (step != null && result is TickResult.Ticked) offerUndo("${step.name} ticked") { book.uncheckItem(stepId) }
+        }
     }
 
     fun uncheckItem(stepId: Long) {
@@ -1028,7 +1055,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     /** "Done" on a routine: every item still open, and so the routine. */
     fun finishRoutine(goalId: Long, onResult: (TickResult) -> Unit = {}) {
-        viewModelScope.launch { onResult(book.finishRoutine(goalId)) }
+        viewModelScope.launch {
+            val result = book.finishRoutine(goalId)
+            onResult(result)
+            offerTickUndo(goalId, result) { book.undoRoutine(goalId) }
+        }
     }
 
     fun undoRoutine(goalId: Long) {
@@ -1036,7 +1067,15 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun tickStep(stepId: Long, onResult: (TickResult) -> Unit = {}) {
-        viewModelScope.launch { onResult(book.tickStep(stepId)) }
+        viewModelScope.launch {
+            val result = book.tickStep(stepId)
+            onResult(result)
+            val step = dao.step(stepId)
+            if (step != null && result is TickResult.Ticked) {
+                val paid = result.points + result.bonus
+                offerUndo(if (paid > 0) "${step.name} · +$paid" else "${step.name} ticked") { book.undoStep(stepId) }
+            }
+        }
     }
 
     fun undoStep(stepId: Long) {
@@ -1044,7 +1083,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun buy(rewardId: Long, onResult: (BuyResult) -> Unit = {}) {
-        viewModelScope.launch { onResult(book.buy(rewardId)) }
+        viewModelScope.launch {
+            val result = book.buy(rewardId)
+            onResult(result)
+            if (result is BuyResult.Bought) {
+                val name = result.prize ?: repository.reward(rewardId)?.name ?: return@launch
+                offerUndo("Bought $name · −${result.price}") { book.returnPurchase(result.purchaseId) }
+            }
+        }
     }
 
     fun use(purchaseId: Long) {
@@ -1258,8 +1304,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun removeGoal(id: Long, onDone: () -> Unit) {
         viewModelScope.launch {
+            val name = repository.goal(id)?.name
             repository.removeGoal(id)
             onDone()
+            if (name != null) offerUndo("Removed $name") { repository.restoreGoal(id) }
         }
     }
 

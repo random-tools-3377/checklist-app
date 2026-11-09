@@ -13,4 +13,5 @@
     <string name="shortcut_plan_long">Plan the coming days</string>
     <string name="shortcut_shop_short">Shop</string>
     <string name="shortcut_shop_long">Open the shop</string>
+    <string name="tile_label">Tick next</string>
 </resources>

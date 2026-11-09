@@ -2,6 +2,8 @@
 
 package io.github.randomtools3377.checklist.ui
 
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.collectLatest
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
@@ -77,6 +79,21 @@ fun ChecklistApp(vm: MainViewModel = viewModel()) {
     val stack = rememberSaveable(saver = RoutesSaver) { mutableListOf(AppTab.TODAY.route).toMutableStateList() }
     var showBought by rememberSaveable { mutableStateOf(false) }
     var newGoal by remember { mutableStateOf(false) }
+    // The Undo bar: the last tick, purchase or removed goal, for 5 seconds. A newer one replaces it.
+    val undoHost = remember { androidx.compose.material3.SnackbarHostState() }
+    LaunchedEffect(Unit) {
+        vm.undoBar.collectLatest { offer ->
+            kotlinx.coroutines.coroutineScope {
+                val timer = launch {
+                    kotlinx.coroutines.delay(UNDO_MILLIS)
+                    undoHost.currentSnackbarData?.dismiss()
+                }
+                val result = undoHost.showSnackbar(offer.message, actionLabel = "Undo", duration = androidx.compose.material3.SnackbarDuration.Indefinite)
+                timer.cancel()
+                if (result == androidx.compose.material3.SnackbarResult.ActionPerformed) offer.undo()
+            }
+        }
+    }
     var reorderGoals by rememberSaveable { mutableStateOf(false) }
     var reorderRewards by rememberSaveable { mutableStateOf(false) }
 
@@ -256,6 +273,7 @@ fun ChecklistApp(vm: MainViewModel = viewModel()) {
                     tabs = shownTabs,
                     onTab = ::goTo,
                     onSettings = { push("settings") },
+                    snackbarHost = { androidx.compose.material3.SnackbarHost(undoHost, modifier = Modifier.testTag("undo-bar")) },
                     actions = {
                         if (tab == AppTab.GOALS && goals?.goals?.isNotEmpty() == true) {
                             TextButton(onClick = { reorderGoals = !reorderGoals }, modifier = Modifier.testTag("reorder")) {
@@ -368,9 +386,11 @@ private fun TabScaffold(
     onSettings: () -> Unit,
     actions: @Composable RowScope.() -> Unit,
     fab: @Composable () -> Unit,
+    snackbarHost: @Composable () -> Unit = {},
     content: @Composable (PaddingValues) -> Unit,
 ) {
     Scaffold(
+        snackbarHost = snackbarHost,
         topBar = {
             TopAppBar(
                 title = { Text(tab.label) },
@@ -408,6 +428,9 @@ private fun editRoute(goal: io.github.randomtools3377.checklist.core.Goal): Stri
     GoalKind.PROJECT -> "project/${goal.id}"
     GoalKind.TODO -> "todo/${goal.id}"
 }
+
+/** How long the Undo bar stays. */
+private const val UNDO_MILLIS = 5_000L
 
 /** What the app shortcuts ask for, through MainActivity.EXTRA_OPEN (see res/xml/shortcuts.xml). */
 const val OPEN_NEW_TODO = "new-todo"
