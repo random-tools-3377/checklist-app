@@ -32,5 +32,6 @@ done <<< "$status"
 if [ "$failed" != 0 ]; then
   if [ "$level" = error ]; then exit 1; fi
   echo "Not failing on a branch: commit the layout above before this goes to main."
+  exit 0
 fi
 echo "Database layout check passed."
