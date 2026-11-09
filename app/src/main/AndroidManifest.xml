@@ -72,6 +72,9 @@
             android:name=".reminders.SkipReceiver"
             android:exported="false" />
         <receiver
+            android:name=".reminders.SnoozeReceiver"
+            android:exported="false" />
+        <receiver
             android:name=".reminders.SystemEventsReceiver"
             android:exported="true">
             <intent-filter>

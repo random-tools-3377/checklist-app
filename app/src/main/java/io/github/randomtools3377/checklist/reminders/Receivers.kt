@@ -50,6 +50,25 @@ class DoneReceiver : BroadcastReceiver() {
     }
 }
 
+/** "Snooze" on a notification: it comes back after the snooze length set in Settings. */
+class SnoozeReceiver : BroadcastReceiver() {
+    override fun onReceive(context: Context, intent: Intent) = work {
+        val goalId = intent.getLongExtra(DoneReceiver.EXTRA_GOAL, -1)
+        val container = (context.applicationContext as ChecklistApplication).container
+        if (goalId >= 0) {
+            val minutes = container.db.dao().setting(io.github.randomtools3377.checklist.data.SETTING_SNOOZE)?.toIntOrNull()
+                ?: io.github.randomtools3377.checklist.data.DEFAULT_SNOOZE_MINUTES
+            Snoozes.add(context, Snooze(goalId, intent.getIntExtra(EXTRA_NUMBER, 0), System.currentTimeMillis() + minutes * 60_000L))
+        }
+        NotificationManagerCompat.from(context).cancel(intent.getIntExtra(DoneReceiver.EXTRA_NOTIFICATION, 0))
+        Reminders.reschedule(context)
+    }
+
+    companion object {
+        const val EXTRA_NUMBER = "number"
+    }
+}
+
 /**
  * "Skip" on a notification, when it was within the allowance. If it would go over the limit by
  * now, the notification is replaced with one that opens the app to skip there, with a reason.

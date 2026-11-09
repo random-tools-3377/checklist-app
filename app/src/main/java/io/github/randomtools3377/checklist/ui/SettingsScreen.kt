@@ -59,6 +59,7 @@ import io.github.randomtools3377.checklist.core.GapSettings
 import io.github.randomtools3377.checklist.core.Days
 import io.github.randomtools3377.checklist.core.dateText
 import io.github.randomtools3377.checklist.data.nowLocal
+import io.github.randomtools3377.checklist.data.Backups
 import io.github.randomtools3377.checklist.data.toLocalDateTime
 import io.github.randomtools3377.checklist.reminders.Reminders
 import io.github.randomtools3377.checklist.core.StreakSettings
@@ -110,6 +111,11 @@ fun SettingsScreen(
 
     fun toast(message: String) = Toast.makeText(context, message, Toast.LENGTH_LONG).show()
 
+    val backups by vm.backupState.collectAsState()
+    androidx.compose.runtime.LaunchedEffect(Unit) { vm.refreshBackup() }
+    val folderLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+        if (uri != null) vm.setBackupFolder(uri)
+    }
     val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
         if (uri != null) vm.exportTo(uri) { toast(it) }
     }
@@ -186,6 +192,25 @@ fun SettingsScreen(
             HorizontalDivider(Modifier.padding(top = 8.dp))
             Section("Notifications")
             NotificationSettings()
+            val snooze by vm.snoozeMinutes.collectAsState()
+            Column(Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
+                Text("Snooze for", style = MaterialTheme.typography.bodyLarge)
+                Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)) {
+                    listOf(10 to "10 min", 30 to "30 min", 60 to "1 hour").forEach { (minutes, label) ->
+                        androidx.compose.material3.FilterChip(
+                            selected = snooze == minutes,
+                            onClick = { vm.setSnoozeMinutes(minutes) },
+                            label = { Text(label) },
+                            modifier = Modifier.testTag("snooze:$minutes"),
+                        )
+                    }
+                }
+                Text(
+                    "Snooze on a reminder brings it back after this long, unless it's done by then.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
@@ -226,6 +251,46 @@ fun SettingsScreen(
                         onClick = { importLauncher.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) },
                         modifier = Modifier.testTag("import"),
                     ) { Text("Import a backup") }
+                }
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    backups.lastBackup?.let { "Last backup: ${momentText(it.toLocalDateTime(), nowLocal().date)}" } ?: "No backup yet.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.testTag("last-backup"),
+                )
+
+                // The automatic backup
+                Spacer(Modifier.height(12.dp))
+                Text("Automatic backup", style = MaterialTheme.typography.bodyLarge)
+                Text(
+                    when {
+                        backups.folderGone -> "The folder can't be reached any more. Choose it again."
+                        backups.folderSet -> "On: each day you use the app, a dated backup is saved in ${backups.folderName ?: "your folder"}. The last ${Backups.KEEP} are kept."
+                        else -> "Off. Choose a folder and each day you use the app, a dated backup is saved there. The last ${Backups.KEEP} are kept."
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (backups.folderGone) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Row {
+                    TextButton(onClick = { folderLauncher.launch(null) }, modifier = Modifier.testTag("auto-backup-folder")) {
+                        Text(if (backups.folderSet) "Change folder" else "Choose a folder")
+                    }
+                    if (backups.folderSet) {
+                        TextButton(onClick = { vm.setBackupFolder(null) }, modifier = Modifier.testTag("auto-backup-off")) { Text("Turn off") }
+                    }
+                }
+
+                // The reminder
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(top = 4.dp)) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Backup reminder", style = MaterialTheme.typography.bodyLarge)
+                        Text(
+                            "Today reminds you when your last backup is over a week old.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Switch(checked = backups.reminderOn, onCheckedChange = { vm.setBackupReminder(it) }, modifier = Modifier.testTag("setting:backup-reminder"))
                 }
             }
 

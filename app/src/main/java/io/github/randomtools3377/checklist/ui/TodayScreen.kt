@@ -40,6 +40,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -92,6 +93,7 @@ fun TodayScreen(
 ) {
     if (screen == null) return
     val view = screen.view
+    val backup by vm.backupState.collectAsStateWithLifecycle()
     val haptics = LocalHapticFeedback.current
     var skipping by remember { mutableStateOf<Goal?>(null) }
     LaunchedEffect(skipRequest, screen.plan) {
@@ -136,6 +138,10 @@ fun TodayScreen(
             Text(longDate(view.day), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(bottom = 8.dp))
             BalanceCard(view.balance, modifier = Modifier.clickable(onClick = onHistory), note = "Tap for your points history")
             Spacer(Modifier.height(12.dp))
+            backup.due?.let { days ->
+                BackupReminderCard(days, onBackUp = onSettings, onLater = vm::backupLater)
+                Spacer(Modifier.height(12.dp))
+            }
             StreakCard(screen.streaks, screen.streakSettings)
             if (screen.hiddenPrivate > 0) {
                 Spacer(Modifier.height(8.dp))
@@ -217,6 +223,30 @@ private fun timeLabel(planned: Planned, screen: TodayState): String? {
     if (planned.row.done) return null
     val text = momentText(time, screen.view.day)
     return if (planned.fixed) "at $text" else "by about $text"
+}
+
+/** Phone backup is off for this app, so a reminder when the last backup is getting old. */
+@Composable
+private fun BackupReminderCard(days: Int, onBackUp: () -> Unit, onLater: () -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth().testTag("backup-reminder"),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer),
+    ) {
+        Column(Modifier.padding(16.dp)) {
+            Text("Time for a backup", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onTertiaryContainer)
+            Text(
+                (if (days < 0) "You haven't backed up yet." else "Your last backup was $days days ago.") +
+                    " Phone backup is off for this app, so your backup file is the only copy.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onTertiaryContainer,
+            )
+            Row(Modifier.padding(top = 8.dp)) {
+                Button(onClick = onBackUp, modifier = Modifier.testTag("backup-now")) { Text("Back up") }
+                Spacer(Modifier.width(8.dp))
+                TextButton(onClick = onLater, modifier = Modifier.testTag("backup-later")) { Text("Later") }
+            }
+        }
+    }
 }
 
 private fun paceText(pace: LongPace): String = "${pace.describe()} (finish by ${dateText(pace.finish)})"

@@ -192,9 +192,10 @@ The app has no network access unless the owner decides otherwise for this app.
 - Today's tick button says what it does: "Done" for a single goal, "+1" with "0 of 2" for a goal
   done several times.
 - Reminders can be snoozed, can keep reminding until the goal is done, and have a +1 button for
-  a goal done several times. **Details (default):** snooze for 10 minutes or 1 hour; "keep
-  reminding" repeats every 30 minutes until the goal is done or its finish time passes, set per
-  goal.
+  a goal done several times. **Details (default):** Snooze puts a reminder off for the length
+  chosen in Settings (10 minutes, 30 minutes or an hour; 10 to start); "keep reminding" repeats
+  every 30 minutes until the goal is done or its finish time passes (at most 12 times), set per
+  goal. The backup reminder shows on Today, with "Back up" and "Later" (tomorrow).
 - A morning plan: one notification when the user's day starts, with today's list and the pace
   **(default: on once "My day starts at" is set, and can be turned off)**.
 - Notifications have Done and Skip buttons. A Skip that would go over the limit opens the app

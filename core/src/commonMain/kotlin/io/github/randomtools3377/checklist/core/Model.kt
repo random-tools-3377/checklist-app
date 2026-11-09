@@ -92,7 +92,14 @@ data class Reminder(
     val onTime: Boolean = true,
     val minutesBefore: Int? = null,
     val at: LocalTime? = null,
-)
+    /** Keep reminding every this many minutes until it is done, or its finish time passes. Null for once. */
+    val againEvery: Int? = null,
+) {
+    companion object {
+        /** "Keep reminding" starts at every 30 minutes. */
+        const val AGAIN_EVERY = 30
+    }
+}
 
 /** One step of a project. */
 @Serializable

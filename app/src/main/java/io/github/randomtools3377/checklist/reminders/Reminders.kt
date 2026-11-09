@@ -87,10 +87,11 @@ object Reminders {
         val now = nowLocal()
         val from = Pace.plusMinutes(now, 1)
         val to = Pace.plusMinutes(now, LOOK_AHEAD_DAYS * 24 * 60L)
-        val nextAlert = (Alerts.between(goals, from, to, dayEnd) + mornings(dao, from, to, dayEnd)).minOfOrNull { it.at }
+        val defaultFinish = dao.setting(SETTING_DEFAULT_FINISH)?.toIntOrNull()?.toTime()
+        val nextAlert = (Alerts.between(goals, from, to, dayEnd, defaultFinish) + mornings(dao, from, to, dayEnd)).minOfOrNull { it.at }
         val dayTurns = LocalDateTime(Days.dayOf(now, dayEnd).plusDays(1), LocalTime(dayEnd, 0))
-        val wake = listOfNotNull(nextAlert, dayTurns).min()
-        setAlarm(context, wake.millis())
+        val wake = listOfNotNull(nextAlert?.millis(), dayTurns.millis(), Snoozes.next(context)?.coerceAtLeast(System.currentTimeMillis() + 1_000)).min()
+        setAlarm(context, wake)
     }
 
     private fun setAlarm(context: Context, atMillis: Long) {
@@ -119,7 +120,14 @@ object Reminders {
         val dao = (context.applicationContext as ChecklistApplication).container.db.dao()
         val goals = dao.activeGoals().map { it.toCore() }
         val dayEnd = parseDayEndHour(dao.setting(SETTING_DAY_END_HOUR))
-        val due = Alerts.between(goals, since.local(), until.local(), dayEnd).filter { it.at.millis() > since }
+        val defaultFinish = dao.setting(SETTING_DEFAULT_FINISH)?.toIntOrNull()?.toTime()
+        // Snoozed reminders come back as "still to do".
+        val snoozed = Snoozes.takeDue(context, until).map { snooze ->
+            val at = snooze.at.local()
+            Alert(snooze.goalId, Days.dayOf(at, dayEnd), at, AlertKind.AGAIN, number = snooze.number)
+        }
+        val due = (Alerts.between(goals, since.local(), until.local(), dayEnd, defaultFinish).filter { it.at.millis() > since } + snoozed)
+            .sortedBy { it.at }
         if (mornings(dao, since.local(), until.local(), dayEnd).any { it.at.millis() > since }) {
             showMorningPlan(context, dayEnd)
         }
@@ -229,6 +237,7 @@ object Reminders {
             AlertKind.BEFORE -> "In ${alert.minutesBefore} min, at ${timeText(alert.at.time)}"
             AlertKind.REMINDER -> "Reminder"
             AlertKind.MORNING -> "Your plan for today"
+            AlertKind.AGAIN -> "Still to do"
         }
         val details = buildList {
             add(whenText)
@@ -258,7 +267,7 @@ object Reminders {
             .setContentTitle(title)
             .setContentText(if (hidden) "Due now" else details)
             .setContentIntent(open)
-            .addAction(0, "Done", done)
+            .addAction(0, if (goal.target > 1) "+1" else "Done", done)
             .setAutoCancel(true)
             .setCategory(NotificationCompat.CATEGORY_REMINDER)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
@@ -285,6 +294,16 @@ object Reminders {
             }
             builder.addAction(0, "Skip", skipIntent)
         }
+        val snooze = PendingIntent.getBroadcast(
+            context,
+            id + 1_000_000,
+            Intent(context, SnoozeReceiver::class.java)
+                .putExtra(DoneReceiver.EXTRA_GOAL, goal.id)
+                .putExtra(DoneReceiver.EXTRA_NOTIFICATION, id)
+                .putExtra(SnoozeReceiver.EXTRA_NUMBER, alert.number),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+        builder.addAction(0, "Snooze", snooze)
         val notification = builder.build()
         try {
             NotificationManagerCompat.from(context).notify(id, notification)

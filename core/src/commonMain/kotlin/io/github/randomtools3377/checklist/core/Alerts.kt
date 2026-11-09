@@ -16,6 +16,9 @@ enum class AlertKind {
 
     /** The morning plan: today's list and the pace, when the user's day starts. Not for one goal. */
     MORNING,
+
+    /** "Keep reminding": again, some minutes after the first reminder, while it isn't done. */
+    AGAIN,
 }
 
 /**
@@ -37,7 +40,7 @@ object Alerts {
      * week, month or year is reminded each day until its window is done; whether it is done is
      * checked when the alert fires.
      */
-    fun between(goals: List<Goal>, from: LocalDateTime, to: LocalDateTime, dayEndHour: Int): List<Alert> {
+    fun between(goals: List<Goal>, from: LocalDateTime, to: LocalDateTime, dayEndHour: Int, defaultFinish: LocalTime? = null): List<Alert> {
         val alerts = mutableListOf<Alert>()
         for (goal in goals) {
             if (goal.archived || goal.kind != GoalKind.HABIT) continue
@@ -45,6 +48,7 @@ object Alerts {
             val reminder = goal.reminder ?: Reminder()
             var day = from.date.minusDays(1)
             while (day <= to.date) {
+                val firstOfDay = alerts.size
                 if (repeat.isDueOn(day)) {
                     val at = goal.at
                     val slots = Pace.slots(goal, day, PaceSettings(dayEndHour, null)).filter { it.fixed }
@@ -65,6 +69,9 @@ object Alerts {
                     } else {
                         reminder.at?.let { alerts += Alert(goal.id, day, Pace.on(day, it, dayEndHour), AlertKind.REMINDER) }
                     }
+                    reminder.againEvery?.takeIf { it > 0 }?.let { every ->
+                        alerts += again(goal, day, alerts.subList(firstOfDay, alerts.size).toList(), every, dayEndHour, defaultFinish)
+                    }
                 }
                 day = day.plusDays(1)
             }
@@ -84,6 +91,34 @@ object Alerts {
             day = day.plusDays(1)
         }
         return alerts.filter { it.at >= from && it.at < to }
+    }
+
+    /** Most times "keep reminding" repeats one reminder, so a forgotten goal doesn't buzz all night. */
+    const val MAX_AGAIN = 12
+
+    /**
+     * "Keep reminding": after each of the day's reminders, again every [every] minutes until the
+     * next one, or the goal's finish time, or the end of the day. Whether it's done by then is
+     * checked when each one fires.
+     */
+    private fun again(goal: Goal, day: LocalDate, first: List<Alert>, every: Int, dayEndHour: Int, defaultFinish: LocalTime?): List<Alert> {
+        val starts = first.filter { it.kind != AlertKind.BEFORE }.sortedBy { it.at }
+        if (starts.isEmpty()) return emptyList()
+        val dayEnd = LocalDateTime(day.plusDays(1), LocalTime(dayEndHour, 0))
+        val finish = (goal.finishBy ?: defaultFinish)?.let { Pace.on(day, it, dayEndHour) }?.let { minOf(it, dayEnd) } ?: dayEnd
+        val result = mutableListOf<Alert>()
+        starts.forEachIndexed { i, start ->
+            // Up to the next reminder, or for the last one up to and including the finish time.
+            val next = starts.getOrNull(i + 1)?.at
+            var at = Pace.plusMinutes(start.at, every.toLong())
+            var n = 0
+            while ((next == null || at < next) && at <= finish && n < MAX_AGAIN) {
+                result += Alert(goal.id, day, at, AlertKind.AGAIN, number = start.number)
+                at = Pace.plusMinutes(at, every.toLong())
+                n++
+            }
+        }
+        return result
     }
 
     /** The goal id a morning plan carries: it is about the whole day, not one goal. */

@@ -61,7 +61,11 @@ import io.github.randomtools3377.checklist.data.ORDER_RECOMMENDED
 import io.github.randomtools3377.checklist.data.ProjectDraft
 import io.github.randomtools3377.checklist.data.RewardDraft
 import io.github.randomtools3377.checklist.data.SETTING_DAY_END_HOUR
+import io.github.randomtools3377.checklist.data.Backups
+import io.github.randomtools3377.checklist.data.DEFAULT_SNOOZE_MINUTES
 import io.github.randomtools3377.checklist.data.SETTING_DAY_START
+import io.github.randomtools3377.checklist.data.SETTING_SNOOZE
+import io.github.randomtools3377.checklist.core.BackupReminder
 import io.github.randomtools3377.checklist.data.SETTING_DEFAULT_FINISH
 import io.github.randomtools3377.checklist.data.SETTING_MORNING_PLAN
 import io.github.randomtools3377.checklist.data.SETTING_TODAY_ORDER
@@ -316,6 +320,83 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     /** Looks for misses and gaps since the last check. Called when the app comes to the front. */
     fun closeDays() {
         viewModelScope.launch { container.closeDays() }
+        autoBackup()
+    }
+
+    // Backups: the reminder, and the automatic backup to a folder
+
+    /** What Settings shows about backups, and whether Today shows the reminder. */
+    data class BackupState(
+        val lastBackup: Long?,
+        val folderName: String?,
+        val folderSet: Boolean,
+        val folderGone: Boolean,
+        val reminderOn: Boolean,
+        /** Today's reminder: null when not due; otherwise days since the last backup, or -1 for never. */
+        val due: Int?,
+    )
+
+    private val folderGone = MutableStateFlow(false)
+    val backupState = MutableStateFlow(BackupState(null, null, false, false, true, null))
+
+    fun refreshBackup() {
+        viewModelScope.launch {
+            val context = getApplication<Application>()
+            val state = withContext(Dispatchers.IO) {
+                val now = System.currentTimeMillis()
+                val last = Backups.lastBackup(context)
+                val hasData = dao.activeGoals().isNotEmpty()
+                val due = if (Backups.reminderOn(context) && Backups.laterUntil(context) < now &&
+                    BackupReminder.due(last, Backups.firstSeen(context), now, hasData)
+                ) {
+                    last?.let { BackupReminder.daysSince(it, now) } ?: -1
+                } else {
+                    null
+                }
+                BackupState(last, Backups.folderName(context), Backups.folder(context) != null, folderGone.value, Backups.reminderOn(context), due)
+            }
+            backupState.value = state
+        }
+    }
+
+    private fun autoBackup() {
+        viewModelScope.launch {
+            val context = getApplication<Application>()
+            val result = withContext(Dispatchers.IO) {
+                Backups.autoBackupIfDue(context, Days.dayOf(nowLocal(), settings.value.dayEndHour)) { repository.exportBackup() }
+            }
+            if (result == Backups.AutoResult.FolderGone) folderGone.value = true
+            if (result == Backups.AutoResult.Saved) folderGone.value = false
+            refreshBackup()
+        }
+    }
+
+    /** "Later" on Today's backup reminder: it comes back tomorrow. */
+    fun backupLater() {
+        Backups.later(getApplication(), System.currentTimeMillis() + 86_400_000L)
+        refreshBackup()
+    }
+
+    fun setBackupReminder(on: Boolean) {
+        Backups.setReminderOn(getApplication(), on)
+        refreshBackup()
+    }
+
+    /** Picks the automatic backup's folder (null turns it off), then backs up there right away. */
+    fun setBackupFolder(uri: Uri?) {
+        viewModelScope.launch {
+            val context = getApplication<Application>()
+            withContext(Dispatchers.IO) { runCatching { Backups.setFolder(context, uri) } }
+            folderGone.value = false
+            autoBackup()
+        }
+    }
+
+    /** How long "Snooze" on a reminder puts it off, in minutes. */
+    val snoozeMinutes: StateFlow<Int> = dao.observeSetting(SETTING_SNOOZE).map { it?.toIntOrNull() ?: DEFAULT_SNOOZE_MINUTES }.state(DEFAULT_SNOOZE_MINUTES)
+
+    fun setSnoozeMinutes(minutes: Int) {
+        viewModelScope.launch { repository.setSetting(SETTING_SNOOZE, minutes.toString()) }
     }
 
     // Gaps and the review
@@ -569,6 +650,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     val stream = resolver.openOutputStream(uri, "wt") ?: error("no stream")
                     stream.use { it.write(text.toByteArray(Charsets.UTF_8)) }
                 }
+                Backups.markBackedUp(getApplication())
+                refreshBackup()
                 "Exported. Keep the file somewhere safe."
             } catch (e: Exception) {
                 "Couldn't write the file. Nothing was exported."

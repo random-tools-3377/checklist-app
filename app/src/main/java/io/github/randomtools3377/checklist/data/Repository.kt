@@ -18,6 +18,8 @@ import java.util.Base64
 const val SETTING_DEFAULT_FINISH = "default_finish_minute"
 const val SETTING_DAY_START = "day_start_minute"
 const val SETTING_MORNING_PLAN = "morning_plan"
+const val SETTING_SNOOZE = "snooze_minutes"
+const val DEFAULT_SNOOZE_MINUTES = 10
 const val SETTING_TODAY_ORDER = "today_order"
 const val ORDER_RECOMMENDED = "recommended"
 const val ORDER_OWN = "own"

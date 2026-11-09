@@ -39,8 +39,11 @@ keeps the data.
 - 0.7.0: clear tick buttons, the full emoji set, "My day starts at", a time for each of a goal
   done several times a day (or spread out for you), and a morning plan.
 
-Next: snooze and repeat on reminders and a backup reminder, then routines, then more (the list
-is in CLAUDE.md). The iPhone app waits for a way to install it.
+- 0.8.0: snooze, keep reminding until done and +1 on reminders; a backup reminder and an
+  automatic backup to a folder the user picks.
+
+Next: routines, then more (the list is in CLAUDE.md). The iPhone app waits for a way to install
+it.
 
 The emoji list is built from Unicode's emoji data via the MIT-licensed `unicode-emoji-json`
 package; its notice ships in `app/src/main/assets/emoji-NOTICE.txt`.

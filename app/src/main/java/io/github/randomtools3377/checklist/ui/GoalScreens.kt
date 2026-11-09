@@ -294,6 +294,7 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit) {
     var notifyOnTime by rememberSaveable { mutableStateOf(true) }
     var alertBefore by rememberSaveable { mutableStateOf<Int?>(null) }
     var remindAtMinute by rememberSaveable { mutableStateOf<Int?>(null) }
+    var keepReminding by rememberSaveable { mutableStateOf(false) }
     var allowance by rememberSaveable { mutableStateOf(Goal.DEFAULT_ALLOWANCE.toString()) }
     var allowancePer by rememberSaveable { mutableStateOf(Period.WEEKLY) }
     var isPrivate by rememberSaveable { mutableStateOf(false) }
@@ -331,6 +332,7 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit) {
                     notifyOnTime = r.onTime
                     alertBefore = r.minutesBefore
                     remindAtMinute = r.at?.toMinuteOfDay()
+                    keepReminding = r.againEvery != null
                 }
                 goal.repeat?.let { r ->
                     startDay = r.start.toEpochDay()
@@ -423,6 +425,7 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit) {
                             onTime = notifyOnTime,
                             minutesBefore = if (atMinute != null || eachTimesSet.isNotEmpty()) alertBefore else null,
                             at = if (atMinute == null && eachTimesSet.isEmpty()) remindAtMinute?.toTime() else null,
+                            againEvery = if (keepReminding) Reminder.AGAIN_EVERY else null,
                         ),
                         allowance = allowance.toIntOrNull() ?: Goal.DEFAULT_ALLOWANCE,
                         allowancePer = allowancePer,
@@ -630,6 +633,20 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit) {
                 emptyText = "No reminder",
                 hint = if (severalADay) "Or set a time for each one above, and it notifies at each." else "Or give it a set time above, and it notifies at that time.",
             )
+        }
+        val hasReminder = (clock != null && notifyOnTime) || (eachTimesSet.isNotEmpty() && notifyOnTime) || (clock == null && eachTimesSet.isEmpty() && remindAtMinute != null)
+        if (hasReminder) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                Column(Modifier.weight(1f)) {
+                    Text("Keep reminding until it's done", style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        "Again every ${Reminder.AGAIN_EVERY} minutes, until it's done or its finish time passes.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(checked = keepReminding, onCheckedChange = { keepReminding = it }, modifier = Modifier.testTag("field:keep-reminding"))
+            }
         }
         AllowanceAndPrivacy(
             allowance = allowance,
