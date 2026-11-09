@@ -14,6 +14,7 @@ import io.github.randomtools3377.checklist.core.Period
 import io.github.randomtools3377.checklist.core.Reminder
 import io.github.randomtools3377.checklist.core.Repeat
 import io.github.randomtools3377.checklist.core.RepeatText
+import io.github.randomtools3377.checklist.core.RepeatKind
 import io.github.randomtools3377.checklist.core.Reward
 import io.github.randomtools3377.checklist.core.Step
 import kotlinx.datetime.LocalDate
@@ -65,6 +66,8 @@ const val SETTING_APP_ICON = "app_icon"
 /** The running Start and Stop timing, as "goalId|startedAt" in epoch milliseconds. */
 const val SETTING_STOPWATCH = "stopwatch"
 const val SETTING_WIDGET_STYLE = "widget_style"
+/** "done" once the welcome card on Today was answered (see GuideScreen). */
+const val SETTING_GUIDE = "guide"
 const val DEFAULT_SNOOZE_MINUTES = 10
 const val SETTING_TODAY_ORDER = "today_order"
 const val ORDER_RECOMMENDED = "recommended"
@@ -297,6 +300,37 @@ class Repository(private val db: AppDatabase, private val celebrations: Celebrat
             )
             existing.id
         }
+    }
+
+    /**
+     * Example goals and rewards from the guide, to try the app with: one of each kind of goal, and
+     * two rewards. They are ordinary goals the user can change or remove.
+     */
+    suspend fun addExamples(today: LocalDate): Unit = db.withTransaction {
+        val daily = Repeat(RepeatKind.EVERY_N_DAYS, today)
+        fun habit(name: String, icon: String, points: Int, repeat: Repeat = daily, target: Int = 1, bonus: Int = 0) = HabitDraft(
+            id = 0, name = name, icon = icon, points = points, repeat = repeat, target = target, bonus = bonus,
+            minutes = null, at = null, finishBy = null, finishDay = null,
+        )
+        saveHabit(habit("Drink water", "💧", 1, target = 8, bonus = 2))
+        saveHabit(habit("Read", "📖", 5).copy(amount = 20.0, unit = "pages"))
+        saveHabit(habit("Exercise", "🏃", 10, repeat = Repeat(RepeatKind.TIMES_PER, today, per = Period.WEEKLY), target = 3))
+        saveHabit(
+            habit("Morning", "☀️", 5).copy(
+                items = listOf(StepDraft(0, "Glass of water", 0), StepDraft(0, "Stretch", 0), StepDraft(0, "Make the bed", 0)),
+            ),
+        )
+        saveProject(
+            ProjectDraft(
+                id = 0, name = "Sort out a cupboard", icon = "🧹",
+                steps = listOf(StepDraft(0, "Empty it", 3), StepDraft(0, "Throw out what isn't needed", 3), StepDraft(0, "Put it back tidy", 3)),
+                bonus = 5, deadline = null, finishBy = null,
+            ),
+        )
+        saveTodo(TodoDraft(id = 0, name = "Tick this to-do"))
+        saveReward(RewardDraft(id = 0, name = "A fancy coffee", icon = "☕", price = 30))
+        saveReward(RewardDraft(id = 0, name = "A film night", icon = "🎬", price = 100))
+        dao.putSetting(SettingEntity(SETTING_GUIDE, "done"))
     }
 
     /** Moves one day's goal to another day of the same week; false if that move isn't allowed. */

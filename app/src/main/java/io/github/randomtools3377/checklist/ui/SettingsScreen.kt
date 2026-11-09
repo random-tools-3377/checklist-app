@@ -103,6 +103,7 @@ fun SettingsScreen(
     settings: Settings,
     vm: MainViewModel,
     onAppearance: () -> Unit,
+    onGuide: () -> Unit,
     onOpenTab: (io.github.randomtools3377.checklist.core.AppTabKind) -> Unit,
     onBack: () -> Unit,
 ) {
@@ -154,6 +155,16 @@ fun SettingsScreen(
             ) {
                 Text("Appearance", style = MaterialTheme.typography.bodyLarge)
                 Text("Colours, Today's layout and sections, and the tabs", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+            }
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onGuide)
+                    .testTag("setting:guide")
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+            ) {
+                Text("How the app works", style = MaterialTheme.typography.bodyLarge)
+                Text("A short guide, and example goals to try", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
             }
             // Tabs hidden from the bottom bar are still here.
             val look by vm.appearance.collectAsState()

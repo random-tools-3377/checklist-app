@@ -5,4 +5,12 @@
     <string name="widget_description">Goals due today, with tick boxes. Make it wider for the week, taller for the month.</string>
     <string name="stats_widget_name">Checklist balance and streaks</string>
     <string name="stats_widget_description">Your balance, your streak and how much of today is done. Make it wider for every streak.</string>
+    <string name="shortcut_todo_short">New to-do</string>
+    <string name="shortcut_todo_long">Add a to-do</string>
+    <string name="shortcut_goal_short">New goal</string>
+    <string name="shortcut_goal_long">Add a habit, project or to-do</string>
+    <string name="shortcut_plan_short">Plan</string>
+    <string name="shortcut_plan_long">Plan the coming days</string>
+    <string name="shortcut_shop_short">Shop</string>
+    <string name="shortcut_shop_long">Open the shop</string>
 </resources>

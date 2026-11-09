@@ -158,7 +158,18 @@ fun ChecklistApp(vm: MainViewModel = viewModel()) {
     val openTab by vm.openTab.collectAsStateWithLifecycle()
     androidx.compose.runtime.LaunchedEffect(openTab) {
         val asked = openTab ?: return@LaunchedEffect
-        AppTab.entries.firstOrNull { it.route == asked }?.let { goTo(it) }
+        when (asked) {
+            // The app shortcuts: a new to-do, or a new goal of any kind.
+            OPEN_NEW_TODO -> {
+                goTo(AppTab.TODAY)
+                push("todo/0")
+            }
+            OPEN_NEW_GOAL -> {
+                goTo(AppTab.GOALS)
+                newGoal = true
+            }
+            else -> AppTab.entries.firstOrNull { it.route == asked }?.let { goTo(it) }
+        }
         vm.openTab.value = null
     }
 
@@ -200,11 +211,17 @@ fun ChecklistApp(vm: MainViewModel = viewModel()) {
                 ProjectEditor(id, vm, onClose = ::pop, onOpen = { copy -> pop(); push("project/$copy") })
             }
             "todo" -> androidx.compose.runtime.key(route) { TodoEditor(id, vm, onClose = ::pop) }
+            "guide" -> GuideScreen(
+                onExamples = { vm.addExamples(); goTo(AppTab.TODAY) },
+                onScratch = { vm.closeWelcome(); goTo(AppTab.TODAY) },
+                onBack = ::pop,
+            )
             "removed" -> RemovedGoalsScreen(removedGoals, onRestore = { vm.restoreGoal(it.id) }, onBack = ::pop)
             "reward" -> androidx.compose.runtime.key(route) { RewardEditor(id, vm, onClose = ::pop) }
             "settings" -> SettingsScreen(
                 settings, vm,
                 onAppearance = { push("appearance") },
+                onGuide = { push("guide") },
                 onOpenTab = { kind -> goTo(AppTab.entries[kind.ordinal]) },
                 onBack = ::pop,
             )
@@ -257,6 +274,7 @@ fun ChecklistApp(vm: MainViewModel = viewModel()) {
                             onUnlock = unlock,
                             onBadges = { push("badges") },
                             onEditTodo = { id -> push("todo/$id") },
+                            onGuide = { push("guide") },
                             skipRequest = skipRequest,
                             onSkipRequestHandled = vm::clearSkipRequest,
                             padding = padding,
@@ -377,3 +395,7 @@ private fun editRoute(goal: io.github.randomtools3377.checklist.core.Goal): Stri
     GoalKind.PROJECT -> "project/${goal.id}"
     GoalKind.TODO -> "todo/${goal.id}"
 }
+
+/** What the app shortcuts ask for, through MainActivity.EXTRA_OPEN (see res/xml/shortcuts.xml). */
+const val OPEN_NEW_TODO = "new-todo"
+const val OPEN_NEW_GOAL = "new-goal"

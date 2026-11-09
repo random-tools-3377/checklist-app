@@ -103,6 +103,7 @@ import io.github.randomtools3377.checklist.data.ORDER_OWN
 import io.github.randomtools3377.checklist.data.ORDER_RECOMMENDED
 import io.github.randomtools3377.checklist.data.ProjectDraft
 import io.github.randomtools3377.checklist.data.TodoDraft
+import io.github.randomtools3377.checklist.data.SETTING_GUIDE
 import io.github.randomtools3377.checklist.data.RewardDraft
 import io.github.randomtools3377.checklist.data.SETTING_DAY_END_HOUR
 import io.github.randomtools3377.checklist.data.Backups
@@ -1039,6 +1040,23 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         if (draft.name.isBlank()) return
         viewModelScope.launch {
             repository.saveTodo(draft)
+            onDone()
+        }
+    }
+
+    /** The welcome card on Today: for someone new, until it is answered or a goal is added. */
+    val showWelcome: StateFlow<Boolean> = combine(dao.observeSetting(SETTING_GUIDE), dao.observeGoals(), dao.observeRemovedGoals()) { guide, goals, removed ->
+        guide != "done" && goals.isEmpty() && removed.isEmpty()
+    }.state(false)
+
+    fun closeWelcome() {
+        viewModelScope.launch { repository.setSetting(SETTING_GUIDE, "done") }
+    }
+
+    /** Adds the guide's example goals and rewards. */
+    fun addExamples(onDone: () -> Unit = {}) {
+        viewModelScope.launch {
+            repository.addExamples(currentDay())
             onDone()
         }
     }

@@ -100,6 +100,8 @@ import io.github.randomtools3377.checklist.reminders.Reminders
 import io.github.randomtools3377.checklist.data.ProjectDraft
 import io.github.randomtools3377.checklist.data.TodoDraft
 import io.github.randomtools3377.checklist.core.Todos
+import io.github.randomtools3377.checklist.core.GoalSearch
+import androidx.compose.material.icons.filled.Search
 import io.github.randomtools3377.checklist.data.StepDraft
 import io.github.randomtools3377.checklist.data.nowLocal
 import io.github.randomtools3377.checklist.data.toDay
@@ -125,10 +127,13 @@ fun GoalsScreen(
     onRemoved: () -> Unit = {},
 ) {
     if (view == null) return
-    val habits = view.goals.filter { it.kind == GoalKind.HABIT }
-    val projects = view.goals.filter { it.kind == GoalKind.PROJECT }
+    // Search: every word typed has to be in a goal's name or category. Not while reordering.
+    var query by rememberSaveable { mutableStateOf("") }
+    val found = if (reordering) view.goals else GoalSearch.filter(view.goals, query)
+    val habits = found.filter { it.kind == GoalKind.HABIT }
+    val projects = found.filter { it.kind == GoalKind.PROJECT }
     // Open to-dos: ones without a date, and ones due today or later. Past ones stay in the history.
-    val todos = view.goals.filter { goal ->
+    val todos = found.filter { goal ->
         goal.kind == GoalKind.TODO && Todos.dateOf(goal).let { it == null || view.today == null || it >= view.today }
     }
     LazyColumn(
@@ -153,6 +158,32 @@ fun GoalsScreen(
             item {
                 OutlinedButton(onClick = onUnlock, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
                     Text(if (view.hiddenPrivate == 1) "🔒 1 private goal · Unlock" else "🔒 ${view.hiddenPrivate} private goals · Unlock")
+                }
+            }
+        }
+        if (!reordering && view.goals.size > 1) {
+            item(key = "search") {
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = { query = it.take(60) },
+                    placeholder = { Text("Search goals") },
+                    leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
+                    trailingIcon = if (query.isNotEmpty()) {
+                        { IconButton(onClick = { query = "" }) { Icon(Icons.Filled.Close, contentDescription = "Clear the search") } }
+                    } else {
+                        null
+                    },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp).testTag("goal-search"),
+                )
+            }
+            if (habits.isEmpty() && projects.isEmpty() && todos.isEmpty()) {
+                item(key = "no-match") {
+                    Text(
+                        "No goals match \"${query.trim()}\".",
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth().padding(top = 24.dp).testTag("no-match"),
+                    )
                 }
             }
         }

@@ -107,6 +107,7 @@ fun TodayScreen(
     onUnlock: () -> Unit,
     onBadges: () -> Unit,
     onEditTodo: (Long) -> Unit,
+    onGuide: () -> Unit,
     skipRequest: Long?,
     onSkipRequestHandled: () -> Unit,
     padding: PaddingValues,
@@ -139,6 +140,7 @@ fun TodayScreen(
         vm.stopRequest.value = null
     }
     val newBadges by vm.newBadges.collectAsStateWithLifecycle()
+    val welcome by vm.showWelcome.collectAsStateWithLifecycle()
     var editingTick by remember { mutableStateOf<Long?>(null) }
     editingTick?.let { id -> EditTickDialog(id, vm) { editingTick = null } }
     val haptics = LocalHapticFeedback.current
@@ -284,6 +286,10 @@ fun TodayScreen(
     ) {
         item {
             Text(longDate(view.day), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(bottom = 8.dp))
+            if (welcome) {
+                WelcomeCard(onTour = onGuide, onExamples = { vm.addExamples() }, onClose = vm::closeWelcome)
+                Spacer(Modifier.height(12.dp))
+            }
             if (newBadges.isNotEmpty()) {
                 NewBadgesCard(newBadges, onSee = onBadges, onDismiss = vm::badgesSeen)
                 Spacer(Modifier.height(12.dp))

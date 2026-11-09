@@ -65,6 +65,8 @@ keeps the data.
 - 0.22.0: a planner for the coming two weeks, and moving a day's goal to another day of its week.
 - 0.23.0: quick to-dos, with an optional date, that pay points; one with a date that isn't done is
   a miss.
+- 0.24.0: a first-run guide with example goals, search in the Goals list, and shortcuts on the
+  app's icon.
 
 Every step in CLAUDE.md's build order is built. The iPhone app waits for a way to install it.
 

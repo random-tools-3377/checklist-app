@@ -346,6 +346,10 @@ Build order **(default)**, each step a Release the owner can try:
     changed in its editor, to today or later. Done and past to-dos leave the Goals list but stay
     in the history and the review. The planner and moving apply to goals; a to-do moves by
     changing its date.
+    The guide is a card on Today for someone with no goals, opening six short pages that end
+    with example goals and rewards (one of each kind) or none; it is also in Settings. The Goals
+    list's search matches every word typed against names and categories. The icon's shortcuts are
+    New to-do, New goal, Plan and Shop.
 
 ## Talking to the owner
 
