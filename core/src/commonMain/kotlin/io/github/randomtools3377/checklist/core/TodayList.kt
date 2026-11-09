@@ -46,10 +46,15 @@ data class TodayView(
     val thisMonth: List<HabitRow>,
     val thisYear: List<HabitRow>,
     val projects: List<ProjectRow>,
+    /** To-dos without a date: open ones, and ones done today. */
+    val todos: List<TodoRow> = emptyList(),
 ) {
     val isEmpty: Boolean
-        get() = dueToday.isEmpty() && thisWeek.isEmpty() && thisMonth.isEmpty() && thisYear.isEmpty() && projects.isEmpty()
+        get() = dueToday.isEmpty() && thisWeek.isEmpty() && thisMonth.isEmpty() && thisYear.isEmpty() && projects.isEmpty() && todos.isEmpty()
 }
+
+/** An undated to-do on Today: open, or done today. */
+data class TodoRow(val goal: Goal, val done: Boolean)
 
 object TodayList {
     /**
@@ -67,7 +72,7 @@ object TodayList {
         checks: List<Check> = emptyList(),
     ): TodayView {
         val active = goals.filter { !it.archived }.sortedWith(compareBy({ it.position }, { it.id }))
-        val habits = active.filter { it.kind == GoalKind.HABIT }.mapNotNull { goal ->
+        val habits = active.filter { it.isHabitLike }.mapNotNull { goal ->
             val window = goal.repeat?.window(day) ?: return@mapNotNull null
             val skips = lapses.count { it.goalId == goal.id && it.kind == LapseKind.SKIP && it.periodStart == window.start && !it.forgotten }
             val windowTicks = ticks.filter { it.countsToward(goal, window.start) }
@@ -100,6 +105,9 @@ object TodayList {
             thisMonth = habits.filter { it.window.period == Period.MONTHLY },
             thisYear = habits.filter { it.window.period == Period.YEARLY },
             projects = projects,
+            todos = active.filter { it.kind == GoalKind.TODO && it.repeat == null }.map { goal ->
+                TodoRow(goal, ticks.any { it.goalId == goal.id && it.stepId == null && it.day == day })
+            },
         )
     }
 }

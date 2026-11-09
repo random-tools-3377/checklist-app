@@ -53,6 +53,9 @@ interface Store {
 
     suspend fun activeGoals(): List<Goal>
 
+    /** Sets a goal's repeat: an undated to-do gets the day it was done (see [Todos]). */
+    suspend fun setRepeat(goalId: Long, repeat: Repeat?)
+
     /** Habit ticks whose window starts on or after [day]. */
     suspend fun habitTicksSince(day: LocalDate): List<Tick>
 

@@ -41,7 +41,7 @@ object StreakCounter {
      * as done for the day, but still breaks the no-skip streak.
      */
     fun records(from: LocalDate, to: LocalDate, goals: List<Goal>, ticks: List<Tick>, lapses: List<Lapse>): List<DayRecord> {
-        val habits = goals.filter { it.kind == GoalKind.HABIT && it.repeat != null }
+        val habits = goals.filter { it.isHabitLike && it.repeat != null }
         val lapsesByDay = lapses.filter { !it.forgotten }.groupBy { it.day }
         // Counted once up front, so a long stretch of history stays quick to go through.
         val ticksByWindow = HashMap<Triple<Long, Period?, LocalDate>, MutableList<Tick>>()

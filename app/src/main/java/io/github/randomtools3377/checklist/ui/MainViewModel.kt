@@ -102,6 +102,7 @@ import io.github.randomtools3377.checklist.data.HabitDraft
 import io.github.randomtools3377.checklist.data.ORDER_OWN
 import io.github.randomtools3377.checklist.data.ORDER_RECOMMENDED
 import io.github.randomtools3377.checklist.data.ProjectDraft
+import io.github.randomtools3377.checklist.data.TodoDraft
 import io.github.randomtools3377.checklist.data.RewardDraft
 import io.github.randomtools3377.checklist.data.SETTING_DAY_END_HOUR
 import io.github.randomtools3377.checklist.data.Backups
@@ -144,7 +145,7 @@ import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.LocalTime
 
 /** Every goal, for the Goals screen. */
-data class GoalsView(val goals: List<Goal>, val steps: Map<Long, List<Step>>, val hiddenPrivate: Int = 0)
+data class GoalsView(val goals: List<Goal>, val steps: Map<Long, List<Step>>, val hiddenPrivate: Int = 0, val today: LocalDate? = null)
 
 /** What the database gives the Today screen, before the lock and the streaks are applied. */
 private data class Raw(val goals: List<Goal>, val steps: List<Step>, val ticks: List<Tick>, val balance: Int, val usual: Map<Long, Int>)
@@ -376,10 +377,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }.state(null)
 
-    val goalsView: StateFlow<GoalsView?> = combine(dao.observeGoals(), dao.observeSteps(), settings, unlocked) { goals, steps, s, isUnlocked ->
+    val goalsView: StateFlow<GoalsView?> = combine(dao.observeGoals(), dao.observeSteps(), settings, unlocked, today) { goals, steps, s, isUnlocked, day ->
         val all = goals.map { it.toCore() }
         val shown = if (s.locks.privateGoals && !isUnlocked) all.filter { !it.private } else all
-        GoalsView(shown, steps.map { it.toCore() }.groupBy { it.goalId }, hiddenPrivate = all.size - shown.size)
+        GoalsView(shown, steps.map { it.toCore() }.groupBy { it.goalId }, hiddenPrivate = all.size - shown.size, today = day)
     }.state(null)
 
     // How the app looks
@@ -606,7 +607,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     val makeUpChoices: StateFlow<List<Goal>> = today.flatMapLatest { day ->
         combine(dao.observeLapsesSince(day.minusDays(14).toEpochDay()), dao.observeGoals()) { recent, goals ->
             val ids = recent.filter { !it.forgotten }.map { it.goalId }.toSet()
-            goals.map { it.toCore() }.filter { it.id in ids && it.kind == GoalKind.HABIT }
+            goals.map { it.toCore() }.filter { it.id in ids && it.isHabitLike }
         }
     }.state(emptyList())
 
@@ -1032,6 +1033,24 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             onDone()
         }
     }
+
+    /** Saves a quick to-do, from its editor or from the box on Today. */
+    fun saveTodo(draft: TodoDraft, onDone: () -> Unit = {}) {
+        if (draft.name.isBlank()) return
+        viewModelScope.launch {
+            repository.saveTodo(draft)
+            onDone()
+        }
+    }
+
+    /** Adds a to-do from the box on Today; [onAdded] gets its id, to open it for a date. */
+    fun addTodo(name: String, onAdded: (Long) -> Unit = {}) {
+        if (name.isBlank()) return
+        viewModelScope.launch { onAdded(repository.saveTodo(TodoDraft(id = 0, name = name.trim()))) }
+    }
+
+    /** The user's current day, with the day ending when they set it to. */
+    fun currentDay(): LocalDate = Days.dayOf(nowLocal(), settings.value.dayEndHour)
 
     fun saveProject(draft: ProjectDraft, onDone: () -> Unit) {
         viewModelScope.launch {

@@ -65,6 +65,10 @@ class MemoryStore : Store {
     fun addPenaltyTask(name: String): PenaltyTask = PenaltyTask(id = nextId++, name = name).also { penaltyTaskList += it }
 
     override suspend fun activeGoals(): List<Goal> = goals.filter { !it.archived }
+    override suspend fun setRepeat(goalId: Long, repeat: Repeat?) {
+        val i = goals.indexOfFirst { it.id == goalId }
+        if (i >= 0) goals[i] = goals[i].copy(repeat = repeat)
+    }
     override suspend fun habitTicksSince(day: LocalDate): List<Tick> = ticks.filter { it.stepId == null && it.periodStart >= day }
     override suspend fun lapses(goalId: Long, from: LocalDate, to: LocalDate): List<Lapse> =
         lapses.filter { it.goalId == goalId && it.day >= from && it.day <= to }

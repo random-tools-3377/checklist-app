@@ -20,7 +20,7 @@ object CalendarView {
      */
     fun agenda(day: LocalDate, goals: List<Goal>, ticks: List<Tick>): List<AgendaItem> {
         val items = goals
-            .filter { !it.archived && it.kind == GoalKind.HABIT }
+            .filter { !it.archived && it.isHabitLike }
             .mapNotNull { goal ->
                 val window = goal.repeat?.window(day) ?: return@mapNotNull null
                 val count = goal.timesDone(ticks.filter { it.countsToward(goal, window.start) })
@@ -37,7 +37,7 @@ object CalendarView {
         var done = 0
         val ticks = ticksByDay[day].orEmpty()
         for (goal in goals) {
-            if (goal.archived || goal.kind != GoalKind.HABIT) continue
+            if (goal.archived || !goal.isHabitLike) continue
             val repeat = goal.repeat ?: continue
             if (repeat.kind == RepeatKind.TIMES_PER || !repeat.isDueOn(day)) continue
             due++

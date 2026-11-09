@@ -50,7 +50,7 @@ object Alerts {
     fun between(goals: List<Goal>, from: LocalDateTime, to: LocalDateTime, dayEndHour: Int, defaultFinish: LocalTime? = null): List<Alert> {
         val alerts = mutableListOf<Alert>()
         for (goal in goals) {
-            if (goal.archived || goal.kind != GoalKind.HABIT) continue
+            if (goal.archived || !goal.isHabitLike) continue
             val repeat = goal.repeat ?: continue
             val reminder = goal.reminder ?: Reminder()
             var day = from.date.minusDays(1)

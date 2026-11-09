@@ -59,7 +59,7 @@ private val RoutesSaver = listSaver<SnapshotStateList<String>, String>(
 
 /**
  * The whole app. Screens are kept on a small stack of routes: a tab ("today", "goals", "shop")
- * at the bottom, with "settings" or an editor ("habit/12", "project/0" for a new one,
+ * at the bottom, with "settings" or an editor ("habit/12", "project/0" for a new one, "todo/3",
  * "reward/3") on top.
  */
 @Composable
@@ -199,6 +199,7 @@ fun ChecklistApp(vm: MainViewModel = viewModel()) {
             "project" -> androidx.compose.runtime.key(route) {
                 ProjectEditor(id, vm, onClose = ::pop, onOpen = { copy -> pop(); push("project/$copy") })
             }
+            "todo" -> androidx.compose.runtime.key(route) { TodoEditor(id, vm, onClose = ::pop) }
             "removed" -> RemovedGoalsScreen(removedGoals, onRestore = { vm.restoreGoal(it.id) }, onBack = ::pop)
             "reward" -> androidx.compose.runtime.key(route) { RewardEditor(id, vm, onClose = ::pop) }
             "settings" -> SettingsScreen(
@@ -255,6 +256,7 @@ fun ChecklistApp(vm: MainViewModel = viewModel()) {
                             onSettings = { push("settings") },
                             onUnlock = unlock,
                             onBadges = { push("badges") },
+                            onEditTodo = { id -> push("todo/$id") },
                             skipRequest = skipRequest,
                             onSkipRequestHandled = vm::clearSkipRequest,
                             padding = padding,
@@ -262,7 +264,7 @@ fun ChecklistApp(vm: MainViewModel = viewModel()) {
                         AppTab.GOALS -> GoalsScreen(
                             goals,
                             reordering = reorderGoals,
-                            onEdit = { goal -> push((if (goal.kind == GoalKind.HABIT) "habit/" else "project/") + goal.id) },
+                            onEdit = { goal -> push(editRoute(goal)) },
                             onMove = { goal, by -> vm.moveGoal(goal.id, by) },
                             onUnlock = unlock,
                             padding = padding,
@@ -308,6 +310,7 @@ fun ChecklistApp(vm: MainViewModel = viewModel()) {
             NewGoalDialog(
                 onHabit = { newGoal = false; push("habit/0") },
                 onProject = { newGoal = false; push("project/0") },
+                onTodo = { newGoal = false; push("todo/0") },
                 onDismiss = { newGoal = false },
             )
         }
@@ -366,4 +369,11 @@ private fun TabScaffold(
         floatingActionButton = fab,
         content = content,
     )
+}
+
+/** The editor for a goal of each kind. */
+private fun editRoute(goal: io.github.randomtools3377.checklist.core.Goal): String = when (goal.kind) {
+    GoalKind.HABIT -> "habit/${goal.id}"
+    GoalKind.PROJECT -> "project/${goal.id}"
+    GoalKind.TODO -> "todo/${goal.id}"
 }

@@ -77,6 +77,10 @@ class RoomStore(private val db: AppDatabase) : Store {
     override suspend fun markReturned(purchaseId: Long, at: Long) = dao.markReturned(purchaseId, at)
 
     override suspend fun activeGoals(): List<Goal> = dao.activeGoals().map { it.toCore() }
+    override suspend fun setRepeat(goalId: Long, repeat: Repeat?) {
+        val row = dao.goal(goalId) ?: return
+        dao.updateGoal(row.copy(repeat = repeat?.let { RepeatText.encode(it) }, period = repeat?.windowPeriod?.name))
+    }
     override suspend fun habitTicksSince(day: LocalDate): List<Tick> = dao.habitTicksSince(day.toEpochDay()).map { it.toCore() }
     override suspend fun lapses(goalId: Long, from: LocalDate, to: LocalDate): List<Lapse> =
         dao.lapses(goalId, from.toEpochDay(), to.toEpochDay()).map { it.toCore() }

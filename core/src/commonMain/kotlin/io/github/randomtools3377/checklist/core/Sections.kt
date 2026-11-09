@@ -7,6 +7,7 @@ enum class TodaySection(val label: String) {
     STREAKS("Streaks"),
     PACE("Pace and order"),
     DUE_TODAY("Due today"),
+    TODOS("To-dos"),
     THIS_WEEK("This week"),
     THIS_MONTH("This month"),
     THIS_YEAR("This year"),

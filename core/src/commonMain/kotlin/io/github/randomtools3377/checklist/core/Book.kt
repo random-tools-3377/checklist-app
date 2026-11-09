@@ -64,8 +64,9 @@ class Book(
     /** Ticks a habit once for its current period, paying its points and, on finishing, its bonus. */
     suspend fun tickHabit(goalId: Long): TickResult = store.transaction {
         val goal = store.goal(goalId)
+        if (goal != null && !goal.archived && goal.kind == GoalKind.TODO && goal.repeat == null) return@transaction tickUndatedTodo(goal)
         val repeat = goal?.repeat
-        if (goal == null || goal.archived || goal.kind != GoalKind.HABIT || repeat == null) {
+        if (goal == null || goal.archived || !goal.isHabitLike || repeat == null) {
             return@transaction TickResult.NotFound
         }
         val day = today()
@@ -100,6 +101,19 @@ class Book(
     }
 
     /**
+     * An undated to-do done: ticked for today, paying its points. When the day closes it takes
+     * today as its date (see [Lapses.closeDays]), so from then on it is an ordinary dated one, done.
+     */
+    private suspend fun tickUndatedTodo(goal: Goal): TickResult {
+        val day = today()
+        if (store.habitTicks(goal.id, day).any { it.stepId == null }) return TickResult.AlreadyDone
+        val at = millis()
+        val tickId = store.addTick(Tick(goalId = goal.id, stepId = null, at = at, day = day, period = Period.DAILY, periodStart = day))
+        store.addEntry(Entry(at = at, day = day, kind = EntryKind.TICK, amount = goal.points, goalId = goal.id, tickId = tickId, label = goal.name))
+        return TickResult.Ticked(points = goal.points, bonus = 0, finished = true)
+    }
+
+    /**
      * Enters how much of a goal's amount was done, like 8 pages, and how long it took if it was
      * timed. Each whole amount reached pays the goal's points, and reaching all of a goal's times
      * pays its bonus; entries in between pay nothing. Once every time is done, more can't be
@@ -108,7 +122,7 @@ class Book(
     suspend fun logAmount(goalId: Long, amount: Double, seconds: Int? = null): TickResult = store.transaction {
         val goal = store.goal(goalId)
         val repeat = goal?.repeat
-        if (goal == null || goal.archived || goal.kind != GoalKind.HABIT || repeat == null || !goal.hasAmount) {
+        if (goal == null || goal.archived || !goal.isHabitLike || repeat == null || !goal.hasAmount) {
             return@transaction TickResult.NotFound
         }
         val day = today()
@@ -150,8 +164,14 @@ class Book(
      */
     suspend fun undoHabitTick(goalId: Long): Boolean = store.transaction {
         val goal = store.goal(goalId)
+        if (goal != null && goal.kind == GoalKind.TODO && goal.repeat == null) {
+            // An undated to-do done today: take that back.
+            val last = store.habitTicks(goalId, today()).filter { it.stepId == null }.maxByOrNull { it.id } ?: return@transaction false
+            removeTickAndItsEntries(last.id)
+            return@transaction true
+        }
         val repeat = goal?.repeat
-        if (goal == null || goal.kind != GoalKind.HABIT || repeat == null) return@transaction false
+        if (goal == null || !goal.isHabitLike || repeat == null) return@transaction false
         val start = repeat.window(today())?.start ?: return@transaction false
         val ticks = store.habitTicks(goalId, start).filter { it.countsToward(goal, start) }
         val last = ticks.maxByOrNull { it.id } ?: return@transaction false

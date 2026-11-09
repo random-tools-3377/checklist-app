@@ -63,6 +63,8 @@ keeps the data.
 - 0.21.0: a notification while timing, with Stop on it, and amounts more than once, like 1 mile
   3 times a week.
 - 0.22.0: a planner for the coming two weeks, and moving a day's goal to another day of its week.
+- 0.23.0: quick to-dos, with an optional date, that pay points; one with a date that isn't done is
+  a miss.
 
 Every step in CLAUDE.md's build order is built. The iPhone app waits for a way to install it.
 

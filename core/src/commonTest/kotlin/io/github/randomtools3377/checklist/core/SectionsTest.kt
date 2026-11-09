@@ -24,7 +24,7 @@ class SectionsTest {
         assertEquals(listOf(TodaySection.BALANCE, TodaySection.STREAKS, TodaySection.WEEKLY_TARGET), moved.take(3).map { it.section })
         assertEquals(Sections.DEFAULT, Sections.move(Sections.DEFAULT, 0, -1)) // already at the top
         val hidden = Sections.toggle(Sections.DEFAULT, TodaySection.PACE)
-        assertEquals("BALANCE,WEEKLY_TARGET,STREAKS,-PACE,DUE_TODAY,THIS_WEEK,THIS_MONTH,THIS_YEAR,PROJECTS", Sections.encode(hidden))
+        assertEquals("BALANCE,WEEKLY_TARGET,STREAKS,-PACE,DUE_TODAY,TODOS,THIS_WEEK,THIS_MONTH,THIS_YEAR,PROJECTS", Sections.encode(hidden))
     }
 
     @Test

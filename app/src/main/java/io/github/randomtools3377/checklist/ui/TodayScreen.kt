@@ -36,6 +36,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -104,6 +106,7 @@ fun TodayScreen(
     onSettings: () -> Unit,
     onUnlock: () -> Unit,
     onBadges: () -> Unit,
+    onEditTodo: (Long) -> Unit,
     skipRequest: Long?,
     onSkipRequestHandled: () -> Unit,
     padding: PaddingValues,
@@ -158,6 +161,7 @@ fun TodayScreen(
     val plan = screen.plan.filter { Categories.shows(filter, it.row.goal) }
     fun shown(rows: List<HabitRow>) = rows.filter { Categories.shows(filter, it.goal) }
     val projects = view.projects.filter { Categories.shows(filter, it.goal) }
+    val todos = view.todos.filter { Categories.shows(filter, it.goal) }
 
     fun celebrateTick(result: TickResult, spot: Spot, bigWhenFinished: Boolean) {
         if (result !is TickResult.Ticked) return
@@ -392,6 +396,26 @@ fun TodayScreen(
                         }
                     }
                 }
+                TodaySection.TODOS -> {
+                    startGoals()
+                    item(key = "title-todos") { SectionTitle("To-dos") }
+                    item(key = "todo-add") {
+                        QuickTodoField(
+                            onAdd = { name -> vm.addTodo(name) },
+                            onMore = { name -> if (name.isBlank()) onEditTodo(0) else vm.addTodo(name, onEditTodo) },
+                        )
+                        Spacer(Modifier.height(10.dp))
+                    }
+                    items(todos, key = { "todo-${it.goal.id}" }) { row ->
+                        TodoCard(
+                            row = row,
+                            onDone = { spot -> vm.tickHabit(row.goal.id) { result -> celebrateTick(result, spot, bigWhenFinished = false) } },
+                            onUndo = { vm.undoHabitTick(row.goal.id) },
+                            onEdit = { onEditTodo(row.goal.id) },
+                        )
+                        Spacer(Modifier.height(10.dp))
+                    }
+                }
                 TodaySection.THIS_WEEK -> {
                     startGoals()
                     habitSection("This week", shown(view.thisWeek), screen, ::tick, vm, grid, { details = it }, stopwatch, { r -> entering = r }) { skipping = it }
@@ -444,6 +468,81 @@ private fun timeLabel(planned: Planned, screen: TodayState): String? {
     if (planned.row.done) return null
     val text = momentText(time, screen.view.day)
     return if (planned.fixed) "at $text" else "by about $text"
+}
+
+/**
+ * The box to add a to-do: type it and press Add. The calendar button adds it too and opens it, to
+ * give it a date or change its points.
+ */
+@Composable
+private fun QuickTodoField(onAdd: (String) -> Unit, onMore: (String) -> Unit) {
+    var text by rememberSaveable { mutableStateOf("") }
+    fun add() {
+        if (text.isBlank()) return
+        onAdd(text)
+        text = ""
+    }
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+        OutlinedTextField(
+            value = text,
+            onValueChange = { text = it.take(80) },
+            placeholder = { Text("Add a to-do") },
+            singleLine = true,
+            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Done),
+            keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = { add() }),
+            modifier = Modifier.weight(1f).testTag("todo-field"),
+        )
+        Spacer(Modifier.width(4.dp))
+        OutlinedIconButton(
+            onClick = {
+                onMore(text)
+                text = ""
+            },
+            modifier = Modifier.semantics { contentDescription = "Add with a date or points" }.testTag("todo-more"),
+        ) {
+            Icon(Icons.Filled.DateRange, contentDescription = null)
+        }
+        FilledIconButton(
+            onClick = ::add,
+            enabled = text.isNotBlank(),
+            modifier = Modifier.semantics { contentDescription = "Add to-do" }.testTag("todo-add"),
+        ) {
+            Icon(Icons.Filled.Add, contentDescription = null)
+        }
+    }
+}
+
+/** A to-do without a date: open until it's done. Tap it to edit it or give it a date. */
+@Composable
+private fun TodoCard(row: io.github.randomtools3377.checklist.core.TodoRow, onDone: (Spot) -> Unit, onUndo: () -> Unit, onEdit: () -> Unit) {
+    val goal = row.goal
+    val spot = remember { Spot() }
+    val cardSize = LocalCardSize.current
+    Card(Modifier.fillMaxWidth().clickable(onClick = onEdit).testTag("todo:${goal.name}")) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.goalStrip(goal.color).padding(cardSize.padding)) {
+            Text(goal.icon, fontSize = cardSize.icon, modifier = Modifier.width(44.dp), textAlign = TextAlign.Center)
+            Spacer(Modifier.width(8.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    goal.name,
+                    style = MaterialTheme.typography.titleMedium,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    textDecoration = if (row.done) androidx.compose.ui.text.style.TextDecoration.LineThrough else null,
+                )
+                Text("+${goal.points}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            TickButton(
+                done = row.done,
+                counted = false,
+                description = if (row.done) "Undo ${goal.name}" else "Mark ${goal.name} done",
+                modifier = Modifier
+                    .onGloballyPositioned { spot.center = it.boundsInRoot().center }
+                    .testTag("tick:${goal.name}"),
+                onClick = { if (row.done) onUndo() else onDone(spot) },
+            )
+        }
+    }
 }
 
 /** Phone backup is off for this app, so a reminder when the last backup is getting old. */

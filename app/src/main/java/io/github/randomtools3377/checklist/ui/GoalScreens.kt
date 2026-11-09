@@ -98,6 +98,8 @@ import io.github.randomtools3377.checklist.core.weekdayShort
 import io.github.randomtools3377.checklist.data.HabitDraft
 import io.github.randomtools3377.checklist.reminders.Reminders
 import io.github.randomtools3377.checklist.data.ProjectDraft
+import io.github.randomtools3377.checklist.data.TodoDraft
+import io.github.randomtools3377.checklist.core.Todos
 import io.github.randomtools3377.checklist.data.StepDraft
 import io.github.randomtools3377.checklist.data.nowLocal
 import io.github.randomtools3377.checklist.data.toDay
@@ -125,6 +127,10 @@ fun GoalsScreen(
     if (view == null) return
     val habits = view.goals.filter { it.kind == GoalKind.HABIT }
     val projects = view.goals.filter { it.kind == GoalKind.PROJECT }
+    // Open to-dos: ones without a date, and ones due today or later. Past ones stay in the history.
+    val todos = view.goals.filter { goal ->
+        goal.kind == GoalKind.TODO && Todos.dateOf(goal).let { it == null || view.today == null || it >= view.today }
+    }
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(
@@ -137,7 +143,7 @@ fun GoalsScreen(
         if (view.goals.isEmpty()) {
             item {
                 Text(
-                    "No goals yet. Add a habit that repeats, like drinking water every day, or a project made of steps.",
+                    "No goals yet. Add a habit that repeats, like drinking water every day, a project made of steps, or a quick to-do.",
                     textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth().padding(top = 48.dp),
                 )
@@ -161,6 +167,7 @@ fun GoalsScreen(
         }
         goalSection("Habits", habits, view, reordering, onEdit, onMove)
         goalSection("Projects", projects, view, reordering, onEdit, onMove)
+        goalSection("To-dos", todos, view, reordering, onEdit, onMove)
         if (removed > 0 && !reordering) {
             item {
                 TextButton(onClick = onRemoved, modifier = Modifier.padding(top = 8.dp).testTag("removed-goals")) {
@@ -258,11 +265,15 @@ private fun describe(goal: Goal, stepCount: Int): String = when (goal.kind) {
         if (goal.bonus > 0) add("bonus +${goal.bonus}")
         goal.deadline?.let { add("due ${shortDate(it)}") }
     }.joinToString(" · ")
+    GoalKind.TODO -> buildList {
+        add("+${goal.points}")
+        add(Todos.dateOf(goal)?.let { "due ${shortDate(it)}" } ?: "no date")
+    }.joinToString(" · ")
 }
 
 /** Asks whether the new goal is a habit or a project. */
 @Composable
-fun NewGoalDialog(onHabit: () -> Unit, onProject: () -> Unit, onDismiss: () -> Unit) {
+fun NewGoalDialog(onHabit: () -> Unit, onProject: () -> Unit, onDismiss: () -> Unit, onTodo: () -> Unit = {}) {
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("New goal") },
@@ -278,6 +289,12 @@ fun NewGoalDialog(onHabit: () -> Unit, onProject: () -> Unit, onDismiss: () -> U
                     Column(Modifier.padding(vertical = 6.dp)) {
                         Text("Project", style = MaterialTheme.typography.titleMedium)
                         Text("Done once, step by step", style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+                OutlinedButton(onClick = onTodo, modifier = Modifier.fillMaxWidth().testTag("new-todo")) {
+                    Column(Modifier.padding(vertical = 6.dp)) {
+                        Text("To-do", style = MaterialTheme.typography.titleMedium)
+                        Text("A one-off task, with or without a date", style = MaterialTheme.typography.bodySmall)
                     }
                 }
             }
@@ -1156,6 +1173,91 @@ private fun EachTimeSetting(dayStart: LocalTime?, count: Int, on: Boolean, onOn:
 private const val MAX_EACH_TIMES = 12
 
 /** The frame shared by the editors: a top bar with Back and Save, and a scrolling form. */
+/** A quick to-do: a name, its points, and an optional date. */
+@Composable
+fun TodoEditor(id: Long, vm: MainViewModel, onClose: () -> Unit) {
+    var loaded by rememberSaveable { mutableStateOf(id == 0L) }
+    var name by rememberSaveable { mutableStateOf("") }
+    var icon by rememberSaveable { mutableStateOf(Todos.ICON) }
+    var points by rememberSaveable { mutableStateOf(Todos.POINTS.toString()) }
+    var date by rememberSaveable { mutableStateOf<Long?>(null) }
+    var isPrivate by rememberSaveable { mutableStateOf(false) }
+    var showErrors by rememberSaveable { mutableStateOf(false) }
+    // A date already in the past can stay as it is, but a new one can't be.
+    var savedDate by rememberSaveable { mutableStateOf<Long?>(null) }
+
+    LaunchedEffect(id) {
+        if (!loaded) {
+            vm.loadGoal(id)?.let { (goal, _) ->
+                name = goal.name
+                icon = goal.icon
+                points = goal.points.toString()
+                date = Todos.dateOf(goal)?.toEpochDay()
+                savedDate = date
+                isPrivate = goal.private
+            }
+            loaded = true
+        }
+    }
+
+    val today = vm.currentDay()
+    val nameError = if (name.isBlank()) "Give it a name" else null
+    val dateError = date?.takeIf { it != savedDate && it.toDay() < today }?.let { "Pick today or a later day" }
+
+    EditorScaffold(
+        title = if (id == 0L) "New to-do" else "Edit to-do",
+        onBack = onClose,
+        onSave = {
+            if (nameError != null || dateError != null) {
+                showErrors = true
+            } else {
+                vm.saveTodo(
+                    TodoDraft(
+                        id = id,
+                        name = name.trim(),
+                        icon = icon,
+                        points = points.toIntOrNull() ?: 0,
+                        date = date?.toDay(),
+                        private = isPrivate,
+                    ),
+                    onDone = onClose,
+                )
+            }
+        },
+    ) {
+        if (!loaded) return@EditorScaffold
+        IconPicker(icon) { icon = it }
+        OutlinedTextField(
+            value = name,
+            onValueChange = { name = it.take(80) },
+            label = { Text("What to do") },
+            singleLine = true,
+            isError = showErrors && nameError != null,
+            supportingText = if (showErrors && nameError != null) ({ Text(nameError) }) else null,
+            modifier = Modifier.fillMaxWidth().testTag("field:name"),
+        )
+        NumberField(label = pointsTitle(), value = points, onValueChange = { points = it }, tag = "field:points")
+        DateSetting("Due on", date?.toDay(), { date = it?.toEpochDay() }, "field:date", emptyText = "No date")
+        if (showErrors && dateError != null) {
+            Text(dateError, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+        }
+        Text(
+            if (date == null) {
+                "Without a date it waits on Today until it's done, and is never missed."
+            } else {
+                "With a date it is due that day. Not done by the end of it, it's a miss, like any goal. To-dos share one allowance: " +
+                    "${Goal.DEFAULT_ALLOWANCE} skip or miss a week between them before it costs ${pointsWord()}."
+            },
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        PrivateSwitch(isPrivate) { isPrivate = it }
+        if (id != 0L) {
+            RemoveButton("to-do", name) { vm.removeGoal(id, onClose) }
+        }
+    }
+}
+
 @Composable
 fun EditorScaffold(title: String, onBack: () -> Unit, onSave: () -> Unit, content: @Composable () -> Unit) {
     Scaffold(

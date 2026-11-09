@@ -7,6 +7,7 @@ import io.github.randomtools3377.checklist.core.Categories
 import io.github.randomtools3377.checklist.core.Celebration
 import io.github.randomtools3377.checklist.core.Goal
 import io.github.randomtools3377.checklist.core.Moves
+import io.github.randomtools3377.checklist.core.Todos
 import io.github.randomtools3377.checklist.core.Mystery
 import io.github.randomtools3377.checklist.core.GoalKind
 import io.github.randomtools3377.checklist.core.Period
@@ -125,6 +126,17 @@ data class ProjectDraft(
     /** As typed; tidied on saving (see Categories). */
     val category: String? = null,
     val color: Int? = null,
+)
+
+/** What the to-do editor and the quick add on Today save. [id] is 0 for a new to-do. */
+data class TodoDraft(
+    val id: Long,
+    val name: String,
+    val icon: String = Todos.ICON,
+    val points: Int = Todos.POINTS,
+    /** The day it is due; null for one that waits until it is done and is never missed. */
+    val date: LocalDate? = null,
+    val private: Boolean = false,
 )
 
 /** What the reward editor saves. */
@@ -263,6 +275,28 @@ class Repository(private val db: AppDatabase, private val celebrations: Celebrat
             }
         }
         pruneCelebrations()
+    }
+
+    /** Saves a quick to-do. Returns its id. */
+    suspend fun saveTodo(draft: TodoDraft): Long = db.withTransaction {
+        val existing = if (draft.id != 0L) dao.goal(draft.id)?.takeIf { it.kind == GoalKind.TODO.name } else null
+        val made = Todos.of(draft.name, draft.points, draft.date, draft.icon.ifBlank { Todos.ICON })
+        if (existing == null) {
+            dao.insertGoal(made.copy(private = draft.private, position = dao.nextGoalPosition(), createdAt = nowMillis()).toEntity())
+        } else {
+            val repeat = made.repeat
+            dao.updateGoal(
+                existing.copy(
+                    name = made.name,
+                    icon = made.icon,
+                    points = made.points,
+                    repeat = repeat?.let { RepeatText.encode(it) },
+                    period = repeat?.windowPeriod?.name,
+                    isPrivate = draft.private,
+                ),
+            )
+            existing.id
+        }
     }
 
     /** Moves one day's goal to another day of the same week; false if that move isn't allowed. */

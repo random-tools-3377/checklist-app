@@ -6,7 +6,17 @@ import kotlinx.serialization.Serializable
 
 /** Habits repeat. Projects are made of steps and are done once. */
 @Serializable
-enum class GoalKind { HABIT, PROJECT }
+enum class GoalKind {
+    HABIT,
+    PROJECT,
+
+    /**
+     * A one-off task, added quickly. With a date (a [RepeatKind.ONCE] repeat) it is due that day
+     * like a habit, and undone after it is a miss; without one it waits on Today until done and is
+     * never missed (see [Todos]).
+     */
+    TODO,
+}
 
 /** The stretch a habit's ticks count toward: one day, or a whole week, month or year. */
 @Serializable
@@ -79,6 +89,9 @@ data class Goal(
 ) {
     /** The kind of stretch its ticks count toward. Null for a project. */
     val period: Period? get() = repeat?.windowPeriod
+
+    /** Scheduled like a habit: a habit, or a to-do (dated or not). */
+    val isHabitLike: Boolean get() = kind == GoalKind.HABIT || kind == GoalKind.TODO
 
     /** It is done when an amount in the user's own unit is reached, rather than by ticking. */
     val hasAmount: Boolean get() = amount != null && amount > 0

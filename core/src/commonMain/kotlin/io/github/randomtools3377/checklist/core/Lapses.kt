@@ -51,14 +51,21 @@ class Lapses(
     /** Skips and misses that count against the allowance of the week or month containing [day]. */
     private suspend fun used(goal: Goal, day: LocalDate): Int {
         val window = goal.allowanceWindow
-        return store.lapses(goal.id, Days.periodStart(day, window), Days.periodEnd(day, window)).count { !it.forgotten }
+        val from = Days.periodStart(day, window)
+        val to = Days.periodEnd(day, window)
+        if (goal.kind == GoalKind.TODO) {
+            // To-dos share one allowance between them.
+            val todos = store.activeGoals().filter { it.kind == GoalKind.TODO }.map { it.id }.toSet()
+            return store.allLapses(from, to).count { it.goalId in todos && !it.forgotten }
+        }
+        return store.lapses(goal.id, from, to).count { !it.forgotten }
     }
 
     /** Whether the habit can be skipped today, and what it would cost. */
     suspend fun checkSkip(goalId: Long): SkipCheck {
         val goal = store.goal(goalId)
         val repeat = goal?.repeat
-        if (goal == null || goal.archived || goal.kind != GoalKind.HABIT || repeat == null) return SkipCheck.NotFound
+        if (goal == null || goal.archived || !goal.isHabitLike || repeat == null) return SkipCheck.NotFound
         val today = book.today()
         val window = repeat.window(today) ?: return SkipCheck.NotDue
         val ticks = store.habitTicks(goalId, window.start).filter { it.countsToward(goal, window.start) }
@@ -142,7 +149,12 @@ class Lapses(
         var day = from
         while (day <= yesterday) {
             for (goal in goals) {
-                if (goal.kind == GoalKind.HABIT) {
+                if (goal.kind == GoalKind.TODO && goal.repeat == null) {
+                    // An undated to-do done on this day takes it as its date; one not done waits.
+                    if (store.habitTicks(goal.id, day).any { it.stepId == null }) store.setRepeat(goal.id, Repeat(RepeatKind.ONCE, day))
+                    continue
+                }
+                if (goal.isHabitLike) {
                     val repeat = goal.repeat ?: continue
                     val window = repeat.window(day) ?: continue
                     if (window.end != day) continue // its time hasn't run out yet

@@ -341,7 +341,11 @@ Build order **(default)**, each step a Release the owner can try:
     penalties, like any goal; to-dos pay points. **Details (default):** a to-do's date is
     optional, and one without a date is never missed; to-dos share one allowance between them;
     each time of an amount goal done more than once needs the whole amount, and amounts entered
-    add up across entries.
+    add up across entries. A new to-do pays 2 points, and is added from a box in its own To-dos
+    section on Today; one without a date takes the day it is done as its date. Its date can be
+    changed in its editor, to today or later. Done and past to-dos leave the Goals list but stay
+    in the history and the review. The planner and moving apply to goals; a to-do moves by
+    changing its date.
 
 ## Talking to the owner
 

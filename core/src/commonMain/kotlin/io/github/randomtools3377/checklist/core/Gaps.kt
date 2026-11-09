@@ -41,7 +41,7 @@ class Gaps(private val store: Store, private val book: Book) {
         var day = from
         while (day <= to) {
             if (goals.any { goal ->
-                    if (goal.kind == GoalKind.HABIT) goal.repeat?.isDueOn(day) == true else goal.deadline == day
+                    if (goal.isHabitLike) goal.repeat?.isDueOn(day) == true else goal.deadline == day
                 }
             ) {
                 days += day

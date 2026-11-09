@@ -92,7 +92,7 @@ object Review {
     ): ReviewSummary {
         val live = lapses.filter { !it.forgotten }
         val inRange = entries.filter { it.day >= from && it.day <= to }
-        val habits = goals.filter { it.kind == GoalKind.HABIT && it.repeat != null }
+        val habits = goals.filter { it.isHabitLike && it.repeat != null }
         val weekdayDue = IntArray(8)
         val weekdayDone = IntArray(8)
         val summaries = habits.map { goal ->
