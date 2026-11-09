@@ -99,6 +99,7 @@ fun ChecklistApp(vm: MainViewModel = viewModel()) {
     val gap by vm.unansweredGap.collectAsStateWithLifecycle()
     val removedGoals by vm.removedGoals.collectAsStateWithLifecycle()
     val badges by vm.badges.collectAsStateWithLifecycle()
+    val appearance by vm.appearance.collectAsStateWithLifecycle()
     val tickNotes by vm.tickNotes.collectAsStateWithLifecycle()
     val review by vm.review.collectAsStateWithLifecycle()
     val reviewPeriod by vm.reviewPeriod.collectAsStateWithLifecycle()
@@ -176,7 +177,9 @@ fun ChecklistApp(vm: MainViewModel = viewModel()) {
             }
             "removed" -> RemovedGoalsScreen(removedGoals, onRestore = { vm.restoreGoal(it.id) }, onBack = ::pop)
             "reward" -> androidx.compose.runtime.key(route) { RewardEditor(id, vm, onClose = ::pop) }
-            "settings" -> SettingsScreen(settings, vm, onBack = ::pop)
+            "settings" -> SettingsScreen(settings, vm, onAppearance = { push("appearance") }, onBack = ::pop)
+            "appearance" -> AppearanceScreen(appearance, vm, onAnyColour = { push("colour") }, onBack = ::pop)
+            "colour" -> AppColourScreen(appearance, onUse = { vm.setColor(it); pop() }, onBack = ::pop)
             "badges" -> if (settings.locks.review && !unlocked) {
                 LockedPanel("The badges page", unlock, Modifier)
             } else {

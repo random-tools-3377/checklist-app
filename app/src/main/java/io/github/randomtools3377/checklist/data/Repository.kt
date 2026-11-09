@@ -29,6 +29,12 @@ const val SETTING_WEEKLY_TARGET = "weekly_target"
 const val SETTING_BADGES = "badges"
 /** The badges the user has already been shown. */
 const val SETTING_BADGES_SEEN = "badges_seen"
+/** Light, dark, phone or black (see ThemeMode). */
+const val SETTING_THEME = "theme"
+/** The colour the app is built from, as "#RRGGBB"; missing to match the wallpaper. */
+const val SETTING_COLOR = "color"
+/** Colours picked lately, as "#RRGGBB" separated by commas. */
+const val SETTING_RECENT_COLORS = "recent_colors"
 const val DEFAULT_SNOOZE_MINUTES = 10
 const val SETTING_TODAY_ORDER = "today_order"
 const val ORDER_RECOMMENDED = "recommended"
@@ -66,6 +72,7 @@ data class HabitDraft(
     val items: List<StepDraft> = emptyList(),
     /** As typed; tidied on saving (see Categories). */
     val category: String? = null,
+    val color: Int? = null,
 )
 
 /** One step in the project editor. [id] is 0 for a new step. */
@@ -85,6 +92,7 @@ data class ProjectDraft(
     val celebration: String? = null,
     /** As typed; tidied on saving (see Categories). */
     val category: String? = null,
+    val color: Int? = null,
 )
 
 /** What the reward editor saves. */
@@ -141,6 +149,7 @@ class Repository(private val db: AppDatabase, private val celebrations: Celebrat
             isPrivate = draft.private,
             celebration = draft.celebration?.takeIf { Celebration.isValid(it) },
             category = category(draft.category, draft.id),
+            color = draft.color,
         )
         val goalId = if (existing == null) dao.insertGoal(row) else row.id.also { dao.updateGoal(row) }
         // A routine's checklist: removed items are archived, so their past ticks still make sense.
@@ -183,6 +192,7 @@ class Repository(private val db: AppDatabase, private val celebrations: Celebrat
                     isPrivate = draft.private,
                     celebration = draft.celebration?.takeIf { Celebration.isValid(it) },
                     category = category(draft.category, 0),
+                    color = draft.color,
                 ),
             )
         } else {
@@ -197,6 +207,7 @@ class Repository(private val db: AppDatabase, private val celebrations: Celebrat
                     isPrivate = draft.private,
                     celebration = draft.celebration?.takeIf { Celebration.isValid(it) },
                     category = category(draft.category, existing.id),
+                    color = draft.color,
                 ),
             )
             existing.id

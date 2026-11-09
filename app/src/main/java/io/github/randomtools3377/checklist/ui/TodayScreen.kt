@@ -452,7 +452,7 @@ private fun HabitCard(
     val spot = remember { Spot() }
     val counted = goal.target > 1 || row.isRoutine
     Card(Modifier.fillMaxWidth()) {
-      Column {
+      Column(Modifier.goalStrip(goal.color)) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(12.dp)) {
             Text(goal.icon, fontSize = 30.sp, modifier = Modifier.width(44.dp), textAlign = TextAlign.Center)
             Spacer(Modifier.width(8.dp))
@@ -628,7 +628,7 @@ private fun TickButton(done: Boolean, counted: Boolean, description: String, mod
 private fun ProjectCard(project: ProjectRow, paceLine: String?, onTick: (StepRow, Spot) -> Unit, onUndo: (StepRow) -> Unit) {
     val goal = project.goal
     Card(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(12.dp)) {
+        Column(Modifier.goalStrip(goal.color).padding(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(goal.icon, fontSize = 30.sp, modifier = Modifier.width(44.dp), textAlign = TextAlign.Center)
                 Spacer(Modifier.width(8.dp))

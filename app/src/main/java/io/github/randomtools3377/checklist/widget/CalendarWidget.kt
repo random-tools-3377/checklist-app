@@ -171,6 +171,11 @@ private fun Agenda(items: List<AgendaItem>) {
     LazyColumn {
         items(items, itemId = { it.goal.id }) { item ->
             Row(verticalAlignment = Alignment.CenterVertically, modifier = GlanceModifier.fillMaxWidth().padding(vertical = 2.dp)) {
+                // The goal's own colour, as a bar.
+                item.goal.color?.let { color ->
+                    Box(GlanceModifier.width(4.dp).height(22.dp).cornerRadius(2.dp).background(androidx.compose.ui.graphics.Color(color))) {}
+                    Spacer(GlanceModifier.width(4.dp))
+                }
                 CheckBox(
                     checked = item.done,
                     onCheckedChange = actionRunCallback<ToggleTick>(actionParametersOf(GoalKey to item.goal.id)),

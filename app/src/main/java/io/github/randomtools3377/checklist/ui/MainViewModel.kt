@@ -9,6 +9,10 @@ import io.github.randomtools3377.checklist.core.Backup
 import io.github.randomtools3377.checklist.core.BackupError
 import io.github.randomtools3377.checklist.core.BuyResult
 import io.github.randomtools3377.checklist.core.Days
+import io.github.randomtools3377.checklist.data.SETTING_RECENT_COLORS
+import io.github.randomtools3377.checklist.data.SETTING_COLOR
+import io.github.randomtools3377.checklist.data.SETTING_THEME
+import io.github.randomtools3377.checklist.core.Colors
 import kotlinx.coroutines.flow.collectLatest
 import io.github.randomtools3377.checklist.data.SETTING_BADGES_SEEN
 import io.github.randomtools3377.checklist.data.SETTING_BADGES
@@ -118,6 +122,9 @@ private data class Raw(val goals: List<Goal>, val steps: List<Step>, val ticks: 
 
 /** How far back streaks are counted. */
 private const val STREAK_DAYS = 400
+
+/** How many recently picked colours the colour picker offers again. */
+private const val MAX_RECENT_COLORS = 6
 
 /** The most points a week the target can ask for. */
 private const val MAX_WEEKLY_TARGET = 100_000
@@ -325,6 +332,41 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         val shown = if (s.locks.privateGoals && !isUnlocked) all.filter { !it.private } else all
         GoalsView(shown, steps.map { it.toCore() }.groupBy { it.goalId }, hiddenPrivate = all.size - shown.size)
     }.state(null)
+
+    // How the app looks
+
+    val appearance: StateFlow<Appearance> = combine(
+        dao.observeSetting(SETTING_THEME),
+        dao.observeSetting(SETTING_COLOR),
+        dao.observeSetting(SETTING_RECENT_COLORS),
+    ) { theme, color, recent ->
+        Appearance(
+            theme = ThemeMode.entries.firstOrNull { it.name == theme } ?: ThemeMode.PHONE,
+            color = color?.let { Colors.parseHex(it) },
+            recent = recent.orEmpty().split(",").mapNotNull { Colors.parseHex(it) },
+        )
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, Appearance())
+
+    fun setTheme(mode: ThemeMode) {
+        viewModelScope.launch { repository.setSetting(SETTING_THEME, mode.name) }
+    }
+
+    /** Null matches the wallpaper. A colour from the picker is remembered among the recent ones. */
+    fun setColor(color: Int?) {
+        viewModelScope.launch {
+            repository.setSetting(SETTING_COLOR, color?.let { Colors.hex(it) } ?: "")
+            if (color != null) rememberColor(color)
+        }
+    }
+
+    /** Keeps a colour picked with the colour picker, for picking again. */
+    fun rememberColor(color: Int) {
+        if (Colors.PRESETS.any { it.second == color }) return
+        viewModelScope.launch {
+            val recent = (listOf(color) + appearance.value.recent.filter { it != color }).take(MAX_RECENT_COLORS)
+            repository.setSetting(SETTING_RECENT_COLORS, recent.joinToString(",") { Colors.hex(it) })
+        }
+    }
 
     // The weekly points target and badges
 

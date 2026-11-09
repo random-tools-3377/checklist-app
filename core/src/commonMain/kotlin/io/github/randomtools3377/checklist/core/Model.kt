@@ -63,6 +63,8 @@ data class Goal(
     val celebration: String? = null,
     /** The user's own category for it, like "Health" or "Home", if they gave it one (see [Categories]). */
     val category: String? = null,
+    /** Its own colour, as 0xFFRRGGBB, shown on its card, in the calendar widget and the grid (see [Colors]). */
+    val color: Int? = null,
     val archived: Boolean = false,
     val position: Int = 0,
     val createdAt: Long = 0,

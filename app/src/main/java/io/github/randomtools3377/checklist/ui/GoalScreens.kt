@@ -71,6 +71,16 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.border
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.Box
+import io.github.randomtools3377.checklist.core.Colors
 import io.github.randomtools3377.checklist.core.Categories
 import io.github.randomtools3377.checklist.core.Goal
 import io.github.randomtools3377.checklist.core.GoalKind
@@ -207,7 +217,7 @@ private fun LazyListScope.goalSection(
                 .clickable(enabled = !reordering) { onEdit(goal) }
                 .testTag("goal:${goal.name}"),
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.goalStrip(goal.color).padding(12.dp)) {
                 Text(goal.icon, fontSize = 28.sp, modifier = Modifier.width(44.dp), textAlign = TextAlign.Center)
                 Spacer(Modifier.width(8.dp))
                 Column(Modifier.weight(1f)) {
@@ -349,6 +359,7 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Long)
     var isPrivate by rememberSaveable { mutableStateOf(false) }
     var celebration by rememberSaveable { mutableStateOf<String?>(null) }
     var category by rememberSaveable { mutableStateOf("") }
+    var color by rememberSaveable { mutableStateOf<Int?>(null) }
     var showErrors by rememberSaveable { mutableStateOf(false) }
     var choosingRepeat by remember { mutableStateOf(false) }
     val context = LocalContext.current
@@ -380,6 +391,7 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Long)
                 isPrivate = goal.private
                 celebration = goal.celebration
                 category = goal.category.orEmpty()
+                color = goal.color
                 goal.reminder?.let { r ->
                     notifyOnTime = r.onTime
                     alertBefore = r.minutesBefore
@@ -486,6 +498,7 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Long)
                         private = isPrivate,
                         celebration = celebration,
                         category = category,
+                        color = color,
                     ),
                     onDone = {
                         val wantsNotifications = when {
@@ -521,6 +534,7 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Long)
             error = if (showErrors) pointsError else null,
         )
         CategoryField(category, { category = it }, vm)
+        GoalColourField(color, { color = it }, vm)
 
         // How often
         Text("How often", style = MaterialTheme.typography.titleSmall)
@@ -869,6 +883,7 @@ fun ProjectEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Lon
     var isPrivate by rememberSaveable { mutableStateOf(false) }
     var celebration by rememberSaveable { mutableStateOf<String?>(null) }
     var category by rememberSaveable { mutableStateOf("") }
+    var color by rememberSaveable { mutableStateOf<Int?>(null) }
     var nextKey by rememberSaveable { mutableStateOf(2L) }
     val steps = rememberSaveable(saver = StepFieldsSaver) { mutableListOf(StepField(1L, 0L, "", "")).toMutableStateList() }
     var showErrors by rememberSaveable { mutableStateOf(false) }
@@ -885,6 +900,7 @@ fun ProjectEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Lon
                 isPrivate = goal.private
                 celebration = goal.celebration
                 category = goal.category.orEmpty()
+                color = goal.color
                 steps.clear()
                 existingSteps.forEach { steps += StepField(nextKey++, it.id, it.name, it.points.toString()) }
                 if (steps.isEmpty()) steps += StepField(nextKey++, 0L, "", "")
@@ -921,6 +937,7 @@ fun ProjectEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Lon
                         private = isPrivate,
                         celebration = celebration,
                         category = category,
+                        color = color,
                     ),
                     onDone = onClose,
                 )
@@ -939,6 +956,7 @@ fun ProjectEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Lon
             modifier = Modifier.fillMaxWidth().testTag("field:name"),
         )
         CategoryField(category, { category = it }, vm)
+        GoalColourField(color, { color = it }, vm)
         Text("Steps", style = MaterialTheme.typography.titleSmall)
         steps.forEachIndexed { index, step ->
             key(step.key) {
@@ -1178,4 +1196,58 @@ private fun CategoryField(value: String, onValue: (String) -> Unit, vm: MainView
             }
         }
     }
+}
+
+/** A goal's own colour: none, one of the offered ones, or any colour from the colour picker. */
+@Composable
+private fun GoalColourField(value: Int?, onValue: (Int?) -> Unit, vm: MainViewModel) {
+    val appearance by vm.appearance.collectAsStateWithLifecycle()
+    var picking by remember { mutableStateOf(false) }
+    Text("Colour", style = MaterialTheme.typography.titleSmall)
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        val offered = (Colors.GOAL_COLORS + listOfNotNull(value)).distinct()
+        ColourDot(null, value == null, "No colour", "goal-colour:none") { onValue(null) }
+        offered.forEach { c -> ColourDot(c, value == c, "Colour ${Colors.hex(c)}", "goal-colour:${Colors.hex(c)}") { onValue(c) } }
+        Box(
+            Modifier
+                .size(40.dp)
+                .background(androidx.compose.ui.graphics.Brush.sweepGradient(listOf(Color.Red, Color.Yellow, Color.Green, Color.Cyan, Color.Blue, Color.Magenta, Color.Red)), CircleShape)
+                .clickable { picking = true }
+                .semantics { contentDescription = "Any colour" }
+                .testTag("goal-colour:any"),
+        )
+    }
+    if (picking) {
+        var picked by remember { mutableStateOf(value ?: Colors.GARDEN) }
+        AlertDialog(
+            onDismissRequest = { picking = false },
+            title = { Text("Goal colour") },
+            text = { ColorPicker(picked, appearance.recent, onChange = { picked = it }, modifier = Modifier.verticalScroll(rememberScrollState())) },
+            confirmButton = {
+                TextButton(onClick = {
+                    onValue(picked)
+                    vm.rememberColor(picked)
+                    picking = false
+                }, modifier = Modifier.testTag("use-goal-colour")) { Text("Use it") }
+            },
+            dismissButton = { TextButton(onClick = { picking = false }) { Text("Cancel") } },
+        )
+    }
+}
+
+@Composable
+private fun ColourDot(color: Int?, selected: Boolean, description: String, tag: String, onClick: () -> Unit) {
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = Modifier
+            .size(40.dp)
+            .then(if (selected) Modifier.border(3.dp, MaterialTheme.colorScheme.onSurface, CircleShape).padding(4.dp) else Modifier)
+            .background(if (color == null) MaterialTheme.colorScheme.surfaceVariant else Color(color), CircleShape)
+            .clickable(onClick = onClick)
+            .semantics {
+                contentDescription = description
+                this.selected = selected
+            }
+            .testTag(tag),
+    ) { if (color == null) Text("–", color = MaterialTheme.colorScheme.onSurfaceVariant) }
 }

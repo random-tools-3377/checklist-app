@@ -102,6 +102,7 @@ private fun Section(title: String) {
 fun SettingsScreen(
     settings: Settings,
     vm: MainViewModel,
+    onAppearance: () -> Unit,
     onBack: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -143,6 +144,17 @@ fun SettingsScreen(
                 .padding(padding)
                 .verticalScroll(rememberScrollState()),
         ) {
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onAppearance)
+                    .testTag("setting:appearance")
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+            ) {
+                Text("Appearance", style = MaterialTheme.typography.bodyLarge)
+                Text("Light, dark or black, and the app's colour", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+            }
+            HorizontalDivider()
             Section("Your day")
             Column(
                 Modifier

@@ -126,6 +126,7 @@ fun GoalEntity.toCore() = Goal(
     celebration = celebration?.takeIf { Celebration.isValid(it) },
     times = decodeTimes(times),
     category = category?.takeIf { it.isNotBlank() },
+    color = color,
     archived = archived,
     position = position,
     createdAt = createdAt,
@@ -156,6 +157,7 @@ fun Goal.toEntity() = GoalEntity(
     celebration = celebration,
     times = encodeTimes(times),
     category = category,
+    color = color,
 )
 
 fun StepEntity.toCore() = Step(id = id, goalId = goalId, name = name, points = points, position = position, archived = archived)

@@ -5,7 +5,9 @@ import android.os.Bundle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import androidx.compose.runtime.getValue
 import androidx.fragment.app.FragmentActivity
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.randomtools3377.checklist.ui.ChecklistApp
 import io.github.randomtools3377.checklist.ui.ChecklistTheme
 import io.github.randomtools3377.checklist.ui.MainViewModel
@@ -20,7 +22,8 @@ class MainActivity : FragmentActivity() {
         Privacy.apply(this)
         handle(intent)
         setContent {
-            ChecklistTheme {
+            val appearance by vm.appearance.collectAsStateWithLifecycle()
+            ChecklistTheme(appearance) {
                 ChecklistApp(vm)
             }
         }

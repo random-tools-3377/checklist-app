@@ -31,6 +31,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -249,4 +250,12 @@ fun DateSetting(
             DatePicker(state = state)
         }
     }
+}
+
+/** A goal's own colour as a strip down the left of its card, inside the card's rounded corners. */
+@Composable
+fun Modifier.goalStrip(color: Int?): Modifier {
+    if (color == null) return this
+    val strip = androidx.compose.ui.graphics.Color(io.github.randomtools3377.checklist.core.Schemes.goalStrip(color, LocalBrightness.current))
+    return this.drawBehind { drawRect(strip, size = androidx.compose.ui.geometry.Size(6.dp.toPx(), size.height)) }
 }
