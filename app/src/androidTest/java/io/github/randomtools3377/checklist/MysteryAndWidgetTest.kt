@@ -66,7 +66,8 @@ class MysteryAndWidgetTest {
         app.waitFor { !gone("mystery:Mystery box") }
         app.tap("buy:Mystery box")
         app.onNodeWithTag("confirm-buy").performClick()
-        app.waitFor { textOf("bought-name").let { it == "Coffee out" || it == "Film night" } }
+        // The reveal closes by itself, and the test clock can run past it, so the purchase is what's checked.
+        app.waitFor { runBlocking { container.db.dao().allPurchases().size } == 1 }
         val purchase = runBlocking { container.db.dao().allPurchases().single().toCore() }
         assertEquals(true, purchase.name in listOf("Coffee out", "Film night"))
         assertEquals(10, purchase.price)
