@@ -47,7 +47,7 @@ object Sections {
 }
 
 /** The tabs along the bottom. Today is always there; the others can be hidden. */
-enum class AppTabKind(val label: String) { TODAY("Today"), GOALS("Goals"), SHOP("Shop"), REVIEW("Review") }
+enum class AppTabKind(val label: String) { TODAY("Today"), PLAN("Plan"), GOALS("Goals"), SHOP("Shop"), REVIEW("Review") }
 
 /** Which tabs show and which one the app opens on. Stored as "SHOP,REVIEW" for hidden ones, and a tab name. */
 data class TabChoice(val hidden: Set<AppTabKind> = emptySet(), val first: AppTabKind = AppTabKind.TODAY) {

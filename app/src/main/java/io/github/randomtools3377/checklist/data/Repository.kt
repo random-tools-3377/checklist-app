@@ -6,6 +6,7 @@ import io.github.randomtools3377.checklist.core.Backup
 import io.github.randomtools3377.checklist.core.Categories
 import io.github.randomtools3377.checklist.core.Celebration
 import io.github.randomtools3377.checklist.core.Goal
+import io.github.randomtools3377.checklist.core.Moves
 import io.github.randomtools3377.checklist.core.Mystery
 import io.github.randomtools3377.checklist.core.GoalKind
 import io.github.randomtools3377.checklist.core.Period
@@ -168,7 +169,10 @@ class Repository(private val db: AppDatabase, private val celebrations: Celebrat
             period = draft.repeat.windowPeriod.name,
             target = draft.target,
             bonus = draft.bonus,
-            repeat = RepeatText.encode(draft.repeat),
+            // Days moved to another day stay moved when the schedule is edited.
+            repeat = RepeatText.encode(
+                draft.repeat.copy(moves = Moves.keep(existing?.repeat?.let { RepeatText.decode(it).moves }.orEmpty(), nowLocal().date)),
+            ),
             minutes = draft.minutes,
             atMinute = draft.at?.toMinuteOfDay(),
             times = encodeTimes(draft.times),
@@ -259,6 +263,17 @@ class Repository(private val db: AppDatabase, private val celebrations: Celebrat
             }
         }
         pruneCelebrations()
+    }
+
+    /** Moves one day's goal to another day of the same week; false if that move isn't allowed. */
+    suspend fun moveGoal(goalId: Long, from: LocalDate, to: LocalDate, today: LocalDate): Boolean = db.withTransaction {
+        val row = dao.goal(goalId) ?: return@withTransaction false
+        val goal = row.toCore()
+        val repeat = goal.repeat ?: return@withTransaction false
+        val backHome = Moves.movedFrom(repeat, from) == to
+        if (!backHome && to !in Moves.choices(goal, from, today)) return@withTransaction false
+        dao.updateGoal(row.copy(repeat = RepeatText.encode(Moves.move(repeat, from, to))))
+        true
     }
 
     /** A copy of a goal, with its steps or checklist, named "… (copy)", at the end of the list. Returns its id. */

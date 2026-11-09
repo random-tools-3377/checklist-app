@@ -62,6 +62,7 @@ keeps the data.
   go, with a typed time to budget or a usual speed learned from Start and Stop.
 - 0.21.0: a notification while timing, with Stop on it, and amounts more than once, like 1 mile
   3 times a week.
+- 0.22.0: a planner for the coming two weeks, and moving a day's goal to another day of its week.
 
 Every step in CLAUDE.md's build order is built. The iPhone app waits for a way to install it.
 

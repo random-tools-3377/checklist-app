@@ -57,6 +57,8 @@ data class Repeat(
     /** For [RepeatKind.YEARLY]: the month (1 to 12) and the day. */
     val month: Int = 1,
     val day: Int = 1,
+    /** Single days moved to another day of the same week (see [Moves]). */
+    val moves: List<Move> = emptyList(),
 ) {
     companion object {
         const val LAST_DAY = 0
@@ -71,11 +73,21 @@ data class Repeat(
 
     private fun inRange(date: LocalDate) = date >= start && (end == null || date <= end)
 
+    /** Due on [date] by its pattern, before any moves. */
+    private fun dueByPattern(date: LocalDate) = inRange(date) && matches(date)
+
+    /** Due on [date] once moves are taken into account: not on a day moved away, and on a day moved to. */
+    private fun dueAfterMoves(date: LocalDate) =
+        moves.any { it.to == date } || (dueByPattern(date) && moves.none { it.from == date })
+
     /** Whether it is due on [date]. For [RepeatKind.TIMES_PER], whether [date]'s period is open. */
     fun isDueOn(date: LocalDate): Boolean = when (kind) {
         RepeatKind.TIMES_PER -> window(date) != null
-        else -> inRange(date) && matches(date)
+        else -> dueAfterMoves(date)
     }
+
+    /** Whether it would be due on [date] by its pattern alone, ignoring moves. */
+    fun isDueByPattern(date: LocalDate): Boolean = kind != RepeatKind.TIMES_PER && dueByPattern(date)
 
     /**
      * The window [date] falls in, if the habit is due then: the day itself for single-day kinds,
@@ -83,7 +95,7 @@ data class Repeat(
      */
     fun window(date: LocalDate): Window? {
         if (kind != RepeatKind.TIMES_PER) {
-            return if (inRange(date) && matches(date)) Window(date, date, Period.DAILY) else null
+            return if (dueAfterMoves(date)) Window(date, date, Period.DAILY) else null
         }
         val period = windowPeriod
         val from = Days.periodStart(date, period)
@@ -95,14 +107,18 @@ data class Repeat(
     /** The first day on or after [from] when it is due, looking ahead up to [limitDays] days. */
     fun nextDue(from: LocalDate, limitDays: Int = 800): LocalDate? {
         if (kind == RepeatKind.TIMES_PER) return window(from)?.let { from } ?: if (from < start) start else null
-        if (kind == RepeatKind.ONCE) return start.takeIf { it >= from }
-        var date = maxOf(from, start)
-        repeat(limitDays) {
-            if (end != null && date > end) return null
-            if (matches(date)) return date
-            date = date.plusDays(1)
+        val movedTo = moves.map { it.to }.filter { it >= from }.minOrNull()
+        val byPattern = run {
+            if (kind == RepeatKind.ONCE) return@run start.takeIf { it >= from && moves.none { m -> m.from == start } }
+            var date = maxOf(from, start)
+            repeat(limitDays) {
+                if (end != null && date > end) return@run null
+                if (matches(date) && moves.none { it.from == date }) return@run date
+                date = date.plusDays(1)
+            }
+            null
         }
-        return null
+        return listOfNotNull(movedTo, byPattern).minOrNull()
     }
 
     private fun matches(date: LocalDate): Boolean = when (kind) {

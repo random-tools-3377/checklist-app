@@ -33,7 +33,8 @@ data class Backup(
      * Routine items ticked (format 5). A routine's items are its steps. Format 6 adds the user's
      * own reasons and notes on ticks; format 7 adds goals' categories; format 8 adds mystery
      * rewards' prizes; format 9 adds goals' colours; format 10 the photo behind Today; format 11
-     * goals' amounts and units, and how much each tick was and how long it took.
+     * goals' amounts and units, and how much each tick was and how long it took; format 12 goals
+     * moved to another day.
      */
     val checks: List<Check> = emptyList(),
     /** The user's own photo behind Today, in base64 (format 10). */
@@ -43,7 +44,7 @@ data class Backup(
         const val APP = "checklist"
 
         /** Raised whenever the file's layout changes in a way older versions can't read. */
-        const val FORMAT = 11
+        const val FORMAT = 12
 
         private val json = Json {
             prettyPrint = true

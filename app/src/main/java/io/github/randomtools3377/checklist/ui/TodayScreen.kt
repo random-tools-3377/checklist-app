@@ -21,6 +21,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.foundation.layout.Arrangement
 import io.github.randomtools3377.checklist.core.Categories
+import io.github.randomtools3377.checklist.core.Moves
 import io.github.randomtools3377.checklist.core.TodaySection
 import io.github.randomtools3377.checklist.core.WeekProgress
 import io.github.randomtools3377.checklist.core.Badge
@@ -118,6 +119,11 @@ fun TodayScreen(
     // For a goal with an amount: the box to enter how much, and the running timing.
     val stopwatch by vm.stopwatch.collectAsStateWithLifecycle()
     var entering by remember { mutableStateOf<AmountRequest?>(null) }
+    // Moving a goal due today to another day of this week.
+    var moving by remember { mutableStateOf<Goal?>(null) }
+    moving?.let { goal ->
+        MoveDialog(goal, view.day, view.day, onMove = { to -> vm.moveGoal(goal.id, view.day, to) }, onDismiss = { moving = null })
+    }
     // Stop on the timing notification: ask how much was done, with the time it took.
     val stopRequest by vm.stopRequest.collectAsStateWithLifecycle()
     LaunchedEffect(stopRequest, stopwatch) {
@@ -380,6 +386,7 @@ fun TodayScreen(
                                 stopwatch = stopwatch,
                                 onAmount = { spot, seconds -> entering = AmountRequest(planned.row.goal.id, seconds, spot) },
                                 onStart = { vm.startStopwatch(planned.row.goal.id) },
+                                onMove = if (Moves.choices(planned.row.goal, view.day, view.day).isNotEmpty()) ({ moving = planned.row.goal }) else null,
                             )
                             Spacer(Modifier.height(10.dp))
                         }
@@ -602,6 +609,8 @@ private fun HabitCard(
     onFocus: (() -> Unit)? = null,
     lastTick: io.github.randomtools3377.checklist.core.Tick? = null,
     onNote: (Long) -> Unit = {},
+    /** Opens the box to move this day's goal to another day of its week, when it can move. */
+    onMove: (() -> Unit)? = null,
     /** For a goal with an amount: the running Start and Stop timing, if any (of any goal). */
     stopwatch: Stopwatch? = null,
     /** For a goal with an amount: opens the box to enter how much, with the timed seconds if it was timed. */
@@ -714,12 +723,22 @@ private fun HabitCard(
                 if (row.skipped) {
                     Text("Skipped", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.secondary, modifier = Modifier.testTag("skipped:${goal.name}"))
                 } else if (!row.done) {
-                    Text(
-                        "Skip",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.secondary,
-                        modifier = Modifier.clickable(onClick = onSkip).padding(vertical = 4.dp).testTag("skip:${goal.name}"),
-                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                        Text(
+                            "Skip",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.secondary,
+                            modifier = Modifier.clickable(onClick = onSkip).padding(vertical = 4.dp).testTag("skip:${goal.name}"),
+                        )
+                        if (onMove != null && row.count == 0) {
+                            Text(
+                                "Move",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.secondary,
+                                modifier = Modifier.clickable(onClick = onMove).padding(vertical = 4.dp).testTag("move:${goal.name}"),
+                            )
+                        }
+                    }
                 }
                 if (counted) {
                     Spacer(Modifier.height(6.dp))

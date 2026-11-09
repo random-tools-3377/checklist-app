@@ -15,6 +15,7 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.ShoppingCart
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
@@ -45,9 +46,10 @@ import io.github.randomtools3377.checklist.core.GoalKind
 
 private enum class AppTab(val route: String, val label: String, val icon: ImageVector) {
     TODAY("today", "Today", Icons.Filled.CheckCircle),
+    PLAN("plan", "Plan", Icons.Filled.DateRange),
     GOALS("goals", "Goals", Icons.AutoMirrored.Filled.List),
     SHOP("shop", "Shop", Icons.Filled.ShoppingCart),
-    REVIEW("review", "Review", Icons.Filled.DateRange),
+    REVIEW("review", "Review", Icons.Filled.Star),
 }
 
 private val RoutesSaver = listSaver<SnapshotStateList<String>, String>(
@@ -110,6 +112,7 @@ fun ChecklistApp(vm: MainViewModel = viewModel()) {
     val removedGoals by vm.removedGoals.collectAsStateWithLifecycle()
     val badges by vm.badges.collectAsStateWithLifecycle()
     val appearance by vm.appearance.collectAsStateWithLifecycle()
+    val planDays by vm.planDays.collectAsStateWithLifecycle()
     celebrations.style = appearance.celebrate
     // The app opens on the tab chosen in Appearance, once the settings have been read.
     var firstTabApplied by rememberSaveable { mutableStateOf(false) }
@@ -266,6 +269,7 @@ fun ChecklistApp(vm: MainViewModel = viewModel()) {
                             removed = removedGoals.size,
                             onRemoved = { push("removed") },
                         )
+                        AppTab.PLAN -> PlanScreen(planDays, vm, padding)
                         AppTab.REVIEW -> if (settings.locks.review && !unlocked) {
                             LockedPanel("The review", unlock, Modifier.padding(padding))
                         } else {

@@ -152,6 +152,9 @@ private data class Raw(val goals: List<Goal>, val steps: List<Step>, val ticks: 
 /** How far back streaks are counted. */
 private const val STREAK_DAYS = 400
 
+/** How many days the planner shows, today included. */
+private const val PLAN_DAYS = 14
+
 /** How many recently picked colours the colour picker offers again. */
 private const val MAX_RECENT_COLORS = 6
 
@@ -927,6 +930,34 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         val startedAt = parts[1].toLongOrNull() ?: return@map null
         Stopwatch(goalId, startedAt)
     }.state(null)
+
+    // The planner: the coming days, and moving one day's goal to another day of its week.
+
+    /** Today and the 13 days after it, each as Today would show it. */
+    val planDays: StateFlow<List<TodayView>> = today.flatMapLatest { day ->
+        val since = Days.earliestOpenDay(day)
+        combine(
+            dao.observeGoals(),
+            dao.observeSteps(),
+            dao.observeHabitTicksSince(since.toEpochDay()),
+            dao.observeLapsesSince(since.toEpochDay()),
+            combine(settings, unlocked) { s, isUnlocked -> s.locks.privateGoals && !isUnlocked },
+        ) { goals, steps, ticks, lapses, hidePrivate ->
+            val shown = goals.map { it.toCore() }.filter { !(hidePrivate && it.private) }
+            val coreSteps = steps.map { it.toCore() }
+            val coreTicks = ticks.map { it.toCore() }
+            val coreLapses = lapses.map { it.toCore() }
+            (0 until PLAN_DAYS).map { d -> TodayList.build(day.plusDays(d), shown, coreSteps, coreTicks, 0, coreLapses) }
+        }
+    }.state(emptyList())
+
+    /** Moves one day's goal to another day of the same week. Free; a miss there counts as usual. */
+    fun moveGoal(goalId: Long, from: LocalDate, to: LocalDate, onDone: (Boolean) -> Unit = {}) {
+        viewModelScope.launch {
+            val today = Days.dayOf(nowLocal(), settings.value.dayEndHour)
+            onDone(repository.moveGoal(goalId, from, to, today))
+        }
+    }
 
     /** Stop pressed on the timing notification, for this goal: Today asks how much was done. */
     val stopRequest = MutableStateFlow<Long?>(null)
