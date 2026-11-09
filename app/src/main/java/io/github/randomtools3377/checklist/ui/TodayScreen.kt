@@ -144,6 +144,30 @@ fun TodayScreen(
     val newBadges by vm.newBadges.collectAsStateWithLifecycle()
     val welcome by vm.showWelcome.collectAsStateWithLifecycle()
     val boosts by vm.boosts.collectAsStateWithLifecycle()
+    val askMood by vm.askMood.collectAsStateWithLifecycle()
+    val todayMood by vm.todayMood.collectAsStateWithLifecycle()
+    // A note for today's mood, while it is being written.
+    var moodNote by remember { mutableStateOf<String?>(null) }
+    moodNote?.let { text ->
+        AlertDialog(
+            onDismissRequest = { moodNote = null },
+            title = { Text("A note for today") },
+            text = {
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { moodNote = it.take(io.github.randomtools3377.checklist.core.Moods.NOTE_LENGTH) },
+                    modifier = Modifier.fillMaxWidth().testTag("mood-note"),
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    todayMood?.let { vm.setMood(it.score, text) }
+                    moodNote = null
+                }) { Text("Save") }
+            },
+            dismissButton = { TextButton(onClick = { moodNote = null }) { Text("Cancel") } },
+        )
+    }
     var editingTick by remember { mutableStateOf<Long?>(null) }
     editingTick?.let { id -> EditTickDialog(id, vm) { editingTick = null } }
     val haptics = LocalHapticFeedback.current
@@ -295,6 +319,28 @@ fun TodayScreen(
             if (welcome) {
                 WelcomeCard(onTour = onGuide, onExamples = { vm.addExamples() }, onClose = vm::closeWelcome)
                 Spacer(Modifier.height(12.dp))
+            }
+            if (askMood && !welcome) {
+                MoodCheckIn(onMood = { vm.setMood(it) }, onLater = vm::skipMood)
+                Spacer(Modifier.height(12.dp))
+            }
+            todayMood?.let { mood ->
+                Text(
+                    "Today: ${io.github.randomtools3377.checklist.core.Moods.face(mood.score)}" + (if (mood.note != null) " · note added" else " · Add a note"),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.clickable { moodNote = mood.note.orEmpty() }.padding(bottom = 8.dp).testTag("mood-today"),
+                )
+            }
+            if (screen.streakPercent > 100) {
+                Text(
+                    "🔥 Streak bonus: goals pay ${screen.streakPercent - 100}% more today",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(bottom = 8.dp).testTag("streak-bonus"),
+                )
             }
             if (newBadges.isNotEmpty()) {
                 NewBadgesCard(newBadges, onSee = onBadges, onDismiss = vm::badgesSeen)
@@ -602,6 +648,30 @@ private fun TodoCard(
     }
 }
 
+/** The daily mood check-in: five faces, one tap; "Not today" puts it off until tomorrow. */
+@Composable
+private fun MoodCheckIn(onMood: (Int) -> Unit, onLater: () -> Unit) {
+    Card(Modifier.fillMaxWidth().testTag("mood-checkin")) {
+        Column(Modifier.padding(12.dp)) {
+            Text("How are you feeling today?", style = MaterialTheme.typography.titleSmall)
+            Row(horizontalArrangement = Arrangement.SpaceEvenly, modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+                io.github.randomtools3377.checklist.core.Moods.FACES.forEachIndexed { index, face ->
+                    Text(
+                        face,
+                        fontSize = 30.sp,
+                        modifier = Modifier
+                            .clickable { onMood(index + 1) }
+                            .semantics { contentDescription = "Mood ${index + 1} of 5" }
+                            .padding(6.dp)
+                            .testTag("mood:${index + 1}"),
+                    )
+                }
+            }
+            TextButton(onClick = onLater, modifier = Modifier.testTag("mood-later")) { Text("Not today") }
+        }
+    }
+}
+
 /** Phone backup is off for this app, so a reminder when the last backup is getting old. */
 @Composable
 private fun BackupReminderCard(days: Int, onBackUp: () -> Unit, onLater: () -> Unit) {
@@ -783,6 +853,7 @@ private fun HabitCard(
     val cardSize = LocalCardSize.current
     val rate = LocalPayRate.current
     val boosted = LocalBoosted.current == goal.id
+    val streakPercent = LocalStreakPercent.current
     val extras = LocalTodayExtras.current
     Card(Modifier.fillMaxWidth()) {
       Column(Modifier.goalStrip(goal.color)) {
@@ -792,8 +863,8 @@ private fun HabitCard(
             Column(Modifier.weight(1f)) {
                 Text(goal.name, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 val detail = buildList {
-                    add("+${payFor(goal.points, rate, boosted)}" + if (counted) " each" else "")
-                    if (counted && goal.bonus > 0) add("bonus +${payFor(goal.bonus, rate, boosted)}")
+                    add("+${payFor(goal.points, rate, boosted, streakPercent)}" + if (counted) " each" else "")
+                    if (counted && goal.bonus > 0) add("bonus +${payFor(goal.bonus, rate, boosted, streakPercent)}")
                     if (boosted) add("🔥 50% more this week")
                     // A "since last done" goal not done on its day waits here until it is.
                     goal.repeat?.lateSince?.let { add("waiting since ${shortDate(it)}") }
@@ -1182,7 +1253,7 @@ private fun NewBadgesCard(badges: List<Badge>, onSee: () -> Unit, onDismiss: () 
 private fun TileRow(rows: List<HabitRow>, screen: TodayState, tick: (HabitRow, Spot) -> Unit, onDetails: (Long) -> Unit) {
     Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp)) {
         rows.forEach { row ->
-            GoalTile(row, tileLine(row, screen, LocalPayRate.current, LocalBoosted.current), Modifier.weight(1f), onTap = { spot ->
+            GoalTile(row, tileLine(row, screen, LocalPayRate.current, LocalBoosted.current, LocalStreakPercent.current), Modifier.weight(1f), onTap = { spot ->
                 val done = row.count >= row.goal.target
                 when {
                     // A routine's items, an amount to enter, and taking back a counted goal, are on its card.
@@ -1197,7 +1268,7 @@ private fun TileRow(rows: List<HabitRow>, screen: TodayState, tick: (HabitRow, S
 }
 
 /** What a tile says under its name. */
-private fun tileLine(row: HabitRow, screen: TodayState, rate: io.github.randomtools3377.checklist.core.Difficulty, boosted: Long?): String {
+private fun tileLine(row: HabitRow, screen: TodayState, rate: io.github.randomtools3377.checklist.core.Difficulty, boosted: Long?, streakPercent: Int): String {
     val goal = row.goal
     return when {
         row.count >= goal.target -> "Done ✓"
@@ -1208,7 +1279,7 @@ private fun tileLine(row: HabitRow, screen: TodayState, rate: io.github.randomto
             screen.nextSlots[goal.id]?.let { append(" · next by ${momentText(it.at, screen.view.day)}") }
         }
         row.skipped -> "Skipped"
-        else -> listOfNotNull("+${payFor(goal.points, rate, boosted == goal.id)}", goal.minutes?.let { minutesText(it) }).joinToString(" · ")
+        else -> listOfNotNull("+${payFor(goal.points, rate, boosted == goal.id, streakPercent)}", goal.minutes?.let { minutesText(it) }).joinToString(" · ")
     }
 }
 

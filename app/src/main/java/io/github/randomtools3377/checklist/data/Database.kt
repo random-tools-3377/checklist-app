@@ -178,6 +178,16 @@ data class CheckEntity(
     val at: Long,
 )
 
+/** How the user felt each day, from 1 to 5, with an optional note. Added in version 16. */
+@Entity(tableName = "moods")
+data class MoodEntity(
+    /** Epoch day. One mood a day. */
+    @PrimaryKey val day: Long,
+    val score: Int,
+    val note: String? = null,
+    val at: Long,
+)
+
 /** Stretches when it looks like the user stopped for a while. Added in version 5. */
 @Entity(tableName = "gaps")
 data class GapEntity(
@@ -490,6 +500,13 @@ interface ChecklistDao {
 
     @Query("DELETE FROM checks WHERE id = :id") suspend fun deleteCheck(id: Long)
 
+    @Query("SELECT * FROM moods WHERE day = :day") fun observeMood(day: Long): Flow<MoodEntity?>
+    @Query("SELECT * FROM moods WHERE day >= :since ORDER BY day") fun observeMoodsSince(since: Long): Flow<List<MoodEntity>>
+    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun putMood(mood: MoodEntity)
+    @Query("SELECT * FROM moods") suspend fun allMoods(): List<MoodEntity>
+    @Query("DELETE FROM moods") suspend fun deleteMoods()
+    @Insert suspend fun insertMoods(rows: List<MoodEntity>)
+
     @Query("SELECT * FROM checks") suspend fun allChecks(): List<CheckEntity>
     @Query("DELETE FROM checks") suspend fun deleteChecks()
     @Insert suspend fun insertChecks(rows: List<CheckEntity>)
@@ -556,11 +573,12 @@ interface ChecklistDao {
         PenaltyTaskEntity::class,
         GapEntity::class,
         CheckEntity::class,
+        MoodEntity::class,
     ],
-    version = 15,
+    version = 16,
     exportSchema = true,
     // Versions 4 to 8 only add tables and columns, so Room works the migrations out from the layouts.
-    autoMigrations = [AutoMigration(from = 3, to = 4), AutoMigration(from = 4, to = 5), AutoMigration(from = 5, to = 6), AutoMigration(from = 6, to = 7), AutoMigration(from = 7, to = 8), AutoMigration(from = 8, to = 9), AutoMigration(from = 9, to = 10), AutoMigration(from = 10, to = 11), AutoMigration(from = 11, to = 12), AutoMigration(from = 12, to = 13), AutoMigration(from = 13, to = 14), AutoMigration(from = 14, to = 15)],
+    autoMigrations = [AutoMigration(from = 3, to = 4), AutoMigration(from = 4, to = 5), AutoMigration(from = 5, to = 6), AutoMigration(from = 6, to = 7), AutoMigration(from = 7, to = 8), AutoMigration(from = 8, to = 9), AutoMigration(from = 9, to = 10), AutoMigration(from = 10, to = 11), AutoMigration(from = 11, to = 12), AutoMigration(from = 12, to = 13), AutoMigration(from = 13, to = 14), AutoMigration(from = 14, to = 15), AutoMigration(from = 15, to = 16)],
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun dao(): ChecklistDao

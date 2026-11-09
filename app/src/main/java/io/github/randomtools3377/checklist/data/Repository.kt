@@ -16,6 +16,8 @@ import io.github.randomtools3377.checklist.core.Reminder
 import io.github.randomtools3377.checklist.core.Repeat
 import io.github.randomtools3377.checklist.core.RewardSize
 import io.github.randomtools3377.checklist.core.Effort
+import io.github.randomtools3377.checklist.core.Mood
+import io.github.randomtools3377.checklist.core.Moods
 import io.github.randomtools3377.checklist.core.Challenge
 import io.github.randomtools3377.checklist.core.RepeatText
 import io.github.randomtools3377.checklist.core.RepeatKind
@@ -75,6 +77,9 @@ const val SETTING_TREAT_BUDGET = "treat_budget"
 /** "1" when the phone's calendar is shown in the planner and on Today; which calendars, by id ("" for all). */
 const val SETTING_CALENDAR = "phone_calendar"
 const val SETTING_CALENDAR_IDS = "phone_calendar_ids"
+/** "0" turns off the daily mood check-in; and the day it was put off ("Not today"). */
+const val SETTING_MOOD = "mood_checkin"
+const val SETTING_MOOD_SKIPPED = "mood_skipped"
 /** "done" once the welcome card on Today was answered (see GuideScreen). */
 const val SETTING_GUIDE = "guide"
 const val DEFAULT_SNOOZE_MINUTES = 10
@@ -378,6 +383,12 @@ class Repository(private val db: AppDatabase, private val celebrations: Celebrat
         dao.putSetting(SettingEntity(SETTING_GUIDE, "done"))
     }
 
+    /** How the user feels today, from the check-in on Today. */
+    suspend fun setMood(day: LocalDate, score: Int, note: String?) {
+        val old = dao.allMoods().firstOrNull { it.day == day.toEpochDay() }
+        dao.putMood(MoodEntity(day.toEpochDay(), score.coerceIn(1, 5), note?.trim()?.take(Moods.NOTE_LENGTH)?.takeIf { it.isNotEmpty() } ?: old?.note?.takeIf { note == null }, nowMillis()))
+    }
+
     /** Gives a goal a clock time for [day] only (from the timeline), or back to its usual time with null. */
     suspend fun retimeGoal(goalId: Long, day: LocalDate, minute: Int?, today: LocalDate): Unit = db.withTransaction {
         val row = dao.goal(goalId) ?: return@withTransaction
@@ -527,6 +538,7 @@ class Repository(private val db: AppDatabase, private val celebrations: Celebrat
                 penaltyTasks = dao.allPenaltyTasks().map { it.toCore() },
                 gaps = dao.allGaps().map { it.toCore() },
                 checks = dao.allChecks().map { it.toCore() },
+                moods = dao.allMoods().map { it.toCore() },
             )
         }
         // The GIFs the user picked go in the file too, so a restore brings them back.
@@ -570,6 +582,7 @@ class Repository(private val db: AppDatabase, private val celebrations: Celebrat
         dao.deletePenaltyTasks()
         dao.deleteGaps()
         dao.deleteChecks()
+        dao.deleteMoods()
         dao.insertGoals(backup.goals.map { it.toEntity() })
         dao.insertSteps(backup.steps.map { it.toEntity() })
         dao.insertTicks(backup.ticks.map { it.toEntity() })
@@ -582,5 +595,6 @@ class Repository(private val db: AppDatabase, private val celebrations: Celebrat
         dao.insertPenaltyTasks(backup.penaltyTasks.map { it.toEntity() })
         dao.insertGaps(backup.gaps.map { it.toEntity() })
         dao.insertChecks(backup.checks.map { it.toEntity() })
+        dao.insertMoods(backup.moods.map { it.toEntity() })
     }
 }

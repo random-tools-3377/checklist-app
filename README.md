@@ -79,6 +79,7 @@ keeps the data.
 - 0.32.0: the phone's own calendar in the planner, the timeline and Today, read on the phone, with
   pacing leaving its events out.
 - 0.33.0: goals to quit, with "I slipped", and challenges of so many days in a row with a bonus.
+- 0.34.0: a streak bonus, and a daily mood check-in shown in the review.
 
 Every step in CLAUDE.md's build order is built. The iPhone app waits for a way to install it.
 

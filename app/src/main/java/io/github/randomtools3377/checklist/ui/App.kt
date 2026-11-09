@@ -130,6 +130,7 @@ fun ChecklistApp(vm: MainViewModel = viewModel()) {
     val doneList by vm.doneList.collectAsStateWithLifecycle()
     val balanceCheck by vm.balanceCheck.collectAsStateWithLifecycle()
     val calendarEvents by vm.calendarEvents.collectAsStateWithLifecycle()
+    val moods by vm.reviewMoods.collectAsStateWithLifecycle()
     val badges by vm.badges.collectAsStateWithLifecycle()
     val appearance by vm.appearance.collectAsStateWithLifecycle()
     val planDays by vm.planDays.collectAsStateWithLifecycle()
@@ -306,6 +307,7 @@ fun ChecklistApp(vm: MainViewModel = viewModel()) {
                     when (tab) {
                         AppTab.TODAY -> androidx.compose.runtime.CompositionLocalProvider(
                             LocalBoosted provides today?.boostedGoalId,
+                            LocalStreakPercent provides (today?.streakPercent ?: 100),
                             LocalTodayExtras provides TodayExtras(today?.quitDays.orEmpty(), today?.challenges.orEmpty(), vm::slip),
                         ) {
                             TodayScreen(
@@ -350,6 +352,7 @@ fun ChecklistApp(vm: MainViewModel = viewModel()) {
                                 badges = badges.size,
                                 onBadges = { push("badges") },
                                 padding = padding,
+                                moods = moods,
                             )
                         }
                         AppTab.SHOP -> if (settings.locks.shop && !unlocked) {

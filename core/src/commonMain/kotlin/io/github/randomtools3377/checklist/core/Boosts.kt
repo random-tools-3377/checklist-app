@@ -33,10 +33,36 @@ object Boost {
  * What a goal pays for [points] on a day: its difficulty, and the boost if it is the boosted
  * goal, multiplied together and rounded down once. Something paying more than 0 pays at least 1.
  */
-fun payFor(points: Int, difficulty: Difficulty, boosted: Boolean): Int {
+fun payFor(points: Int, difficulty: Difficulty, boosted: Boolean, streakPercent: Int = 100): Int {
     if (points <= 0) return points
-    val percent = difficulty.percent * (if (boosted) Boost.PERCENT else 100) / 100
-    return maxOf(1, points * percent / 100)
+    val percent = difficulty.percent.toLong() * (if (boosted) Boost.PERCENT else 100) * streakPercent / 10_000
+    return maxOf(1, (points * percent / 100).toInt())
+}
+
+/**
+ * The streak bonus: a tick pays 10% more from a 7-day main streak, 20% from 30 and 30% from 100,
+ * counted to the end of yesterday so it holds all day. It can be turned off.
+ */
+object StreakBonus {
+    /** "0" turns it off. */
+    const val SETTING = "streak_bonus"
+
+    /** The settings the main streak's target is kept in (see [StreakSettings]). */
+    const val TARGET = "streak_target"
+    const val VALUE = "streak_value"
+
+    fun percentFor(streak: Int): Int = when {
+        streak >= 100 -> 130
+        streak >= 30 -> 120
+        streak >= 7 -> 110
+        else -> 100
+    }
+
+    fun settingsOf(target: String?, value: String?): StreakSettings {
+        val defaults = StreakSettings()
+        val kind = StreakTarget.entries.firstOrNull { it.name == target } ?: defaults.target
+        return StreakSettings(kind, value?.toIntOrNull() ?: defaults.value)
+    }
 }
 
 /**

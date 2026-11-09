@@ -77,6 +77,7 @@ fun ReviewScreen(
     badges: Int,
     onBadges: () -> Unit,
     padding: PaddingValues,
+    moods: List<io.github.randomtools3377.checklist.core.Mood> = emptyList(),
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize().testTag("review"),
@@ -127,6 +128,8 @@ fun ReviewScreen(
         item { GoalsCard(summary) }
         if (summary.categories.isNotEmpty()) item { CategoriesCard(summary) }
         item { ReasonsCard(summary, hideReasons) }
+        val shownMoods = moods.filter { it.day >= summary.from && it.day <= summary.to }
+        if (shownMoods.isNotEmpty() && !hideReasons) item { MoodCard(shownMoods, summary) }
         if (summary.gaps.isNotEmpty()) item { GapsCard(summary.gaps, hideGapNotes) }
         item { StatsCard(summary, streaks) }
     }
@@ -190,6 +193,30 @@ private fun GoalsCard(summary: ReviewSummary) {
 @Composable
 private fun Cell(text: String, color: androidx.compose.ui.graphics.Color = MaterialTheme.colorScheme.onSurface) {
     Text(text, textAlign = TextAlign.Center, color = color, modifier = Modifier.width(56.dp))
+}
+
+/** How the user felt each day, beside how much of what was due got done. */
+@Composable
+private fun MoodCard(moods: List<io.github.randomtools3377.checklist.core.Mood>, summary: ReviewSummary) {
+    ReviewCard("Mood") {
+        Column(Modifier.testTag("review-moods")) {
+            moods.sortedBy { it.day }.forEach { mood ->
+                val record = summary.days.firstOrNull { it.day == mood.day }
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
+                    Text(io.github.randomtools3377.checklist.core.Moods.face(mood.score), fontSize = 20.sp, modifier = Modifier.width(36.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(shortDate(mood.day), style = MaterialTheme.typography.bodyMedium)
+                        mood.note?.let { Text("“$it”", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                    }
+                    Text(
+                        record?.takeIf { it.due > 0 }?.let { "${it.done} of ${it.due} done" } ?: "nothing due",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
+    }
 }
 
 @Composable

@@ -74,10 +74,13 @@ val LocalTodayExtras = androidx.compose.runtime.compositionLocalOf { TodayExtras
 /** The goal boosted this week, which pays 50% more (see Boost in the shared code). */
 val LocalBoosted = androidx.compose.runtime.compositionLocalOf<Long?> { null }
 
-/** What [points] of [goalId] pay now, with today's difficulty and the boost. */
+/** Today's streak bonus, as a percentage of what goals pay (see StreakBonus in the shared code). */
+val LocalStreakPercent = androidx.compose.runtime.compositionLocalOf { 100 }
+
+/** What [points] of [goalId] pay now, with today's difficulty, the boost and the streak bonus. */
 @androidx.compose.runtime.Composable
 fun payNow(points: Int, goalId: Long): Int =
-    io.github.randomtools3377.checklist.core.payFor(points, LocalPayRate.current, LocalBoosted.current == goalId)
+    io.github.randomtools3377.checklist.core.payFor(points, LocalPayRate.current, LocalBoosted.current == goalId, LocalStreakPercent.current)
 
 /** Today's difficulty, which sets what goals pay; screens show points at this rate. */
 val LocalPayRate = androidx.compose.runtime.compositionLocalOf { io.github.randomtools3377.checklist.core.Difficulty.NORMAL }

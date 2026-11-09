@@ -258,6 +258,20 @@ private fun BoostSettings(vm: MainViewModel) {
                 )
             }
         }
+        val streakBonus by vm.streakBonusOn.collectAsState()
+        SwitchLine(
+            "Streak bonus",
+            "Goals pay 10% more from a 7-day main streak, 20% from 30 days and 30% from 100.",
+            streakBonus,
+            "streak-bonus",
+        ) { vm.setStreakBonus(it) }
+        val mood by vm.askMoodOn.collectAsState()
+        SwitchLine(
+            "Mood check-in",
+            "Today asks once a day how you feel, and the review shows it beside how much got done.",
+            mood,
+            "mood",
+        ) { vm.setMoodCheckIn(it) }
         SwitchLine(
             "Prices rise on repeat buys",
             "A reward costs 25% more for each time it was already bought this week, back to its price on Monday.",

@@ -4,6 +4,7 @@ import androidx.room.withTransaction
 import io.github.randomtools3377.checklist.core.Repeat
 import io.github.randomtools3377.checklist.core.RewardSize
 import io.github.randomtools3377.checklist.core.Effort
+import io.github.randomtools3377.checklist.core.Mood
 import io.github.randomtools3377.checklist.core.Challenge
 import io.github.randomtools3377.checklist.core.Mystery
 import io.github.randomtools3377.checklist.core.Celebration
@@ -181,6 +182,10 @@ fun Goal.toEntity() = GoalEntity(
     challengeBonus = challenge?.bonus,
     challengeFrom = challenge?.from?.toEpochDay(),
 )
+
+fun MoodEntity.toCore() = Mood(day = day.toDay(), score = score, note = note, at = at)
+
+fun Mood.toEntity() = MoodEntity(day = day.toEpochDay(), score = score.coerceIn(1, 5), note = note, at = at)
 
 fun StepEntity.toCore() = Step(id = id, goalId = goalId, name = name, points = points, position = position, archived = archived)
 

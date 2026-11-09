@@ -405,9 +405,11 @@ Build order **(default)**, each step a Release the owner can try:
     finishes it (undoing the tick takes the bonus back). A skip neither counts toward a
     challenge nor restarts it; finishing pays its bonus, and the goal carries on as a habit. The
     streak bonus adds 10% to a tick's points from a 7-day main streak, 20% from 30 and 30% from
-    100, rounded down, can be turned off, and goes with an undone tick. The mood check-in is five
+    100, rounded down, can be turned off, and goes with an undone tick; it counts the main streak to
+    the end of yesterday, so it holds all day. The mood check-in is five
     faces and an optional note once a day, as a card on Today, shown in the review beside how
-    much got done, and behind the lock with reasons and notes. Point changes stack by
+    much got done, and behind the lock with reasons and notes; "Not today" puts it off until the
+    next day, and it can be turned off. Point changes stack by
     multiplying (difficulty, the boost, the streak bonus) and are rounded down once.
 
 ## Talking to the owner

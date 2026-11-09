@@ -14,6 +14,8 @@ import io.github.randomtools3377.checklist.core.Backup
 import io.github.randomtools3377.checklist.core.BackupError
 import io.github.randomtools3377.checklist.core.BuyResult
 import io.github.randomtools3377.checklist.core.Days
+import io.github.randomtools3377.checklist.core.StreakBonus
+import io.github.randomtools3377.checklist.core.Mood
 import io.github.randomtools3377.checklist.core.ChallengeProgress
 import io.github.randomtools3377.checklist.core.Challenges
 import io.github.randomtools3377.checklist.core.Quit
@@ -129,6 +131,8 @@ import io.github.randomtools3377.checklist.data.ORDER_RECOMMENDED
 import io.github.randomtools3377.checklist.data.ProjectDraft
 import io.github.randomtools3377.checklist.data.TodoDraft
 import io.github.randomtools3377.checklist.data.SETTING_GUIDE
+import io.github.randomtools3377.checklist.data.SETTING_MOOD_SKIPPED
+import io.github.randomtools3377.checklist.data.SETTING_MOOD
 import io.github.randomtools3377.checklist.data.SETTING_TREAT_BUDGET
 import io.github.randomtools3377.checklist.data.RewardDraft
 import io.github.randomtools3377.checklist.data.SETTING_DAY_END_HOUR
@@ -225,12 +229,14 @@ data class TodayState(
     val events: List<Busy> = emptyList(),
     /** For goals to quit: days in a row avoided. */
     val quitDays: Map<Long, Int> = emptyMap(),
+    /** The streak bonus today, as a percentage of what goals pay (100 for none). */
+    val streakPercent: Int = 100,
     /** For goals with a challenge: how far it has got. */
     val challenges: Map<Long, ChallengeProgress> = emptyMap(),
 )
 
 /** What Today needs besides goals and ticks. */
-private data class Extras(val lapses: List<Lapse>, val checks: List<Check>, val boostOn: Boolean, val events: List<Busy>)
+private data class Extras(val lapses: List<Lapse>, val checks: List<Check>, val boostOn: Boolean, val events: List<Busy>, val streakBonusOn: Boolean)
 
 /** Something just done, which the Undo bar can take back for a few seconds. */
 class Undoable(val message: String, val undo: () -> Unit)
@@ -405,8 +411,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             dao.observeChecksSince(since.toEpochDay()).map { rows -> rows.map { it.toCore() } },
             dao.observeSetting(Boost.SETTING),
             calendarEvents,
-        ) { lapses, checks, boost, events -> Extras(lapses, checks, boost != "0", events) }
-        combine(view, lapsesFlow, now, settings, unlocked) { raw, (lapses, checks, boostOn, events), moment, s, isUnlocked ->
+            dao.observeSetting(StreakBonus.SETTING),
+        ) { lapses, checks, boost, events, streakBonus -> Extras(lapses, checks, boost != "0", events, streakBonus != "0") }
+        combine(view, lapsesFlow, now, settings, unlocked) { raw, (lapses, checks, boostOn, events, streakBonusOn), moment, s, isUnlocked ->
             val busy = BusyTime.on(events, day, s.dayEndHour)
             val hidePrivate = s.locks.privateGoals && !isUnlocked
             val shownGoals = if (hidePrivate) raw.goals.filter { !it.private } else raw.goals
@@ -454,6 +461,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 hasDayStart = s.dayStart != null,
                 boostedGoalId = if (boostOn) Boost.goalFor(day, raw.goals, lapses)?.id else null,
                 events = busy,
+                streakPercent = if (streakBonusOn) StreakBonus.percentFor(StreakCounter.count(records, day.minusDays(1), s.streak).done) else 100,
                 quitDays = raw.goals.filter { it.quit && !it.archived }.associate { it.id to Quit.daysWithout(it, raw.ticks, day) },
                 challenges = raw.goals.filter { it.challenge != null && !it.archived }.mapNotNull { goal ->
                     Challenges.progress(goal, raw.ticks, lapses, emptyList(), day)?.let { goal.id to it }
@@ -897,6 +905,43 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             )
         }
     }.state(null)
+
+    /** Moods over the last year, for the review. */
+    val reviewMoods: StateFlow<List<Mood>> = today.flatMapLatest { day ->
+        dao.observeMoodsSince(day.minusDays(400).toEpochDay()).map { rows -> rows.map { it.toCore() } }
+    }.state(emptyList())
+
+    // The daily mood check-in
+
+    /** Today's mood, if it was given. */
+    val todayMood: StateFlow<Mood?> = today.flatMapLatest { day -> dao.observeMood(day.toEpochDay()).map { it?.toCore() } }.state(null)
+
+    /** Whether Today asks how the user feels: on, not answered and not put off today. */
+    val askMood: StateFlow<Boolean> = combine(today, todayMood, dao.observeSetting(SETTING_MOOD), dao.observeSetting(SETTING_MOOD_SKIPPED)) { day, mood, on, skipped ->
+        on != "0" && mood == null && skipped != day.toString()
+    }.state(false)
+
+    fun setMood(score: Int, note: String? = null) {
+        viewModelScope.launch { repository.setMood(currentDay(), score, note) }
+    }
+
+    fun skipMood() {
+        viewModelScope.launch { repository.setSetting(SETTING_MOOD_SKIPPED, currentDay().toString()) }
+    }
+
+    /** Whether the mood check-in is on (it is unless turned off). */
+    val askMoodOn: StateFlow<Boolean> = dao.observeSetting(SETTING_MOOD).map { it != "0" }.state(true)
+
+    fun setMoodCheckIn(on: Boolean) {
+        viewModelScope.launch { repository.setSetting(SETTING_MOOD, if (on) "1" else "0") }
+    }
+
+    /** The streak bonus, on unless turned off. */
+    val streakBonusOn: StateFlow<Boolean> = dao.observeSetting(StreakBonus.SETTING).map { it != "0" }.state(true)
+
+    fun setStreakBonus(on: Boolean) {
+        viewModelScope.launch { repository.setSetting(StreakBonus.SETTING, if (on) "1" else "0") }
+    }
 
     suspend fun checkSkip(goalId: Long): SkipCheck = lapses.checkSkip(goalId)
 

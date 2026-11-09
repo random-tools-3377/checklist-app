@@ -53,11 +53,22 @@ class Book(
         return Boost.goalFor(day, store.activeGoals(), lapses)?.id == goal.id
     }
 
-    /** What [goal]'s points pay on [day]: its difficulty and the boost (see [payFor]). */
+    /** What [goal]'s points pay on [day]: its difficulty, the boost and the streak bonus (see [payFor]). */
     suspend fun payer(goal: Goal, day: LocalDate): (Int) -> Int {
         val rate = difficulty(day)
         val boost = boosted(goal, day)
-        return { points -> payFor(points, rate, boost) }
+        val streak = streakPercent(day)
+        return { points -> payFor(points, rate, boost, streak) }
+    }
+
+    /** The streak bonus on [day], from the main streak to the end of the day before (see [StreakBonus]). */
+    suspend fun streakPercent(day: LocalDate): Int {
+        if (store.setting(StreakBonus.SETTING) == "0") return 100
+        val settings = StreakBonus.settingsOf(store.setting(StreakBonus.TARGET), store.setting(StreakBonus.VALUE))
+        val yesterday = day.minusDays(1)
+        val from = day.minusDays(120)
+        val records = StreakCounter.records(from, yesterday, store.activeGoals(), store.habitTicksSince(Days.earliestOpenDay(from)), store.allLapses(from, yesterday))
+        return StreakBonus.percentFor(StreakCounter.count(records, yesterday, settings).done)
     }
 
     companion object {
