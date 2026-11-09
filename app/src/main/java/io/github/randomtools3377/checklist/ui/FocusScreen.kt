@@ -61,34 +61,56 @@ fun FocusScreen(state: FocusState, goal: Goal?, onPause: () -> Unit, onResume: (
     }
     val left = state.left(now)
     val progress = if (state.totalMillis <= 0) 0f else (1f - left.toFloat() / state.totalMillis).coerceIn(0f, 1f)
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
-        modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).safeDrawingPadding().padding(24.dp).testTag("focus"),
-    ) {
-        Text(goal?.icon ?: "⏱", fontSize = 56.sp)
-        Text(
-            goal?.name ?: "Focus",
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.Bold,
-            textAlign = TextAlign.Center,
-        )
-        Spacer(Modifier.height(24.dp))
+    val ring = minOf(240.dp, screenHeight() - 120.dp).coerceAtLeast(120.dp)
+    val clock: @Composable () -> Unit = {
         Box(contentAlignment = Alignment.Center) {
-            CircularProgressIndicator(progress = { progress }, strokeWidth = 10.dp, modifier = Modifier.size(240.dp))
-            Text(clockText(left), fontSize = 56.sp, fontWeight = FontWeight.Bold, modifier = Modifier.testTag("focus-time"))
+            CircularProgressIndicator(progress = { progress }, strokeWidth = 10.dp, modifier = Modifier.size(ring))
+            Text(clockText(left), fontSize = if (ring < 200.dp) 44.sp else 56.sp, fontWeight = FontWeight.Bold, modifier = Modifier.testTag("focus-time"))
         }
-        Spacer(Modifier.height(8.dp))
-        Text(if (state.running) "Ticked for you when time's up." else "Paused", style = MaterialTheme.typography.bodyMedium)
-        Spacer(Modifier.height(24.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            if (state.running) {
-                FilledTonalButton(onClick = onPause, modifier = Modifier.testTag("focus-pause")) { Text("Pause") }
-            } else {
-                FilledTonalButton(onClick = onResume, modifier = Modifier.testTag("focus-resume")) { Text("Carry on") }
+    }
+    val rest: @Composable () -> Unit = {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Spacer(Modifier.height(8.dp))
+            Text(if (state.running) "Ticked for you when time's up." else "Paused", style = MaterialTheme.typography.bodyMedium)
+            Spacer(Modifier.height(24.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                if (state.running) {
+                    FilledTonalButton(onClick = onPause, modifier = Modifier.testTag("focus-pause")) { Text("Pause") }
+                } else {
+                    FilledTonalButton(onClick = onResume, modifier = Modifier.testTag("focus-resume")) { Text("Carry on") }
+                }
+                Button(onClick = onDone, modifier = Modifier.testTag("focus-done")) { Text("Done now") }
             }
-            Button(onClick = onDone, modifier = Modifier.testTag("focus-done")) { Text("Done now") }
+            TextButton(onClick = onStop, modifier = Modifier.padding(top = 8.dp).testTag("focus-stop")) { Text("Stop without ticking") }
         }
-        TextButton(onClick = onStop, modifier = Modifier.padding(top = 8.dp).testTag("focus-stop")) { Text("Stop without ticking") }
+    }
+    val title: @Composable () -> Unit = {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(goal?.icon ?: "⏱", fontSize = if (isShort()) 40.sp else 56.sp)
+            Text(
+                goal?.name ?: "Focus",
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center,
+            )
+        }
+    }
+    val screen = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).safeDrawingPadding().padding(24.dp).testTag("focus")
+    if (isShort()) {
+        // A phone on its side: the clock on the left, the rest beside it, so it all fits.
+        Row(horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically, modifier = screen) {
+            clock()
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                title()
+                rest()
+            }
+        }
+    } else {
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center, modifier = screen) {
+            title()
+            Spacer(Modifier.height(24.dp))
+            clock()
+            rest()
+        }
     }
 }

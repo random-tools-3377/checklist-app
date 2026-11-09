@@ -26,7 +26,8 @@ class MainActivity : FragmentActivity() {
             val rate by vm.currentDifficulty.collectAsStateWithLifecycle()
             ChecklistTheme(appearance) {
                 androidx.compose.runtime.CompositionLocalProvider(io.github.randomtools3377.checklist.ui.LocalPayRate provides rate) {
-                    ChecklistApp(vm)
+                    // Measures the window, for tablets and phones on their side.
+                    io.github.randomtools3377.checklist.ui.WindowSized { ChecklistApp(vm) }
                 }
             }
         }

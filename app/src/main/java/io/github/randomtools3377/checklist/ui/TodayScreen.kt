@@ -307,7 +307,7 @@ fun TodayScreen(
     Box(Modifier.fillMaxSize()) {
     TodayBackdrop(look)
     LazyColumn(
-        modifier = Modifier.fillMaxSize().testTag("today-list"),
+        modifier = Modifier.fillMaxSize().readable().testTag("today-list"),
         contentPadding = PaddingValues(
             start = 16.dp,
             end = 16.dp,

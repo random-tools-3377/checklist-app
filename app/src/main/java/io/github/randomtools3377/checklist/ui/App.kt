@@ -24,6 +24,19 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.displayCutout
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.material3.NavigationRail
+import androidx.compose.material3.NavigationRailItem
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
@@ -163,21 +176,21 @@ fun ChecklistApp(vm: MainViewModel = viewModel()) {
     val owed = penalty
     val checkIn = gap
     if (checkIn != null) {
-        Box(Modifier.fillMaxSize()) {
+        Page {
             GapCheckInScreen(checkIn, vm)
         }
         return
     }
     if (!misses.isNullOrEmpty()) {
         Box(Modifier.fillMaxSize()) {
-            MissesScreen(misses, vm)
+            Page { MissesScreen(misses, vm) }
             celebrations.Overlay()
         }
         return
     }
     if (owed != null) {
         Box(Modifier.fillMaxSize()) {
-            PenaltyScreen(owed, makeUp, penaltyTasks, vm)
+            Page { PenaltyScreen(owed, makeUp, penaltyTasks, vm) }
             celebrations.Overlay()
         }
         return
@@ -235,6 +248,10 @@ fun ChecklistApp(vm: MainViewModel = viewModel()) {
     Box(Modifier.fillMaxSize()) {
         val parts = route.split("/")
         val id = parts.getOrNull(1)?.toLongOrNull() ?: 0L
+        // On a wide window a screen with its own top bar sits in the middle at a readable width;
+        // the tabs handle their own width.
+        val onTab = AppTab.entries.any { it.route == route }
+        Box(if (onTab) Modifier.fillMaxSize() else Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).readable()) {
         when (parts[0]) {
             // Each editor screen keeps its own fields, so opening a copy doesn't carry the last one's over.
             "habit" -> androidx.compose.runtime.key(route) {
@@ -396,6 +413,7 @@ fun ChecklistApp(vm: MainViewModel = viewModel()) {
                 }
             }
         }
+        }
 
         if (quickTodo) {
             QuickTodoDialog(onAdd = { name -> vm.addTodo(name); quickTodo = false }, onDismiss = { quickTodo = false })
@@ -437,37 +455,67 @@ private fun TabScaffold(
     snackbarHost: @Composable () -> Unit = {},
     content: @Composable (PaddingValues) -> Unit,
 ) {
-    Scaffold(
-        snackbarHost = snackbarHost,
-        topBar = {
-            TopAppBar(
-                title = { Text(tab.label) },
-                actions = {
-                    actions()
-                    if (tab == AppTab.TODAY) {
-                        IconButton(onClick = onSettings, modifier = Modifier.testTag("settings")) {
-                            Icon(Icons.Filled.Settings, contentDescription = "Settings")
-                        }
+    // A wide window, like a tablet or a phone on its side, has the tabs in a rail down the side.
+    val wide = isWide()
+    Row(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+        if (wide) {
+            NavigationRail(
+                modifier = Modifier
+                    .windowInsetsPadding(WindowInsets.displayCutout.only(WindowInsetsSides.Start))
+                    .testTag("nav-rail"),
+            ) {
+                // Scrolls on a small phone on its side, where five tabs only just fit.
+                Column(Modifier.verticalScroll(rememberScrollState())) {
+                    for (item in tabs) {
+                        NavigationRailItem(
+                            selected = item == tab,
+                            onClick = { onTab(item) },
+                            icon = { Icon(item.icon, contentDescription = null) },
+                            label = { Text(item.label) },
+                            modifier = Modifier.testTag("nav:${item.route}"),
+                        )
                     }
-                },
-            )
-        },
-        bottomBar = {
-            NavigationBar {
-                for (item in tabs) {
-                    NavigationBarItem(
-                        selected = item == tab,
-                        onClick = { onTab(item) },
-                        icon = { Icon(item.icon, contentDescription = null) },
-                        label = { Text(item.label) },
-                        modifier = Modifier.testTag("nav:${item.route}"),
-                    )
                 }
             }
-        },
-        floatingActionButton = fab,
-        content = content,
-    )
+        }
+        Scaffold(
+            modifier = Modifier.weight(1f),
+            snackbarHost = snackbarHost,
+            topBar = {
+                TopAppBar(
+                    title = { Text(tab.label) },
+                    actions = {
+                        actions()
+                        if (tab == AppTab.TODAY) {
+                            IconButton(onClick = onSettings, modifier = Modifier.testTag("settings")) {
+                                Icon(Icons.Filled.Settings, contentDescription = "Settings")
+                            }
+                        }
+                    },
+                )
+            },
+            bottomBar = {
+                if (!wide) {
+                    NavigationBar {
+                        for (item in tabs) {
+                            NavigationBarItem(
+                                selected = item == tab,
+                                onClick = { onTab(item) },
+                                icon = { Icon(item.icon, contentDescription = null) },
+                                label = { Text(item.label) },
+                                modifier = Modifier.testTag("nav:${item.route}"),
+                            )
+                        }
+                    }
+                }
+            },
+            floatingActionButton = fab,
+        ) { padding ->
+            // Today keeps its backdrop across the whole window and holds its own list to a
+            // readable width; the other tabs are held to it here.
+            if (tab == AppTab.TODAY) content(padding) else Box(Modifier.fillMaxSize().readable()) { content(padding) }
+        }
+    }
 }
 
 /** The editor for a goal of each kind. */

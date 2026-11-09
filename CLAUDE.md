@@ -439,7 +439,26 @@ Build order **(default)**, each step a Release the owner can try:
     points history, with the note on each tick, saved where the user picks; words that start
     like a formula get a ' in front so a spreadsheet shows them as written. Restoring an
     automatic backup lists the dated files in the chosen folder and goes through the same
-    confirm step as importing a file.
+    confirm step as importing a file. A wide window (600 dp or more across, counting the
+    whole window: a tablet, or a phone on its side) puts the tabs in a rail down the side and
+    holds each screen to a readable width (720 dp) in the middle; a short one (under 480 dp)
+    lays the focus timer out side by side and shrinks the big celebrations to fit.
+
+16. Then an optional AI that runs on the phone, after 0.40.0 and the previews PDF.
+
+    Decided: it is a one-time download that works offline, and the app is complete without it.
+    The app keeps no internet permission: a button opens the phone's browser to download the AI
+    file, and the user picks the file in the app, like a GIF. It is an extra on the Features
+    page, off to start. It adds a goal from a sentence (the goal editor fills itself in from
+    plain words), steps suggested for a project or to-do, a short coach note in the weekly
+    summary from the user's own stats, reasons and notes, and voice (saying "done reading" or
+    "add buy milk"), which needs its own speech file.
+
+    **Details (default):** every suggestion is shown for the user to check before anything is
+    saved, and the AI never ticks, skips or spends on its own. The files come from the models'
+    own public download pages, under licences that allow it, and the app checks each file's
+    checksum before using it. They are kept in the app's own storage, left out of the backup
+    file, and can be removed in Settings to free the space.
 
 ## Talking to the owner
 

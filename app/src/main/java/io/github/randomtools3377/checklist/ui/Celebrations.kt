@@ -222,6 +222,8 @@ private fun BigEffect(celebration: BigCelebration, amount: Float, onEnd: () -> U
                 }
             }
         }
+        // Smaller on a short screen, like a phone on its side, so the words still fit.
+        val gifSize = minOf(240.dp, screenHeight() * 0.4f)
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
@@ -231,7 +233,7 @@ private fun BigEffect(celebration: BigCelebration, amount: Float, onEnd: () -> U
                 is BigCelebration.ProjectFinished -> {
                     val gif = celebration.gif
                     if (gif != null) {
-                        CelebrationGif(gif, Modifier.size(240.dp).testTag("celebration-gif"))
+                        CelebrationGif(gif, Modifier.size(gifSize).testTag("celebration-gif"))
                     } else {
                         Text(celebration.icon, fontSize = 96.sp)
                     }
@@ -245,7 +247,7 @@ private fun BigEffect(celebration: BigCelebration, amount: Float, onEnd: () -> U
                     }
                 }
                 is BigCelebration.GoalFinished -> {
-                    CelebrationGif(celebration.gif, Modifier.size(240.dp).testTag("celebration-gif"))
+                    CelebrationGif(celebration.gif, Modifier.size(gifSize).testTag("celebration-gif"))
                     Spacer(Modifier.height(16.dp))
                     Text("${celebration.icon} ${celebration.name}", color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
                     if (celebration.points > 0) {
