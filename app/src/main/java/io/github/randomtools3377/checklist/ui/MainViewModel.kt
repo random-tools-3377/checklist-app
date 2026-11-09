@@ -14,6 +14,7 @@ import io.github.randomtools3377.checklist.core.Backup
 import io.github.randomtools3377.checklist.core.BackupError
 import io.github.randomtools3377.checklist.core.BuyResult
 import io.github.randomtools3377.checklist.core.Days
+import io.github.randomtools3377.checklist.core.YearReview
 import io.github.randomtools3377.checklist.core.Effort
 import io.github.randomtools3377.checklist.core.Feature
 import io.github.randomtools3377.checklist.core.StreakBonus
@@ -133,6 +134,7 @@ import io.github.randomtools3377.checklist.data.ORDER_RECOMMENDED
 import io.github.randomtools3377.checklist.data.ProjectDraft
 import io.github.randomtools3377.checklist.data.TodoDraft
 import io.github.randomtools3377.checklist.data.SETTING_GUIDE
+import io.github.randomtools3377.checklist.data.SETTING_WEEK_PLANNED
 import io.github.randomtools3377.checklist.data.SETTING_MOOD_SKIPPED
 import io.github.randomtools3377.checklist.data.SETTING_MOOD
 import io.github.randomtools3377.checklist.data.SETTING_TREAT_BUDGET
@@ -877,6 +879,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             val moved = when (reviewPeriod.value) {
                 Period.DAILY -> day.plusDays(by)
                 Period.WEEKLY -> day.plusDays(7 * by)
+                Period.YEARLY -> Review.range(day, Period.YEARLY).let { (start, end) -> if (by < 0) start.minusDays(1) else end.plusDays(1) }
                 else -> Review.range(day, Period.MONTHLY).let { (start, end) -> if (by < 0) start.minusDays(1) else end.plusDays(1) }
             }
             reviewDay.value = if (moved >= today) null else moved
@@ -1375,6 +1378,34 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     val features: StateFlow<Set<Feature>> = combine(Feature.entries.map { dao.observeSetting(it.key) }) { values ->
         Feature.entries.filterIndexed { i, feature -> feature.isOn(values[i]) }.toSet()
     }.state(emptySet())
+
+    /** The weekly planning card on Today: from Monday, until this week is planned or put off. */
+    val showWeekPlan: StateFlow<Boolean> = combine(today, features, dao.observeSetting(SETTING_WEEK_PLANNED)) { day, on, planned ->
+        Feature.WEEKLY_PLANNING in on && planned != YearReview.weekOf(day).toString()
+    }.state(false)
+
+    /** This week is planned, or put off: the card goes until next Monday. */
+    fun weekPlanned() {
+        viewModelScope.launch { repository.setSetting(SETTING_WEEK_PLANNED, YearReview.weekOf(currentDay()).toString()) }
+    }
+
+    /** Last week, summed up, for weekly planning. */
+    val lastWeek: StateFlow<ReviewSummary?> = today.flatMapLatest { day ->
+        val (from, to) = Review.range(day.minusDays(7), Period.WEEKLY)
+        val windowsFrom = Days.earliestOpenDay(from).minusDays(7)
+        combine(
+            dao.observeGoals(),
+            dao.observeHabitTicksSince(windowsFrom.toEpochDay()),
+            dao.observeLapsesSince(windowsFrom.toEpochDay()),
+            dao.observeEntries(from.toEpochDay(), to.toEpochDay()),
+            dao.observeGaps(),
+        ) { goals, ticks, lapsesRows, entries, gapRows ->
+            Review.summarize(
+                from = from, to = to, today = day, goals = goals.map { it.toCore() }, ticks = ticks.map { it.toCore() },
+                lapses = lapsesRows.map { it.toCore() }, entries = entries.map { it.toCore() }, gaps = gapRows.map { it.toCore() },
+            )
+        }
+    }.state(null)
 
     /** Turns a feature on or off. The phone calendar also needs its permission (see Settings). */
     fun setFeature(feature: Feature, on: Boolean) {

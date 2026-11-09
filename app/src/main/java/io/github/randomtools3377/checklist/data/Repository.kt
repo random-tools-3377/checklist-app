@@ -80,6 +80,8 @@ const val SETTING_CALENDAR_IDS = "phone_calendar_ids"
 /** "0" turns off the daily mood check-in; and the day it was put off ("Not today"). */
 const val SETTING_MOOD = "mood_checkin"
 const val SETTING_MOOD_SKIPPED = "mood_skipped"
+/** The Monday of the last week planned, or put off, from the weekly planning card. */
+const val SETTING_WEEK_PLANNED = "week_planned"
 /** "done" once the welcome card on Today was answered (see GuideScreen). */
 const val SETTING_GUIDE = "guide"
 const val DEFAULT_SNOOZE_MINUTES = 10

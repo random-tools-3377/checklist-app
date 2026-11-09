@@ -12,6 +12,7 @@ enum class Feature(val key: String, val onValue: String, val title: String, val 
     USUAL_REMINDERS("feature_usual_reminders", "1", "Reminders at your usual time", "Goals with no time and no reminder remind you around when you usually tick them, learned from the last 4 weeks.", "Today"),
     MOOD("mood_checkin", "1", "Mood check-in", "Today asks once a day how you feel, and the review shows it beside what got done.", "Today"),
     CALENDAR("phone_calendar", "1", "Phone calendar", "Your phone's calendar events in the planner, the timeline and Today, and pacing leaves their time out.", "Today"),
+    WEEKLY_PLANNING("feature_weekly_planning", "1", "Weekly planning", "From Monday, a card on Today opens a few minutes of planning: last week, this week's target and the days ahead.", "Today"),
     SUGGESTIONS("feature_suggestions", "1", "Suggested points and prices", "\"How hard is it?\" on goals and \"What is it worth?\" on rewards, with a suggestion to use.", "Goals and rewards"),
     QUIT("feature_quit", "1", "Goals to quit", "A habit can be something to stop, ticked \"Avoided\" each day, with \"I slipped\".", "Goals and rewards"),
     CHALLENGES("feature_challenges", "1", "Challenges", "A habit can carry a challenge, like 30 days in a row with a bonus at the end.", "Goals and rewards"),

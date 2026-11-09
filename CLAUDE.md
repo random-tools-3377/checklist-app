@@ -433,8 +433,8 @@ Build order **(default)**, each step a Release the owner can try:
     show when there is something to act on. A reminder at the usual time is for a goal with no
     time and no reminder, at the time of day it is usually ticked (from at least 5 ticks over the
     last 4 weeks). A habit chain names the goal that comes before; ticking that one reminds of
-    the next straight away if it is due and not done. Weekly planning is a card on Today on
-    Mondays, opening last week's summary, this week's target and the week's goals to move. The
+    the next straight away if it is due and not done. Weekly planning is a card on Today from
+    Monday until the week is planned or put off, opening last week's summary, this week's target and the week's goals to move. The
     quick-add widget adds a to-do from the home screen. The spreadsheet export is a CSV of the
     points history and ticks, saved where the user picks.
 

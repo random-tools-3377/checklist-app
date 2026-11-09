@@ -265,6 +265,7 @@ fun ChecklistApp(vm: MainViewModel = viewModel()) {
                     events = day?.let { io.github.randomtools3377.checklist.core.BusyTime.on(calendarEvents, it.day, settings.dayEndHour) }.orEmpty(),
                 )
             }
+            "plan-week" -> WeekPlanScreen(vm, onOpenPlan = { goTo(AppTab.PLAN) }, onBack = ::pop)
             "done" -> DoneListScreen(doneList, onOpen = { goal -> push(editRoute(goal)) }, onBack = ::pop)
             "removed" -> RemovedGoalsScreen(removedGoals, onRestore = { vm.restoreGoal(it.id) }, onBack = ::pop)
             "reward" -> androidx.compose.runtime.key(route) { RewardEditor(id, vm, onClose = ::pop) }
@@ -339,6 +340,7 @@ fun ChecklistApp(vm: MainViewModel = viewModel()) {
                                 onEditTodo = { id -> push("todo/$id") },
                                 onGuide = { push("guide") },
                                 onTimeline = { push("timeline/0") },
+                                onPlanWeek = { push("plan-week") },
                                 skipRequest = skipRequest,
                                 onSkipRequestHandled = vm::clearSkipRequest,
                                 padding = padding,

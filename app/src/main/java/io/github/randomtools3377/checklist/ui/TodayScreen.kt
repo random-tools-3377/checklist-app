@@ -111,6 +111,7 @@ fun TodayScreen(
     onEditTodo: (Long) -> Unit,
     onGuide: () -> Unit,
     onTimeline: () -> Unit = {},
+    onPlanWeek: () -> Unit = {},
     skipRequest: Long?,
     onSkipRequestHandled: () -> Unit,
     padding: PaddingValues,
@@ -147,6 +148,7 @@ fun TodayScreen(
     val boosts by vm.boosts.collectAsStateWithLifecycle()
     val features by vm.features.collectAsStateWithLifecycle()
     val askMood by vm.askMood.collectAsStateWithLifecycle()
+    val showWeekPlan by vm.showWeekPlan.collectAsStateWithLifecycle()
     val todayMood by vm.todayMood.collectAsStateWithLifecycle()
     // A note for today's mood, while it is being written.
     var moodNote by remember { mutableStateOf<String?>(null) }
@@ -322,6 +324,10 @@ fun TodayScreen(
             }
             if (welcome) {
                 WelcomeCard(onTour = onGuide, onExamples = { vm.addExamples() }, onClose = vm::closeWelcome)
+                Spacer(Modifier.height(12.dp))
+            }
+            if (showWeekPlan && !welcome) {
+                WeekPlanCard(onPlan = onPlanWeek, onLater = vm::weekPlanned)
                 Spacer(Modifier.height(12.dp))
             }
             if (askMood && !welcome) {

@@ -86,11 +86,11 @@ fun ReviewScreen(
     ) {
         item {
             SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-                listOf(Period.DAILY to "Day", Period.WEEKLY to "Week", Period.MONTHLY to "Month").forEachIndexed { index, (value, label) ->
+                listOf(Period.DAILY to "Day", Period.WEEKLY to "Week", Period.MONTHLY to "Month", Period.YEARLY to "Year").forEachIndexed { index, (value, label) ->
                     SegmentedButton(
                         selected = period == value,
                         onClick = { onPeriod(value) },
-                        shape = SegmentedButtonDefaults.itemShape(index = index, count = 3),
+                        shape = SegmentedButtonDefaults.itemShape(index = index, count = 4),
                         modifier = Modifier.testTag("review:$label"),
                     ) { Text(label) }
                 }
@@ -123,7 +123,8 @@ fun ReviewScreen(
             }
         }
         item { PointsCard(summary) }
-        if (period != Period.DAILY) item { DayCharts(summary, period) }
+        if (period == Period.WEEKLY || period == Period.MONTHLY) item { DayCharts(summary, period) }
+        if (period == Period.YEARLY) item { YearCard(summary, moods, hideMoods = hideReasons) }
         if (period == Period.MONTHLY) item { MonthCalendar(summary) }
         item { GoalsCard(summary) }
         if (summary.categories.isNotEmpty()) item { CategoriesCard(summary) }
@@ -193,6 +194,34 @@ private fun GoalsCard(summary: ReviewSummary) {
 @Composable
 private fun Cell(text: String, color: androidx.compose.ui.graphics.Color = MaterialTheme.colorScheme.onSurface) {
     Text(text, textAlign = TextAlign.Center, color = color, modifier = Modifier.width(56.dp))
+}
+
+/** The year, month by month: how much got done, points earned, and mood. */
+@Composable
+private fun YearCard(summary: ReviewSummary, moods: List<io.github.randomtools3377.checklist.core.Mood>, hideMoods: Boolean) {
+    val today = minOf(summary.to, io.github.randomtools3377.checklist.data.nowLocal().date)
+    val months = io.github.randomtools3377.checklist.core.YearReview.months(summary, if (hideMoods) emptyList() else moods, summary.from.year, today)
+    ReviewCard("${summary.from.year}, month by month") {
+        Column(Modifier.testTag("review-year")) {
+            months.forEach { month ->
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp)) {
+                    Text(io.github.randomtools3377.checklist.core.monthShort(month.month), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.width(44.dp))
+                    val share = month.share
+                    if (share == null) {
+                        Text("–", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+                    } else {
+                        androidx.compose.material3.LinearProgressIndicator(
+                            progress = { share.toFloat() },
+                            modifier = Modifier.weight(1f).height(8.dp),
+                        )
+                        Text("${(share * 100).toInt()}%", style = MaterialTheme.typography.bodySmall, modifier = Modifier.width(44.dp).padding(start = 6.dp))
+                    }
+                    Text(if (month.earned > 0) "+${month.earned}" else "", style = MaterialTheme.typography.bodySmall, modifier = Modifier.width(56.dp))
+                    Text(month.mood?.let { io.github.randomtools3377.checklist.core.Moods.face(Math.round(it).toInt()) } ?: "", modifier = Modifier.width(28.dp))
+                }
+            }
+        }
+    }
 }
 
 /** How the user felt each day, beside how much of what was due got done. */
