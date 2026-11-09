@@ -18,6 +18,9 @@ import io.github.randomtools3377.checklist.core.Alert
 import io.github.randomtools3377.checklist.core.AlertKind
 import io.github.randomtools3377.checklist.core.Alerts
 import io.github.randomtools3377.checklist.core.Days
+import io.github.randomtools3377.checklist.core.Chains
+import io.github.randomtools3377.checklist.core.UsualTimes
+import io.github.randomtools3377.checklist.core.Feature
 import io.github.randomtools3377.checklist.core.Goal
 import io.github.randomtools3377.checklist.core.Pace
 import io.github.randomtools3377.checklist.core.SkipCheck
@@ -41,6 +44,7 @@ import io.github.randomtools3377.checklist.data.SETTING_MORNING_PLAN
 import io.github.randomtools3377.checklist.data.toTime
 import io.github.randomtools3377.checklist.ui.minutesText
 import io.github.randomtools3377.checklist.data.nowLocal
+import io.github.randomtools3377.checklist.data.toLocalDateTime
 import io.github.randomtools3377.checklist.data.parseDayEndHour
 import io.github.randomtools3377.checklist.data.toCore
 import io.github.randomtools3377.checklist.data.toEpochDay
@@ -94,7 +98,7 @@ object Reminders {
         val from = Pace.plusMinutes(now, 1)
         val to = Pace.plusMinutes(now, LOOK_AHEAD_DAYS * 24 * 60L)
         val defaultFinish = dao.setting(SETTING_DEFAULT_FINISH)?.toIntOrNull()?.toTime()
-        val nextAlert = (Alerts.between(goals, from, to, dayEnd, defaultFinish) + mornings(dao, from, to, dayEnd) + weeklies(dao, from, to, dayEnd))
+        val nextAlert = (Alerts.between(goals, from, to, dayEnd, defaultFinish, usualTimes(dao)) + mornings(dao, from, to, dayEnd) + weeklies(dao, from, to, dayEnd))
             .minOfOrNull { it.at }
         val dayTurns = LocalDateTime(Days.dayOf(now, dayEnd).plusDays(1), LocalTime(dayEnd, 0))
         val soon = System.currentTimeMillis() + 1_000
@@ -139,7 +143,7 @@ object Reminders {
             val at = snooze.at.local()
             Alert(snooze.goalId, Days.dayOf(at, dayEnd), at, AlertKind.AGAIN, number = snooze.number)
         }
-        val due = (Alerts.between(goals, since.local(), until.local(), dayEnd, defaultFinish).filter { it.at.millis() > since } + snoozed)
+        val due = (Alerts.between(goals, since.local(), until.local(), dayEnd, defaultFinish, usualTimes(dao)).filter { it.at.millis() > since } + snoozed)
             .sortedBy { it.at }
         if (mornings(dao, since.local(), until.local(), dayEnd).any { it.at.millis() > since }) {
             showMorningPlan(context, dayEnd)
@@ -173,6 +177,42 @@ object Reminders {
         }
         prefs.edit().putLong(LAST_FIRED, until).apply()
         reschedule(context)
+    }
+
+    /**
+     * When each goal is usually ticked, from the last 4 weeks, for reminders at the usual time;
+     * empty while that extra is off.
+     */
+    private suspend fun usualTimes(dao: io.github.randomtools3377.checklist.data.ChecklistDao): Map<Long, LocalTime> {
+        if (!Feature.USUAL_REMINDERS.isOn(dao.setting(Feature.USUAL_REMINDERS.key))) return emptyMap()
+        val since = nowLocal().date.minusDays(28)
+        return UsualTimes.of(
+            dao.habitTicksSince(since.toEpochDay()).groupBy { it.goalId }.mapValues { (_, ticks) ->
+                ticks.map { tick -> tick.at.toLocalDateTime().let { it.hour * 60 + it.minute } }
+            },
+        )
+    }
+
+    /**
+     * A goal just done: the goals that come after it in a habit chain, still to do today, are
+     * reminded straight away.
+     */
+    suspend fun afterDone(context: Context, goalId: Long) {
+        val container = (context.applicationContext as ChecklistApplication).container
+        val dao = container.db.dao()
+        val goals = dao.activeGoals().map { it.toCore() }
+        if (goals.none { it.after == goalId }) return
+        val dayEnd = parseDayEndHour(dao.setting(SETTING_DAY_END_HOUR))
+        val now = nowLocal()
+        val day = Days.dayOf(now, dayEnd)
+        val since = Days.earliestOpenDay(day)
+        val ticks = dao.habitTicksSince(since.toEpochDay()).map { it.toCore() }
+        val view = TodayList.build(day, goals, dao.allSteps().map { it.toCore() }, ticks, 0, dao.lapsesSince(since.toEpochDay()).map { it.toCore() })
+        val hidePrivate = dao.setting(LOCK_PRIVATE) == "1"
+        for (row in Chains.next(goalId, view)) {
+            val skip = container.lapses.checkSkip(row.goal.id) as? SkipCheck.Allowed
+            show(context, row.goal, Alert(row.goal.id, day, now, AlertKind.NEXT), row.count, hidden = hidePrivate && row.goal.private, skip = skip)
+        }
     }
 
     /** The morning plans between [from] and [to], when the day start is set and the plan is on. */
@@ -313,6 +353,8 @@ object Reminders {
             AlertKind.AGAIN -> "Still to do"
             AlertKind.WEEKLY -> "Your week"
             AlertKind.FOCUS_DONE -> "Time's up: tap Done to tick it"
+            AlertKind.USUAL -> "About now, as usual"
+            AlertKind.NEXT -> "Next up"
         }
         val details = buildList {
             add(whenText)

@@ -9,11 +9,13 @@ package io.github.randomtools3377.checklist.core
 enum class Feature(val key: String, val onValue: String, val title: String, val about: String, val group: String) {
     TODOS("feature_todos", "1", "To-dos on Today", "A box on Today to add quick one-off to-dos, with or without a date.", "Today"),
     TIMELINE("feature_timeline", "1", "Timeline", "A Timeline button on Today and in the planner, to see the day by the hour and drag goals to other times.", "Today"),
+    USUAL_REMINDERS("feature_usual_reminders", "1", "Reminders at your usual time", "Goals with no time and no reminder remind you around when you usually tick them, learned from the last 4 weeks.", "Today"),
     MOOD("mood_checkin", "1", "Mood check-in", "Today asks once a day how you feel, and the review shows it beside what got done.", "Today"),
     CALENDAR("phone_calendar", "1", "Phone calendar", "Your phone's calendar events in the planner, the timeline and Today, and pacing leaves their time out.", "Today"),
     SUGGESTIONS("feature_suggestions", "1", "Suggested points and prices", "\"How hard is it?\" on goals and \"What is it worth?\" on rewards, with a suggestion to use.", "Goals and rewards"),
     QUIT("feature_quit", "1", "Goals to quit", "A habit can be something to stop, ticked \"Avoided\" each day, with \"I slipped\".", "Goals and rewards"),
     CHALLENGES("feature_challenges", "1", "Challenges", "A habit can carry a challenge, like 30 days in a row with a bonus at the end.", "Goals and rewards"),
+    CHAINS("feature_chains", "1", "Habit chains", "A goal can come after another, like journal after coffee: ticking the first reminds you of the next.", "Goals and rewards"),
     BALANCE_CHECK("feature_balance_check", "1", "Balance check", "A page in the shop comparing prices with what you earn, and goals with how often they get done.", "Goals and rewards"),
     INTEREST("interest_percent", "2", "Savings interest", "Unspent points grow a little at the end of each week.", "Points"),
     BOOST("boost", "1", "Boost the goal missed most", "Each week, the goal missed most lately pays 50% more.", "Points"),

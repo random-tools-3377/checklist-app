@@ -143,6 +143,7 @@ fun GoalEntity.toCore() = Goal(
     effort = Effort.entries.firstOrNull { it.name == effort },
     quit = quit,
     challenge = if (challengeDays != null && challengeDays > 0 && challengeFrom != null) Challenge(challengeDays, challengeBonus ?: 0, challengeFrom.toDay()) else null,
+    after = afterGoal,
     archived = archived,
     position = position,
     createdAt = createdAt,
@@ -181,6 +182,7 @@ fun Goal.toEntity() = GoalEntity(
     challengeDays = challenge?.days,
     challengeBonus = challenge?.bonus,
     challengeFrom = challenge?.from?.toEpochDay(),
+    afterGoal = after,
 )
 
 fun MoodEntity.toCore() = Mood(day = day.toDay(), score = score, note = note, at = at)

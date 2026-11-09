@@ -47,7 +47,10 @@ class NextGoalTile : TileService() {
             scope.launch {
                 val next = NextGoal.find(applicationContext) ?: return@launch
                 val book = (applicationContext as ChecklistApplication).container.book
-                if (next.isRoutine) book.finishRoutine(next.goal.id) else book.tickHabit(next.goal.id)
+                val result = if (next.isRoutine) book.finishRoutine(next.goal.id) else book.tickHabit(next.goal.id)
+                if (result is io.github.randomtools3377.checklist.core.TickResult.Ticked && result.finished) {
+                    io.github.randomtools3377.checklist.reminders.Reminders.afterDone(applicationContext, next.goal.id)
+                }
                 show(NextGoal.find(applicationContext))
             }
             Unit

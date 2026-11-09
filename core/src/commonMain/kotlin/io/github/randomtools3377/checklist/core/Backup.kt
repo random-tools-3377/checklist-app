@@ -39,7 +39,8 @@ data class Backup(
      * format 16 perfect-day bonuses;
      * format 17 goals repeating some days after they were last done;
      * format 18 goals to quit and challenges;
-     * format 19 the daily mood check-in.
+     * format 19 the daily mood check-in;
+     * format 20 habit chains.
      */
     val checks: List<Check> = emptyList(),
     /** The user's own photo behind Today, in base64 (format 10). */
@@ -51,7 +52,7 @@ data class Backup(
         const val APP = "checklist"
 
         /** Raised whenever the file's layout changes in a way older versions can't read. */
-        const val FORMAT = 19
+        const val FORMAT = 20
 
         private val json = Json {
             prettyPrint = true

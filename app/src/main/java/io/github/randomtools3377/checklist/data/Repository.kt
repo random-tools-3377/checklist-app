@@ -129,6 +129,8 @@ data class HabitDraft(
     val quit: Boolean = false,
     /** A challenge on it, like 30 days in a row with a bonus at the end. */
     val challenge: Challenge? = null,
+    /** The goal it comes after, in a habit chain. */
+    val after: Long? = null,
 )
 
 /** One step in the project editor. [id] is 0 for a new step. */
@@ -244,6 +246,7 @@ class Repository(private val db: AppDatabase, private val celebrations: Celebrat
             challengeDays = draft.challenge?.days,
             challengeBonus = draft.challenge?.bonus,
             challengeFrom = draft.challenge?.from?.toEpochDay(),
+            afterGoal = draft.after?.takeIf { it != draft.id },
         )
         val goalId = if (existing == null) dao.insertGoal(row) else row.id.also { dao.updateGoal(row) }
         // A routine's checklist: removed items are archived, so their past ticks still make sense.

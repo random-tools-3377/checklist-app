@@ -41,7 +41,8 @@ class DoneReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) = work {
         val goalId = intent.getLongExtra(EXTRA_GOAL, -1)
         if (goalId >= 0) {
-            (context.applicationContext as ChecklistApplication).container.book.tickHabit(goalId)
+            val result = (context.applicationContext as ChecklistApplication).container.book.tickHabit(goalId)
+            if (result is io.github.randomtools3377.checklist.core.TickResult.Ticked && result.finished) Reminders.afterDone(context, goalId)
         }
         NotificationManagerCompat.from(context).cancel(intent.getIntExtra(EXTRA_NOTIFICATION, 0))
     }

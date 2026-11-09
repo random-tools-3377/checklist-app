@@ -1061,6 +1061,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     private suspend fun offerTickUndo(goalId: Long, result: TickResult, undo: suspend () -> Unit) {
         if (result !is TickResult.Ticked) return
+        // A goal done: the next in its habit chain is reminded.
+        if (result.finished) Reminders.afterDone(getApplication(), goalId)
         val name = repository.goal(goalId)?.name ?: return
         val paid = result.points + result.bonus
         offerUndo(if (paid > 0) "$name · +$paid" else "$name ticked", undo)

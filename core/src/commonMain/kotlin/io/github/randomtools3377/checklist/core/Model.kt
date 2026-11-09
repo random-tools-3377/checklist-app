@@ -89,6 +89,8 @@ data class Goal(
     val quit: Boolean = false,
     /** A challenge on this habit, like 30 days in a row with a bonus (see [Challenges]). */
     val challenge: Challenge? = null,
+    /** The goal this one comes after, in a habit chain (see [Chains]). */
+    val after: Long? = null,
     val archived: Boolean = false,
     val position: Int = 0,
     val createdAt: Long = 0,

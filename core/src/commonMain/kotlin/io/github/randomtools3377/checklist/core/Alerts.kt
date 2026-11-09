@@ -21,6 +21,12 @@ enum class AlertKind {
     /** "Keep reminding": again, some minutes after the first reminder, while it isn't done. */
     AGAIN,
 
+    /** Around the time of day the goal is usually ticked (see [UsualTimes]). */
+    USUAL,
+
+    /** Right after the goal that comes before it was done (see [Chains]). */
+    NEXT,
+
     /** The weekly summary, on Sunday. Not for one goal. */
     WEEKLY,
 
@@ -47,7 +53,14 @@ object Alerts {
      * week, month or year is reminded each day until its window is done; whether it is done is
      * checked when the alert fires.
      */
-    fun between(goals: List<Goal>, from: LocalDateTime, to: LocalDateTime, dayEndHour: Int, defaultFinish: LocalTime? = null): List<Alert> {
+    fun between(
+        goals: List<Goal>,
+        from: LocalDateTime,
+        to: LocalDateTime,
+        dayEndHour: Int,
+        defaultFinish: LocalTime? = null,
+        usual: Map<Long, LocalTime> = emptyMap(),
+    ): List<Alert> {
         val alerts = mutableListOf<Alert>()
         for (goal in goals) {
             if (goal.archived || !goal.isHabitLike) continue
@@ -73,8 +86,11 @@ object Alerts {
                         reminder.minutesBefore?.takeIf { it > 0 }?.let { before ->
                             alerts += Alert(goal.id, day, Pace.plusMinutes(time, -before.toLong()), AlertKind.BEFORE, before)
                         }
+                    } else if (reminder.at != null) {
+                        alerts += Alert(goal.id, day, Pace.on(day, reminder.at, dayEndHour), AlertKind.REMINDER)
                     } else {
-                        reminder.at?.let { alerts += Alert(goal.id, day, Pace.on(day, it, dayEndHour), AlertKind.REMINDER) }
+                        // No time and no reminder: around when it is usually done, if that is known.
+                        usual[goal.id]?.let { alerts += Alert(goal.id, day, Pace.on(day, it, dayEndHour), AlertKind.USUAL) }
                     }
                     reminder.againEvery?.takeIf { it > 0 }?.let { every ->
                         alerts += again(goal, day, alerts.subList(firstOfDay, alerts.size).toList(), every, dayEndHour, defaultFinish)

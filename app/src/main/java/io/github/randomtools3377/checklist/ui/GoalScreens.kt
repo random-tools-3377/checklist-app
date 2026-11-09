@@ -101,6 +101,7 @@ import io.github.randomtools3377.checklist.reminders.Reminders
 import io.github.randomtools3377.checklist.data.ProjectDraft
 import io.github.randomtools3377.checklist.data.TodoDraft
 import io.github.randomtools3377.checklist.core.Todos
+import io.github.randomtools3377.checklist.core.Chains
 import io.github.randomtools3377.checklist.core.Feature
 import io.github.randomtools3377.checklist.core.Challenge
 import io.github.randomtools3377.checklist.core.Difficulty
@@ -479,6 +480,8 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Long)
     var challengeDays by rememberSaveable { mutableStateOf("30") }
     var challengeBonus by rememberSaveable { mutableStateOf("50") }
     var challengeFrom by rememberSaveable { mutableStateOf<Long?>(null) }
+    // The goal this one comes after, in a habit chain.
+    var after by rememberSaveable { mutableStateOf<Long?>(null) }
     var showErrors by rememberSaveable { mutableStateOf(false) }
     var choosingRepeat by remember { mutableStateOf(false) }
     val context = LocalContext.current
@@ -515,6 +518,7 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Long)
                 unit = goal.unit.orEmpty()
                 effort = goal.effort?.name
                 quit = goal.quit
+                after = goal.after
                 goal.challenge?.let { c ->
                     challengeOn = true
                     challengeDays = c.days.toString()
@@ -628,6 +632,7 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Long)
                         unit = if (hasAmount) unit.trim() else null,
                         effort = effort?.let { Effort.valueOf(it) },
                         quit = quit,
+                        after = after,
                         challenge = challengeDays.toIntOrNull()?.takeIf { challengeOn && it in 2..3650 }?.let { days ->
                             Challenge(days, challengeBonus.toIntOrNull() ?: 0, challengeFrom?.toDay() ?: vm.currentDay())
                         },
@@ -1007,6 +1012,10 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Long)
                 }
             }
         }
+        // A habit chain: an extra, shown when turned on or already set here.
+        if (Feature.CHAINS in features || after != null) {
+            ChainField(id, after, vm) { after = it }
+        }
         AllowanceAndPrivacy(
             allowance = allowance,
             onAllowance = { allowance = it },
@@ -1052,6 +1061,44 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Long)
                 }
             },
             confirmButton = { TextButton(onClick = { choosingRepeat = false }) { Text("Close") } },
+        )
+    }
+}
+
+/** "Comes after": the goal before this one in a habit chain; ticking that one reminds of this. */
+@Composable
+private fun ChainField(id: Long, after: Long?, vm: MainViewModel, onAfter: (Long?) -> Unit) {
+    val view by vm.goalsView.collectAsStateWithLifecycle()
+    val goals = view?.goals.orEmpty()
+    var picking by remember { mutableStateOf(false) }
+    val self = goals.firstOrNull { it.id == id } ?: Goal(id = id, kind = GoalKind.HABIT, name = "", icon = "", points = 0, repeat = null)
+    val before = goals.firstOrNull { it.id == after }
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.weight(1f)) {
+            Text("Comes after", style = MaterialTheme.typography.bodyLarge)
+            Text(
+                before?.let { "${it.icon} ${it.name}: ticking it reminds you of this one" } ?: "Nothing: not part of a chain",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        TextButton(onClick = { picking = true }, modifier = Modifier.testTag("field:after")) { Text(if (before == null) "Choose" else "Change") }
+    }
+    if (picking) {
+        AlertDialog(
+            onDismissRequest = { picking = false },
+            title = { Text("Comes after") },
+            text = {
+                Column(Modifier.verticalScroll(rememberScrollState())) {
+                    TextButton(onClick = { onAfter(null); picking = false }) { Text("Nothing") }
+                    Chains.choices(self, goals).forEach { goal ->
+                        TextButton(onClick = { onAfter(goal.id); picking = false }, modifier = Modifier.testTag("after:${goal.name}")) {
+                            Text("${goal.icon} ${goal.name}")
+                        }
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { picking = false }) { Text("Cancel") } },
         )
     }
 }
