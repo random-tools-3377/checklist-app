@@ -16,6 +16,8 @@ import kotlinx.datetime.LocalTime
 import java.util.Base64
 
 const val SETTING_DEFAULT_FINISH = "default_finish_minute"
+const val SETTING_DAY_START = "day_start_minute"
+const val SETTING_MORNING_PLAN = "morning_plan"
 const val SETTING_TODAY_ORDER = "today_order"
 const val ORDER_RECOMMENDED = "recommended"
 const val ORDER_OWN = "own"
@@ -46,6 +48,8 @@ data class HabitDraft(
     val allowancePer: Period? = null,
     val private: Boolean = false,
     val celebration: String? = null,
+    /** A time for each one, for a habit done several times a day. */
+    val times: List<LocalTime> = emptyList(),
 )
 
 /** One step in the project editor. [id] is 0 for a new step. */
@@ -99,6 +103,7 @@ class Repository(private val db: AppDatabase, private val celebrations: Celebrat
             repeat = RepeatText.encode(draft.repeat),
             minutes = draft.minutes,
             atMinute = draft.at?.toMinuteOfDay(),
+            times = encodeTimes(draft.times),
             finishByMinute = draft.finishBy?.toMinuteOfDay(),
             finishDay = draft.finishDay,
             reminder = draft.reminder?.let { RepeatText.encodeReminder(it) },
@@ -225,6 +230,10 @@ class Repository(private val db: AppDatabase, private val celebrations: Celebrat
     /** The default time to finish the day's goals by. Null clears it, which turns today's pace off. */
     suspend fun setDefaultFinish(time: LocalTime?) {
         dao.putSetting(SettingEntity(SETTING_DEFAULT_FINISH, time?.toMinuteOfDay()?.toString() ?: ""))
+    }
+
+    suspend fun setDayStart(time: LocalTime?) {
+        dao.putSetting(SettingEntity(SETTING_DAY_START, time?.toMinuteOfDay()?.toString() ?: ""))
     }
 
     suspend fun setTodayOrder(order: String) {

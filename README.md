@@ -36,9 +36,14 @@ keeps the data.
   privacy lock.
 - 0.6.0: celebration GIFs for each goal, from the app or the user's own through the Photo
   Picker.
+- 0.7.0: clear tick buttons, the full emoji set, "My day starts at", a time for each of a goal
+  done several times a day (or spread out for you), and a morning plan.
 
-Every feature in the design is now built for Android. The iPhone app waits for a way to
-install it.
+Next: snooze and repeat on reminders and a backup reminder, then routines, then more (the list
+is in CLAUDE.md). The iPhone app waits for a way to install it.
+
+The emoji list is built from Unicode's emoji data via the MIT-licensed `unicode-emoji-json`
+package; its notice ships in `app/src/main/assets/emoji-NOTICE.txt`.
 
 ## How it is built
 

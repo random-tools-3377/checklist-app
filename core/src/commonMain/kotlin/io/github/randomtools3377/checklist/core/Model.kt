@@ -37,6 +37,12 @@ data class Goal(
     val minutes: Int? = null,
     /** The clock time to do it at, if the user set one. */
     val at: LocalTime? = null,
+    /**
+     * For a habit done several times a day: the time for each one, if the user set them, each
+     * with its own reminder. Empty means none set; then they are spread over the day (see
+     * [Pace.slots]).
+     */
+    val times: List<LocalTime> = emptyList(),
     /** The time to finish it by, if the user set one. Otherwise the default from Settings. */
     val finishBy: LocalTime? = null,
     /**
@@ -61,6 +67,9 @@ data class Goal(
 ) {
     /** The kind of stretch its ticks count toward. Null for a project. */
     val period: Period? get() = repeat?.windowPeriod
+
+    /** Done several times on each day it is due. */
+    val severalADay: Boolean get() = kind == GoalKind.HABIT && target > 1 && repeat?.windowPeriod == Period.DAILY
 
     /** Skips and misses allowed per [allowanceWindow] before they go over the limit. */
     val allowed: Int get() = allowance ?: DEFAULT_ALLOWANCE

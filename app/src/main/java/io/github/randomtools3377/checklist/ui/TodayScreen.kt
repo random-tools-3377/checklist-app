@@ -26,8 +26,8 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -68,6 +68,7 @@ import io.github.randomtools3377.checklist.core.StepRow
 import io.github.randomtools3377.checklist.core.TickResult
 import io.github.randomtools3377.checklist.core.TodayPace
 import io.github.randomtools3377.checklist.core.dateText
+import io.github.randomtools3377.checklist.core.ordinal
 import io.github.randomtools3377.checklist.data.ORDER_OWN
 import io.github.randomtools3377.checklist.data.ORDER_RECOMMENDED
 
@@ -169,9 +170,11 @@ fun TodayScreen(
             items(screen.plan, key = { "today-${it.row.goal.id}" }) { planned ->
                 HabitCard(
                     row = planned.row,
-                    timeLabel = timeLabel(planned, screen),
+                    // A habit done several times a day shows its next one instead.
+                    timeLabel = if (screen.nextSlots.containsKey(planned.row.goal.id)) null else timeLabel(planned, screen),
                     late = planned.late,
                     paceLine = null,
+                    nextLine = nextLine(planned.row, screen),
                     onTick = { spot -> tick(planned.row, spot) },
                     onUndo = { vm.undoHabitTick(planned.row.goal.id) },
                     onSkip = { skipping = planned.row.goal },
@@ -217,6 +220,20 @@ private fun timeLabel(planned: Planned, screen: TodayState): String? {
 }
 
 private fun paceText(pace: LongPace): String = "${pace.describe()} (finish by ${dateText(pace.finish)})"
+
+/**
+ * For a habit done several times a day: when the next one is due, at its own time or by the
+ * time it was spread to, and whether that has passed. Without times or a day start, a hint.
+ */
+private fun nextLine(row: HabitRow, screen: TodayState): Pair<String, Boolean>? {
+    if (!row.goal.severalADay || row.done) return null
+    val slot = screen.nextSlots[row.goal.id]
+        ?: return if (row.goal.times.isEmpty() && !screen.hasDayStart) "Set when your day starts in Settings to space these out" to false else null
+    val text = momentText(slot.at, screen.view.day)
+    val late = slot.at < screen.now
+    val label = if (slot.fixed) "Next: the ${ordinal(slot.number)} at $text" else "Next one by $text"
+    return (if (late) "$label · late" else label) to late
+}
 
 private fun LazyListScope.habitSection(
     title: String,
@@ -322,6 +339,7 @@ private fun HabitCard(
     onTick: (Spot) -> Unit,
     onUndo: () -> Unit,
     onSkip: () -> Unit,
+    nextLine: Pair<String, Boolean>? = null,
 ) {
     val goal = row.goal
     val spot = remember { Spot() }
@@ -334,7 +352,6 @@ private fun HabitCard(
                 Text(goal.name, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 val detail = buildList {
                     add("+${goal.points}" + if (counted) " each" else "")
-                    if (counted) add("${row.count} of ${goal.target}")
                     if (counted && goal.bonus > 0) add("bonus +${goal.bonus}")
                     goal.minutes?.let { add(minutesText(it)) }
                 }.joinToString(" · ")
@@ -349,6 +366,16 @@ private fun HabitCard(
                 }
                 if (paceLine != null) {
                     Text(paceLine, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                }
+                if (nextLine != null) {
+                    val (text, isLate) = nextLine
+                    Text(
+                        text,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium,
+                        color = if (isLate) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.testTag("next:${goal.name}"),
+                    )
                 }
                 if (row.skipped) {
                     Text("Skipped", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.secondary, modifier = Modifier.testTag("skipped:${goal.name}"))
@@ -378,35 +405,58 @@ private fun HabitCard(
                 }
             }
             val shownDone = row.count >= goal.target
-            TickButton(
-                done = shownDone,
-                label = if (counted && !shownDone) "${row.count}/${goal.target}" else null,
-                description = if (shownDone) "Undo ${goal.name}" else "Tick ${goal.name}",
-                modifier = Modifier
-                    .onGloballyPositioned { spot.center = it.boundsInRoot().center }
-                    .testTag("tick:${goal.name}"),
-                onClick = { if (shownDone && !counted) onUndo() else if (!shownDone) onTick(spot) },
-            )
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                TickButton(
+                    done = shownDone,
+                    counted = counted,
+                    description = when {
+                        shownDone && !counted -> "Undo ${goal.name}"
+                        shownDone -> "${goal.name} is done"
+                        counted -> "Add one to ${goal.name}"
+                        else -> "Mark ${goal.name} done"
+                    },
+                    modifier = Modifier
+                        .onGloballyPositioned { spot.center = it.boundsInRoot().center }
+                        .testTag("tick:${goal.name}"),
+                    onClick = { if (shownDone && !counted) onUndo() else if (!shownDone) onTick(spot) },
+                )
+                if (counted) {
+                    Text(
+                        "${row.count} of ${goal.target}",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 2.dp).testTag("count:${goal.name}"),
+                    )
+                }
+            }
         }
     }
 }
 
-/** The round button that ticks a goal. Filled with a check mark once done. */
+/**
+ * The button that ticks a goal, saying what it does: "Done" for a single goal, "+1" for one done
+ * several times. Once done it fills in with a check mark; for a single goal, tapping it again
+ * takes the tick back.
+ */
 @Composable
-private fun TickButton(done: Boolean, label: String?, description: String, modifier: Modifier, onClick: () -> Unit) {
+private fun TickButton(done: Boolean, counted: Boolean, description: String, modifier: Modifier, onClick: () -> Unit) {
     val semantics = Modifier.semantics { contentDescription = description }
+    val padding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
     if (done) {
-        FilledIconButton(onClick = onClick, modifier = modifier.size(52.dp).then(semantics)) {
-            Icon(Icons.Filled.Check, contentDescription = null)
+        Button(onClick = onClick, contentPadding = padding, modifier = modifier.then(semantics)) {
+            Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(4.dp))
+            Text("Done")
         }
     } else {
-        OutlinedIconButton(
-            onClick = onClick,
-            modifier = modifier.size(52.dp).then(semantics),
-            border = BorderStroke(2.dp, MaterialTheme.colorScheme.primary),
-            colors = IconButtonDefaults.outlinedIconButtonColors(contentColor = MaterialTheme.colorScheme.primary),
-        ) {
-            if (label != null) Text(label, fontSize = 13.sp, fontWeight = FontWeight.Bold) else Box(Modifier.size(1.dp))
+        FilledTonalButton(onClick = onClick, contentPadding = padding, modifier = modifier.then(semantics)) {
+            if (counted) {
+                Text("+1", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            } else {
+                Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(4.dp))
+                Text("Done")
+            }
         }
     }
 }

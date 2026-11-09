@@ -34,17 +34,23 @@ object Order {
         pace: TodayPace?,
     ): List<Planned> {
         val nowMinute = now.hour * 60 + now.minute
+        val far = LocalDateTime(day.plusDays(2), kotlinx.datetime.LocalTime(0, 0))
         val left = rows.filter { !it.done }
-        val clocked = left.filter { it.goal.at != null }
-            .map { row ->
-                val at = Pace.on(day, row.goal.at!!, settings.dayEndHour)
-                Planned(row, at, fixed = true, late = at < now)
-            }
+        // A habit done several times a day goes by its next repetition: at the time the user
+        // set for it, or by the time it was spread to.
+        val next = left.associateWith { Pace.nextSlot(it, day, settings) }
+        fun clockTime(row: HabitRow): LocalDateTime? =
+            row.goal.at?.let { Pace.on(day, it, settings.dayEndHour) } ?: next[row]?.takeIf { it.fixed }?.at
+        fun dueOf(row: HabitRow): LocalDateTime? = next[row]?.takeIf { !it.fixed }?.at ?: Pace.dueAt(row.goal, day, settings)
+        // Ticks to lay out now: only the next repetition of one with its times set or spread.
+        fun ticksNow(row: HabitRow): Int = if (next[row] != null) 1 else row.left
+
+        val clocked = left.mapNotNull { row -> clockTime(row)?.let { Planned(row, it, fixed = true, late = it < now) } }
             .sortedBy { it.time }
 
-        val untimed = left.filter { it.goal.at == null }.sortedWith(
+        val untimed = left.filter { clockTime(it) == null }.sortedWith(
             compareBy<HabitRow>(
-                { Pace.dueAt(it.goal, day, settings) ?: LocalDateTime(day.plusDays(2), kotlinx.datetime.LocalTime(0, 0)) },
+                { dueOf(it) ?: far },
                 { usualMinute[it.goal.id]?.let { usual -> if (usual < nowMinute) 0 else 1 } ?: 1 },
                 { usualMinute[it.goal.id] ?: Int.MAX_VALUE },
                 { it.goal.minutes ?: UNKNOWN_LENGTH },
@@ -57,23 +63,21 @@ object Order {
         var cursor = now
         val blocks = clocked.toMutableList()
         val planned = untimed.map { row ->
-            val minutes = (row.goal.minutes ?: each ?: UNKNOWN_LENGTH).toLong() * row.left
+            val minutes = (row.goal.minutes ?: each ?: UNKNOWN_LENGTH).toLong() * ticksNow(row)
             cursor = Pace.plusMinutes(cursor, minutes)
             while (blocks.isNotEmpty() && blocks.first().time!! < cursor) {
                 val block = blocks.removeAt(0)
-                cursor = Pace.plusMinutes(cursor, (block.row.goal.minutes ?: 0).toLong() * block.row.left)
+                cursor = Pace.plusMinutes(cursor, (block.row.goal.minutes ?: 0).toLong() * ticksNow(block.row))
             }
-            val due = Pace.dueAt(row.goal, day, settings)
+            val due = dueOf(row)
             Planned(row, if (each == null && row.goal.minutes == null) null else cursor, fixed = false, late = due != null && due < now)
         }
 
-        val merged = (clocked + planned).sortedWith(
-            compareBy<Planned>({ it.time ?: LocalDateTime(day.plusDays(2), kotlinx.datetime.LocalTime(0, 0)) }),
-        )
+        val merged = (clocked + planned).sortedWith(compareBy<Planned>({ it.time ?: far }))
         // Keep the untimed ones in their recommended order relative to each other.
         val untimedQueue = planned.toMutableList()
         val result = merged.map { if (it.fixed) it else untimedQueue.removeAt(0) }
-        val done = rows.filter { it.done }.map { Planned(it, null, fixed = it.goal.at != null, late = false) }
+        val done = rows.filter { it.done }.map { Planned(it, null, fixed = it.goal.at != null || it.goal.times.isNotEmpty(), late = false) }
         return result + done
     }
 }

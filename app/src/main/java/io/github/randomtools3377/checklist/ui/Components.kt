@@ -61,17 +61,6 @@ import java.util.Locale
 const val GOAL_ICON = "⭐"
 const val REWARD_ICON = "🎁"
 
-/** Emoji to pick from. They are drawn with the phone's own emoji font. */
-private val IconChoices = listOf(
-    "⭐", "✅", "💧", "🏃", "🚶", "🚴", "🏊", "💪", "🧘", "🛌",
-    "🍎", "🥗", "🍳", "☕", "🍵", "💊", "🦷", "🚿", "🧹", "🧺",
-    "🛒", "🍽", "📚", "📖", "✏", "📝", "💻", "📞", "✉", "📅",
-    "🎸", "🎹", "🎨", "📷", "🌱", "🌻", "🐶", "🐱", "🧠", "❤",
-    "🎁", "🍫", "🍰", "🍦", "🍕", "🍔", "🍿", "🎬", "🎮", "🎧",
-    "🛍", "👟", "👗", "💄", "💆", "🛁", "✈", "🏖", "🎉", "🏆",
-    "🔨", "🔧", "🏠", "🚗", "💰", "🎯", "⏰", "🌞", "🌙", "🙂",
-)
-
 fun pointsText(points: Int): String = if (points == 1 || points == -1) "$points point" else "$points points"
 
 private val ShortDate = DateTimeFormatter.ofPattern("EEE d MMM", Locale.getDefault())
@@ -143,7 +132,7 @@ fun NumberField(
     )
 }
 
-/** Shows the chosen emoji. Tapping it opens a grid to pick another. */
+/** Shows the chosen emoji. Tapping it opens the full emoji set to pick another. */
 @Composable
 fun IconPicker(icon: String, onPick: (String) -> Unit) {
     var open by remember { mutableStateOf(false) }
@@ -162,39 +151,13 @@ fun IconPicker(icon: String, onPick: (String) -> Unit) {
         TextButton(onClick = { open = true }) { Text("Choose icon") }
     }
     if (open) {
-        AlertDialog(
-            onDismissRequest = { open = false },
-            confirmButton = { TextButton(onClick = { open = false }) { Text("Close") } },
-            title = { Text("Icon") },
-            text = {
-                LazyVerticalGrid(
-                    columns = GridCells.Adaptive(52.dp),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                    modifier = Modifier.heightIn(max = 420.dp),
-                ) {
-                    items(IconChoices) { choice ->
-                        Box(
-                            contentAlignment = Alignment.Center,
-                            modifier = Modifier
-                                .size(52.dp)
-                                .then(
-                                    if (choice == icon) {
-                                        Modifier.border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(12.dp))
-                                    } else {
-                                        Modifier
-                                    },
-                                )
-                                .clickable {
-                                    onPick(choice)
-                                    open = false
-                                },
-                        ) {
-                            Text(choice, fontSize = 28.sp)
-                        }
-                    }
-                }
+        EmojiPickerDialog(
+            current = icon,
+            onPick = {
+                onPick(it)
+                open = false
             },
+            onDismiss = { open = false },
         )
     }
 }

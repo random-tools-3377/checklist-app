@@ -193,6 +193,7 @@ private fun describe(goal: Goal, stepCount: Int): String = when (goal.kind) {
         goal.repeat?.let { add(it.describe(goal.target)) }
         if (goal.repeat?.kind != RepeatKind.TIMES_PER && goal.target > 1) add("${goal.target} times")
         goal.at?.let { add("at ${timeText(it)}") }
+        if (goal.times.isNotEmpty()) add("at " + goal.times.sorted().joinToString(", ") { timeText(it) })
         goal.minutes?.let { add(minutesText(it)) }
     }.joinToString(" · ")
     GoalKind.PROJECT -> buildList {
@@ -285,6 +286,9 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit) {
     var endDay by rememberSaveable { mutableStateOf<Long?>(null) }
     var minutes by rememberSaveable { mutableStateOf("") }
     var atMinute by rememberSaveable { mutableStateOf<Int?>(null) }
+    // A time for each one, for a habit done several times a day; -1 where not set yet.
+    var eachTimeOn by rememberSaveable { mutableStateOf(false) }
+    var eachTimes by rememberSaveable { mutableStateOf(listOf<Int>()) }
     var finishByMinute by rememberSaveable { mutableStateOf<Int?>(null) }
     var finishDay by rememberSaveable { mutableStateOf<Int?>(null) }
     var notifyOnTime by rememberSaveable { mutableStateOf(true) }
@@ -309,6 +313,14 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit) {
                 bonus = if (goal.bonus > 0) goal.bonus.toString() else ""
                 minutes = goal.minutes?.toString() ?: ""
                 atMinute = goal.at?.toMinuteOfDay()
+                if (goal.times.isNotEmpty()) {
+                    eachTimeOn = true
+                    eachTimes = goal.times.map { it.toMinuteOfDay() }
+                } else if (goal.severalADay && goal.at != null) {
+                    // One time for a goal done several times a day becomes its first time.
+                    eachTimeOn = true
+                    eachTimes = listOf(goal.at!!.toMinuteOfDay())
+                }
                 finishByMinute = goal.finishBy?.toMinuteOfDay()
                 finishDay = goal.finishDay
                 allowance = goal.allowed.toString()
@@ -382,6 +394,9 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit) {
     }
     val minutesValue = minutes.toIntOrNull()?.takeIf { it > 0 }
     val counted = (targetValue ?: 1) > 1
+    // Done several times on each day it's due: it can have a time for each one.
+    val severalADay = counted && choice != RepeatChoice.TIMES_PER
+    val eachTimesSet = if (severalADay && eachTimeOn) eachTimes.filter { it >= 0 }.distinct().sorted().take(targetValue ?: 1) else emptyList()
 
     EditorScaffold(
         title = if (id == 0L) "New habit" else "Edit habit",
@@ -400,13 +415,14 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit) {
                         target = targetValue ?: 1,
                         bonus = if (counted) bonus.toIntOrNull() ?: 0 else 0,
                         minutes = minutesValue,
-                        at = atMinute?.toTime(),
+                        at = if (severalADay) null else atMinute?.toTime(),
+                        times = eachTimesSet.map { it.toTime() },
                         finishBy = finishByMinute?.toTime(),
                         finishDay = if (choice == RepeatChoice.TIMES_PER) finishDay else null,
                         reminder = Reminder(
                             onTime = notifyOnTime,
-                            minutesBefore = if (atMinute != null) alertBefore else null,
-                            at = if (atMinute == null) remindAtMinute?.toTime() else null,
+                            minutesBefore = if (atMinute != null || eachTimesSet.isNotEmpty()) alertBefore else null,
+                            at = if (atMinute == null && eachTimesSet.isEmpty()) remindAtMinute?.toTime() else null,
                         ),
                         allowance = allowance.toIntOrNull() ?: Goal.DEFAULT_ALLOWANCE,
                         allowancePer = allowancePer,
@@ -414,7 +430,10 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit) {
                         celebration = celebration,
                     ),
                     onDone = {
-                        val wantsNotifications = if (atMinute != null) notifyOnTime || alertBefore != null else remindAtMinute != null
+                        val wantsNotifications = when {
+                            eachTimesSet.isNotEmpty() || (!severalADay && atMinute != null) -> notifyOnTime || alertBefore != null
+                            else -> remindAtMinute != null
+                        }
                         if (wantsNotifications && !Reminders.canNotify(context) && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                             askPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
                         } else {
@@ -554,7 +573,20 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit) {
             tag = "field:minutes",
             hint = "Pacing keeps this much time for it. Leave empty to share the free time evenly.",
         )
-        TimeSetting("At a set time", atMinute?.toTime(), { atMinute = it?.toMinuteOfDay() }, "field:at", emptyText = "Any time")
+        if (severalADay) {
+            EachTimeSetting(
+                count = targetValue ?: 1,
+                on = eachTimeOn,
+                onOn = { on ->
+                    eachTimeOn = on
+                    if (on && eachTimes.isEmpty()) eachTimes = List(targetValue ?: 1) { -1 }
+                },
+                times = eachTimes,
+                onTimes = { eachTimes = it },
+            )
+        } else {
+            TimeSetting("At a set time", atMinute?.toTime(), { atMinute = it?.toMinuteOfDay() }, "field:at", emptyText = "Any time")
+        }
         TimeSetting(
             "Finish by",
             finishByMinute?.toTime(),
@@ -569,10 +601,14 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit) {
         // Reminders
         HorizontalDivider()
         Text("Reminders", style = MaterialTheme.typography.titleSmall)
-        val clock = atMinute
-        if (clock != null) {
+        val clock = if (severalADay) null else atMinute
+        if (clock != null || eachTimesSet.isNotEmpty()) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                Text("Notify at ${timeText(clock.toTime())}", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                Text(
+                    if (clock != null) "Notify at ${timeText(clock.toTime())}" else "Notify at each time",
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier.weight(1f),
+                )
                 Switch(checked = notifyOnTime, onCheckedChange = { notifyOnTime = it }, modifier = Modifier.testTag("field:notify-on-time"))
             }
             Text("Also alert before", style = MaterialTheme.typography.bodyLarge)
@@ -592,7 +628,7 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit) {
                 { remindAtMinute = it?.toMinuteOfDay() },
                 "field:remind-at",
                 emptyText = "No reminder",
-                hint = "Or give it a set time above, and it notifies at that time.",
+                hint = if (severalADay) "Or set a time for each one above, and it notifies at each." else "Or give it a set time above, and it notifies at that time.",
             )
         }
         AllowanceAndPrivacy(
@@ -867,6 +903,47 @@ fun ProjectEditor(id: Long, vm: MainViewModel, onClose: () -> Unit) {
         if (id != 0L) RemoveButton("project", name) { vm.removeGoal(id, onClose) }
     }
 }
+
+/**
+ * For a habit done several times a day: a time for each one, or spread out by the app between
+ * when the day starts and the finish time.
+ */
+@Composable
+private fun EachTimeSetting(count: Int, on: Boolean, onOn: (Boolean) -> Unit, times: List<Int>, onTimes: (List<Int>) -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.weight(1f)) {
+            Text("A time for each one", style = MaterialTheme.typography.bodyLarge)
+            Text(
+                if (on) "Each gets its own reminder." else "Off: they're spread out evenly from when your day starts to the finish time, and Today shows when the next one is due.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Switch(checked = on, onCheckedChange = onOn, modifier = Modifier.testTag("field:each-time"))
+    }
+    if (!on) return
+    val shown = minOf(count, MAX_EACH_TIMES)
+    val padded = (times + List(maxOf(0, shown - times.size)) { -1 }).take(shown)
+    padded.forEachIndexed { i, minute ->
+        TimeSetting(
+            "${ordinal(i + 1)} one",
+            minute.takeIf { it >= 0 }?.toTime(),
+            { time -> onTimes(padded.toMutableList().also { it[i] = time?.toMinuteOfDay() ?: -1 }) },
+            "field:time-${i + 1}",
+            emptyText = "Not set",
+        )
+    }
+    if (count > MAX_EACH_TIMES) {
+        Text(
+            "Times can be set for the first $MAX_EACH_TIMES. The rest are any time before the finish.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+/** Times for more than this many a day would make a very long form. */
+private const val MAX_EACH_TIMES = 12
 
 /** The frame shared by the editors: a top bar with Back and Save, and a scrolling form. */
 @Composable

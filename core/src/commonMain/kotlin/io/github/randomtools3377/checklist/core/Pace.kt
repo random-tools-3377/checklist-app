@@ -11,8 +11,17 @@ import kotlinx.datetime.toLocalDateTime
 import kotlin.math.ceil
 import kotlin.math.floor
 
-/** What pacing needs from Settings. [defaultFinish] is null until the user sets it. */
-data class PaceSettings(val dayEndHour: Int, val defaultFinish: LocalTime?)
+/**
+ * What pacing needs from Settings. [defaultFinish] is null until the user sets it, and so is
+ * [dayStart], when the user's day starts ("My day starts at").
+ */
+data class PaceSettings(val dayEndHour: Int, val defaultFinish: LocalTime?, val dayStart: LocalTime? = null)
+
+/**
+ * When one repetition of a habit done several times a day is due: [number] 1 for the first.
+ * [fixed] when it is a time the user set; otherwise it is a "by" time, spread out by the app.
+ */
+data class Slot(val number: Int, val at: LocalDateTime, val fixed: Boolean)
 
 /** How quickly to go to get through what is left today. */
 data class TodayPace(
@@ -67,24 +76,61 @@ object Pace {
     }
 
     /**
+     * When each repetition of [goal] is due on [day], for a habit done several times a day: the
+     * times the user set, in order through the day, or else spread evenly between when the day
+     * starts and the goal's finish time, the last one due at the finish time. Empty when it isn't
+     * done several times a day, or when the start or the finish isn't set.
+     */
+    fun slots(goal: Goal, day: LocalDate, settings: PaceSettings): List<Slot> {
+        if (!goal.severalADay) return emptyList()
+        if (goal.times.isNotEmpty()) {
+            return goal.times.map { on(day, it, settings.dayEndHour) }.sorted().take(goal.target)
+                .mapIndexed { i, at -> Slot(i + 1, at, fixed = true) }
+        }
+        if (goal.at != null) return emptyList()
+        val start = settings.dayStart?.let { on(day, it, settings.dayEndHour) } ?: return emptyList()
+        val finish = (goal.finishBy ?: settings.defaultFinish)?.let { on(day, it, settings.dayEndHour) } ?: return emptyList()
+        val span = minutesBetween(start, finish)
+        if (span <= 0) return emptyList()
+        return (1..goal.target).map { k -> Slot(k, plusMinutes(start, span * k / goal.target), fixed = false) }
+    }
+
+    /** The next repetition of [row] still to do today, if its times are set or spread out. */
+    fun nextSlot(row: HabitRow, day: LocalDate, settings: PaceSettings): Slot? =
+        if (row.done) null else slots(row.goal, day, settings).getOrNull(row.count)
+
+    /**
      * The pace for today's habits that are not done. Ticks with a length keep it; the rest share
-     * what is left evenly, with earlier finish times taken into account. Null when nothing that
-     * is left has a finish time.
+     * what is left evenly, with earlier finish times taken into account. A habit done several
+     * times a day is due one repetition at a time, by each of its times. Null when nothing that is
+     * left has a finish time.
      */
     fun today(now: LocalDateTime, day: LocalDate, rows: List<HabitRow>, settings: PaceSettings): TodayPace? {
         val left = rows.filter { !it.done }
-        val paced = left.mapNotNull { row -> dueAt(row.goal, day, settings)?.let { row to it } }
-        val unpaced = left.size - paced.size
-        if (paced.isEmpty()) return null
+        // Each tick still to do, with when it is due and how long it takes.
+        class Due(val at: LocalDateTime, val minutes: Int?)
+        var unpaced = 0
+        val units = mutableListOf<Due>()
+        for (row in left) {
+            val slots = slots(row.goal, day, settings)
+            val due = dueAt(row.goal, day, settings)
+            val mine = (0 until row.left).mapNotNull { i ->
+                val slot = slots.getOrNull(row.count + i)
+                val at = slot?.let { if (it.fixed) plusMinutes(it.at, (row.goal.minutes ?: 0).toLong()) else it.at } ?: due
+                at?.let { Due(it, row.goal.minutes) }
+            }
+            if (mine.isEmpty()) unpaced++ else units += mine
+        }
+        if (units.isEmpty()) return null
 
         var reserved = 0L
         var untimed = 0
         var best = Double.POSITIVE_INFINITY
         var short = 0L
-        for ((due, group) in paced.groupBy { it.second }.entries.sortedBy { it.key }.map { it.key to it.value }) {
-            for ((row, _) in group) {
-                val minutes = row.goal.minutes
-                if (minutes != null) reserved += minutes.toLong() * row.left else untimed += row.left
+        for ((due, group) in units.groupBy { it.at }.entries.sortedBy { it.key }.map { it.key to it.value }) {
+            for (unit in group) {
+                val minutes = unit.minutes
+                if (minutes != null) reserved += minutes.toLong() else untimed += 1
             }
             val free = minutesBetween(now, due) - reserved
             if (free < 0) short = maxOf(short, -free)
@@ -95,7 +141,7 @@ object Pace {
             untimedLeft = untimed,
             minutesEach = each,
             reservedMinutes = reserved.toInt(),
-            finishAt = paced.maxOf { it.second },
+            finishAt = units.maxOf { it.at },
             nextBy = each?.takeIf { it > 0 }?.let { plusMinutes(now, it.toLong()) },
             shortBy = short.toInt(),
             unpaced = unpaced,

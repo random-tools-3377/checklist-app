@@ -51,6 +51,16 @@ The app has no network access unless the owner decides otherwise for this app.
   optional reminder, and optionally its own celebration GIF.
 - The user can reorder goals, and rewards in the shop.
 - Counted goals, like "8 glasses", pay for each tick plus a bonus for finishing **(default)**.
+- A goal done several times a day can have a time for each one, like 9 am and 9 pm, each with
+  its own reminder. Without set times, the app spreads them evenly between when the user's day
+  starts and the finish time, and Today shows when the next one is due ("next one by 2:30 pm").
+- **Routines:** a goal with a checklist inside, like "Morning: water, stretch, make bed", ticked
+  item by item. **Details (default):** a routine is a habit; it is done, and pays its points,
+  when every item is ticked. Items pay nothing on their own, and start fresh each time it is due.
+- Icons are picked from the full standard emoji set. **Details (default):** grouped by category,
+  with search by name, a skin tone choice, and the most recent ones first. Emoji the phone can't
+  show are left out. The list comes from Unicode's emoji data (via the MIT-licensed
+  `unicode-emoji-json` package) and is bundled with the app.
 - Each step of a project pays, and finishing the project pays a bonus. A project can have a
   deadline, and missing it counts as a miss **(default)**.
 - Changing a goal applies from then on, never to the past **(default)**.
@@ -91,6 +101,8 @@ The app has no network access unless the owner decides otherwise for this app.
   assumes an end date the user hasn't set.
 - Goals due over a week, month or year, and projects with a deadline, are paced too, like "2 left,
   about one every 2 days".
+- Settings hold "My day starts at". Spreading a goal's times over the day needs it, so until it
+  is set they aren't spread.
 - Each goal can have its own finish-by time, and a date where it fits. Goals without one use the
   default finish time in Settings, and until that is set, today's list shows no pace
   **(default)**.
@@ -177,6 +189,14 @@ The app has no network access unless the owner decides otherwise for this app.
 - A home-screen widget that looks like a calendar, to see the schedule at a glance.
 - A goal with a clock time notifies at that time, and the user can add an earlier alert, like a
   calendar's "10 minutes before" **(default)**.
+- Today's tick button says what it does: "Done" for a single goal, "+1" with "0 of 2" for a goal
+  done several times.
+- Reminders can be snoozed, can keep reminding until the goal is done, and have a +1 button for
+  a goal done several times. **Details (default):** snooze for 10 minutes or 1 hour; "keep
+  reminding" repeats every 30 minutes until the goal is done or its finish time passes, set per
+  goal.
+- A morning plan: one notification when the user's day starts, with today's list and the pace
+  **(default: on once "My day starts at" is set, and can be turned off)**.
 - Notifications have Done and Skip buttons. A Skip that would go over the limit opens the app
   instead, because it needs the warning, the reason and the penalty **(default)**.
 - The widget can be resized: small shows today's agenda with times and tick buttons, larger shows
@@ -212,7 +232,11 @@ The app has no network access unless the owner decides otherwise for this app.
 
 - Export everything to a file, and import it back, through the system dialogs (`CreateDocument` and
   `OpenDocument`). Where that file goes is the user's choice.
-- The app makes no copy of its own anywhere else.
+- A backup reminder, and an automatic backup to a folder the user chooses. **Details
+  (default):** the reminder comes when the last export is over a week old, and can be turned
+  off. The automatic backup is off until the user picks a folder; then it writes a dated file
+  there once a day the app is used and keeps the last 7.
+- Apart from that folder, the app makes no copy of its own anywhere else.
 
 ## iPhone
 
@@ -262,6 +286,16 @@ Build order **(default)**, each step a Release the owner can try:
    Skip button arrives with step 4.
 4. Skips, misses, the limit and penalties, with streaks and the privacy lock.
 5. Gaps, the review screen and stats.
+6. Celebration GIFs (0.6.0).
+7. Clear tick buttons, the full emoji set, "My day starts at", times for each repetition or
+   "next one by", and the morning plan.
+8. Snooze, keep reminding and +1 on reminders; the backup reminder and automatic backup.
+9. Routines.
+10. More, chosen as useful for a schedule and checklist **(default, in this order)**: a focus
+    timer for goals with a length; a weekly summary; "every few hours" goals; the user's own
+    miss reasons; duplicating a goal and bringing back a removed one; fixing a tick's time;
+    notes on ticks; categories; charts in the review; badges; colours; a balance and streaks
+    widget; a mystery reward and a weekly points target.
 
 ## Talking to the owner
 

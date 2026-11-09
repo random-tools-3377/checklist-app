@@ -154,6 +154,14 @@ fun SettingsScreen(
             }
             Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
                 TimeSetting(
+                    label = "My day starts at",
+                    time = settings.dayStart,
+                    onChange = { vm.setDayStart(it) },
+                    tag = "setting:day-start",
+                    emptyText = "Not set",
+                    hint = "Goals done several times a day are spread out from then to the finish time, and the morning plan comes then.",
+                )
+                TimeSetting(
                     label = "Finish each day's goals by",
                     time = settings.defaultFinish,
                     onChange = { vm.setDefaultFinish(it) },
@@ -178,6 +186,25 @@ fun SettingsScreen(
             HorizontalDivider(Modifier.padding(top = 8.dp))
             Section("Notifications")
             NotificationSettings()
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text("Morning plan", style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        if (settings.dayStart == null) "Set when your day starts, above, and it comes then: today's list, what to do first, and the pace."
+                        else "When your day starts: today's list, what to do first, and the pace.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(
+                    checked = settings.morningPlan,
+                    onCheckedChange = { vm.setMorningPlan(it) },
+                    modifier = Modifier.testTag("setting:morning-plan"),
+                )
+            }
 
             HorizontalDivider(Modifier.padding(top = 8.dp))
             Section("Backup")

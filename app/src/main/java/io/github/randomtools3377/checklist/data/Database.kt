@@ -54,6 +54,8 @@ data class GoalEntity(
     @ColumnInfo(defaultValue = "0") val isPrivate: Boolean = false,
     /** Its own celebration GIF (see Celebration in the shared code). Added in version 6. */
     val celebration: String? = null,
+    /** For a habit done several times a day, a time for each one, as minutes after midnight separated by commas. Added in version 7. */
+    val times: String? = null,
 )
 
 @Entity(tableName = "steps", indices = [Index("goalId")])
@@ -463,10 +465,10 @@ interface ChecklistDao {
         PenaltyTaskEntity::class,
         GapEntity::class,
     ],
-    version = 6,
+    version = 7,
     exportSchema = true,
     // Versions 4 and 5 only add tables and columns, so Room works the migrations out from the layouts.
-    autoMigrations = [AutoMigration(from = 3, to = 4), AutoMigration(from = 4, to = 5), AutoMigration(from = 5, to = 6)],
+    autoMigrations = [AutoMigration(from = 3, to = 4), AutoMigration(from = 4, to = 5), AutoMigration(from = 5, to = 6), AutoMigration(from = 6, to = 7)],
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun dao(): ChecklistDao

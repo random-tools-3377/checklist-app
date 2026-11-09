@@ -23,10 +23,17 @@ import io.github.randomtools3377.checklist.core.Step
 import io.github.randomtools3377.checklist.core.Store
 import io.github.randomtools3377.checklist.core.Tick
 import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalTime
 
 const val SETTING_DAY_END_HOUR = "day_end_hour"
 
 fun parseDayEndHour(value: String?): Int = value?.toIntOrNull()?.coerceIn(0, Days.MAX_DAY_END_HOUR) ?: 0
+
+/** A habit's times for each repetition, as stored: minutes after midnight, separated by commas. */
+fun encodeTimes(times: List<LocalTime>): String? = times.takeIf { it.isNotEmpty() }?.joinToString(",") { (it.hour * 60 + it.minute).toString() }
+
+fun decodeTimes(text: String?): List<LocalTime> =
+    text?.split(",")?.mapNotNull { it.trim().toIntOrNull()?.takeIf { m -> m in 0 until 24 * 60 }?.let { m -> LocalTime(m / 60, m % 60) } }.orEmpty()
 
 /** The [Store] the app uses: the Room database on the phone. */
 class RoomStore(private val db: AppDatabase) : Store {
@@ -108,6 +115,7 @@ fun GoalEntity.toCore() = Goal(
     allowancePer = allowancePer?.let { Period.valueOf(it) },
     private = isPrivate,
     celebration = celebration?.takeIf { Celebration.isValid(it) },
+    times = decodeTimes(times),
     archived = archived,
     position = position,
     createdAt = createdAt,
@@ -136,6 +144,7 @@ fun Goal.toEntity() = GoalEntity(
     allowancePer = allowancePer?.name,
     isPrivate = private,
     celebration = celebration,
+    times = encodeTimes(times),
 )
 
 fun StepEntity.toCore() = Step(id = id, goalId = goalId, name = name, points = points, position = position, archived = archived)

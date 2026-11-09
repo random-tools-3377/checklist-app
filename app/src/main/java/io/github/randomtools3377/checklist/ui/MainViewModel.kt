@@ -40,6 +40,7 @@ import io.github.randomtools3377.checklist.core.PenaltyTask
 import io.github.randomtools3377.checklist.core.Reason
 import io.github.randomtools3377.checklist.core.SkipCheck
 import io.github.randomtools3377.checklist.core.SkipResult
+import io.github.randomtools3377.checklist.core.Slot
 import io.github.randomtools3377.checklist.core.StreakCounter
 import io.github.randomtools3377.checklist.core.StreakSettings
 import io.github.randomtools3377.checklist.core.StreakTarget
@@ -60,7 +61,9 @@ import io.github.randomtools3377.checklist.data.ORDER_RECOMMENDED
 import io.github.randomtools3377.checklist.data.ProjectDraft
 import io.github.randomtools3377.checklist.data.RewardDraft
 import io.github.randomtools3377.checklist.data.SETTING_DAY_END_HOUR
+import io.github.randomtools3377.checklist.data.SETTING_DAY_START
 import io.github.randomtools3377.checklist.data.SETTING_DEFAULT_FINISH
+import io.github.randomtools3377.checklist.data.SETTING_MORNING_PLAN
 import io.github.randomtools3377.checklist.data.SETTING_TODAY_ORDER
 import io.github.randomtools3377.checklist.data.nowLocal
 import io.github.randomtools3377.checklist.data.parseDayEndHour
@@ -115,6 +118,10 @@ data class TodayState(
     val streakSettings: StreakSettings,
     /** Private goals left off the list because the lock is on. */
     val hiddenPrivate: Int,
+    /** For habits done several times a day: when the next one is due, by goal. */
+    val nextSlots: Map<Long, Slot> = emptyMap(),
+    /** "My day starts at" is set, so repetitions can be spread over the day. */
+    val hasDayStart: Boolean = false,
 )
 
 /** What the privacy lock covers, as chosen in Settings. */
@@ -131,6 +138,10 @@ data class Settings(
     val dayEndHour: Int,
     val defaultFinish: LocalTime?,
     val order: String,
+    /** When the user's day starts, if set ("My day starts at"). */
+    val dayStart: LocalTime? = null,
+    /** The morning plan notification, on unless turned off. It needs [dayStart]. */
+    val morningPlan: Boolean = true,
     val streak: StreakSettings = StreakSettings(),
     val locks: Locks = Locks(),
     val gaps: GapSettings = GapSettings(),
@@ -151,7 +162,17 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             dao.observeSetting(SETTING_DAY_END_HOUR),
             dao.observeSetting(SETTING_DEFAULT_FINISH),
             dao.observeSetting(SETTING_TODAY_ORDER),
-        ) { hour, finish, order -> Triple(hour, finish, order) },
+            dao.observeSetting(SETTING_DAY_START),
+            dao.observeSetting(SETTING_MORNING_PLAN),
+        ) { hour, finish, order, start, morning ->
+            Settings(
+                dayEndHour = parseDayEndHour(hour),
+                defaultFinish = finish?.toIntOrNull()?.toTime(),
+                order = if (order == ORDER_OWN) ORDER_OWN else ORDER_RECOMMENDED,
+                dayStart = start?.toIntOrNull()?.toTime(),
+                morningPlan = morning != "0",
+            )
+        },
         combine(dao.observeSetting(SETTING_STREAK_TARGET), dao.observeSetting(SETTING_STREAK_VALUE)) { target, value ->
             val defaults = StreakSettings()
             StreakSettings(
@@ -172,15 +193,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             val defaults = GapSettings()
             GapSettings(days = days?.toIntOrNull() ?: defaults.days, points = points?.toIntOrNull() ?: defaults.points)
         },
-    ) { (hour, finish, order), streak, locks, gapSettings ->
-        Settings(
-            dayEndHour = parseDayEndHour(hour),
-            defaultFinish = finish?.toIntOrNull()?.toTime(),
-            order = if (order == ORDER_OWN) ORDER_OWN else ORDER_RECOMMENDED,
-            streak = streak,
-            locks = locks,
-            gaps = gapSettings,
-        )
+    ) { basics, streak, locks, gapSettings ->
+        basics.copy(streak = streak, locks = locks, gaps = gapSettings)
     }.state(Settings(0, null, ORDER_RECOMMENDED))
 
     /** True from unlocking until the user leaves the app. */
@@ -245,7 +259,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             val usual = raw.usual
             val records = StreakCounter.records(day.minusDays(STREAK_DAYS), day, raw.goals, raw.ticks.filter { it.stepId == null }, lapses)
             val streaks = StreakCounter.count(records, day, s.streak)
-            val paceSettings = PaceSettings(s.dayEndHour, s.defaultFinish)
+            val paceSettings = PaceSettings(s.dayEndHour, s.defaultFinish, s.dayStart)
             val pace = Pace.today(moment, day, todayView.dueToday, paceSettings)
             val recommended = s.order == ORDER_RECOMMENDED
             val plan = if (recommended) {
@@ -253,6 +267,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             } else {
                 todayView.dueToday.map { row ->
                     val at = row.goal.at?.let { Pace.on(day, it, s.dayEndHour) }
+                        ?: Pace.nextSlot(row, day, paceSettings)?.takeIf { it.fixed }?.at
                     Planned(row, at, fixed = at != null, late = at != null && !row.done && at < moment)
                 }
             }
@@ -262,9 +277,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 }
                 todayView.projects.forEach { project -> Pace.forProject(project, day)?.let { put(project.goal.id, it) } }
             }
+            val nextSlots = todayView.dueToday.mapNotNull { row -> Pace.nextSlot(row, day, paceSettings)?.let { row.goal.id to it } }.toMap()
             TodayState(
                 todayView, moment, pace, plan, recommended, longPaces, s.defaultFinish != null,
                 streaks, s.streak, hiddenPrivate = raw.goals.count { it.private && !it.archived } - shownGoals.count { it.private && !it.archived },
+                nextSlots = nextSlots,
+                hasDayStart = s.dayStart != null,
             )
         }
     }.state(null)
@@ -525,6 +543,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun setDefaultFinish(time: LocalTime?) {
         viewModelScope.launch { repository.setDefaultFinish(time) }
+    }
+
+    fun setDayStart(time: LocalTime?) {
+        viewModelScope.launch { repository.setDayStart(time) }
+    }
+
+    fun setMorningPlan(on: Boolean) {
+        viewModelScope.launch { repository.setSetting(SETTING_MORNING_PLAN, if (on) "1" else "0") }
     }
 
     fun setTodayOrder(order: String) {

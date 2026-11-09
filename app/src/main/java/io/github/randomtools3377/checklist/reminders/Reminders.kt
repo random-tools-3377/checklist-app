@@ -24,7 +24,16 @@ import io.github.randomtools3377.checklist.core.SkipCheck
 import io.github.randomtools3377.checklist.data.LOCK_PRIVATE
 import io.github.randomtools3377.checklist.core.countsToward
 import io.github.randomtools3377.checklist.core.plusDays
+import io.github.randomtools3377.checklist.core.MorningPlan
+import io.github.randomtools3377.checklist.core.PaceSettings
+import io.github.randomtools3377.checklist.core.TodayList
+import io.github.randomtools3377.checklist.core.ordinal
 import io.github.randomtools3377.checklist.data.SETTING_DAY_END_HOUR
+import io.github.randomtools3377.checklist.data.SETTING_DAY_START
+import io.github.randomtools3377.checklist.data.SETTING_DEFAULT_FINISH
+import io.github.randomtools3377.checklist.data.SETTING_MORNING_PLAN
+import io.github.randomtools3377.checklist.data.toTime
+import io.github.randomtools3377.checklist.ui.minutesText
 import io.github.randomtools3377.checklist.data.nowLocal
 import io.github.randomtools3377.checklist.data.parseDayEndHour
 import io.github.randomtools3377.checklist.data.toCore
@@ -76,8 +85,9 @@ object Reminders {
         val goals = dao.activeGoals().map { it.toCore() }
         val dayEnd = parseDayEndHour(dao.setting(SETTING_DAY_END_HOUR))
         val now = nowLocal()
-        val nextAlert = Alerts.between(goals, Pace.plusMinutes(now, 1), Pace.plusMinutes(now, LOOK_AHEAD_DAYS * 24 * 60L), dayEnd)
-            .firstOrNull()?.at
+        val from = Pace.plusMinutes(now, 1)
+        val to = Pace.plusMinutes(now, LOOK_AHEAD_DAYS * 24 * 60L)
+        val nextAlert = (Alerts.between(goals, from, to, dayEnd) + mornings(dao, from, to, dayEnd)).minOfOrNull { it.at }
         val dayTurns = LocalDateTime(Days.dayOf(now, dayEnd).plusDays(1), LocalTime(dayEnd, 0))
         val wake = listOfNotNull(nextAlert, dayTurns).min()
         setAlarm(context, wake.millis())
@@ -110,6 +120,9 @@ object Reminders {
         val goals = dao.activeGoals().map { it.toCore() }
         val dayEnd = parseDayEndHour(dao.setting(SETTING_DAY_END_HOUR))
         val due = Alerts.between(goals, since.local(), until.local(), dayEnd).filter { it.at.millis() > since }
+        if (mornings(dao, since.local(), until.local(), dayEnd).any { it.at.millis() > since }) {
+            showMorningPlan(context, dayEnd)
+        }
         if (due.isNotEmpty()) {
             val earliest = due.minOf { it.day }.startOfYear()
             val ticks = dao.habitTicksSince(earliest.toEpochDay()).map { it.toCore() }
@@ -119,7 +132,8 @@ object Reminders {
                 val goal = goals.find { it.id == alert.goalId } ?: continue
                 val window = goal.repeat?.window(alert.day) ?: continue
                 val count = ticks.count { it.countsToward(goal, window.start) }
-                if (count >= goal.target) continue
+                // One of several a day is reminded until that one is done.
+                if (count >= (if (alert.number > 0) alert.number else goal.target)) continue
                 val skips = dao.lapses(goal.id, window.start.toEpochDay(), window.end.toEpochDay())
                     .count { it.kind == "SKIP" && it.periodStart == window.start.toEpochDay() }
                 if (window.period == io.github.randomtools3377.checklist.core.Period.DAILY && skips > 0) continue
@@ -130,6 +144,76 @@ object Reminders {
         prefs.edit().putLong(LAST_FIRED, until).apply()
         reschedule(context)
     }
+
+    /** The morning plans between [from] and [to], when the day start is set and the plan is on. */
+    private suspend fun mornings(dao: io.github.randomtools3377.checklist.data.ChecklistDao, from: LocalDateTime, to: LocalDateTime, dayEnd: Int): List<Alert> {
+        if (dao.setting(SETTING_MORNING_PLAN) == "0") return emptyList()
+        val start = dao.setting(SETTING_DAY_START)?.toIntOrNull()?.toTime() ?: return emptyList()
+        return Alerts.mornings(from, to, start, dayEnd)
+    }
+
+    /** The morning plan: what is due today, what to do first, and the pace. Nothing on a day with nothing due. */
+    private suspend fun showMorningPlan(context: Context, dayEnd: Int) {
+        if (!canNotify(context)) return
+        val container = (context.applicationContext as ChecklistApplication).container
+        val dao = container.db.dao()
+        val now = nowLocal()
+        val day = Days.dayOf(now, dayEnd)
+        val hidePrivate = dao.setting(LOCK_PRIVATE) == "1"
+        val goals = dao.activeGoals().map { it.toCore() }.filter { !(hidePrivate && it.private) }
+        val since = Days.earliestOpenDay(day)
+        val ticks = dao.habitTicksSince(since.toEpochDay()).map { it.toCore() } +
+            dao.allTicks().filter { it.stepId != null }.map { it.toCore() }
+        val steps = dao.allSteps().map { it.toCore() }
+        val lapses = dao.lapsesSince(since.toEpochDay()).map { it.toCore() }
+        val view = TodayList.build(day, goals, steps, ticks, 0, lapses)
+        val settings = PaceSettings(
+            dayEndHour = dayEnd,
+            defaultFinish = dao.setting(SETTING_DEFAULT_FINISH)?.toIntOrNull()?.toTime(),
+            dayStart = dao.setting(SETTING_DAY_START)?.toIntOrNull()?.toTime(),
+        )
+        val plan = MorningPlan.of(now, view, settings) ?: return
+        val title = when (plan.goals) {
+            0 -> "Today: nothing due, ${plan.alsoOpen} still open this week"
+            1 -> "Today: 1 goal"
+            else -> "Today: ${plan.goals} goals"
+        }
+        val text = buildList {
+            plan.first?.let { first ->
+                val goal = first.row.goal
+                val at = first.time?.let { if (first.fixed) " at ${timeText(it.time)}" else "" } ?: ""
+                add("First: ${goal.icon} ${goal.name}$at")
+            }
+            plan.pace?.let { pace ->
+                pace.minutesEach?.let { add("about ${minutesText(it)} each") }
+                add("done by ${timeText(pace.finishAt.time)}")
+            }
+            if (plan.goals > 0 && plan.alsoOpen > 0) add("${plan.alsoOpen} more open this week or month")
+        }.joinToString(" · ")
+        val open = PendingIntent.getActivity(
+            context,
+            MORNING_ID,
+            Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+        val notification = NotificationCompat.Builder(context, CHANNEL)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle(title)
+            .setContentText(text)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+            .setContentIntent(open)
+            .setAutoCancel(true)
+            .setCategory(NotificationCompat.CATEGORY_REMINDER)
+            .build()
+        try {
+            NotificationManagerCompat.from(context).notify(MORNING_ID, notification)
+        } catch (e: SecurityException) {
+            // Notifications were turned off in the meantime.
+        }
+    }
+
+    /** The morning plan's notification. Goals use 1000 and up. */
+    private const val MORNING_ID = 900
 
     // Ticks from the start of the year cover every window an alert can fall in.
     private fun kotlinx.datetime.LocalDate.startOfYear() = Days.earliestOpenDay(this)
@@ -144,9 +228,11 @@ object Reminders {
             AlertKind.ON_TIME -> "Now"
             AlertKind.BEFORE -> "In ${alert.minutesBefore} min, at ${timeText(alert.at.time)}"
             AlertKind.REMINDER -> "Reminder"
+            AlertKind.MORNING -> "Your plan for today"
         }
         val details = buildList {
             add(whenText)
+            if (alert.number > 0) add("the ${ordinal(alert.number)} of ${goal.target}")
             goal.minutes?.let { add("$it min") }
             add("+${goal.points}")
             if (goal.target > 1) add("$count of ${goal.target}")
