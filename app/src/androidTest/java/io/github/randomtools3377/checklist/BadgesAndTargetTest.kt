@@ -6,6 +6,7 @@ import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -68,11 +69,13 @@ class BadgesAndTargetTest {
         app.waitFor { app.shownIn("badges", "badge-to-go:STREAK_7") }
         app.onNodeWithContentDescription("Back").performClick()
 
-        // Seen now, so Today's card has gone; undoing the tick doesn't take them away.
-        app.waitFor { app.shownIn("today-list", "undo:Run") }
-        app.tap("undo:Run")
+        // Seen now, so Today's card has gone; taking the tick back (Done again) doesn't take them away.
         app.waitFor { app.shownIn("today-list", "tick:Run") }
-        app.toTopOfToday()
+        app.tap("tick:Run")
+        app.waitFor {
+            app.toTopOfToday()
+            textOf("weekly-target-text").contains("0 of 20")
+        }
         app.waitFor { gone("new-badges") }
         app.onNodeWithTag("nav:review").performClick()
         app.waitFor { textOf("review:badges").contains("3 of") }
@@ -83,7 +86,8 @@ class BadgesAndTargetTest {
         app.onNodeWithTag("settings").performClick()
         app.waitFor { !gone("setting:weekly-target") }
         app.tap("setting:weekly-target")
-        app.onNodeWithTag("setting:weekly-target").performTextInput("0")
+        app.onNodeWithTag("setting:weekly-target").performTextClearance()
+        app.onNodeWithTag("setting:weekly-target").performTextInput("200")
         app.tap("save-weekly-target")
         app.onNodeWithContentDescription("Back").performClick()
         app.waitFor { textOf("weekly-target-text").contains("0 of 200") }
