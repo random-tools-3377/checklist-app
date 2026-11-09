@@ -3,6 +3,7 @@
 package io.github.randomtools3377.checklist.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.material3.LinearProgressIndicator
@@ -49,6 +50,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import io.github.randomtools3377.checklist.core.Badge
 import io.github.randomtools3377.checklist.core.DayRecord
 import io.github.randomtools3377.checklist.core.Gap
 import io.github.randomtools3377.checklist.core.Period
@@ -72,6 +74,8 @@ fun ReviewScreen(
     hideGapNotes: Boolean,
     onPeriod: (Period) -> Unit,
     onStep: (Int) -> Unit,
+    badges: Int,
+    onBadges: () -> Unit,
     padding: PaddingValues,
 ) {
     LazyColumn(
@@ -88,6 +92,15 @@ fun ReviewScreen(
                         shape = SegmentedButtonDefaults.itemShape(index = index, count = 3),
                         modifier = Modifier.testTag("review:$label"),
                     ) { Text(label) }
+                }
+            }
+        }
+        item {
+            Card(Modifier.fillMaxWidth().clickable(onClick = onBadges).testTag("review:badges")) {
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
+                    Text("🏅", fontSize = 24.sp, modifier = Modifier.width(40.dp))
+                    Text("Badges", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+                    Text("$badges of ${Badge.entries.size} · See all", color = MaterialTheme.colorScheme.primary)
                 }
             }
         }

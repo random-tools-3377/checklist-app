@@ -210,6 +210,10 @@ interface ChecklistDao {
     @Query("SELECT * FROM goals WHERE archived = 0 ORDER BY position, id")
     fun observeGoals(): Flow<List<GoalEntity>>
 
+    /** Changes with every tick and undo, to know when to look for new badges. */
+    @Query("SELECT COUNT(*) FROM ticks")
+    fun observeTickCount(): Flow<Int>
+
     @Query("SELECT * FROM goals WHERE id = :id")
     suspend fun goal(id: Long): GoalEntity?
 

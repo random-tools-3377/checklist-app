@@ -9,6 +9,14 @@ import io.github.randomtools3377.checklist.core.Backup
 import io.github.randomtools3377.checklist.core.BackupError
 import io.github.randomtools3377.checklist.core.BuyResult
 import io.github.randomtools3377.checklist.core.Days
+import kotlinx.coroutines.flow.collectLatest
+import io.github.randomtools3377.checklist.data.SETTING_BADGES_SEEN
+import io.github.randomtools3377.checklist.data.SETTING_BADGES
+import io.github.randomtools3377.checklist.data.SETTING_WEEKLY_TARGET
+import io.github.randomtools3377.checklist.core.WeeklyTarget
+import io.github.randomtools3377.checklist.core.WeekProgress
+import io.github.randomtools3377.checklist.core.Badges
+import io.github.randomtools3377.checklist.core.Badge
 import io.github.randomtools3377.checklist.core.Entry
 import io.github.randomtools3377.checklist.core.Categories
 import io.github.randomtools3377.checklist.core.Goal
@@ -110,6 +118,12 @@ private data class Raw(val goals: List<Goal>, val steps: List<Step>, val ticks: 
 
 /** How far back streaks are counted. */
 private const val STREAK_DAYS = 400
+
+/** The most points a week the target can ask for. */
+private const val MAX_WEEKLY_TARGET = 100_000
+
+/** How long to wait after a change before looking for new badges, so a run of changes is looked at once. */
+private const val BADGE_CHECK_DELAY_MS = 800L
 
 data class RewardRow(val reward: Reward, val usual: String?)
 
@@ -311,6 +325,69 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         val shown = if (s.locks.privateGoals && !isUnlocked) all.filter { !it.private } else all
         GoalsView(shown, steps.map { it.toCore() }.groupBy { it.goalId }, hiddenPrivate = all.size - shown.size)
     }.state(null)
+
+    // The weekly points target and badges
+
+    /** The weekly points target, 0 when not set. */
+    val weeklyTarget: StateFlow<Int> = dao.observeSetting(SETTING_WEEKLY_TARGET).map { it?.toIntOrNull()?.coerceAtLeast(0) ?: 0 }.state(0)
+
+    fun setWeeklyTarget(points: Int) {
+        viewModelScope.launch { repository.setSetting(SETTING_WEEKLY_TARGET, points.coerceIn(0, MAX_WEEKLY_TARGET).toString()) }
+    }
+
+    /** This week against the target, or null while no target is set. */
+    val weekProgress: StateFlow<WeekProgress?> = today.flatMapLatest { day ->
+        val monday = Days.periodStart(day, Period.WEEKLY)
+        combine(dao.observeEntries(monday.toEpochDay(), day.toEpochDay()), dao.observeSetting(SETTING_WEEKLY_TARGET)) { rows, target ->
+            val points = target?.toIntOrNull() ?: 0
+            if (points <= 0) null else WeeklyTarget.progress(rows.map { it.toCore() }, day, points)
+        }
+    }.state(null)
+
+    /** Badges earned, each with the day it was first earned. */
+    val badges: StateFlow<Map<Badge, LocalDate>> = dao.observeSetting(SETTING_BADGES).map { Badges.decode(it) }.state(emptyMap())
+
+    /** Badges earned since the user last looked, for the card on Today. */
+    val newBadges: StateFlow<List<Badge>> = combine(dao.observeSetting(SETTING_BADGES), dao.observeSetting(SETTING_BADGES_SEEN)) { earned, seen ->
+        val seenNames = seen.orEmpty().split(",").toSet()
+        Badges.decode(earned).keys.filter { it.name !in seenNames }.sortedBy { it.ordinal }
+    }.state(emptyList())
+
+    fun badgesSeen() {
+        viewModelScope.launch {
+            val earned = Badges.decode(dao.setting(SETTING_BADGES)).keys
+            repository.setSetting(SETTING_BADGES_SEEN, earned.joinToString(",") { it.name })
+        }
+    }
+
+    init {
+        // Looks for new badges a moment after each tick, undo or change of day.
+        viewModelScope.launch {
+            combine(today, dao.observeBalance(), dao.observeTickCount(), settings, dao.observeSetting(SETTING_WEEKLY_TARGET)) { day, _, _, s, target ->
+                Triple(day, s.streak, target?.toIntOrNull() ?: 0)
+            }.collectLatest { (day, streak, target) ->
+                delay(BADGE_CHECK_DELAY_MS)
+                findBadges(day, streak, target)
+            }
+        }
+    }
+
+    private suspend fun findBadges(day: LocalDate, streak: StreakSettings, target: Int) {
+        val ticks = dao.allTicks().map { it.toCore() }
+        if (ticks.isEmpty()) return
+        val goals = dao.allGoals().map { it.toCore() }
+        val steps = dao.allSteps().map { it.toCore() }
+        val entries = dao.allEntries().map { it.toCore() }
+        val lapses = dao.allLapses().map { it.toCore() }
+        val earned = withContext(Dispatchers.Default) {
+            val from = maxOf(ticks.minOf { it.day }, day.minusDays(STREAK_DAYS))
+            val records = StreakCounter.records(from, day, goals.filter { !it.archived }, ticks.filter { it.stepId == null }, lapses)
+            Badges.earned(day, records, streak, goals, steps, ticks, entries, target)
+        }
+        val kept = Badges.decode(dao.setting(SETTING_BADGES))
+        val merged = Badges.merge(kept, earned)
+        if (merged.size > kept.size) repository.setSetting(SETTING_BADGES, Badges.encode(merged))
+    }
 
     // Skips, misses and penalties
 

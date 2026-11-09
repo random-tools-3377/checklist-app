@@ -21,6 +21,8 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.foundation.layout.Arrangement
 import io.github.randomtools3377.checklist.core.Categories
+import io.github.randomtools3377.checklist.core.WeekProgress
+import io.github.randomtools3377.checklist.core.Badge
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
@@ -93,6 +95,7 @@ fun TodayScreen(
     onHistory: () -> Unit,
     onSettings: () -> Unit,
     onUnlock: () -> Unit,
+    onBadges: () -> Unit,
     skipRequest: Long?,
     onSkipRequestHandled: () -> Unit,
     padding: PaddingValues,
@@ -100,6 +103,8 @@ fun TodayScreen(
     if (screen == null) return
     val view = screen.view
     val backup by vm.backupState.collectAsStateWithLifecycle()
+    val week by vm.weekProgress.collectAsStateWithLifecycle()
+    val newBadges by vm.newBadges.collectAsStateWithLifecycle()
     var editingTick by remember { mutableStateOf<Long?>(null) }
     editingTick?.let { id -> EditTickDialog(id, vm) { editingTick = null } }
     val haptics = LocalHapticFeedback.current
@@ -172,6 +177,14 @@ fun TodayScreen(
             Text(longDate(view.day), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(bottom = 8.dp))
             BalanceCard(view.balance, modifier = Modifier.clickable(onClick = onHistory), note = "Tap for your points history")
             Spacer(Modifier.height(12.dp))
+            week?.let {
+                WeeklyTargetCard(it)
+                Spacer(Modifier.height(12.dp))
+            }
+            if (newBadges.isNotEmpty()) {
+                NewBadgesCard(newBadges, onSee = onBadges, onDismiss = vm::badgesSeen)
+                Spacer(Modifier.height(12.dp))
+            }
             backup.due?.let { days ->
                 BackupReminderCard(days, onBackUp = onSettings, onLater = vm::backupLater)
                 Spacer(Modifier.height(12.dp))
@@ -686,5 +699,50 @@ private fun StepLine(step: StepRow, onTick: (Spot) -> Unit, onUndo: () -> Unit) 
             color = if (step.done) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
         )
         Text("+${step.step.points}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+/** How far along the week is toward the weekly points target. */
+@Composable
+private fun WeeklyTargetCard(week: WeekProgress) {
+    Card(Modifier.fillMaxWidth().testTag("weekly-target")) {
+        Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+            Text(
+                (if (week.reached) "🎯 " else "") + week.describe(),
+                style = MaterialTheme.typography.titleSmall,
+                color = if (week.reached) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.testTag("weekly-target-text"),
+            )
+            Spacer(Modifier.height(6.dp))
+            LinearProgressIndicator(progress = { week.share }, modifier = Modifier.fillMaxWidth())
+        }
+    }
+}
+
+/** Badges earned since the user last looked. */
+@Composable
+private fun NewBadgesCard(badges: List<Badge>, onSee: () -> Unit, onDismiss: () -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth().testTag("new-badges"),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+    ) {
+        Column(Modifier.padding(16.dp)) {
+            val color = MaterialTheme.colorScheme.onSecondaryContainer
+            Text(
+                if (badges.size == 1) "New badge: ${badges[0].icon} ${badges[0].title}" else "${badges.size} new badges",
+                style = MaterialTheme.typography.titleMedium,
+                color = color,
+            )
+            if (badges.size > 1) {
+                Text(badges.joinToString("  ") { it.icon }, fontSize = 26.sp, color = color)
+            } else {
+                Text(badges[0].how, style = MaterialTheme.typography.bodyMedium, color = color)
+            }
+            Row(Modifier.padding(top = 8.dp)) {
+                Button(onClick = onSee, modifier = Modifier.testTag("see-badges")) { Text("See badges") }
+                Spacer(Modifier.width(8.dp))
+                TextButton(onClick = onDismiss, modifier = Modifier.testTag("badges-ok")) { Text("OK") }
+            }
+        }
     }
 }

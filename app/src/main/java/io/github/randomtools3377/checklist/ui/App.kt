@@ -98,6 +98,7 @@ fun ChecklistApp(vm: MainViewModel = viewModel()) {
     val unlock = rememberUnlock(vm)
     val gap by vm.unansweredGap.collectAsStateWithLifecycle()
     val removedGoals by vm.removedGoals.collectAsStateWithLifecycle()
+    val badges by vm.badges.collectAsStateWithLifecycle()
     val tickNotes by vm.tickNotes.collectAsStateWithLifecycle()
     val review by vm.review.collectAsStateWithLifecycle()
     val reviewPeriod by vm.reviewPeriod.collectAsStateWithLifecycle()
@@ -176,6 +177,11 @@ fun ChecklistApp(vm: MainViewModel = viewModel()) {
             "removed" -> RemovedGoalsScreen(removedGoals, onRestore = { vm.restoreGoal(it.id) }, onBack = ::pop)
             "reward" -> androidx.compose.runtime.key(route) { RewardEditor(id, vm, onClose = ::pop) }
             "settings" -> SettingsScreen(settings, vm, onBack = ::pop)
+            "badges" -> if (settings.locks.review && !unlocked) {
+                LockedPanel("The badges page", unlock, Modifier)
+            } else {
+                BadgesScreen(badges, onSeen = vm::badgesSeen, onBack = ::pop)
+            }
             "history" -> HistoryScreen(
                 history,
                 gaps = if (settings.locks.gaps && !unlocked) emptyList() else allGaps,
@@ -215,6 +221,7 @@ fun ChecklistApp(vm: MainViewModel = viewModel()) {
                             onHistory = { push("history") },
                             onSettings = { push("settings") },
                             onUnlock = unlock,
+                            onBadges = { push("badges") },
                             skipRequest = skipRequest,
                             onSkipRequestHandled = vm::clearSkipRequest,
                             padding = padding,
@@ -240,6 +247,8 @@ fun ChecklistApp(vm: MainViewModel = viewModel()) {
                                 hideGapNotes = settings.locks.gaps && !unlocked,
                                 onPeriod = { vm.reviewPeriod.value = it; vm.reviewDay.value = null },
                                 onStep = vm::reviewStep,
+                                badges = badges.size,
+                                onBadges = { push("badges") },
                                 padding = padding,
                             )
                         }

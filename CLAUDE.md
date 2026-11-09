@@ -300,6 +300,14 @@ Build order **(default)**, each step a Release the owner can try:
     user types on a goal or picks from the ones in use; Today can show one category at a time,
     and the review sums each one up. The week and month reviews chart each day: how much of
     what was due got done, and points earned above the line with points lost below it.
+    Badges are milestones earned once and kept, found from the user's own history: the first
+    tick, 100 and 1,000 ticks, a perfect day and a perfect week, main streaks of 7, 30, 100 and
+    365 days, 100, 1,000 and 10,000 points earned, the first reward bought, the first project
+    finished, and reaching the weekly target once and 4 weeks in a row. New ones show as a card
+    on Today, not full screen. The weekly points target is a number the user sets in Settings,
+    counted Monday to Sunday from points earned (ticks, bonuses and refunds); Today shows how far
+    along it is, the weekly summary says whether it was reached, and reaching it pays nothing
+    extra.
 11. Customising the look, after all of step 10. Decided: dark mode choices (light, dark, follow
     the phone, pure black); an accent colour from a palette, any colour from a colour picker,
     or matched to the wallpaper; a colour for each goal (its card, the calendar, the widget),

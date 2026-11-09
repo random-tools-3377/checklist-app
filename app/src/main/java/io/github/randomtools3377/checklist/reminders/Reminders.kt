@@ -21,6 +21,7 @@ import io.github.randomtools3377.checklist.core.Days
 import io.github.randomtools3377.checklist.core.Goal
 import io.github.randomtools3377.checklist.core.Pace
 import io.github.randomtools3377.checklist.core.SkipCheck
+import io.github.randomtools3377.checklist.data.SETTING_WEEKLY_TARGET
 import io.github.randomtools3377.checklist.data.LOCK_PRIVATE
 import io.github.randomtools3377.checklist.core.countsToward
 import io.github.randomtools3377.checklist.core.plusDays
@@ -269,7 +270,7 @@ object Reminders {
             gaps = dao.allGaps().map { it.toCore() },
         )
         val locked = dao.setting(LOCK_REVIEW) == "1"
-        val text = if (locked) "Your weekly review is ready." else WeeklySummary.of(review).describe()
+        val text = if (locked) "Your weekly review is ready." else WeeklySummary.of(review).describe(dao.setting(SETTING_WEEKLY_TARGET)?.toIntOrNull() ?: 0)
         val open = PendingIntent.getActivity(
             context,
             WEEKLY_ID,

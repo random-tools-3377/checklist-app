@@ -22,6 +22,12 @@ const val SETTING_MORNING_PLAN = "morning_plan"
 const val SETTING_SNOOZE = "snooze_minutes"
 const val SETTING_WEEKLY = "weekly_summary"
 const val SETTING_OWN_REASONS = "own_reasons"
+/** Points to earn each week; 0 or missing for none. */
+const val SETTING_WEEKLY_TARGET = "weekly_target"
+/** Badges earned, with the day each was first earned (see Badges in the shared code). */
+const val SETTING_BADGES = "badges"
+/** The badges the user has already been shown. */
+const val SETTING_BADGES_SEEN = "badges_seen"
 const val DEFAULT_SNOOZE_MINUTES = 10
 const val SETTING_TODAY_ORDER = "today_order"
 const val ORDER_RECOMMENDED = "recommended"

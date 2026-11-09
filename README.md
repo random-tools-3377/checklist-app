@@ -47,6 +47,7 @@ keeps the data.
   and bringing back a removed one.
 - 0.11.0: the user's own miss reasons, notes on ticks, and fixing when a tick was done.
 - 0.12.0: categories for goals, shown one at a time on Today, and charts in the review.
+- 0.13.0: badges for milestones, and a weekly points target on Today.
 
 Next: more features (the list is in CLAUDE.md). The iPhone app waits for a way to install it.
 

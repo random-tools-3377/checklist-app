@@ -182,6 +182,10 @@ fun SettingsScreen(
             StreakSettingsRow(settings.streak) { vm.setStreakSettings(it) }
 
             HorizontalDivider(Modifier.padding(top = 8.dp))
+            Section("Weekly points target")
+            WeeklyTargetSetting(vm)
+
+            HorizontalDivider(Modifier.padding(top = 8.dp))
             Section("Penalty tasks")
             PenaltyTaskList(vm)
 
@@ -633,6 +637,34 @@ private fun PenaltyTaskList(vm: MainViewModel) {
                 },
                 enabled = newTask.isNotBlank(),
             ) { Text("Add") }
+        }
+    }
+}
+
+/** Points to earn each week, Monday to Sunday, shown on Today. Empty for none. */
+@Composable
+private fun WeeklyTargetSetting(vm: MainViewModel) {
+    val target by vm.weeklyTarget.collectAsState()
+    var text by remember(target) { mutableStateOf(if (target > 0) target.toString() else "") }
+    Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+        Text(
+            "Points to earn each week, Monday to Sunday. Today shows how far along you are. Leave it empty for none.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            NumberField(
+                label = "Points a week",
+                value = text,
+                onValueChange = { text = it.take(5) },
+                tag = "setting:weekly-target",
+                modifier = Modifier.weight(1f),
+            )
+            TextButton(
+                onClick = { vm.setWeeklyTarget(text.toIntOrNull() ?: 0) },
+                enabled = text != (if (target > 0) target.toString() else ""),
+                modifier = Modifier.testTag("save-weekly-target"),
+            ) { Text("Set") }
         }
     }
 }

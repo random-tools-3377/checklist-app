@@ -33,5 +33,7 @@ class WeeklyAndHoursTest {
             reasons = emptyList(), earned = 27, spent = 0, lost = 5, days = emptyList(), gaps = emptyList(), weekdays = emptyMap(),
         )
         assertEquals("11 of 14 done (78%) · +27 points · −5 lost · 2 missed · 1 skipped · best: 💧 Water", WeeklySummary.of(review).describe())
+        assertEquals("11 of 14 done (78%) · +27 points · 🎯 27 of 50 · −5 lost · 2 missed · 1 skipped · best: 💧 Water", WeeklySummary.of(review).describe(target = 50))
+        assertEquals("11 of 14 done (78%) · +27 points · 🎯 target reached · −5 lost · 2 missed · 1 skipped · best: 💧 Water", WeeklySummary.of(review).describe(target = 20))
     }
 }

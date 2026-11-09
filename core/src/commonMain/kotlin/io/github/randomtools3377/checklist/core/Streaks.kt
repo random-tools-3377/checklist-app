@@ -43,6 +43,19 @@ object StreakCounter {
     fun records(from: LocalDate, to: LocalDate, goals: List<Goal>, ticks: List<Tick>, lapses: List<Lapse>): List<DayRecord> {
         val habits = goals.filter { it.kind == GoalKind.HABIT && it.repeat != null }
         val lapsesByDay = lapses.filter { !it.forgotten }.groupBy { it.day }
+        // Counted once up front, so a long stretch of history stays quick to go through.
+        val tickCounts = HashMap<Triple<Long, Period?, LocalDate>, Int>()
+        for (tick in ticks) {
+            if (tick.stepId != null) continue
+            val key = Triple(tick.goalId, tick.period, tick.periodStart)
+            tickCounts[key] = (tickCounts[key] ?: 0) + 1
+        }
+        val skipCounts = HashMap<Pair<Long, LocalDate>, Int>()
+        for (lapse in lapses) {
+            if (lapse.forgotten || lapse.kind != LapseKind.SKIP) continue
+            val key = lapse.goalId to lapse.periodStart
+            skipCounts[key] = (skipCounts[key] ?: 0) + 1
+        }
         val records = mutableListOf<DayRecord>()
         var day = from
         while (day <= to) {
@@ -52,8 +65,8 @@ object StreakCounter {
                 val window = goal.repeat!!.window(day) ?: continue
                 if (window.end != day) continue
                 due++
-                val count = ticks.count { it.countsToward(goal, window.start) }
-                val skips = lapses.count { it.goalId == goal.id && it.kind == LapseKind.SKIP && it.periodStart == window.start && !it.forgotten }
+                val count = tickCounts[Triple(goal.id, goal.period, window.start)] ?: 0
+                val skips = skipCounts[goal.id to window.start] ?: 0
                 val finished = if (window.period == Period.DAILY) count >= goal.target || skips > 0 else count + skips >= goal.target
                 if (finished) done++
             }
@@ -71,7 +84,7 @@ object StreakCounter {
         return records
     }
 
-    private fun meetsTarget(record: DayRecord, settings: StreakSettings): Boolean = when (settings.target) {
+    internal fun meetsTarget(record: DayRecord, settings: StreakSettings): Boolean = when (settings.target) {
         StreakTarget.COUNT -> record.done >= minOf(settings.value, record.due)
         StreakTarget.PERCENT -> record.done * 100 >= settings.value * record.due
     }
