@@ -102,3 +102,52 @@ class AmountsTest {
         assertEquals("0 of 1 mile", Amounts.progressText(0.0, Goal(kind = GoalKind.HABIT, name = "Walk", icon = "🚶", points = 2, repeat = null, amount = 1.0, unit = "mile")))
     }
 }
+
+class AmountsMoreThanOnceTest {
+    private val store = MemoryStore()
+    private val clock = TestClock(LocalDateTime(2026, 11, 9, 10, 0)) // Monday
+    private val book = Book(store, clock) { kotlinx.datetime.TimeZone.UTC }
+
+    private fun walks() = store.addGoal(
+        Goal(
+            kind = GoalKind.HABIT, name = "Walk", icon = "🚶", points = 3, bonus = 5, target = 3, amount = 1.0, unit = "mile",
+            repeat = Repeat(RepeatKind.TIMES_PER, LocalDate(2026, 1, 1), per = Period.WEEKLY),
+        ),
+    )
+
+    @Test
+    fun eachWholeAmountIsATimeAndPays() = runTest {
+        val walk = walks()
+        val half = book.logAmount(walk.id, 0.5) as TickResult.Ticked
+        assertEquals(0, half.points)
+        val more = book.logAmount(walk.id, 1.0) as TickResult.Ticked // 1.5 miles: one time done
+        assertEquals(3, more.points)
+        assertFalse(more.finished)
+        val row = TodayList.build(LocalDate(2026, 11, 9), store.goals, store.steps, store.ticks, 3).thisWeek.single()
+        assertEquals(1, row.count)
+        assertEquals("1 of 3 times · 0.5 of 1 mile on the next", Amounts.progressText(row.progress, walk))
+        assertEquals(1.5, row.amountLeft)
+
+        // A long walk can make the rest at once; the last time pays the bonus too.
+        val rest = book.logAmount(walk.id, 1.5) as TickResult.Ticked
+        assertEquals(6, rest.points)
+        assertEquals(5, rest.bonus)
+        assertTrue(rest.finished)
+        assertEquals(3 + 6 + 5, book.balance())
+        assertEquals(TickResult.AlreadyDone, book.logAmount(walk.id, 1.0))
+    }
+
+    @Test
+    fun doneFinishesTheTimeBeingWorkedOnAndUndoTakesItBack() = runTest {
+        val walk = walks()
+        book.logAmount(walk.id, 0.25)
+        val done = book.tickHabit(walk.id) as TickResult.Ticked
+        assertEquals(0.75, store.ticks.last().amount)
+        assertEquals(3, done.points)
+        book.tickHabit(walk.id) // a second whole mile
+        assertEquals(1.0, store.ticks.last().amount)
+        assertEquals(6, book.balance())
+        assertTrue(book.undoHabitTick(walk.id))
+        assertEquals(3, book.balance())
+    }
+}

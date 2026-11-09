@@ -9,6 +9,9 @@ import io.github.randomtools3377.checklist.core.Lapses
 import io.github.randomtools3377.checklist.core.PointsName
 import io.github.randomtools3377.checklist.ui.PointsLabel
 import kotlinx.coroutines.withContext
+import io.github.randomtools3377.checklist.reminders.TimingNotice
+import io.github.randomtools3377.checklist.data.LOCK_PRIVATE
+import io.github.randomtools3377.checklist.data.SETTING_STOPWATCH
 import io.github.randomtools3377.checklist.data.SETTING_APP_ICON
 import io.github.randomtools3377.checklist.data.SETTING_POINTS_NAME
 import io.github.randomtools3377.checklist.data.BackgroundPhoto
@@ -77,6 +80,20 @@ class Container(app: Application) {
             db.dao().observeSetting(SETTING_APP_ICON).collect { name ->
                 val icon = AppIcons.of(name)
                 if (AppIcons.current(app) != icon) runCatching { AppIcons.apply(app, icon) }
+            }
+        }
+        // While a goal is being timed, a notification shows the time running, with Stop.
+        scope.launch {
+            db.dao().observeSetting(SETTING_STOPWATCH).collect { text ->
+                val parts = text?.split("|")?.takeIf { it.size == 2 }
+                val goal = parts?.get(0)?.toLongOrNull()?.let { db.dao().goal(it) }
+                val startedAt = parts?.get(1)?.toLongOrNull()
+                if (goal == null || startedAt == null) {
+                    TimingNotice.hide(app)
+                } else {
+                    val hidden = goal.isPrivate && db.dao().setting(LOCK_PRIVATE) == "1"
+                    TimingNotice.show(app, goal.id, if (hidden) "A private goal" else "${goal.icon} ${goal.name}", startedAt)
+                }
             }
         }
         // What points are called, for the screens, the widgets and the notifications alike.

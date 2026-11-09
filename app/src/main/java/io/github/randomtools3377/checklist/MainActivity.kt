@@ -56,6 +56,12 @@ class MainActivity : FragmentActivity() {
             vm.openTab.value = tab
             intent.removeExtra(EXTRA_OPEN)
         }
+        val timed = intent?.getLongExtra(EXTRA_STOP_TIMING, -1) ?: -1
+        if (timed >= 0) {
+            vm.openTab.value = "today"
+            vm.stopRequest.value = timed
+            intent?.removeExtra(EXTRA_STOP_TIMING)
+        }
     }
 
     companion object {
@@ -64,5 +70,8 @@ class MainActivity : FragmentActivity() {
 
         /** Opens a tab, like "review" from the weekly summary. */
         const val EXTRA_OPEN = "open_tab"
+
+        /** Stop on the timing notification: asks how much of this goal was done. */
+        const val EXTRA_STOP_TIMING = "stop_timing"
     }
 }

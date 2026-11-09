@@ -468,7 +468,7 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Long)
         else -> null
     }
     val routine = !hasAmount && items.any { it.name.isNotBlank() }
-    val targetError = if (!routine && !hasAmount && (targetValue == null || targetValue !in 1..999)) "From 1 to 999" else null
+    val targetError = if (!routine && (targetValue == null || targetValue !in 1..999)) "From 1 to 999" else null
     val end = endDay
     val repeatError = when {
         repeat == null -> "Finish choosing how often"
@@ -476,7 +476,7 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Long)
         else -> null
     }
     val minutesValue = minutes.toIntOrNull()?.takeIf { it > 0 }
-    val counted = !routine && !hasAmount && (targetValue ?: 1) > 1
+    val counted = !routine && (targetValue ?: 1) > 1
     // Done several times on each day it's due: it can have a time for each one.
     val severalADay = counted && choice != RepeatChoice.TIMES_PER
     val eachTimesSet = if (severalADay && eachTimeOn) eachTimes.filter { it >= 0 }.distinct().sorted().take(targetValue ?: 1) else emptyList()
@@ -495,7 +495,7 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Long)
                         icon = icon,
                         points = points.toInt(),
                         repeat = repeat,
-                        target = if (routine || hasAmount) 1 else targetValue ?: 1,
+                        target = if (routine) 1 else targetValue ?: 1,
                         bonus = if (counted) bonus.toIntOrNull() ?: 0 else 0,
                         minutes = minutesValue,
                         at = if (severalADay) null else atMinute?.toTime(),
@@ -660,11 +660,11 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Long)
         }
         Text(
             if (showErrors && amountError != null) amountError
-            else "Like 20 pages, 3 chapters or 1 mile. You enter how much you did each time, and it's done, and pays its ${pointsWord()}, when this is reached.",
+            else "Like 20 pages, 3 chapters or 1 mile. You enter how much you did as you go, and it's done, and pays its ${pointsWord()}, when this is reached. Done more than once (below), each time needs the whole amount.",
             style = MaterialTheme.typography.bodySmall,
             color = if (showErrors && amountError != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        if (!routine && !hasAmount) {
+        if (!routine) {
             NumberField(
                 label = if (choice == RepeatChoice.TIMES_PER) "Times per $perWord" else "Times each day it's due",
                 value = target,
@@ -726,7 +726,7 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Long)
                 }
             }.orEmpty()
             NumberField(
-                label = "Time to budget for all of it, in minutes",
+                label = if ((targetValue ?: 1) > 1) "Time to budget for each one, in minutes" else "Time to budget for all of it, in minutes",
                 value = minutes,
                 onValueChange = { minutes = it },
                 tag = "field:minutes",

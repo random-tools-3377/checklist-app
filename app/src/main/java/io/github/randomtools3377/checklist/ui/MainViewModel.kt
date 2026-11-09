@@ -928,6 +928,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         Stopwatch(goalId, startedAt)
     }.state(null)
 
+    /** Stop pressed on the timing notification, for this goal: Today asks how much was done. */
+    val stopRequest = MutableStateFlow<Long?>(null)
+
     fun startStopwatch(goalId: Long) {
         viewModelScope.launch { repository.setSetting(SETTING_STOPWATCH, "$goalId|${System.currentTimeMillis()}") }
     }

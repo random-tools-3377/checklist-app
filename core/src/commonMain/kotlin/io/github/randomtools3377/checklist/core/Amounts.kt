@@ -22,6 +22,13 @@ object Amounts {
     /** Reached, allowing for rounding in decimals. */
     fun reached(progress: Double, amount: Double): Boolean = progress >= amount - 1e-6
 
+    /** How many whole amounts [progress] makes, allowing for rounding in decimals. */
+    fun times(progress: Double, amount: Double): Int = if (amount <= 0) 0 else kotlin.math.floor(progress / amount + 1e-6).toInt()
+
+    /** What is left of the time being worked on now: the rest of the current whole amount. */
+    fun leftOfThisTime(progress: Double, amount: Double): Double =
+        ((times(progress, amount) + 1) * amount - progress).coerceAtLeast(0.0).let { if (it < 1e-6) amount else it }
+
     /** A positive amount rounded to two decimals, or null if it isn't one. */
     fun tidy(amount: Double): Double? =
         amount.takeIf { it.isFinite() && it > 0 }?.coerceAtMost(MAX)?.let { (it * 100).roundToLong() / 100.0 }?.takeIf { it > 0 }
@@ -37,9 +44,19 @@ object Amounts {
         return if (text.contains('.')) text.trimEnd('0').trimEnd('.') else text
     }
 
-    /** "12 of 20 pages". */
-    fun progressText(progress: Double, goal: Goal): String =
-        "${format(progress)} of ${format(goal.amount ?: 0.0)}" + (goal.unit?.takeIf { it.isNotBlank() }?.let { " $it" } ?: "")
+    /**
+     * "12 of 20 pages", or for a goal done more than once, "1 of 3 times · 0.5 of 1 mile on the
+     * next".
+     */
+    fun progressText(progress: Double, goal: Goal): String {
+        val amount = goal.amount ?: 0.0
+        val unit = goal.unit?.takeIf { it.isNotBlank() }?.let { " $it" } ?: ""
+        if (goal.target <= 1) return "${format(progress)} of ${format(amount)}$unit"
+        val done = times(progress, amount).coerceAtMost(goal.target)
+        if (done >= goal.target) return "$done of ${goal.target} times"
+        val partial = (progress - done * amount).coerceAtLeast(0.0)
+        return "$done of ${goal.target} times · ${format(partial)} of ${format(amount)}$unit on the next"
+    }
 
     /**
      * The user's usual minutes for one unit, from the latest [TIMINGS] timed entries of a goal, or
@@ -53,8 +70,8 @@ object Amounts {
     }
 
     /**
-     * Minutes to budget for what is [left] of [goal]'s amount: its share of the typed time if
-     * there is one, otherwise the usual speed, otherwise unknown.
+     * Minutes to budget for what is [left] of [goal]'s amount: its share of the typed time (for
+     * one whole amount) if there is one, otherwise the usual speed, otherwise unknown.
      */
     fun minutesFor(goal: Goal, left: Double, minutesPerUnit: Double?): Int? {
         val amount = goal.amount ?: return null

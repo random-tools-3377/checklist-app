@@ -17,8 +17,8 @@ data class HabitRow(
     /** For a goal with an amount: how much has been entered in this window. */
     val progress: Double = 0.0,
 ) {
-    /** For a goal with an amount: how much is left to do in this window. */
-    val amountLeft: Double get() = ((goal.amount ?: 0.0) - progress).coerceAtLeast(0.0)
+    /** For a goal with an amount: how much is left to do in this window, every time of it. */
+    val amountLeft: Double get() = ((goal.amount ?: 0.0) * goal.target - progress).coerceAtLeast(0.0)
 
     val isRoutine: Boolean get() = items.isNotEmpty()
     val skipped: Boolean get() = skips > 0 && count < goal.target

@@ -332,6 +332,16 @@ Build order **(default)**, each step a Release the owner can try:
     code box, and the app builds the whole theme from the picked colour so text stays
     readable**)**.
 12. Goals with an amount in the user's own unit (0.20.0).
+13. Next, chosen by the owner: a timer notification while Start and Stop runs, with Stop on it;
+    amounts more than once (like 1 mile, 3 times a week); a planner to see and plan the coming
+    days; moving one day's goal to another day; quick to-dos; and a first-run guide, search in
+    the Goals list and app shortcuts. Decided: moving a goal to another day is free, but only to
+    another day in the same Monday-to-Sunday week, and if it isn't done on the new day that is a
+    miss as usual. A to-do left undone past its date is a miss, with a reason, the allowance and
+    penalties, like any goal; to-dos pay points. **Details (default):** a to-do's date is
+    optional, and one without a date is never missed; to-dos share one allowance between them;
+    each time of an amount goal done more than once needs the whole amount, and amounts entered
+    add up across entries.
 
 ## Talking to the owner
 

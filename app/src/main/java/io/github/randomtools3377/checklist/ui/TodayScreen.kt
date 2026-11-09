@@ -118,6 +118,17 @@ fun TodayScreen(
     // For a goal with an amount: the box to enter how much, and the running timing.
     val stopwatch by vm.stopwatch.collectAsStateWithLifecycle()
     var entering by remember { mutableStateOf<AmountRequest?>(null) }
+    // Stop on the timing notification: ask how much was done, with the time it took.
+    val stopRequest by vm.stopRequest.collectAsStateWithLifecycle()
+    LaunchedEffect(stopRequest, stopwatch) {
+        val goalId = stopRequest ?: return@LaunchedEffect
+        val running = stopwatch ?: return@LaunchedEffect
+        if (running.goalId == goalId) {
+            val seconds = ((System.currentTimeMillis() - running.startedAt) / 1000).toInt().coerceAtLeast(1)
+            entering = AmountRequest(goalId, seconds, Spot())
+        }
+        vm.stopRequest.value = null
+    }
     val newBadges by vm.newBadges.collectAsStateWithLifecycle()
     var editingTick by remember { mutableStateOf<Long?>(null) }
     editingTick?.let { id -> EditTickDialog(id, vm) { editingTick = null } }
@@ -238,6 +249,9 @@ fun TodayScreen(
                             } else {
                                 celebrateTick(result, request.spot, bigWhenFinished = true)
                             }
+                        } else if (result.points > 0) {
+                            // One whole time of a goal done more than once.
+                            celebrateTick(result, request.spot, bigWhenFinished = false)
                         } else {
                             celebrations.burst(request.spot.center, "+" + io.github.randomtools3377.checklist.core.Amounts.format(amount) + (row.goal.unit?.let { " $it" } ?: ""))
                         }

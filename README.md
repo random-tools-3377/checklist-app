@@ -60,6 +60,8 @@ keeps the data.
 - 0.19.0: app icon choices, and the widgets solid in the app's colours or see-through.
 - 0.20.0: goals with an amount in the user's own unit, like 20 pages or 1 mile, entered as they
   go, with a typed time to budget or a usual speed learned from Start and Stop.
+- 0.21.0: a notification while timing, with Stop on it, and amounts more than once, like 1 mile
+  3 times a week.
 
 Every step in CLAUDE.md's build order is built. The iPhone app waits for a way to install it.
 
