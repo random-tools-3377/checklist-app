@@ -51,19 +51,20 @@ class CategoriesAndChartsTest {
     fun todayShowsOneCategoryAtATime() {
         // "health" joined "Health" rather than starting a second one.
         assertEquals("Health", categoryOf("Water"))
-        app.waitFor { !gone("today-category:Home") }
+        // The chips sit below the cards at the top of Today, so scroll to them first.
+        app.waitFor { app.shownIn("today-list", "today-category:Home") }
         app.waitFor { app.shownIn("today-list", "tick:Run") }
 
-        app.toTopOfToday()
+        app.waitFor { app.shownIn("today-list", "today-category:Home") }
         app.tap("today-category:Home")
         app.waitFor { app.shownIn("today-list", "tick:Dishes") && !app.shownIn("today-list", "tick:Run") }
         app.waitFor { !app.shownIn("today-list", "tick:Read") }
 
-        app.toTopOfToday()
+        app.waitFor { app.shownIn("today-list", "today-category:Health") }
         app.tap("today-category:Health")
         app.waitFor { app.shownIn("today-list", "tick:Water") && !app.shownIn("today-list", "tick:Dishes") }
 
-        app.toTopOfToday()
+        app.waitFor { app.shownIn("today-list", "today-category:All") }
         app.tap("today-category:All")
         app.waitFor { app.shownIn("today-list", "tick:Read") && app.shownIn("today-list", "tick:Dishes") }
     }
