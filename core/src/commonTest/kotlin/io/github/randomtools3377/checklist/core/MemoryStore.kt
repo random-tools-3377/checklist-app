@@ -44,6 +44,7 @@ class MemoryStore : Store {
     override suspend fun updateEntry(entry: Entry) { entries[entries.indexOfFirst { it.id == entry.id }] = entry }
     override suspend fun removeEntry(entryId: Long) { entries.removeAll { it.id == entryId } }
     override suspend fun balance(): Int = entries.sumOf { it.amount }
+    override suspend fun balanceOn(day: LocalDate): Int = entries.filter { it.day <= day }.sumOf { it.amount }
     override suspend fun reward(id: Long): Reward? = rewards.find { it.id == id }
     override suspend fun purchase(id: Long): Purchase? = purchases.find { it.id == id }
     override suspend fun addPurchase(purchase: Purchase): Long = nextId++.also { purchases += purchase.copy(id = it) }

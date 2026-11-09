@@ -111,6 +111,7 @@ fun ChecklistApp(vm: MainViewModel = viewModel()) {
     val gap by vm.unansweredGap.collectAsStateWithLifecycle()
     val removedGoals by vm.removedGoals.collectAsStateWithLifecycle()
     val doneList by vm.doneList.collectAsStateWithLifecycle()
+    val balanceCheck by vm.balanceCheck.collectAsStateWithLifecycle()
     val badges by vm.badges.collectAsStateWithLifecycle()
     val appearance by vm.appearance.collectAsStateWithLifecycle()
     val planDays by vm.planDays.collectAsStateWithLifecycle()
@@ -217,6 +218,11 @@ fun ChecklistApp(vm: MainViewModel = viewModel()) {
                 onScratch = { vm.closeWelcome(); goTo(AppTab.TODAY) },
                 onBack = ::pop,
             )
+            "balance-check" -> if (settings.locks.shop && !unlocked) {
+                LockedPanel("The shop", unlock, Modifier)
+            } else {
+                BalanceCheckScreen(balanceCheck, vm, onBack = ::pop)
+            }
             "done" -> DoneListScreen(doneList, onOpen = { goal -> push(editRoute(goal)) }, onBack = ::pop)
             "removed" -> RemovedGoalsScreen(removedGoals, onRestore = { vm.restoreGoal(it.id) }, onBack = ::pop)
             "reward" -> androidx.compose.runtime.key(route) { RewardEditor(id, vm, onClose = ::pop) }
@@ -322,6 +328,7 @@ fun ChecklistApp(vm: MainViewModel = viewModel()) {
                             reordering = reorderRewards,
                             onEdit = { reward -> push("reward/${reward.id}") },
                             padding = padding,
+                            onBalanceCheck = { push("balance-check") },
                         )
                     }
                 }

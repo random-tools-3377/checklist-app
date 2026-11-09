@@ -9,6 +9,10 @@ import io.github.randomtools3377.checklist.core.Backup
 import io.github.randomtools3377.checklist.core.BackupError
 import io.github.randomtools3377.checklist.core.BuyResult
 import io.github.randomtools3377.checklist.core.Days
+import io.github.randomtools3377.checklist.core.Interest
+import io.github.randomtools3377.checklist.core.GoalCheck
+import io.github.randomtools3377.checklist.core.RewardCheck
+import io.github.randomtools3377.checklist.core.BalanceCheck
 import io.github.randomtools3377.checklist.core.Suggest
 import io.github.randomtools3377.checklist.core.Ramp
 import io.github.randomtools3377.checklist.core.DifficultySetting
@@ -198,6 +202,9 @@ data class TodayState(
     /** Each ticked habit's latest tick in its window, to add a note to. */
     val lastTicks: Map<Long, Tick> = emptyMap(),
 )
+
+/** What the balance check shows: usual earnings now, and each reward and goal judged. */
+data class BalanceCheckView(val perDay: Double?, val rate: Difficulty, val rewards: List<RewardCheck>, val goals: List<GoalCheck>)
 
 /** A Start and Stop timing of a goal with an amount, running since [startedAt] (epoch milliseconds). */
 data class Stopwatch(val goalId: Long, val startedAt: Long)
@@ -1080,6 +1087,48 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             earnedPerDay?.let { it * 100 / rate.percent } ?: Suggest.expectedPerDay(goals.map { it.toCore() }, day)
         }
     }.state(null)
+
+    /** Savings interest on a positive balance each week, as a whole percentage; 0 is off. */
+    val interestPercent: StateFlow<Int> =
+        dao.observeSetting(Interest.PERCENT).map { it?.toIntOrNull()?.coerceIn(0, 100) ?: Interest.DEFAULT_PERCENT }.state(Interest.DEFAULT_PERCENT)
+
+    fun setInterest(percent: Int) {
+        viewModelScope.launch { repository.setSetting(Interest.PERCENT, percent.coerceIn(0, 100).toString()) }
+    }
+
+    /** The balance check in the shop: prices against earnings, and goals against how often they get done. */
+    val balanceCheck: StateFlow<BalanceCheckView?> = today.flatMapLatest { day ->
+        val perDay = combine(
+            dao.observeEarnedByDay(day.minusDays(Usual.WINDOW_DAYS).toEpochDay()),
+            dao.observeFirstEarningDay(),
+        ) { earned, first -> Usual.pointsPerDay(earned.associate { it.day.toDay() to it.amount }, first?.toDay(), day) }
+        val shown = combine(dao.observeGoals(), settings, unlocked) { goals, s, isUnlocked ->
+            val all = goals.map { it.toCore() }
+            if (s.locks.privateGoals && !isUnlocked) all.filter { !it.private } else all
+        }
+        combine(
+            combine(dao.observeRewards(), shown, dao.observeHabitTicksSince(day.minusDays(BalanceCheck.DAYS).toEpochDay())) { r, g, t -> Triple(r, g, t) },
+            perDay,
+            usualAtNormal,
+            treatBudget,
+            currentDifficulty,
+        ) { (rewards, goals, ticks), earned, atNormal, budget, rate ->
+            BalanceCheckView(
+                perDay = earned,
+                rate = rate,
+                rewards = BalanceCheck.rewards(rewards.map { it.toCore() }, earned, atNormal, budget),
+                goals = BalanceCheck.goals(goals, ticks.map { it.toCore() }, day) { it.createdAt.toLocalDateTime().date },
+            )
+        }
+    }.state(null)
+
+    fun setRewardPrice(id: Long, price: Int) {
+        viewModelScope.launch { repository.setRewardPrice(id, price) }
+    }
+
+    fun setGoalPoints(id: Long, points: Int) {
+        viewModelScope.launch { repository.setGoalPoints(id, points) }
+    }
 
     /** Picks a level by hand, which stops a ramp. */
     fun setDifficulty(level: Difficulty) {

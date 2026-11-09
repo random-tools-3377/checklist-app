@@ -5,6 +5,7 @@ import androidx.room.InvalidationTracker
 import androidx.room.withTransaction
 import io.github.randomtools3377.checklist.core.Book
 import io.github.randomtools3377.checklist.core.Gaps
+import io.github.randomtools3377.checklist.core.Interest
 import io.github.randomtools3377.checklist.core.Lapses
 import io.github.randomtools3377.checklist.core.PointsName
 import io.github.randomtools3377.checklist.ui.PointsLabel
@@ -46,6 +47,7 @@ class Container(app: Application) {
     val book = Book(RoomStore(db))
     val lapses = Lapses(RoomStore(db), book)
     val gaps = Gaps(RoomStore(db), book)
+    val interest = Interest(RoomStore(db), book)
 
     /**
      * Finds misses since the last check, then gaps. When the app opens, and when the day ends.
@@ -55,6 +57,7 @@ class Container(app: Application) {
         db.withTransaction {
             lapses.closeDays()
             gaps.find()
+            interest.pay()
         }
     }
     val celebrationFiles = CelebrationFiles(app.filesDir)

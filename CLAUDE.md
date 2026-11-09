@@ -382,8 +382,10 @@ Build order **(default)**, each step a Release the owner can try:
     earnings are worth that budget). The balance check sits in the shop: usual earnings, each
     reward's days of earning, rewards too cheap (under half a day) or out of reach (over 2
     months), and goals done 95% of the time or more (could pay less) or half the time or less
-    (could pay more) over the last 4 weeks. Savings interest is 2% of a positive balance at the
-    end of each week, rounded down, in the points history, and can be changed or turned off. The
+    (could pay more) over the last 4 weeks, once due at least 4 times, suggesting three quarters
+    or one and a half times the points. Savings interest is 2% of a positive balance at the end
+    of each week, rounded down, paid on the Monday, in the points history, and can be set to off,
+    1%, 2% or 5%; it counts from the first week the app looked. The
     goal missed most over the last 4 weeks (2 misses or more) pays 50% more for the week,
     chosen each Monday. A perfect day, everything due done, pays 10 points when it ends. A reward
     costs 25% more for each time it was already bought that week, back to its price on Monday;

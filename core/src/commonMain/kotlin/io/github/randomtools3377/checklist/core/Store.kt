@@ -43,6 +43,9 @@ interface Store {
     /** Sum of the whole ledger. */
     suspend fun balance(): Int
 
+    /** The balance at the end of [day]: every entry on or before it. */
+    suspend fun balanceOn(day: LocalDate): Int
+
     suspend fun reward(id: Long): Reward?
     suspend fun purchase(id: Long): Purchase?
     suspend fun addPurchase(purchase: Purchase): Long

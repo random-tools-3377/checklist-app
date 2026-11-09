@@ -431,6 +431,16 @@ class Repository(private val db: AppDatabase, private val celebrations: Celebrat
         Unit
     }
 
+    /** A new price for a reward, from the balance check. Ones already bought keep what they cost. */
+    suspend fun setRewardPrice(id: Long, price: Int) {
+        dao.reward(id)?.let { dao.updateReward(it.copy(price = price.coerceAtLeast(1))) }
+    }
+
+    /** New points for a goal, from the balance check. It applies from now on. */
+    suspend fun setGoalPoints(id: Long, points: Int) {
+        dao.goal(id)?.let { dao.updateGoal(it.copy(points = points.coerceAtLeast(0))) }
+    }
+
     /** Removes a reward from the shop. Bought ones stay in the inventory. */
     suspend fun removeReward(id: Long) {
         dao.reward(id)?.let { dao.updateReward(it.copy(archived = true)) }

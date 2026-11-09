@@ -180,6 +180,30 @@ private fun DifficultySettings(vm: MainViewModel) {
     }
 }
 
+/** Savings interest: a positive balance grows a little at the end of each week. */
+@Composable
+private fun InterestSetting(vm: MainViewModel) {
+    val percent by vm.interestPercent.collectAsState()
+    Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("Savings interest", style = MaterialTheme.typography.bodyLarge)
+        Text(
+            "Unspent ${pointsWord()} grow at the end of each week, to help save for big rewards. Paid on Mondays, in the history.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf(0, 1, 2, 5).forEach { choice ->
+                androidx.compose.material3.FilterChip(
+                    selected = percent == choice,
+                    onClick = { vm.setInterest(choice) },
+                    label = { Text(if (choice == 0) "Off" else "$choice%") },
+                    modifier = Modifier.testTag("interest:$choice"),
+                )
+            }
+        }
+    }
+}
+
 @Composable
 private fun DifficultyChips(selected: Difficulty?, tagPrefix: String, onPick: (Difficulty) -> Unit) {
     Row(
@@ -287,6 +311,7 @@ fun SettingsScreen(
             HorizontalDivider()
             Section("Difficulty")
             DifficultySettings(vm)
+            InterestSetting(vm)
             HorizontalDivider()
             Section("Your day")
             Column(

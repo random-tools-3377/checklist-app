@@ -316,6 +316,10 @@ interface ChecklistDao {
     @Query("SELECT COALESCE(SUM(amount), 0) FROM entries")
     suspend fun balance(): Int
 
+    /** The balance at the end of a day: every entry on or before it. */
+    @Query("SELECT COALESCE(SUM(amount), 0) FROM entries WHERE day <= :day")
+    suspend fun balanceOn(day: Long): Int
+
     @Query("SELECT COALESCE(SUM(amount), 0) FROM entries")
     fun observeBalance(): Flow<Int>
 

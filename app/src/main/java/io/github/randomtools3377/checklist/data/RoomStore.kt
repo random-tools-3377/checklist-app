@@ -72,6 +72,7 @@ class RoomStore(private val db: AppDatabase) : Store {
         if (tickIds.isEmpty()) emptyList() else dao.entriesForTicks(tickIds).map { it.toCore() }
     override suspend fun removeEntry(entryId: Long) = dao.deleteEntry(entryId)
     override suspend fun balance(): Int = dao.balance()
+    override suspend fun balanceOn(day: LocalDate): Int = dao.balanceOn(day.toEpochDay())
 
     override suspend fun reward(id: Long): Reward? = dao.reward(id)?.toCore()
     override suspend fun purchase(id: Long): Purchase? = dao.purchase(id)?.toCore()

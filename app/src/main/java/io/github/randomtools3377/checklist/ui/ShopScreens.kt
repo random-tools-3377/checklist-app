@@ -2,6 +2,7 @@
 
 package io.github.randomtools3377.checklist.ui
 
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.foundation.text.KeyboardOptions
@@ -77,6 +78,7 @@ fun ShopScreen(
     reordering: Boolean,
     onEdit: (Reward) -> Unit,
     padding: PaddingValues,
+    onBalanceCheck: () -> Unit = {},
 ) {
     if (view == null) return
     val haptics = LocalHapticFeedback.current
@@ -91,6 +93,9 @@ fun ShopScreen(
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
             note = if (view.balance < 0) "The shop opens again once you are back above zero." else null,
         )
+        TextButton(onClick = onBalanceCheck, modifier = Modifier.padding(start = 8.dp).testTag("balance-check")) {
+            Text("Balance check: are prices and ${pointsWord()} right?")
+        }
         TabRow(selectedTabIndex = if (showBought) 1 else 0) {
             Tab(selected = !showBought, onClick = { onShowBought(false) }, text = { Text("Rewards") }, modifier = Modifier.testTag("tab:rewards"))
             Tab(
@@ -360,6 +365,108 @@ private fun WorthField(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+    }
+}
+
+/**
+ * The balance check: what the user usually earns, how many days each reward takes, which are too
+ * cheap or out of reach, and goals that could pay more or less, each with a suggestion to use.
+ */
+@Composable
+fun BalanceCheckScreen(view: BalanceCheckView?, vm: MainViewModel, onBack: () -> Unit) {
+    androidx.compose.material3.Scaffold(
+        topBar = {
+            androidx.compose.material3.TopAppBar(
+                title = { Text("Balance check") },
+                navigationIcon = {
+                    IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") }
+                },
+            )
+        },
+    ) { padding ->
+        if (view == null) return@Scaffold
+        androidx.compose.foundation.lazy.LazyColumn(
+            modifier = Modifier.fillMaxSize().testTag("balance-check-list"),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = padding.calculateTopPadding() + 8.dp, bottom = padding.calculateBottomPadding() + 24.dp),
+        ) {
+            item {
+                Text(
+                    view.perDay?.let { perDay ->
+                        "You usually earn about ${Suggest.nice(perDay)} ${pointsWord()} a day, ${Suggest.nice(perDay * 7)} a week" +
+                            if (view.rate != io.github.randomtools3377.checklist.core.Difficulty.NORMAL) ", at ${view.rate.label}." else "."
+                    } ?: "Tick a few goals first: the check works from what you usually earn.",
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier.padding(bottom = 12.dp).testTag("usual-earnings"),
+                )
+            }
+            if (view.rewards.isNotEmpty()) {
+                item { SectionTitle("Rewards") }
+                items(view.rewards.size) { i ->
+                    val check = view.rewards[i]
+                    CheckRow(
+                        icon = check.reward.icon,
+                        name = check.reward.name,
+                        line = buildList {
+                            add("${check.reward.price} ${pointsWord(check.reward.price)}")
+                            check.days?.let { add(if (it < 1) "less than a day" else "≈ ${it.toInt()} day" + if (it.toInt() == 1) "" else "s") }
+                            when (check.verdict) {
+                                io.github.randomtools3377.checklist.core.PriceVerdict.TOO_CHEAP -> add("maybe too cheap")
+                                io.github.randomtools3377.checklist.core.PriceVerdict.OUT_OF_REACH -> add("maybe out of reach")
+                                else -> {}
+                            }
+                        }.joinToString(" · "),
+                        flagged = check.verdict != null && check.verdict != io.github.randomtools3377.checklist.core.PriceVerdict.FAIR,
+                        suggestion = check.suggested?.let { "Make it $it" },
+                        tag = "check-reward:${check.reward.name}",
+                        onUse = check.suggested?.let { price -> { vm.setRewardPrice(check.reward.id, price) } },
+                    )
+                }
+            }
+            item { SectionTitle("Goals") }
+            if (view.goals.none { it.hint != null }) {
+                item {
+                    Text(
+                        "Nothing to change: no goal has been done nearly every time or missed half the time or more over the last 4 weeks.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            val hinted = view.goals.filter { it.hint != null }
+            items(hinted.size) { i ->
+                val check = hinted[i]
+                CheckRow(
+                    icon = check.goal.icon,
+                    name = check.goal.name,
+                    line = "done ${check.done} of ${check.due} times · " + when (check.hint) {
+                        io.github.randomtools3377.checklist.core.GoalHint.PAY_LESS -> "nearly always done: it could pay less, or be made harder"
+                        else -> "often missed: more ${pointsWord()} might help"
+                    },
+                    flagged = true,
+                    suggestion = check.suggested?.let { "Pay $it instead of ${check.goal.points}" },
+                    tag = "check-goal:${check.goal.name}",
+                    onUse = check.suggested?.let { points -> { vm.setGoalPoints(check.goal.id, points) } },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun CheckRow(icon: String, name: String, line: String, flagged: Boolean, suggestion: String?, tag: String, onUse: (() -> Unit)?) {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp).testTag(tag)) {
+        Text(icon, fontSize = 26.sp, modifier = Modifier.width(40.dp))
+        Column(Modifier.weight(1f)) {
+            Text(name, style = MaterialTheme.typography.bodyLarge)
+            Text(
+                line,
+                style = MaterialTheme.typography.bodySmall,
+                color = if (flagged) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        if (suggestion != null && onUse != null) {
+            TextButton(onClick = onUse, modifier = Modifier.testTag("use:$tag")) { Text(suggestion) }
+        }
     }
 }
 

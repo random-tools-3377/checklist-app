@@ -196,6 +196,9 @@ enum class EntryKind {
 
     /** A penalty given back, because the miss turned out to be a forgotten tick. */
     REFUND,
+
+    /** Savings interest on a positive balance at the end of a week (see [Interest]). */
+    INTEREST,
 }
 
 /** One line in the points ledger. Positive amounts are earned, negative ones are spent. */
