@@ -55,9 +55,14 @@
             </intent-filter>
         </service>
 
+        <!--
+            Turning the phone or resizing the window redraws the screens for the new size instead
+            of rebuilding the activity, so open dialogs and anything being typed stay put.
+        -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize"
             android:windowSoftInputMode="adjustResize" />
 
         <!--

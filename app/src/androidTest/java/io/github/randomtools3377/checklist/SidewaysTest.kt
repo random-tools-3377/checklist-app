@@ -1,6 +1,6 @@
 package io.github.randomtools3377.checklist
 
-import android.content.pm.ActivityInfo
+import android.app.UiAutomation
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
@@ -50,9 +50,9 @@ class SidewaysTest {
 
     private fun gone(tag: String) = app.onAllNodesWithTag(tag).fetchSemanticsNodes().isEmpty()
 
-    private fun turn(orientation: Int) {
-        app.activityRule.scenario.onActivity { it.requestedOrientation = orientation }
-        app.waitForIdle()
+    /** Turns the whole phone, the way a hand would, rather than asking the app to. */
+    private fun turn(rotation: Int) {
+        InstrumentationRegistry.getInstrumentation().uiAutomation.setRotation(rotation)
     }
 
     @Test
@@ -62,8 +62,7 @@ class SidewaysTest {
             app.waitFor { !gone("nav:today") }
             assertTrue(gone("nav-rail"))
 
-            turn(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE)
-            // Turning rebuilds the screen: wait until only the new one is there.
+            turn(UiAutomation.ROTATION_FREEZE_90)
             app.waitFor { !gone("nav-rail") && app.onAllNodesWithTag("nav:goals").fetchSemanticsNodes().size == 1 }
 
             // The tabs still work from the rail.
@@ -86,7 +85,10 @@ class SidewaysTest {
             app.tap("focus-stop")
             app.waitFor { gone("focus") }
         } finally {
-            turn(ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED)
+            // Back upright for the tests after this one.
+            turn(UiAutomation.ROTATION_FREEZE_0)
+            turn(UiAutomation.ROTATION_UNFREEZE)
+            runCatching { app.waitFor { gone("nav-rail") } }
         }
     }
 }
