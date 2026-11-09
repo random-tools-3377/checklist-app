@@ -3,4 +3,6 @@
     <string name="app_name">Checklist</string>
     <string name="widget_name">Checklist calendar</string>
     <string name="widget_description">Goals due today, with tick boxes. Make it wider for the week, taller for the month.</string>
+    <string name="stats_widget_name">Checklist balance and streaks</string>
+    <string name="stats_widget_description">Your balance, your streak and how much of today is done. Make it wider for every streak.</string>
 </resources>

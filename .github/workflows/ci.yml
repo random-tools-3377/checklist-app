@@ -12,8 +12,11 @@ on:
 permissions:
   contents: read
 
+# A push to a branch cancels that branch's earlier run. Each push to main runs on its own, so a
+# release never waits behind an earlier run's slow iPhone job; the release script skips a
+# version that is already out, or older than one that is.
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ${{ github.ref == 'refs/heads/main' && format('ci-main-{0}', github.sha) || format('ci-{0}', github.ref) }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 env:

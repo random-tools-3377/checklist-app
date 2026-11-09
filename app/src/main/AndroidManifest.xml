@@ -61,6 +61,19 @@
                 android:resource="@xml/calendar_widget_info" />
         </receiver>
 
+        <!-- The balance and streaks widget. -->
+        <receiver
+            android:name=".widget.StatsWidgetReceiver"
+            android:exported="true"
+            android:label="@string/stats_widget_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/stats_widget_info" />
+        </receiver>
+
         <!-- Reminders: the alarm, the Done button, and setting the alarm again after a restart. -->
         <receiver
             android:name=".reminders.AlarmReceiver"

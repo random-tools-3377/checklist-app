@@ -56,7 +56,8 @@ private val Confetti = listOf(
 /** A big celebration that fills the screen. */
 sealed interface BigCelebration {
     data class ProjectFinished(val icon: String, val name: String, val points: Int, val gif: String? = null) : BigCelebration
-    data class Bought(val icon: String, val name: String) : BigCelebration
+    /** A reward bought; for a mystery reward, [name] is what came out of it. */
+    data class Bought(val icon: String, val name: String, val mystery: Boolean = false) : BigCelebration
 
     /** A habit finished for its day, week, month or year, with its own GIF. */
     data class GoalFinished(val icon: String, val name: String, val points: Int, val gif: String) : BigCelebration
@@ -243,9 +244,12 @@ private fun BigEffect(celebration: BigCelebration, onEnd: () -> Unit) {
                     Text("🎁", fontSize = 72.sp)
                     Text(celebration.icon, fontSize = 72.sp)
                     Spacer(Modifier.height(16.dp))
+                    if (celebration.mystery) {
+                        Text("Out of the mystery…", color = Color.White, fontSize = 22.sp, textAlign = TextAlign.Center)
+                    }
                     Text("Enjoy it!", color = Color.White, fontSize = 32.sp, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.height(8.dp))
-                    Text(celebration.name, color = Color.White, fontSize = 22.sp, textAlign = TextAlign.Center)
+                    Text(celebration.name, color = Color.White, fontSize = 22.sp, textAlign = TextAlign.Center, modifier = Modifier.testTag("bought-name"))
                     Spacer(Modifier.height(8.dp))
                     Text("It's waiting under Bought until you use it.", color = Color.White.copy(alpha = 0.85f), fontSize = 15.sp, textAlign = TextAlign.Center)
                 }

@@ -19,7 +19,8 @@ sealed interface TickResult {
 }
 
 sealed interface BuyResult {
-    data class Bought(val purchaseId: Long, val price: Int, val balanceAfter: Int) : BuyResult
+    /** For a mystery reward, [prize] is what came out of it. */
+    data class Bought(val purchaseId: Long, val price: Int, val balanceAfter: Int, val prize: String? = null) : BuyResult
 
     /** The price is more than the balance, so the reward can't be bought. */
     data class TooExpensive(val price: Int, val balance: Int) : BuyResult
@@ -209,23 +210,28 @@ class Book(
     }
 
     /** Buys a reward if its price is not more than the balance. */
-    suspend fun buy(rewardId: Long): BuyResult = store.transaction {
+    /**
+     * Buys a reward, which then waits in the inventory. A mystery reward draws one of its prizes
+     * with [random]; the prize is what goes in the inventory, at the mystery reward's price.
+     */
+    suspend fun buy(rewardId: Long, random: kotlin.random.Random = kotlin.random.Random.Default): BuyResult = store.transaction {
         val reward = store.reward(rewardId)
         if (reward == null || reward.archived) return@transaction BuyResult.NotFound
         val balance = store.balance()
         if (reward.price > balance) return@transaction BuyResult.TooExpensive(reward.price, balance)
 
         val at = millis()
+        val prize = if (reward.isMystery) Mystery.draw(reward.prizes, random) else null
         val purchaseId = store.addPurchase(
-            Purchase(rewardId = reward.id, name = reward.name, icon = reward.icon, price = reward.price, at = at),
+            Purchase(rewardId = reward.id, name = prize ?: reward.name, icon = reward.icon, price = reward.price, at = at),
         )
         store.addEntry(
             Entry(
                 at = at, day = today(), kind = EntryKind.PURCHASE, amount = -reward.price,
-                rewardId = reward.id, purchaseId = purchaseId, label = reward.name,
+                rewardId = reward.id, purchaseId = purchaseId, label = if (prize != null) "${reward.name}: $prize" else reward.name,
             ),
         )
-        BuyResult.Bought(purchaseId = purchaseId, price = reward.price, balanceAfter = balance - reward.price)
+        BuyResult.Bought(purchaseId = purchaseId, price = reward.price, balanceAfter = balance - reward.price, prize = prize)
     }
 
     /** Takes a bought reward out of the inventory because it has been used. */

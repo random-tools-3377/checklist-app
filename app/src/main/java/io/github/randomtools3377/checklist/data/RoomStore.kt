@@ -1,6 +1,7 @@
 package io.github.randomtools3377.checklist.data
 
 import androidx.room.withTransaction
+import io.github.randomtools3377.checklist.core.Mystery
 import io.github.randomtools3377.checklist.core.Celebration
 import io.github.randomtools3377.checklist.core.Check
 import io.github.randomtools3377.checklist.core.Days
@@ -213,10 +214,12 @@ fun Entry.toEntity() = EntryEntity(
 
 fun RewardEntity.toCore() = Reward(
     id = id, name = name, icon = icon, price = price, archived = archived, position = position, createdAt = createdAt,
+    prizes = Mystery.decode(prizes),
 )
 
 fun Reward.toEntity() = RewardEntity(
     id = id, name = name, icon = icon, price = price, archived = archived, position = position, createdAt = createdAt,
+    prizes = Mystery.encode(prizes),
 )
 
 fun PurchaseEntity.toCore() = Purchase(

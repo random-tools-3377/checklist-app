@@ -194,7 +194,14 @@ data class Reward(
     val archived: Boolean = false,
     val position: Int = 0,
     val createdAt: Long = 0,
-)
+    /**
+     * For a mystery reward: what can come out of it, one drawn at random each time it is bought
+     * (see [Mystery]). Empty for a plain reward.
+     */
+    val prizes: List<String> = emptyList(),
+) {
+    val isMystery: Boolean get() = prizes.isNotEmpty()
+}
 
 /** A reward that was bought. It waits in the inventory until it is used or returned. */
 @Serializable

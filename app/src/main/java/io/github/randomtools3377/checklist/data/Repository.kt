@@ -5,6 +5,7 @@ import io.github.randomtools3377.checklist.core.Backup
 import io.github.randomtools3377.checklist.core.Categories
 import io.github.randomtools3377.checklist.core.Celebration
 import io.github.randomtools3377.checklist.core.Goal
+import io.github.randomtools3377.checklist.core.Mystery
 import io.github.randomtools3377.checklist.core.GoalKind
 import io.github.randomtools3377.checklist.core.Period
 import io.github.randomtools3377.checklist.core.Reminder
@@ -87,7 +88,14 @@ data class ProjectDraft(
 )
 
 /** What the reward editor saves. */
-data class RewardDraft(val id: Long, val name: String, val icon: String, val price: Int)
+data class RewardDraft(
+    val id: Long,
+    val name: String,
+    val icon: String,
+    val price: Int,
+    /** For a mystery reward, what can come out of it. Empty for a plain reward. */
+    val prizes: List<String> = emptyList(),
+)
 
 /** Adding, editing, ordering and removing goals and rewards; settings; export and import. */
 class Repository(private val db: AppDatabase, private val celebrations: CelebrationFiles) {
@@ -255,10 +263,11 @@ class Repository(private val db: AppDatabase, private val celebrations: Celebrat
                     archived = false,
                     position = dao.nextRewardPosition(),
                     createdAt = nowMillis(),
+                    prizes = Mystery.encode(draft.prizes),
                 ),
             )
         } else {
-            dao.updateReward(existing.copy(name = draft.name, icon = draft.icon, price = draft.price))
+            dao.updateReward(existing.copy(name = draft.name, icon = draft.icon, price = draft.price, prizes = Mystery.encode(draft.prizes)))
         }
         Unit
     }

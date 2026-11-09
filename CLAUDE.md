@@ -307,7 +307,10 @@ Build order **(default)**, each step a Release the owner can try:
     on Today, not full screen. The weekly points target is a number the user sets in Settings,
     counted Monday to Sunday from points earned (ticks, bonuses and refunds); Today shows how far
     along it is, the weekly summary says whether it was reached, and reaching it pays nothing
-    extra.
+    extra. A mystery reward is a shop reward with a list of things it could be, written by the
+    user; buying it draws one at random, which waits in the inventory at the mystery reward's
+    price and can be returned like any other. The balance and streaks widget shows the balance,
+    the main streak and how much of today is done, and every streak when made wider.
 11. Customising the look, after all of step 10. Decided: dark mode choices (light, dark, follow
     the phone, pure black); an accent colour from a palette, any colour from a colour picker,
     or matched to the wallpaper; a colour for each goal (its card, the calendar, the widget),

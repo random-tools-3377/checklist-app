@@ -82,7 +82,7 @@ class CategoriesAndChartsTest {
         )
         val back = Backup.decode(Backup.encode(backup))
         assertEquals("Health", back.goals.single().category)
-        assertEquals(7, back.format)
+        assertEquals(Backup.FORMAT, back.format)
         // An older file, with no categories, still reads.
         val old = Backup.encode(backup.copy(goals = listOf(habit(1, "Run", null)))).replace("\"category\": null,", "")
         assertNull(Backup.decode(old).goals.single().category)

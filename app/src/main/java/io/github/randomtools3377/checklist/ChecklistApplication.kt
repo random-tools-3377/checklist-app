@@ -12,6 +12,7 @@ import io.github.randomtools3377.checklist.data.Repository
 import io.github.randomtools3377.checklist.data.RoomStore
 import io.github.randomtools3377.checklist.reminders.Reminders
 import io.github.randomtools3377.checklist.widget.CalendarWidget
+import io.github.randomtools3377.checklist.widget.StatsWidget
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
@@ -57,7 +58,7 @@ class Container(app: Application) {
         // Whenever goals, ticks or settings change, from the app, the widget or a notification,
         // set the next reminder and redraw the widget.
         db.invalidationTracker.addObserver(
-            object : InvalidationTracker.Observer(arrayOf("goals", "ticks", "settings", "steps", "lapses")) {
+            object : InvalidationTracker.Observer(arrayOf("goals", "ticks", "settings", "steps", "lapses", "entries")) {
                 override fun onInvalidated(tables: Set<String>) {
                     changes.tryEmit(Unit)
                 }
@@ -68,6 +69,7 @@ class Container(app: Application) {
             changes.debounce(400).collect {
                 runCatching { Reminders.reschedule(app) }
                 runCatching { CalendarWidget.refresh(app) }
+                runCatching { StatsWidget.refresh(app) }
             }
         }
     }

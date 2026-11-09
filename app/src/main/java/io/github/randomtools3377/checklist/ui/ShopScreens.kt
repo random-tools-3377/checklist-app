@@ -19,6 +19,9 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import io.github.randomtools3377.checklist.core.Mystery
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material3.Switch
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -143,7 +146,7 @@ fun ShopScreen(
                             when (result) {
                                 is BuyResult.Bought -> {
                                     haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                                    celebrations.show(BigCelebration.Bought(reward.icon, reward.name))
+                                    celebrations.show(BigCelebration.Bought(reward.icon, result.prize ?: reward.name, mystery = result.prize != null))
                                 }
                                 is BuyResult.TooExpensive ->
                                     Toast.makeText(context, "Not enough points for ${reward.name} yet.", Toast.LENGTH_SHORT).show()
@@ -206,6 +209,14 @@ private fun RewardCard(
                 Column(Modifier.weight(1f)) {
                     Text(reward.name, style = MaterialTheme.typography.titleMedium)
                     Text(pointsText(reward.price), style = MaterialTheme.typography.bodyMedium)
+                    if (reward.isMystery) {
+                        Text(
+                            "A mystery: one of ${reward.prizes.size}, drawn when you buy it",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.testTag("mystery:${reward.name}"),
+                        )
+                    }
                     row.usual?.let {
                         Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
@@ -266,6 +277,8 @@ fun RewardEditor(id: Long, vm: MainViewModel, onClose: () -> Unit) {
     var name by rememberSaveable { mutableStateOf("") }
     var icon by rememberSaveable { mutableStateOf(REWARD_ICON) }
     var price by rememberSaveable { mutableStateOf("") }
+    var mystery by rememberSaveable { mutableStateOf(false) }
+    var prizes by rememberSaveable { mutableStateOf(listOf("", "")) }
     var showErrors by rememberSaveable { mutableStateOf(false) }
 
     LaunchedEffect(id) {
@@ -274,6 +287,10 @@ fun RewardEditor(id: Long, vm: MainViewModel, onClose: () -> Unit) {
                 name = it.name
                 icon = it.icon
                 price = it.price.toString()
+                if (it.isMystery) {
+                    mystery = true
+                    prizes = it.prizes
+                }
             }
             loaded = true
         }
@@ -282,15 +299,19 @@ fun RewardEditor(id: Long, vm: MainViewModel, onClose: () -> Unit) {
     val nameError = if (name.isBlank()) "Give it a name" else null
     val priceValue = price.toIntOrNull()
     val priceError = if (priceValue == null || priceValue < 1) "A price of at least 1 point" else null
+    val prizesError = if (mystery && Mystery.tidy(prizes).size < 2) "Write at least two things it could be" else null
 
     EditorScaffold(
         title = if (id == 0L) "New reward" else "Edit reward",
         onBack = onClose,
         onSave = {
-            if (nameError != null || priceError != null) {
+            if (nameError != null || priceError != null || prizesError != null) {
                 showErrors = true
             } else {
-                vm.saveReward(RewardDraft(id = id, name = name.trim(), icon = icon, price = priceValue!!), onDone = onClose)
+                vm.saveReward(
+                    RewardDraft(id = id, name = name.trim(), icon = icon, price = priceValue!!, prizes = if (mystery) Mystery.tidy(prizes) else emptyList()),
+                    onDone = onClose,
+                )
             }
         },
     ) {
@@ -317,6 +338,39 @@ fun RewardEditor(id: Long, vm: MainViewModel, onClose: () -> Unit) {
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+            Column(Modifier.weight(1f)) {
+                Text("Mystery reward", style = MaterialTheme.typography.bodyLarge)
+                Text(
+                    "Write what could come out of it. Each time it's bought, one is drawn at random.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Switch(checked = mystery, onCheckedChange = { mystery = it }, modifier = Modifier.testTag("field:mystery"))
+        }
+        if (mystery) {
+            prizes.forEachIndexed { index, prize ->
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    OutlinedTextField(
+                        value = prize,
+                        onValueChange = { text -> prizes = prizes.toMutableList().also { it[index] = text.take(Mystery.PRIZE_LENGTH) } },
+                        label = { Text("Could be ${index + 1}") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f).testTag("field:prize-$index"),
+                    )
+                    IconButton(onClick = { prizes = prizes.filterIndexed { i, _ -> i != index } }, enabled = prizes.size > 2) {
+                        Icon(Icons.Filled.Close, contentDescription = "Remove ${index + 1}")
+                    }
+                }
+            }
+            if (showErrors && prizesError != null) {
+                Text(prizesError, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+            }
+            if (prizes.size < Mystery.MAX_PRIZES) {
+                TextButton(onClick = { prizes = prizes + "" }, modifier = Modifier.testTag("add-prize")) { Text("Add another") }
+            }
+        }
         if (id != 0L) {
             var asking by remember { mutableStateOf(false) }
             TextButton(onClick = { asking = true }, modifier = Modifier.testTag("remove")) {

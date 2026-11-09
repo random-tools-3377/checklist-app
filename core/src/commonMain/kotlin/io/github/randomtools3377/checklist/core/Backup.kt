@@ -31,7 +31,8 @@ data class Backup(
     val files: Map<String, String> = emptyMap(),
     /**
      * Routine items ticked (format 5). A routine's items are its steps. Format 6 adds the user's
-     * own reasons and notes on ticks; format 7 adds goals' categories.
+     * own reasons and notes on ticks; format 7 adds goals' categories; format 8 adds mystery
+     * rewards' prizes.
      */
     val checks: List<Check> = emptyList(),
 ) {
@@ -39,7 +40,7 @@ data class Backup(
         const val APP = "checklist"
 
         /** Raised whenever the file's layout changes in a way older versions can't read. */
-        const val FORMAT = 7
+        const val FORMAT = 8
 
         private val json = Json {
             prettyPrint = true
