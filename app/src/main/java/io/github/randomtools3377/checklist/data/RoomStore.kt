@@ -2,6 +2,8 @@ package io.github.randomtools3377.checklist.data
 
 import androidx.room.withTransaction
 import io.github.randomtools3377.checklist.core.Repeat
+import io.github.randomtools3377.checklist.core.RewardSize
+import io.github.randomtools3377.checklist.core.Effort
 import io.github.randomtools3377.checklist.core.Mystery
 import io.github.randomtools3377.checklist.core.Celebration
 import io.github.randomtools3377.checklist.core.Check
@@ -134,6 +136,7 @@ fun GoalEntity.toCore() = Goal(
     color = color,
     amount = amount?.takeIf { it > 0 },
     unit = unit?.takeIf { it.isNotBlank() },
+    effort = Effort.entries.firstOrNull { it.name == effort },
     archived = archived,
     position = position,
     createdAt = createdAt,
@@ -167,6 +170,7 @@ fun Goal.toEntity() = GoalEntity(
     color = color,
     amount = amount,
     unit = unit,
+    effort = effort?.name,
 )
 
 fun StepEntity.toCore() = Step(id = id, goalId = goalId, name = name, points = points, position = position, archived = archived)
@@ -230,11 +234,15 @@ fun Entry.toEntity() = EntryEntity(
 fun RewardEntity.toCore() = Reward(
     id = id, name = name, icon = icon, price = price, archived = archived, position = position, createdAt = createdAt,
     prizes = Mystery.decode(prizes),
+    size = RewardSize.entries.firstOrNull { it.name == size },
+    value = value?.takeIf { it > 0 },
 )
 
 fun Reward.toEntity() = RewardEntity(
     id = id, name = name, icon = icon, price = price, archived = archived, position = position, createdAt = createdAt,
     prizes = Mystery.encode(prizes),
+    size = size?.name,
+    value = value,
 )
 
 fun PurchaseEntity.toCore() = Purchase(

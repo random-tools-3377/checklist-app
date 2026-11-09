@@ -25,6 +25,7 @@ import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -100,6 +101,9 @@ import io.github.randomtools3377.checklist.reminders.Reminders
 import io.github.randomtools3377.checklist.data.ProjectDraft
 import io.github.randomtools3377.checklist.data.TodoDraft
 import io.github.randomtools3377.checklist.core.Todos
+import io.github.randomtools3377.checklist.core.Difficulty
+import io.github.randomtools3377.checklist.core.Suggest
+import io.github.randomtools3377.checklist.core.Effort
 import io.github.randomtools3377.checklist.core.GoalSearch
 import androidx.compose.material.icons.filled.Search
 import io.github.randomtools3377.checklist.data.StepDraft
@@ -464,6 +468,8 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Long)
     // An amount in the user's own unit, like 20 pages.
     var amountText by rememberSaveable { mutableStateOf("") }
     var unit by rememberSaveable { mutableStateOf("") }
+    // How hard it is, by name, which suggests its points.
+    var effort by rememberSaveable { mutableStateOf<String?>(null) }
     var showErrors by rememberSaveable { mutableStateOf(false) }
     var choosingRepeat by remember { mutableStateOf(false) }
     val context = LocalContext.current
@@ -498,6 +504,7 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Long)
                 color = goal.color
                 amountText = goal.amount?.let { Amounts.format(it) }.orEmpty()
                 unit = goal.unit.orEmpty()
+                effort = goal.effort?.name
                 goal.reminder?.let { r ->
                     notifyOnTime = r.onTime
                     alertBefore = r.minutesBefore
@@ -601,6 +608,7 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Long)
                         items = if (hasAmount) emptyList() else items.filter { it.name.isNotBlank() }.map { StepDraft(it.id, it.name.trim(), 0) },
                         amount = if (hasAmount) amountValue else null,
                         unit = if (hasAmount) unit.trim() else null,
+                        effort = effort?.let { Effort.valueOf(it) },
                         finishBy = finishByMinute?.toTime(),
                         finishDay = if (choice == RepeatChoice.TIMES_PER) finishDay else null,
                         reminder = Reminder(
@@ -648,6 +656,14 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Long)
             onValueChange = { points = it },
             tag = "field:points",
             error = if (showErrors) pointsError else null,
+        )
+        EffortField(
+            effort = effort?.let { Effort.valueOf(it) },
+            onEffort = { effort = it?.name },
+            suggest = { e -> Suggest.points(e, minutesValue, target.toIntOrNull()?.takeIf { it > 0 } ?: 1) },
+            points = points,
+            onPoints = { points = it },
+            vm = vm,
         )
         CategoryField(category, { category = it }, vm)
         GoalColourField(color, { color = it }, vm)
@@ -1047,6 +1063,7 @@ fun ProjectEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Lon
     var celebration by rememberSaveable { mutableStateOf<String?>(null) }
     var category by rememberSaveable { mutableStateOf("") }
     var color by rememberSaveable { mutableStateOf<Int?>(null) }
+    var effort by rememberSaveable { mutableStateOf<String?>(null) }
     var nextKey by rememberSaveable { mutableStateOf(2L) }
     val steps = rememberSaveable(saver = StepFieldsSaver) { mutableListOf(StepField(1L, 0L, "", "")).toMutableStateList() }
     var showErrors by rememberSaveable { mutableStateOf(false) }
@@ -1064,6 +1081,7 @@ fun ProjectEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Lon
                 celebration = goal.celebration
                 category = goal.category.orEmpty()
                 color = goal.color
+                effort = goal.effort?.name
                 steps.clear()
                 existingSteps.forEach { steps += StepField(nextKey++, it.id, it.name, it.points.toString()) }
                 if (steps.isEmpty()) steps += StepField(nextKey++, 0L, "", "")
@@ -1101,6 +1119,7 @@ fun ProjectEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Lon
                         celebration = celebration,
                         category = category,
                         color = color,
+                        effort = effort?.let { Effort.valueOf(it) },
                     ),
                     onDone = onClose,
                 )
@@ -1157,6 +1176,16 @@ fun ProjectEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Lon
             onClick = { steps += StepField(nextKey++, 0L, "", steps.lastOrNull()?.points ?: "") },
             modifier = Modifier.testTag("add-step"),
         ) { Text("Add a step") }
+        // One difficulty for the steps: its suggestion goes in every step's points.
+        EffortField(
+            effort = effort?.let { Effort.valueOf(it) },
+            onEffort = { effort = it?.name },
+            suggest = { e -> Suggest.points(e) },
+            points = steps.map { it.points }.distinct().singleOrNull().orEmpty(),
+            onPoints = { value -> steps.indices.forEach { i -> steps[i] = steps[i].copy(points = value) } },
+            vm = vm,
+            label = "How hard are the steps?",
+        )
 
         NumberField(
             label = "Bonus for finishing the project",
@@ -1264,6 +1293,7 @@ fun TodoEditor(id: Long, vm: MainViewModel, onClose: () -> Unit) {
     var date by rememberSaveable { mutableStateOf<Long?>(null) }
     var isPrivate by rememberSaveable { mutableStateOf(false) }
     var remindAtMinute by rememberSaveable { mutableStateOf<Int?>(null) }
+    var effort by rememberSaveable { mutableStateOf<String?>(null) }
     var showErrors by rememberSaveable { mutableStateOf(false) }
     // A date already in the past can stay as it is, but a new one can't be.
     var savedDate by rememberSaveable { mutableStateOf<Long?>(null) }
@@ -1281,6 +1311,7 @@ fun TodoEditor(id: Long, vm: MainViewModel, onClose: () -> Unit) {
                 savedDate = date
                 isPrivate = goal.private
                 remindAtMinute = goal.reminder?.at?.toMinuteOfDay()
+                effort = goal.effort?.name
                 existingSteps.forEach { steps += StepField(nextKey++, it.id, it.name, "") }
             }
             loaded = true
@@ -1308,6 +1339,7 @@ fun TodoEditor(id: Long, vm: MainViewModel, onClose: () -> Unit) {
                         private = isPrivate,
                         steps = steps.filter { it.name.isNotBlank() }.map { StepDraft(it.id, it.name.trim(), 0) },
                         remindAt = remindAtMinute?.toTime(),
+                        effort = effort?.let { Effort.valueOf(it) },
                     ),
                     onDone = onClose,
                 )
@@ -1326,6 +1358,14 @@ fun TodoEditor(id: Long, vm: MainViewModel, onClose: () -> Unit) {
             modifier = Modifier.fillMaxWidth().testTag("field:name"),
         )
         NumberField(label = pointsTitle(), value = points, onValueChange = { points = it }, tag = "field:points")
+        EffortField(
+            effort = effort?.let { Effort.valueOf(it) },
+            onEffort = { effort = it?.name },
+            suggest = { e -> Suggest.points(e) },
+            points = points,
+            onPoints = { points = it },
+            vm = vm,
+        )
         Text("Steps", style = MaterialTheme.typography.titleSmall)
         Text(
             "Optional. Tick them off one by one, over as many days as it takes; the last one does the to-do.",
@@ -1377,6 +1417,60 @@ fun TodoEditor(id: Long, vm: MainViewModel, onClose: () -> Unit) {
         if (id != 0L) {
             RemoveButton("to-do", name) { vm.removeGoal(id, onClose) }
         }
+    }
+}
+
+/**
+ * "How hard is it?": picking one suggests the points, filled in when the box is empty and
+ * offered with "Use it" otherwise. It also says what the points pay at today's difficulty.
+ */
+@Composable
+private fun EffortField(
+    effort: Effort?,
+    onEffort: (Effort?) -> Unit,
+    suggest: (Effort) -> Int,
+    points: String,
+    onPoints: (String) -> Unit,
+    vm: MainViewModel,
+    label: String = "How hard is it?",
+) {
+    val rate by vm.currentDifficulty.collectAsStateWithLifecycle()
+    Text(label, style = MaterialTheme.typography.titleSmall)
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
+        Effort.entries.forEach { e ->
+            FilterChip(
+                selected = effort == e,
+                onClick = {
+                    val next = if (effort == e) null else e
+                    onEffort(next)
+                    if (next != null && points.isBlank()) onPoints(suggest(next).toString())
+                },
+                label = { Text(e.label) },
+                modifier = Modifier.testTag("effort:${e.name}"),
+            )
+        }
+    }
+    effort?.let { e ->
+        val suggested = suggest(e)
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+            Text(
+                "Suggested: $suggested",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.weight(1f).testTag("suggested-points"),
+            )
+            if (points != suggested.toString()) {
+                TextButton(onClick = { onPoints(suggested.toString()) }, modifier = Modifier.testTag("use-suggested")) { Text("Use it") }
+            }
+        }
+    }
+    val typed = points.toIntOrNull()
+    if (typed != null && typed > 0 && rate != Difficulty.NORMAL) {
+        Text(
+            "At ${rate.label} this week, it pays ${rate.pay(typed)}.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 

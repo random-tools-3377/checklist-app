@@ -62,6 +62,9 @@ import java.util.Locale
 const val GOAL_ICON = "⭐"
 const val REWARD_ICON = "🎁"
 
+/** Today's difficulty, which sets what goals pay; screens show points at this rate. */
+val LocalPayRate = androidx.compose.runtime.compositionLocalOf { io.github.randomtools3377.checklist.core.Difficulty.NORMAL }
+
 /** What points are called (Settings → Appearance). Reading it in a screen redraws the screen when it changes. */
 object PointsLabel {
     var name by androidx.compose.runtime.mutableStateOf(io.github.randomtools3377.checklist.core.PointsName.DEFAULT)

@@ -39,6 +39,12 @@ class Book(
 ) {
     fun millis(): Long = clock.now().toEpochMilliseconds()
 
+    /** The difficulty on [day], which sets what goals pay (see [Difficulty]). */
+    suspend fun difficulty(day: LocalDate): Difficulty = DifficultySetting.of(store).on(day)
+
+    /** Today's difficulty. */
+    suspend fun difficulty(): Difficulty = difficulty(today())
+
     companion object {
         /** A tick's note is kept short, like "ran 5 km". */
         const val NOTE_LENGTH = 200
@@ -81,23 +87,24 @@ class Book(
         }
         if (ticks.size >= goal.target) return@transaction TickResult.AlreadyDone
 
+        val rate = difficulty(day)
         val at = millis()
         val tickId = store.addTick(
             Tick(goalId = goalId, stepId = null, at = at, day = day, period = window.period, periodStart = start),
         )
         store.addEntry(
-            Entry(at = at, day = day, kind = EntryKind.TICK, amount = goal.points, goalId = goalId, tickId = tickId, label = goal.name),
+            Entry(at = at, day = day, kind = EntryKind.TICK, amount = rate.pay(goal.points), goalId = goalId, tickId = tickId, label = goal.name),
         )
 
         val finished = ticks.size + 1 >= goal.target
         var bonus = 0
         if (finished && goal.target > 1 && goal.bonus > 0 && bonusesOn(ticks).isEmpty()) {
-            bonus = goal.bonus
+            bonus = rate.pay(goal.bonus)
             store.addEntry(
                 Entry(at = at, day = day, kind = EntryKind.BONUS, amount = bonus, goalId = goalId, tickId = tickId, label = goal.name),
             )
         }
-        TickResult.Ticked(points = goal.points, bonus = bonus, finished = finished)
+        TickResult.Ticked(points = rate.pay(goal.points), bonus = bonus, finished = finished)
     }
 
     /**
@@ -109,8 +116,9 @@ class Book(
         if (store.habitTicks(goal.id, day).any { it.stepId == null }) return TickResult.AlreadyDone
         val at = millis()
         val tickId = store.addTick(Tick(goalId = goal.id, stepId = null, at = at, day = day, period = Period.DAILY, periodStart = day))
-        store.addEntry(Entry(at = at, day = day, kind = EntryKind.TICK, amount = goal.points, goalId = goal.id, tickId = tickId, label = goal.name))
-        return TickResult.Ticked(points = goal.points, bonus = 0, finished = true)
+        val points = difficulty(day).pay(goal.points)
+        store.addEntry(Entry(at = at, day = day, kind = EntryKind.TICK, amount = points, goalId = goal.id, tickId = tickId, label = goal.name))
+        return TickResult.Ticked(points = points, bonus = 0, finished = true)
     }
 
     /**
@@ -141,7 +149,8 @@ class Book(
         )
         val timesAfter = Amounts.times(before + entered, goal.amount).coerceAtMost(goal.target)
         val newTimes = timesAfter - timesBefore
-        val points = goal.points * newTimes
+        val rate = difficulty(day)
+        val points = rate.pay(goal.points) * newTimes
         if (points != 0) {
             store.addEntry(
                 Entry(at = at, day = day, kind = EntryKind.TICK, amount = points, goalId = goalId, tickId = tickId, label = goal.name),
@@ -150,7 +159,7 @@ class Book(
         val finished = timesAfter >= goal.target
         var bonus = 0
         if (finished && goal.target > 1 && goal.bonus > 0) {
-            bonus = goal.bonus
+            bonus = rate.pay(goal.bonus)
             store.addEntry(
                 Entry(at = at, day = day, kind = EntryKind.BONUS, amount = bonus, goalId = goalId, tickId = tickId, label = goal.name),
             )
@@ -251,13 +260,14 @@ class Book(
         if (goal.kind == GoalKind.TODO) return@transaction tickTodoStep(goal, step)
 
         val day = today()
+        val rate = difficulty(day)
         val at = millis()
         val tickId = store.addTick(
             Tick(goalId = goal.id, stepId = stepId, at = at, day = day, period = null, periodStart = day),
         )
         store.addEntry(
             Entry(
-                at = at, day = day, kind = EntryKind.TICK, amount = step.points,
+                at = at, day = day, kind = EntryKind.TICK, amount = rate.pay(step.points),
                 goalId = goal.id, tickId = tickId, label = "${goal.name}: ${step.name}",
             ),
         )
@@ -267,12 +277,12 @@ class Book(
         val finished = store.activeSteps(goal.id).all { it.id in done }
         var bonus = 0
         if (finished && goal.bonus > 0 && bonusesOn(stepTicks).isEmpty()) {
-            bonus = goal.bonus
+            bonus = rate.pay(goal.bonus)
             store.addEntry(
                 Entry(at = at, day = day, kind = EntryKind.BONUS, amount = bonus, goalId = goal.id, tickId = tickId, label = goal.name),
             )
         }
-        TickResult.Ticked(points = step.points, bonus = bonus, finished = finished)
+        TickResult.Ticked(points = rate.pay(step.points), bonus = bonus, finished = finished)
     }
 
     /**

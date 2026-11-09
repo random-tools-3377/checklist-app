@@ -13,6 +13,8 @@ import io.github.randomtools3377.checklist.core.GoalKind
 import io.github.randomtools3377.checklist.core.Period
 import io.github.randomtools3377.checklist.core.Reminder
 import io.github.randomtools3377.checklist.core.Repeat
+import io.github.randomtools3377.checklist.core.RewardSize
+import io.github.randomtools3377.checklist.core.Effort
 import io.github.randomtools3377.checklist.core.RepeatText
 import io.github.randomtools3377.checklist.core.RepeatKind
 import io.github.randomtools3377.checklist.core.Reward
@@ -66,6 +68,8 @@ const val SETTING_APP_ICON = "app_icon"
 /** The running Start and Stop timing, as "goalId|startedAt" in epoch milliseconds. */
 const val SETTING_STOPWATCH = "stopwatch"
 const val SETTING_WIDGET_STYLE = "widget_style"
+/** What the user would spend on treats in a normal week, in their own money, for suggested prices. */
+const val SETTING_TREAT_BUDGET = "treat_budget"
 /** "done" once the welcome card on Today was answered (see GuideScreen). */
 const val SETTING_GUIDE = "guide"
 const val DEFAULT_SNOOZE_MINUTES = 10
@@ -109,6 +113,8 @@ data class HabitDraft(
     /** How much of [unit] makes it done each time, like 20 pages; null for a goal that is simply ticked. */
     val amount: Double? = null,
     val unit: String? = null,
+    /** How hard it is, which suggests its points. */
+    val effort: Effort? = null,
 )
 
 /** One step in the project editor. [id] is 0 for a new step. */
@@ -129,6 +135,8 @@ data class ProjectDraft(
     /** As typed; tidied on saving (see Categories). */
     val category: String? = null,
     val color: Int? = null,
+    /** How hard its steps are, which suggests their points. */
+    val effort: Effort? = null,
 )
 
 /** What the to-do editor and the quick add on Today save. [id] is 0 for a new to-do. */
@@ -144,6 +152,7 @@ data class TodoDraft(
     val steps: List<StepDraft> = emptyList(),
     /** A reminder on its date, for a to-do with one. */
     val remindAt: LocalTime? = null,
+    val effort: Effort? = null,
 )
 
 /** What the reward editor saves. */
@@ -154,6 +163,9 @@ data class RewardDraft(
     val price: Int,
     /** For a mystery reward, what can come out of it. Empty for a plain reward. */
     val prizes: List<String> = emptyList(),
+    /** How big a treat it is, or what it costs in money, which suggest its price. */
+    val size: RewardSize? = null,
+    val value: Double? = null,
 )
 
 /** Adding, editing, ordering and removing goals and rewards; settings; export and import. */
@@ -206,6 +218,7 @@ class Repository(private val db: AppDatabase, private val celebrations: Celebrat
             color = draft.color,
             amount = draft.amount?.let { Amounts.tidy(it) },
             unit = draft.unit?.trim()?.take(Amounts.UNIT_LENGTH)?.takeIf { it.isNotEmpty() && draft.amount != null },
+            effort = draft.effort?.name,
         )
         val goalId = if (existing == null) dao.insertGoal(row) else row.id.also { dao.updateGoal(row) }
         // A routine's checklist: removed items are archived, so their past ticks still make sense.
@@ -249,6 +262,7 @@ class Repository(private val db: AppDatabase, private val celebrations: Celebrat
                     celebration = draft.celebration?.takeIf { Celebration.isValid(it) },
                     category = category(draft.category, 0),
                     color = draft.color,
+                    effort = draft.effort?.name,
                 ),
             )
         } else {
@@ -264,6 +278,7 @@ class Repository(private val db: AppDatabase, private val celebrations: Celebrat
                     celebration = draft.celebration?.takeIf { Celebration.isValid(it) },
                     category = category(draft.category, existing.id),
                     color = draft.color,
+                    effort = draft.effort?.name,
                 ),
             )
             existing.id
@@ -290,7 +305,7 @@ class Repository(private val db: AppDatabase, private val celebrations: Celebrat
         val made = Todos.of(draft.name, draft.points, draft.date, draft.icon.ifBlank { Todos.ICON })
         val reminder = draft.remindAt?.takeIf { draft.date != null }?.let { Reminder(onTime = true, at = it) }
         val goalId = if (existing == null) {
-            dao.insertGoal(made.copy(private = draft.private, reminder = reminder, position = dao.nextGoalPosition(), createdAt = nowMillis()).toEntity())
+            dao.insertGoal(made.copy(private = draft.private, reminder = reminder, effort = draft.effort, position = dao.nextGoalPosition(), createdAt = nowMillis()).toEntity())
         } else {
             val repeat = made.repeat
             dao.updateGoal(
@@ -302,6 +317,7 @@ class Repository(private val db: AppDatabase, private val celebrations: Celebrat
                     period = repeat?.windowPeriod?.name,
                     isPrivate = draft.private,
                     reminder = reminder?.let { RepeatText.encodeReminder(it) },
+                    effort = draft.effort?.name,
                 ),
             )
             existing.id
@@ -400,10 +416,17 @@ class Repository(private val db: AppDatabase, private val celebrations: Celebrat
                     position = dao.nextRewardPosition(),
                     createdAt = nowMillis(),
                     prizes = Mystery.encode(draft.prizes),
+                    size = draft.size?.name,
+                    value = draft.value?.takeIf { it > 0 },
                 ),
             )
         } else {
-            dao.updateReward(existing.copy(name = draft.name, icon = draft.icon, price = draft.price, prizes = Mystery.encode(draft.prizes)))
+            dao.updateReward(
+                existing.copy(
+                    name = draft.name, icon = draft.icon, price = draft.price, prizes = Mystery.encode(draft.prizes),
+                    size = draft.size?.name, value = draft.value?.takeIf { it > 0 },
+                ),
+            )
         }
         Unit
     }

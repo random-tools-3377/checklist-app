@@ -2,6 +2,12 @@
 
 package io.github.randomtools3377.checklist.ui
 
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.material3.Button
+import androidx.compose.foundation.horizontalScroll
+import io.github.randomtools3377.checklist.core.Amounts
+import io.github.randomtools3377.checklist.core.Difficulty
 import android.Manifest
 import android.app.Activity
 import android.content.Context
@@ -86,6 +92,109 @@ private fun Context.findActivity(): Activity? = when (this) {
     is Activity -> this
     is ContextWrapper -> baseContext.findActivity()
     else -> null
+}
+
+/**
+ * How easy rewards are to earn: a level by hand, or getting harder (or easier) a level at a time
+ * on a schedule. Also the weekly treat budget that prices from money are worked out from.
+ */
+@Composable
+private fun DifficultySettings(vm: MainViewModel) {
+    val setting by vm.difficulty.collectAsState()
+    val now by vm.currentDifficulty.collectAsState()
+    val budget by vm.treatBudget.collectAsState()
+    var rampFrom by rememberSaveable { mutableStateOf(Difficulty.EASY) }
+    var rampTo by rememberSaveable { mutableStateOf(Difficulty.NORMAL) }
+    var weeks by rememberSaveable { mutableStateOf("6") }
+    var planning by rememberSaveable { mutableStateOf(false) }
+    var budgetText by rememberSaveable(budget) { mutableStateOf(budget?.let { Amounts.format(it) }.orEmpty()) }
+    val ramp = setting.ramp
+    Column(Modifier.padding(horizontal = 16.dp, vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            "Now: ${now.label}. Goals pay ${now.percent}% of their ${pointsWord()}" + when (now) {
+                Difficulty.VERY_EASY -> ", and 2 more skips or misses are free."
+                Difficulty.EASY -> ", and 1 more skip or miss is free."
+                Difficulty.NORMAL -> ", and skips and misses are as each goal sets."
+                Difficulty.HARD -> ", and 1 fewer skip or miss is free."
+                Difficulty.VERY_HARD -> ", and no skip or miss is free."
+            },
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.testTag("difficulty-now"),
+        )
+        Text(
+            "Penalties stay half a goal's own ${pointsWord()}, and prices don't change.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        DifficultyChips(selected = if (ramp == null) setting.level else null, tagPrefix = "difficulty") { vm.setDifficulty(it) }
+        if (ramp != null) {
+            val next = ramp.nextChange(vm.currentDay())
+            Text(
+                "Getting ${if (ramp.to.ordinal > ramp.from.ordinal) "harder" else "easier"}: from ${ramp.from.label} to ${ramp.to.label} over " +
+                    "${ramp.weeks} weeks." + (next?.let { " Next step on ${longDate(it)}." } ?: " It has got there."),
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.testTag("ramp-status"),
+            )
+            TextButton(onClick = vm::stopRamp, modifier = Modifier.testTag("stop-ramp")) { Text("Stop, and stay at ${now.label}") }
+        } else if (!planning) {
+            TextButton(onClick = { planning = true }, modifier = Modifier.testTag("plan-ramp")) { Text("Get harder over time…") }
+        } else {
+            Text("Start at", style = MaterialTheme.typography.bodyLarge)
+            DifficultyChips(selected = rampFrom, tagPrefix = "ramp-from") { rampFrom = it }
+            Text("End up at", style = MaterialTheme.typography.bodyLarge)
+            DifficultyChips(selected = rampTo, tagPrefix = "ramp-to") { rampTo = it }
+            NumberField(label = "Over how many weeks", value = weeks, onValueChange = { weeks = it.take(2) }, tag = "field:ramp-weeks")
+            Row {
+                Button(
+                    onClick = {
+                        vm.startRamp(rampFrom, rampTo, weeks.toIntOrNull() ?: 6)
+                        planning = false
+                    },
+                    enabled = rampFrom != rampTo && (weeks.toIntOrNull() ?: 0) in 1..52,
+                    modifier = Modifier.testTag("start-ramp"),
+                ) { Text("Start") }
+                TextButton(onClick = { planning = false }) { Text("Cancel") }
+            }
+            Text(
+                "It moves a level at a time on Mondays, spread over the weeks. Picking a level above stops it.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            OutlinedTextField(
+                value = budgetText,
+                onValueChange = { text -> budgetText = text.filter { it.isDigit() || it == '.' || it == ',' }.take(9) },
+                label = { Text("Weekly treat budget, in money") },
+                singleLine = true,
+                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal),
+                modifier = Modifier.weight(1f).testTag("field:treat-budget"),
+            )
+            TextButton(onClick = { vm.setTreatBudget(Amounts.parse(budgetText)) }, modifier = Modifier.testTag("save-treat-budget")) { Text("Set") }
+        }
+        Text(
+            "For suggested prices from what a reward costs: a normal week of ticking earns this much.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+@Composable
+private fun DifficultyChips(selected: Difficulty?, tagPrefix: String, onPick: (Difficulty) -> Unit) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier.fillMaxWidth().horizontalScroll(androidx.compose.foundation.rememberScrollState()),
+    ) {
+        Difficulty.entries.forEach { level ->
+            androidx.compose.material3.FilterChip(
+                selected = selected == level,
+                onClick = { onPick(level) },
+                label = { Text(level.label) },
+                modifier = Modifier.testTag("$tagPrefix:${level.name}"),
+            )
+        }
+    }
 }
 
 @Composable
@@ -175,6 +284,9 @@ fun SettingsScreen(
                     }
                 }
             }
+            HorizontalDivider()
+            Section("Difficulty")
+            DifficultySettings(vm)
             HorizontalDivider()
             Section("Your day")
             Column(

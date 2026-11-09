@@ -83,6 +83,8 @@ data class Goal(
     val amount: Double? = null,
     /** The unit of [amount], in the user's own words, like "pages" or "mile". */
     val unit: String? = null,
+    /** How hard it is, which suggests its points (see [Suggest]); null when not given. */
+    val effort: Effort? = null,
     val archived: Boolean = false,
     val position: Int = 0,
     val createdAt: Long = 0,
@@ -229,6 +231,10 @@ data class Reward(
      * (see [Mystery]). Empty for a plain reward.
      */
     val prizes: List<String> = emptyList(),
+    /** How big a treat it is, which suggests its price (see [Suggest]). */
+    val size: RewardSize? = null,
+    /** What it costs in money, in the user's own currency, which also suggests its price. */
+    val value: Double? = null,
 ) {
     val isMystery: Boolean get() = prizes.isNotEmpty()
 }

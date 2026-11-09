@@ -63,6 +63,8 @@ data class GoalEntity(
     /** How much of [unit] makes it done each time, like 20 pages (see Amounts in the shared code). Added in version 13. */
     val amount: Double? = null,
     val unit: String? = null,
+    /** How hard it is (Effort in the shared code), which suggests its points. Added in version 14. */
+    val effort: String? = null,
 )
 
 @Entity(tableName = "steps", indices = [Index("goalId")])
@@ -119,6 +121,9 @@ data class RewardEntity(
     val createdAt: Long,
     /** A mystery reward's prizes, one per line (see Mystery in the shared code). Added in version 11. */
     val prizes: String? = null,
+    /** How big a treat it is (RewardSize in the shared code), and what it costs in money. Added in version 14. */
+    val size: String? = null,
+    val value: Double? = null,
 )
 
 @Entity(tableName = "purchases")
@@ -535,10 +540,10 @@ interface ChecklistDao {
         GapEntity::class,
         CheckEntity::class,
     ],
-    version = 13,
+    version = 14,
     exportSchema = true,
     // Versions 4 to 8 only add tables and columns, so Room works the migrations out from the layouts.
-    autoMigrations = [AutoMigration(from = 3, to = 4), AutoMigration(from = 4, to = 5), AutoMigration(from = 5, to = 6), AutoMigration(from = 6, to = 7), AutoMigration(from = 7, to = 8), AutoMigration(from = 8, to = 9), AutoMigration(from = 9, to = 10), AutoMigration(from = 10, to = 11), AutoMigration(from = 11, to = 12), AutoMigration(from = 12, to = 13)],
+    autoMigrations = [AutoMigration(from = 3, to = 4), AutoMigration(from = 4, to = 5), AutoMigration(from = 5, to = 6), AutoMigration(from = 6, to = 7), AutoMigration(from = 7, to = 8), AutoMigration(from = 8, to = 9), AutoMigration(from = 9, to = 10), AutoMigration(from = 10, to = 11), AutoMigration(from = 11, to = 12), AutoMigration(from = 12, to = 13), AutoMigration(from = 13, to = 14)],
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun dao(): ChecklistDao

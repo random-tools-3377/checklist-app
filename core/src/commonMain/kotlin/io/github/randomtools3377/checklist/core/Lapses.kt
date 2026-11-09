@@ -74,8 +74,9 @@ class Lapses(
         val done = if (window.period == Period.DAILY) times >= goal.target || skips.isNotEmpty() else times + skips.size >= goal.target
         if (done) return SkipCheck.AlreadyDone
         val used = used(goal, today)
-        val over = used >= goal.allowed
-        return SkipCheck.Allowed(used, goal.allowed, over, if (over) cost(goal) else 0)
+        val allowed = book.difficulty(today).allowed(goal.allowed)
+        val over = used >= allowed
+        return SkipCheck.Allowed(used, allowed, over, if (over) cost(goal) else 0)
     }
 
     /**
@@ -163,13 +164,13 @@ class Lapses(
                         .count { it.kind == LapseKind.SKIP && it.periodStart == window.start }
                     val done = if (window.period == Period.DAILY) count >= goal.target || skips > 0 else count + skips >= goal.target
                     if (done) continue
-                    val over = used(goal, day) >= goal.allowed
+                    val over = used(goal, day) >= book.difficulty(day).allowed(goal.allowed)
                     found += record(goal, LapseKind.MISS, day, window.period, window.start, over, null, null).lapse
                 } else if (goal.deadline == day) {
                     val steps = store.activeSteps(goal.id)
                     val doneSteps = store.stepTicks(goal.id).mapNotNull { it.stepId }.toSet()
                     if (steps.isNotEmpty() && steps.all { it.id in doneSteps }) continue
-                    val over = used(goal, day) >= goal.allowed
+                    val over = used(goal, day) >= book.difficulty(day).allowed(goal.allowed)
                     found += record(goal, LapseKind.MISS, day, null, day, over, null, null).lapse
                 }
             }
@@ -205,7 +206,7 @@ class Lapses(
             Tick(goalId = goal.id, stepId = null, at = now, day = lapse.day, period = lapse.period, periodStart = lapse.periodStart),
         )
         store.addEntry(
-            Entry(at = now, day = book.today(), kind = EntryKind.TICK, amount = goal.points, goalId = goal.id, tickId = tickId, label = goal.name),
+            Entry(at = now, day = book.today(), kind = EntryKind.TICK, amount = book.difficulty(lapse.day).pay(goal.points), goalId = goal.id, tickId = tickId, label = goal.name),
         )
         if (lapse.cost > 0) {
             store.addEntry(

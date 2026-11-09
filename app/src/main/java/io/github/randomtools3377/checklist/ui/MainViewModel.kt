@@ -9,6 +9,10 @@ import io.github.randomtools3377.checklist.core.Backup
 import io.github.randomtools3377.checklist.core.BackupError
 import io.github.randomtools3377.checklist.core.BuyResult
 import io.github.randomtools3377.checklist.core.Days
+import io.github.randomtools3377.checklist.core.Suggest
+import io.github.randomtools3377.checklist.core.Ramp
+import io.github.randomtools3377.checklist.core.DifficultySetting
+import io.github.randomtools3377.checklist.core.Difficulty
 import io.github.randomtools3377.checklist.core.DoneItem
 import io.github.randomtools3377.checklist.core.DoneList
 import io.github.randomtools3377.checklist.data.SETTING_STOPWATCH
@@ -106,6 +110,7 @@ import io.github.randomtools3377.checklist.data.ORDER_RECOMMENDED
 import io.github.randomtools3377.checklist.data.ProjectDraft
 import io.github.randomtools3377.checklist.data.TodoDraft
 import io.github.randomtools3377.checklist.data.SETTING_GUIDE
+import io.github.randomtools3377.checklist.data.SETTING_TREAT_BUDGET
 import io.github.randomtools3377.checklist.data.RewardDraft
 import io.github.randomtools3377.checklist.data.SETTING_DAY_END_HOUR
 import io.github.randomtools3377.checklist.data.Backups
@@ -1044,6 +1049,63 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             repository.saveTodo(draft)
             onDone()
         }
+    }
+
+    // Difficulty and suggestions
+
+    /** The difficulty the user set: a level, or a ramp. */
+    val difficulty: StateFlow<DifficultySetting> =
+        combine(dao.observeSetting(DifficultySetting.LEVEL), dao.observeSetting(DifficultySetting.RAMP)) { level, ramp ->
+            DifficultySetting.decode(level, ramp)
+        }.state(DifficultySetting())
+
+    /** Today's difficulty, which sets what goals pay. */
+    val currentDifficulty: StateFlow<Difficulty> = combine(difficulty, today) { d, day -> d.on(day) }.state(Difficulty.NORMAL)
+
+    /** What the user would spend on treats in a normal week, for prices from money. */
+    val treatBudget: StateFlow<Double?> = dao.observeSetting(SETTING_TREAT_BUDGET).map { it?.toDoubleOrNull()?.takeIf { v -> v > 0 } }.state(null)
+
+    /**
+     * The user's usual earnings a day at Normal, for suggested prices: what they earned lately,
+     * taken back to Normal, or before there is any history, what their goals would pay.
+     */
+    val usualAtNormal: StateFlow<Double?> = today.flatMapLatest { day ->
+        combine(
+            dao.observeEarnedByDay(day.minusDays(Usual.WINDOW_DAYS).toEpochDay()),
+            dao.observeFirstEarningDay(),
+            dao.observeGoals(),
+            currentDifficulty,
+        ) { earned, first, goals, rate ->
+            val earnedPerDay = Usual.pointsPerDay(earned.associate { it.day.toDay() to it.amount }, first?.toDay(), day)
+            earnedPerDay?.let { it * 100 / rate.percent } ?: Suggest.expectedPerDay(goals.map { it.toCore() }, day)
+        }
+    }.state(null)
+
+    /** Picks a level by hand, which stops a ramp. */
+    fun setDifficulty(level: Difficulty) {
+        viewModelScope.launch {
+            repository.setSetting(DifficultySetting.LEVEL, level.name)
+            repository.setSetting(DifficultySetting.RAMP, "")
+        }
+    }
+
+    /** Starts getting harder (or easier) on a schedule, from this week. */
+    fun startRamp(from: Difficulty, to: Difficulty, weeks: Int) {
+        viewModelScope.launch {
+            repository.setSetting(DifficultySetting.RAMP, Ramp.encode(Ramp(from, to, weeks.coerceIn(1, 52), currentDay())))
+        }
+    }
+
+    /** Stops the ramp, staying at the level it has reached. */
+    fun stopRamp() {
+        viewModelScope.launch {
+            repository.setSetting(DifficultySetting.LEVEL, currentDifficulty.value.name)
+            repository.setSetting(DifficultySetting.RAMP, "")
+        }
+    }
+
+    fun setTreatBudget(value: Double?) {
+        viewModelScope.launch { repository.setSetting(SETTING_TREAT_BUDGET, value?.takeIf { it > 0 }?.toString() ?: "") }
     }
 
     /** Finished projects and done to-dos, newest first; private ones hidden while locked. */

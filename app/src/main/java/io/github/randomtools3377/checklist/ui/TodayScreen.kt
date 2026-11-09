@@ -554,7 +554,8 @@ private fun TodoCard(
                     overflow = TextOverflow.Ellipsis,
                     textDecoration = if (row.done) androidx.compose.ui.text.style.TextDecoration.LineThrough else null,
                 )
-                val detail = if (row.items.isEmpty()) "+${goal.points}" else "+${goal.points} · ${row.items.count { it.done }} of ${row.items.size} steps"
+                val pay = LocalPayRate.current.pay(goal.points)
+                val detail = if (row.items.isEmpty()) "+$pay" else "+$pay · ${row.items.count { it.done }} of ${row.items.size} steps"
                 Text(detail, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             TickButton(
@@ -754,6 +755,7 @@ private fun HabitCard(
     val amountMode = goal.hasAmount && onAmount != null
     val counted = !amountMode && (goal.target > 1 || row.isRoutine)
     val cardSize = LocalCardSize.current
+    val rate = LocalPayRate.current
     Card(Modifier.fillMaxWidth()) {
       Column(Modifier.goalStrip(goal.color)) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(cardSize.padding)) {
@@ -762,8 +764,8 @@ private fun HabitCard(
             Column(Modifier.weight(1f)) {
                 Text(goal.name, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 val detail = buildList {
-                    add("+${goal.points}" + if (counted) " each" else "")
-                    if (counted && goal.bonus > 0) add("bonus +${goal.bonus}")
+                    add("+${rate.pay(goal.points)}" + if (counted) " each" else "")
+                    if (counted && goal.bonus > 0) add("bonus +${rate.pay(goal.bonus)}")
                     if (!goal.hasAmount) goal.minutes?.let { add(minutesText(it)) }
                 }.joinToString(" · ")
                 Text(detail, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -1084,7 +1086,7 @@ private fun StepLine(step: StepRow, onTick: (Spot) -> Unit, onUndo: () -> Unit) 
             modifier = Modifier.weight(1f),
             color = if (step.done) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
         )
-        Text("+${step.step.points}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("+${LocalPayRate.current.pay(step.step.points)}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
@@ -1138,7 +1140,7 @@ private fun NewBadgesCard(badges: List<Badge>, onSee: () -> Unit, onDismiss: () 
 private fun TileRow(rows: List<HabitRow>, screen: TodayState, tick: (HabitRow, Spot) -> Unit, onDetails: (Long) -> Unit) {
     Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp)) {
         rows.forEach { row ->
-            GoalTile(row, tileLine(row, screen), Modifier.weight(1f), onTap = { spot ->
+            GoalTile(row, tileLine(row, screen, LocalPayRate.current), Modifier.weight(1f), onTap = { spot ->
                 val done = row.count >= row.goal.target
                 when {
                     // A routine's items, an amount to enter, and taking back a counted goal, are on its card.
@@ -1153,7 +1155,7 @@ private fun TileRow(rows: List<HabitRow>, screen: TodayState, tick: (HabitRow, S
 }
 
 /** What a tile says under its name. */
-private fun tileLine(row: HabitRow, screen: TodayState): String {
+private fun tileLine(row: HabitRow, screen: TodayState, rate: io.github.randomtools3377.checklist.core.Difficulty): String {
     val goal = row.goal
     return when {
         row.count >= goal.target -> "Done ✓"
@@ -1164,7 +1166,7 @@ private fun tileLine(row: HabitRow, screen: TodayState): String {
             screen.nextSlots[goal.id]?.let { append(" · next by ${momentText(it.at, screen.view.day)}") }
         }
         row.skipped -> "Skipped"
-        else -> listOfNotNull("+${goal.points}", goal.minutes?.let { minutesText(it) }).joinToString(" · ")
+        else -> listOfNotNull("+${rate.pay(goal.points)}", goal.minutes?.let { minutesText(it) }).joinToString(" · ")
     }
 }
 

@@ -69,6 +69,7 @@ keeps the data.
   app's icon.
 - 0.25.0: steps and reminders on to-dos, to-dos in the widget and the morning plan, and a Done
   list.
+- 0.26.0: suggested points and prices, and a difficulty setting that can ramp up over time.
 
 Every step in CLAUDE.md's build order is built. The iPhone app waits for a way to install it.
 

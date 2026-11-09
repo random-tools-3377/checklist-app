@@ -34,7 +34,8 @@ data class Backup(
      * own reasons and notes on ticks; format 7 adds goals' categories; format 8 adds mystery
      * rewards' prizes; format 9 adds goals' colours; format 10 the photo behind Today; format 11
      * goals' amounts and units, and how much each tick was and how long it took; format 12 goals
-     * moved to another day; format 13 quick to-dos.
+     * moved to another day; format 13 quick to-dos; format 14 goals' difficulty and rewards'
+     * sizes and values.
      */
     val checks: List<Check> = emptyList(),
     /** The user's own photo behind Today, in base64 (format 10). */
@@ -44,7 +45,7 @@ data class Backup(
         const val APP = "checklist"
 
         /** Raised whenever the file's layout changes in a way older versions can't read. */
-        const val FORMAT = 13
+        const val FORMAT = 14
 
         private val json = Json {
             prettyPrint = true

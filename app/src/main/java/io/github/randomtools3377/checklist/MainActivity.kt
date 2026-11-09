@@ -23,8 +23,11 @@ class MainActivity : FragmentActivity() {
         handle(intent)
         setContent {
             val appearance by vm.appearance.collectAsStateWithLifecycle()
+            val rate by vm.currentDifficulty.collectAsStateWithLifecycle()
             ChecklistTheme(appearance) {
-                ChecklistApp(vm)
+                androidx.compose.runtime.CompositionLocalProvider(io.github.randomtools3377.checklist.ui.LocalPayRate provides rate) {
+                    ChecklistApp(vm)
+                }
             }
         }
     }
