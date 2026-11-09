@@ -67,11 +67,11 @@ class TodoTest {
             )
         }
         app.waitFor { app.shownIn("today-list", "item:Clear it") }
-        app.onNodeWithTag("item:Clear it", useUnmergedTree = true).performClick()
+        app.tap("item:Clear it")
         app.waitFor { runBlocking { container.db.dao().allTicks() }.count { it.stepId != null } == 1 }
         assertEquals(0, balance())
         app.waitFor { app.shownIn("today-list", "item:Carry it") }
-        app.onNodeWithTag("item:Carry it", useUnmergedTree = true).performClick()
+        app.tap("item:Carry it")
         app.waitFor { balance() == 6 }
 
         app.onNodeWithTag("nav:goals").performClick()
