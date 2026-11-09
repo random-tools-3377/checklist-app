@@ -368,8 +368,14 @@ fun TodayScreen(
                     StreakCard(screen.streaks, screen.streakSettings)
                     Spacer(Modifier.height(12.dp))
                 }
-                TodaySection.PACE -> if (screen.plan.isNotEmpty()) {
-                    item(key = "pace") {
+                TodaySection.PACE -> if (screen.plan.isNotEmpty() || screen.events.isNotEmpty()) {
+                    if (screen.events.isNotEmpty()) item(key = "events") {
+                        Column(Modifier.padding(bottom = 8.dp).testTag("today-events")) {
+                            Text("In your calendar", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+                            screen.events.forEach { EventLine(it) }
+                        }
+                    }
+                    if (screen.plan.isNotEmpty()) item(key = "pace") {
                         PaceCard(screen, onSettings)
                         Spacer(Modifier.height(12.dp))
                         OrderSwitch(screen.recommended) { vm.setTodayOrder(if (it) ORDER_RECOMMENDED else ORDER_OWN) }
@@ -708,6 +714,9 @@ private fun PaceCard(screen: TodayState, onSettings: () -> Unit) {
                     Text("${next}finish by ${momentText(pace.finishAt, day)}", color = color, style = MaterialTheme.typography.bodyMedium)
                     if (pace.reservedMinutes > 0) {
                         Text("Includes ${minutesText(pace.reservedMinutes)} for goals with a set length", color = color, style = MaterialTheme.typography.bodySmall)
+                    }
+                    if (pace.busyMinutes > 0) {
+                        Text("Leaves out ${minutesText(pace.busyMinutes)} in your calendar", color = color, style = MaterialTheme.typography.bodySmall)
                     }
                     if (pace.shortBy > 0) {
                         Text(

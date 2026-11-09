@@ -19,6 +19,11 @@
         android:name="android.permission.SCHEDULE_EXACT_ALARM"
         android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!--
+        Reading the phone's own calendar, only once the user turns it on in Settings, to show
+        events in the planner and on Today. Nothing is written to it or sent anywhere.
+    -->
+    <uses-permission android:name="android.permission.READ_CALENDAR" />
     <!-- Added by a library the widget uses, for work the app never does. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" tools:node="remove" />
 

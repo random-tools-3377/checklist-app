@@ -2,6 +2,7 @@
 
 package io.github.randomtools3377.checklist.ui
 
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -57,6 +58,9 @@ fun PlanScreen(days: List<TodayView>, vm: MainViewModel, padding: PaddingValues,
     if (days.isEmpty()) return
     val today = days.first().day
     val view = days[selected.coerceIn(days.indices)]
+    val events by vm.calendarEvents.collectAsStateWithLifecycle()
+    val settings by vm.settings.collectAsStateWithLifecycle()
+    val dayEvents = io.github.randomtools3377.checklist.core.BusyTime.on(events, view.day, settings.dayEndHour)
     LazyColumn(
         modifier = Modifier.fillMaxSize().testTag("plan"),
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = padding.calculateTopPadding() + 8.dp, bottom = padding.calculateBottomPadding() + 24.dp),
@@ -87,6 +91,10 @@ fun PlanScreen(days: List<TodayView>, vm: MainViewModel, padding: PaddingValues,
                     androidx.compose.material3.TextButton(onClick = { onTimeline(selected) }, modifier = Modifier.testTag("plan-timeline")) { Text("Timeline") }
                 }
             }
+        }
+        if (dayEvents.isNotEmpty()) {
+            item { SectionTitle("In your calendar") }
+            items(dayEvents.size) { i -> EventLine(dayEvents[i]) }
         }
         val due = view.dueToday.sortedWith(compareBy({ it.goal.at ?: it.goal.times.minOrNull() }, { it.goal.position }))
         if (due.isEmpty() && view.thisWeek.isEmpty() && view.projects.none { it.goal.deadline == view.day }) {
@@ -130,6 +138,20 @@ private fun dayLabel(day: LocalDate, today: LocalDate): String = when (day) {
     today -> "Today"
     today.plusDays(1) -> "Tmrw"
     else -> weekdayShort(day.dayOfWeek.isoDayNumber)
+}
+
+/** An event from the phone's calendar: its time and title. */
+@Composable
+internal fun EventLine(event: io.github.randomtools3377.checklist.core.Busy) {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp).testTag("event:${event.title}")) {
+        Text(
+            if (event.allDay) "All day" else "${timeText(event.start.time)}–${timeText(event.end.time)}",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.width(110.dp),
+        )
+        Text("📅 ${event.title}", style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+    }
 }
 
 @Composable

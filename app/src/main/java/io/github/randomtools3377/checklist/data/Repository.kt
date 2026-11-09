@@ -71,6 +71,9 @@ const val SETTING_STOPWATCH = "stopwatch"
 const val SETTING_WIDGET_STYLE = "widget_style"
 /** What the user would spend on treats in a normal week, in their own money, for suggested prices. */
 const val SETTING_TREAT_BUDGET = "treat_budget"
+/** "1" when the phone's calendar is shown in the planner and on Today; which calendars, by id ("" for all). */
+const val SETTING_CALENDAR = "phone_calendar"
+const val SETTING_CALENDAR_IDS = "phone_calendar_ids"
 /** "done" once the welcome card on Today was answered (see GuideScreen). */
 const val SETTING_GUIDE = "guide"
 const val DEFAULT_SNOOZE_MINUTES = 10

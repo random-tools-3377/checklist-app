@@ -397,7 +397,8 @@ Build order **(default)**, each step a Release the owner can try:
     hours; tapping a goal picks a time, and "Usual time" puts it back. The timeline opens from
     Today and from each day in the planner, and reminders, pacing and the order follow it. The
     calendar is off until turned on in Settings, which asks for the calendar permission; events
-    are only read, from the calendars the user picks, and pacing counts them as busy time. "I
+    are only read, from the calendars the user picks, and pacing counts them as busy time;
+    all-day events are only shown. "I
     slipped" on a goal to quit records the miss straight away. A skip neither counts toward a
     challenge nor restarts it; finishing pays its bonus, and the goal carries on as a habit. The
     streak bonus adds 10% to a tick's points from a 7-day main streak, 20% from 30 and 30% from

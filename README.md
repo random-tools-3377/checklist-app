@@ -76,6 +76,8 @@ keeps the data.
 - 0.29.0: an Undo bar, and a quick settings tile that ticks the next goal.
 - 0.30.0: goals that repeat some days after they were last done.
 - 0.31.0: a day timeline, where a goal can be dragged to another time for that day.
+- 0.32.0: the phone's own calendar in the planner, the timeline and Today, read on the phone, with
+  pacing leaving its events out.
 
 Every step in CLAUDE.md's build order is built. The iPhone app waits for a way to install it.
 

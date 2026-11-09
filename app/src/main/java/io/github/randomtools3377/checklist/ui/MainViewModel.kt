@@ -1,5 +1,10 @@
 package io.github.randomtools3377.checklist.ui
 
+import kotlinx.coroutines.flow.mapLatest
+import io.github.randomtools3377.checklist.data.SETTING_CALENDAR_IDS
+import io.github.randomtools3377.checklist.data.SETTING_CALENDAR
+import io.github.randomtools3377.checklist.calendar.PhoneCalendarInfo
+import io.github.randomtools3377.checklist.calendar.PhoneCalendar
 import android.app.Application
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
@@ -9,6 +14,9 @@ import io.github.randomtools3377.checklist.core.Backup
 import io.github.randomtools3377.checklist.core.BackupError
 import io.github.randomtools3377.checklist.core.BuyResult
 import io.github.randomtools3377.checklist.core.Days
+import io.github.randomtools3377.checklist.core.Check
+import io.github.randomtools3377.checklist.core.BusyTime
+import io.github.randomtools3377.checklist.core.Busy
 import io.github.randomtools3377.checklist.core.payFor
 import io.github.randomtools3377.checklist.core.PerfectDays
 import io.github.randomtools3377.checklist.core.RepeatPrice
@@ -210,7 +218,12 @@ data class TodayState(
     val lastTicks: Map<Long, Tick> = emptyMap(),
     /** The goal missed most lately, which pays 50% more this week (see Boost). */
     val boostedGoalId: Long? = null,
+    /** Today's events in the phone's calendar, when it is shown. */
+    val events: List<Busy> = emptyList(),
 )
+
+/** What Today needs besides goals and ticks. */
+private data class Extras(val lapses: List<Lapse>, val checks: List<Check>, val boostOn: Boolean, val events: List<Busy>)
 
 /** Something just done, which the Undo bar can take back for a few seconds. */
 class Undoable(val message: String, val undo: () -> Unit)
@@ -332,6 +345,35 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val today: Flow<LocalDate> =
         combine(now, settings) { moment, s -> Days.dayOf(moment, s.dayEndHour) }.distinctUntilChanged()
 
+    // The phone's calendar, read on the phone once the user turns it on (see PhoneCalendar).
+
+    /** Read again each time the app comes to the front, since the calendar can change meanwhile. */
+    private val calendarRefresh = MutableStateFlow(0)
+
+    /** Whether the phone's calendar is shown, and from which calendars (all when empty). */
+    val calendarChoice: StateFlow<Pair<Boolean, Set<Long>>> =
+        combine(dao.observeSetting(SETTING_CALENDAR), dao.observeSetting(SETTING_CALENDAR_IDS)) { on, ids ->
+            (on == "1") to ids.orEmpty().split(",").mapNotNull { it.toLongOrNull() }.toSet()
+        }.state(false to emptySet())
+
+    /** Events from today on, for the planner's two weeks. Empty while the calendar is off. */
+    val calendarEvents: StateFlow<List<Busy>> = combine(today, calendarChoice, calendarRefresh) { day, choice, _ -> day to choice }
+        .mapLatest { (day, choice) ->
+            if (!choice.first) emptyList() else withContext(kotlinx.coroutines.Dispatchers.IO) {
+                PhoneCalendar.events(getApplication(), choice.second, day, PLAN_DAYS)
+            }
+        }.state(emptyList())
+
+    fun setCalendarOn(on: Boolean) {
+        viewModelScope.launch { repository.setSetting(SETTING_CALENDAR, if (on) "1" else "0") }
+    }
+
+    fun setCalendarIds(ids: Set<Long>) {
+        viewModelScope.launch { repository.setSetting(SETTING_CALENDAR_IDS, ids.joinToString(",")) }
+    }
+
+    suspend fun phoneCalendars(): List<PhoneCalendarInfo> = withContext(kotlinx.coroutines.Dispatchers.IO) { PhoneCalendar.calendars(getApplication()) }
+
     val todayState: StateFlow<TodayState?> = today.flatMapLatest { day ->
         // Streaks look back up to a year and a bit; that also covers every open window.
         val since = minOf(Days.earliestOpenDay(day), day.minusDays(STREAK_DAYS))
@@ -355,8 +397,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             dao.observeLapsesSince(since.toEpochDay()).map { rows -> rows.map { it.toCore() } },
             dao.observeChecksSince(since.toEpochDay()).map { rows -> rows.map { it.toCore() } },
             dao.observeSetting(Boost.SETTING),
-        ) { lapses, checks, boost -> Triple(lapses, checks, boost != "0") }
-        combine(view, lapsesFlow, now, settings, unlocked) { raw, (lapses, checks, boostOn), moment, s, isUnlocked ->
+            calendarEvents,
+        ) { lapses, checks, boost, events -> Extras(lapses, checks, boost != "0", events) }
+        combine(view, lapsesFlow, now, settings, unlocked) { raw, (lapses, checks, boostOn, events), moment, s, isUnlocked ->
+            val busy = BusyTime.on(events, day, s.dayEndHour)
             val hidePrivate = s.locks.privateGoals && !isUnlocked
             val shownGoals = if (hidePrivate) raw.goals.filter { !it.private } else raw.goals
             // Goals with an amount get the time what is left takes, from a typed time or the
@@ -378,7 +422,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             val records = StreakCounter.records(day.minusDays(STREAK_DAYS), day, raw.goals, raw.ticks.filter { it.stepId == null }, lapses)
             val streaks = StreakCounter.count(records, day, s.streak)
             val paceSettings = PaceSettings(s.dayEndHour, s.defaultFinish, s.dayStart)
-            val pace = Pace.today(moment, day, todayView.dueToday, paceSettings)
+            val pace = Pace.today(moment, day, todayView.dueToday, paceSettings, busy)
             val recommended = s.order == ORDER_RECOMMENDED
             val plan = if (recommended) {
                 Order.recommend(moment, day, todayView.dueToday, paceSettings, usual, pace)
@@ -402,6 +446,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 nextSlots = nextSlots,
                 hasDayStart = s.dayStart != null,
                 boostedGoalId = if (boostOn) Boost.goalFor(day, raw.goals, lapses)?.id else null,
+                events = busy,
                 lastTicks = (todayView.dueToday + todayView.thisWeek + todayView.thisMonth + todayView.thisYear).mapNotNull { row ->
                     raw.ticks.filter { it.stepId == null && it.countsToward(row.goal, row.window.start) }.maxByOrNull { it.at }?.let { row.goal.id to it }
                 }.toMap(),
@@ -645,6 +690,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Looks for misses and gaps since the last check. Called when the app comes to the front. */
     fun closeDays() {
+        calendarRefresh.value++
         viewModelScope.launch { container.closeDays() }
         autoBackup()
         refreshFocus()

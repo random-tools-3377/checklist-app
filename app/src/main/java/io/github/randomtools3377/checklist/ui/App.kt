@@ -129,6 +129,7 @@ fun ChecklistApp(vm: MainViewModel = viewModel()) {
     val removedGoals by vm.removedGoals.collectAsStateWithLifecycle()
     val doneList by vm.doneList.collectAsStateWithLifecycle()
     val balanceCheck by vm.balanceCheck.collectAsStateWithLifecycle()
+    val calendarEvents by vm.calendarEvents.collectAsStateWithLifecycle()
     val badges by vm.badges.collectAsStateWithLifecycle()
     val appearance by vm.appearance.collectAsStateWithLifecycle()
     val planDays by vm.planDays.collectAsStateWithLifecycle()
@@ -248,6 +249,7 @@ fun ChecklistApp(vm: MainViewModel = viewModel()) {
                     firstHour = settings.dayStart?.hour ?: 6,
                     onRetime = { goalId, minute -> day?.let { vm.retime(goalId, it.day, minute) } },
                     onBack = ::pop,
+                    events = day?.let { io.github.randomtools3377.checklist.core.BusyTime.on(calendarEvents, it.day, settings.dayEndHour) }.orEmpty(),
                 )
             }
             "done" -> DoneListScreen(doneList, onOpen = { goal -> push(editRoute(goal)) }, onBack = ::pop)

@@ -69,7 +69,14 @@ private val HOUR = 64.dp
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun TimelineScreen(view: TodayView?, title: String, firstHour: Int, onRetime: (goalId: Long, minute: Int?) -> Unit, onBack: () -> Unit) {
+fun TimelineScreen(
+    view: TodayView?,
+    title: String,
+    firstHour: Int,
+    onRetime: (goalId: Long, minute: Int?) -> Unit,
+    onBack: () -> Unit,
+    events: List<io.github.randomtools3377.checklist.core.Busy> = emptyList(),
+) {
     var picking by remember { mutableStateOf<HabitRow?>(null) }
     Scaffold(
         topBar = {
@@ -123,7 +130,8 @@ fun TimelineScreen(view: TodayView?, title: String, firstHour: Int, onRetime: (g
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(vertical = 8.dp),
             )
-            Hours(startHour, timed, onTap = { picking = it }, onDrop = { row, minute -> onRetime(row.goal.id, minute) })
+            events.filter { it.allDay }.forEach { EventLine(it) }
+            Hours(startHour, timed, events.filter { !it.allDay }, onTap = { picking = it }, onDrop = { row, minute -> onRetime(row.goal.id, minute) })
         }
     }
     picking?.let { row ->
@@ -132,7 +140,13 @@ fun TimelineScreen(view: TodayView?, title: String, firstHour: Int, onRetime: (g
 }
 
 @Composable
-private fun Hours(startHour: Int, timed: List<HabitRow>, onTap: (HabitRow) -> Unit, onDrop: (HabitRow, Int) -> Unit) {
+private fun Hours(
+    startHour: Int,
+    timed: List<HabitRow>,
+    events: List<io.github.randomtools3377.checklist.core.Busy>,
+    onTap: (HabitRow) -> Unit,
+    onDrop: (HabitRow, Int) -> Unit,
+) {
     val hours = 24 - startHour
     val density = LocalDensity.current
     val hourPx = with(density) { HOUR.toPx() }
@@ -149,6 +163,22 @@ private fun Hours(startHour: Int, timed: List<HabitRow>, onTap: (HabitRow) -> Un
                 HorizontalDivider(Modifier.padding(top = 8.dp))
             }
         }
+        // Events from the phone's calendar, as grey blocks on the right.
+        events.forEach { event ->
+            val from = (event.start.hour * 60 + event.start.minute - startHour * 60).coerceAtLeast(0)
+            val to = (event.end.hour * 60 + event.end.minute - startHour * 60).let { if (event.end.date > event.start.date) hours * 60 else it }.coerceAtLeast(from + 15)
+            Box(
+                Modifier
+                    .offset(x = 220.dp, y = HOUR * (from / 60f))
+                    .width(88.dp)
+                    .height(HOUR * ((to - from) / 60f))
+                    .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(6.dp))
+                    .padding(4.dp)
+                    .testTag("timeline-event:${event.title}"),
+            ) {
+                Text("📅 ${event.title}", style = MaterialTheme.typography.labelSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            }
+        }
         // Goals at their time; ones at the same time sit side by side.
         val placed = timed.sortedBy { it.goal.at }.groupBy { it.goal.at!!.hour * 60 + it.goal.at!!.minute }
         placed.forEach { (minute, sameTime) ->
@@ -159,7 +189,7 @@ private fun Hours(startHour: Int, timed: List<HabitRow>, onTap: (HabitRow) -> Un
                     Box(
                         Modifier
                             .offset { IntOffset(with(density) { (64 + index * 110).dp.roundToPx() }, (baseY + dragY).roundToInt()) }
-                            .width(150.dp)
+                            .width(146.dp)
                             .background(
                                 if (row.done) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.primaryContainer,
                                 RoundedCornerShape(8.dp),

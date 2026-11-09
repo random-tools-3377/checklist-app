@@ -39,6 +39,8 @@ data class TodayPace(
     val shortBy: Int,
     /** Goals left with no finish time, because none is set for them or in Settings. */
     val unpaced: Int,
+    /** Minutes taken by events in the phone's calendar before the finish, which pacing leaves out. */
+    val busyMinutes: Int = 0,
 )
 
 /** The pace for a goal that spans days: a "times per" habit or a project with a deadline. */
@@ -115,7 +117,7 @@ object Pace {
      * times a day is due one repetition at a time, by each of its times. Null when nothing that is
      * left has a finish time.
      */
-    fun today(now: LocalDateTime, day: LocalDate, rows: List<HabitRow>, settings: PaceSettings): TodayPace? {
+    fun today(now: LocalDateTime, day: LocalDate, rows: List<HabitRow>, settings: PaceSettings, busy: List<Busy> = emptyList()): TodayPace? {
         val left = rows.filter { !it.done }
         // Each tick still to do, with when it is due and how long it takes.
         class Due(val at: LocalDateTime, val minutes: Int?)
@@ -142,7 +144,7 @@ object Pace {
                 val minutes = unit.minutes
                 if (minutes != null) reserved += minutes.toLong() else untimed += 1
             }
-            val free = minutesBetween(now, due) - reserved
+            val free = minutesBetween(now, due) - reserved - BusyTime.minutes(busy, now, due)
             if (free < 0) short = maxOf(short, -free)
             if (untimed > 0) best = minOf(best, free.toDouble() / untimed)
         }
@@ -155,6 +157,7 @@ object Pace {
             nextBy = each?.takeIf { it > 0 }?.let { plusMinutes(now, it.toLong()) },
             shortBy = short.toInt(),
             unpaced = unpaced,
+            busyMinutes = BusyTime.minutes(busy, now, units.maxOf { it.at }).toInt(),
         )
     }
 

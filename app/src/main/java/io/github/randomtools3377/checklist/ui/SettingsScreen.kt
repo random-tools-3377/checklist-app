@@ -2,6 +2,7 @@
 
 package io.github.randomtools3377.checklist.ui
 
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.material3.Button
@@ -177,6 +178,56 @@ private fun DifficultySettings(vm: MainViewModel) {
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+    }
+}
+
+/**
+ * Showing the phone's own calendar in the planner and on Today, read on the phone only. Turning
+ * it on asks for the calendar permission; then the user picks which calendars.
+ */
+@Composable
+private fun CalendarSettings(vm: MainViewModel) {
+    val context = LocalContext.current
+    val choice by vm.calendarChoice.collectAsState()
+    var calendars by remember { mutableStateOf<List<io.github.randomtools3377.checklist.calendar.PhoneCalendarInfo>>(emptyList()) }
+    var allowed by remember { mutableStateOf(io.github.randomtools3377.checklist.calendar.PhoneCalendar.allowed(context)) }
+    val ask = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        allowed = granted
+        if (granted) vm.setCalendarOn(true)
+    }
+    LaunchedEffect(choice.first, allowed) {
+        calendars = if (choice.first && allowed) vm.phoneCalendars() else emptyList()
+    }
+    Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        SwitchLine(
+            "Show my calendar",
+            "Events from your phone's calendar in the planner, the timeline and Today, and pacing leaves their time out. It is only read, on the phone.",
+            choice.first && allowed,
+            "calendar",
+        ) { on ->
+            if (!on) vm.setCalendarOn(false) else if (allowed) vm.setCalendarOn(true) else ask.launch(Manifest.permission.READ_CALENDAR)
+        }
+        if (choice.first && allowed && calendars.size > 1) {
+            Text("Which calendars", style = MaterialTheme.typography.bodyLarge)
+            calendars.forEach { cal ->
+                val shown = choice.second.isEmpty() || cal.id in choice.second
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().testTag("calendar:${cal.name}")) {
+                    androidx.compose.material3.Checkbox(
+                        checked = shown,
+                        onCheckedChange = { on ->
+                            val current = if (choice.second.isEmpty()) calendars.map { it.id }.toSet() else choice.second
+                            vm.setCalendarIds(if (on) current + cal.id else current - cal.id)
+                        },
+                    )
+                    Column {
+                        Text(cal.name, style = MaterialTheme.typography.bodyMedium)
+                        if (cal.account.isNotBlank() && cal.account != cal.name) {
+                            Text(cal.account, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -360,6 +411,9 @@ fun SettingsScreen(
             DifficultySettings(vm)
             InterestSetting(vm)
             BoostSettings(vm)
+            HorizontalDivider()
+            Section("Phone calendar")
+            CalendarSettings(vm)
             HorizontalDivider()
             Section("Your day")
             Column(
