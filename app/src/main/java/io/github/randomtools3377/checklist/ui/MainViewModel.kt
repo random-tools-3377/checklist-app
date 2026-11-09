@@ -9,6 +9,8 @@ import io.github.randomtools3377.checklist.core.Backup
 import io.github.randomtools3377.checklist.core.BackupError
 import io.github.randomtools3377.checklist.core.BuyResult
 import io.github.randomtools3377.checklist.core.Days
+import io.github.randomtools3377.checklist.core.DoneItem
+import io.github.randomtools3377.checklist.core.DoneList
 import io.github.randomtools3377.checklist.data.SETTING_STOPWATCH
 import io.github.randomtools3377.checklist.core.HabitRow
 import io.github.randomtools3377.checklist.core.Amounts
@@ -1043,6 +1045,15 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             onDone()
         }
     }
+
+    /** Finished projects and done to-dos, newest first; private ones hidden while locked. */
+    val doneList: StateFlow<List<DoneItem>> = combine(
+        dao.observeGoals(), dao.observeSteps(), dao.observeStepTicks(), dao.observeTodoTicks(), combine(settings, unlocked) { s, u -> s to u },
+    ) { goals, steps, stepTicks, todoTicks, (s, isUnlocked) ->
+        val all = goals.map { it.toCore() }
+        val shown = if (s.locks.privateGoals && !isUnlocked) all.filter { !it.private } else all
+        DoneList.of(shown, steps.map { it.toCore() }, (stepTicks + todoTicks).map { it.toCore() })
+    }.state(emptyList())
 
     /** The welcome card on Today: for someone new, until it is answered or a goal is added. */
     val showWelcome: StateFlow<Boolean> = combine(dao.observeSetting(SETTING_GUIDE), dao.observeGoals(), dao.observeRemovedGoals()) { guide, goals, removed ->

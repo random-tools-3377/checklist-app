@@ -53,8 +53,8 @@ data class TodayView(
         get() = dueToday.isEmpty() && thisWeek.isEmpty() && thisMonth.isEmpty() && thisYear.isEmpty() && projects.isEmpty() && todos.isEmpty()
 }
 
-/** An undated to-do on Today: open, or done today. */
-data class TodoRow(val goal: Goal, val done: Boolean)
+/** An undated to-do on Today: open, or done today, with its steps if it has any. */
+data class TodoRow(val goal: Goal, val done: Boolean, val items: List<StepRow> = emptyList())
 
 object TodayList {
     /**
@@ -78,7 +78,12 @@ object TodayList {
             val windowTicks = ticks.filter { it.countsToward(goal, window.start) }
             val count = goal.timesDone(windowTicks)
             // A routine's items: ticked if ticked in this window, or all of them once it is done.
-            val ticked = checks.filter { it.goalId == goal.id && it.periodStart == window.start }.map { it.stepId }.toSet()
+            // A to-do's steps stay ticked until it is done, like a project's.
+            val ticked = if (goal.kind == GoalKind.TODO) {
+                ticks.filter { it.goalId == goal.id && it.stepId != null }.mapNotNull { it.stepId }.toSet()
+            } else {
+                checks.filter { it.goalId == goal.id && it.periodStart == window.start }.map { it.stepId }.toSet()
+            }
             val items = steps.filter { it.goalId == goal.id && !it.archived }
                 .sortedWith(compareBy({ it.position }, { it.id }))
                 .map { StepRow(it, it.id in ticked || count >= goal.target) }
@@ -106,7 +111,11 @@ object TodayList {
             thisYear = habits.filter { it.window.period == Period.YEARLY },
             projects = projects,
             todos = active.filter { it.kind == GoalKind.TODO && it.repeat == null }.map { goal ->
-                TodoRow(goal, ticks.any { it.goalId == goal.id && it.stepId == null && it.day == day })
+                val done = Todos.doneOn(goal, day, ticks)
+                val items = steps.filter { it.goalId == goal.id && !it.archived }
+                    .sortedWith(compareBy({ it.position }, { it.id }))
+                    .map { StepRow(it, stepTicks.containsKey(it.id) || done) }
+                TodoRow(goal, done, items)
             },
         )
     }

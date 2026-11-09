@@ -125,6 +125,8 @@ fun GoalsScreen(
     padding: PaddingValues,
     removed: Int = 0,
     onRemoved: () -> Unit = {},
+    doneCount: Int = 0,
+    onDoneList: () -> Unit = {},
 ) {
     if (view == null) return
     // Search: every word typed has to be in a goal's name or category. Not while reordering.
@@ -199,10 +201,56 @@ fun GoalsScreen(
         goalSection("Habits", habits, view, reordering, onEdit, onMove)
         goalSection("Projects", projects, view, reordering, onEdit, onMove)
         goalSection("To-dos", todos, view, reordering, onEdit, onMove)
+        if (doneCount > 0 && !reordering) {
+            item {
+                TextButton(onClick = onDoneList, modifier = Modifier.padding(top = 8.dp).testTag("done-list")) {
+                    Text("Done list · $doneCount")
+                }
+            }
+        }
         if (removed > 0 && !reordering) {
             item {
                 TextButton(onClick = onRemoved, modifier = Modifier.padding(top = 8.dp).testTag("removed-goals")) {
                     Text(if (removed == 1) "1 removed goal" else "$removed removed goals")
+                }
+            }
+        }
+    }
+}
+
+/** Finished projects and done to-dos, newest first. Tap one to open it. */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+fun DoneListScreen(items: List<io.github.randomtools3377.checklist.core.DoneItem>, onOpen: (Goal) -> Unit, onBack: () -> Unit) {
+    androidx.compose.material3.Scaffold(
+        topBar = {
+            androidx.compose.material3.TopAppBar(
+                title = { Text("Done") },
+                navigationIcon = {
+                    IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") }
+                },
+            )
+        },
+    ) { padding ->
+        LazyColumn(
+            modifier = Modifier.fillMaxSize().testTag("done-items"),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = padding.calculateTopPadding() + 8.dp, bottom = padding.calculateBottomPadding() + 24.dp),
+        ) {
+            if (items.isEmpty()) item { Text("Nothing finished yet.", modifier = Modifier.padding(top = 24.dp)) }
+            items(items, key = { it.goal.id }) { done ->
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth().clickable { onOpen(done.goal) }.padding(vertical = 8.dp).testTag("done:${done.goal.name}"),
+                ) {
+                    Text(done.goal.icon, fontSize = 26.sp, modifier = Modifier.width(40.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(done.goal.name, style = MaterialTheme.typography.bodyLarge)
+                        Text(
+                            (if (done.goal.kind == GoalKind.PROJECT) "Project" else "To-do") + " · done " + shortDate(done.day),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
             }
         }
@@ -298,7 +346,9 @@ private fun describe(goal: Goal, stepCount: Int): String = when (goal.kind) {
     }.joinToString(" · ")
     GoalKind.TODO -> buildList {
         add("+${goal.points}")
+        if (stepCount > 0) add(if (stepCount == 1) "1 step" else "$stepCount steps")
         add(Todos.dateOf(goal)?.let { "due ${shortDate(it)}" } ?: "no date")
+        goal.reminder?.at?.let { add("reminder ${timeText(it)}") }
     }.joinToString(" · ")
 }
 
@@ -1213,19 +1263,25 @@ fun TodoEditor(id: Long, vm: MainViewModel, onClose: () -> Unit) {
     var points by rememberSaveable { mutableStateOf(Todos.POINTS.toString()) }
     var date by rememberSaveable { mutableStateOf<Long?>(null) }
     var isPrivate by rememberSaveable { mutableStateOf(false) }
+    var remindAtMinute by rememberSaveable { mutableStateOf<Int?>(null) }
     var showErrors by rememberSaveable { mutableStateOf(false) }
     // A date already in the past can stay as it is, but a new one can't be.
     var savedDate by rememberSaveable { mutableStateOf<Long?>(null) }
+    // Its steps, if any. Steps pay nothing; the to-do is done when every one is ticked.
+    var nextKey by rememberSaveable { mutableStateOf(1L) }
+    val steps = rememberSaveable(saver = StepFieldsSaver) { mutableListOf<StepField>().toMutableStateList() }
 
     LaunchedEffect(id) {
         if (!loaded) {
-            vm.loadGoal(id)?.let { (goal, _) ->
+            vm.loadGoal(id)?.let { (goal, existingSteps) ->
                 name = goal.name
                 icon = goal.icon
                 points = goal.points.toString()
                 date = Todos.dateOf(goal)?.toEpochDay()
                 savedDate = date
                 isPrivate = goal.private
+                remindAtMinute = goal.reminder?.at?.toMinuteOfDay()
+                existingSteps.forEach { steps += StepField(nextKey++, it.id, it.name, "") }
             }
             loaded = true
         }
@@ -1250,6 +1306,8 @@ fun TodoEditor(id: Long, vm: MainViewModel, onClose: () -> Unit) {
                         points = points.toIntOrNull() ?: 0,
                         date = date?.toDay(),
                         private = isPrivate,
+                        steps = steps.filter { it.name.isNotBlank() }.map { StepDraft(it.id, it.name.trim(), 0) },
+                        remindAt = remindAtMinute?.toTime(),
                     ),
                     onDone = onClose,
                 )
@@ -1268,9 +1326,42 @@ fun TodoEditor(id: Long, vm: MainViewModel, onClose: () -> Unit) {
             modifier = Modifier.fillMaxWidth().testTag("field:name"),
         )
         NumberField(label = pointsTitle(), value = points, onValueChange = { points = it }, tag = "field:points")
+        Text("Steps", style = MaterialTheme.typography.titleSmall)
+        Text(
+            "Optional. Tick them off one by one, over as many days as it takes; the last one does the to-do.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        steps.forEachIndexed { index, step ->
+            key(step.key) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    OutlinedTextField(
+                        value = step.name,
+                        onValueChange = { steps[index] = step.copy(name = it.take(60)) },
+                        label = { Text("Step ${index + 1}") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f).testTag("field:step-name-$index"),
+                    )
+                    IconButton(onClick = { steps.removeAt(index) }) {
+                        Icon(Icons.Filled.Close, contentDescription = "Remove step ${index + 1}")
+                    }
+                }
+            }
+        }
+        TextButton(onClick = { steps += StepField(nextKey++, 0L, "", "") }, modifier = Modifier.testTag("add-step")) { Text("Add a step") }
         DateSetting("Due on", date?.toDay(), { date = it?.toEpochDay() }, "field:date", emptyText = "No date")
         if (showErrors && dateError != null) {
             Text(dateError, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+        }
+        if (date != null) {
+            TimeSetting(
+                "Remind me at",
+                remindAtMinute?.toTime(),
+                { remindAtMinute = it?.toMinuteOfDay() },
+                "field:remind-at",
+                emptyText = "No reminder",
+                hint = "On the day it's due.",
+            )
         }
         Text(
             if (date == null) {

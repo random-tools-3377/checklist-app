@@ -110,6 +110,7 @@ fun ChecklistApp(vm: MainViewModel = viewModel()) {
     val unlock = rememberUnlock(vm)
     val gap by vm.unansweredGap.collectAsStateWithLifecycle()
     val removedGoals by vm.removedGoals.collectAsStateWithLifecycle()
+    val doneList by vm.doneList.collectAsStateWithLifecycle()
     val badges by vm.badges.collectAsStateWithLifecycle()
     val appearance by vm.appearance.collectAsStateWithLifecycle()
     val planDays by vm.planDays.collectAsStateWithLifecycle()
@@ -216,6 +217,7 @@ fun ChecklistApp(vm: MainViewModel = viewModel()) {
                 onScratch = { vm.closeWelcome(); goTo(AppTab.TODAY) },
                 onBack = ::pop,
             )
+            "done" -> DoneListScreen(doneList, onOpen = { goal -> push(editRoute(goal)) }, onBack = ::pop)
             "removed" -> RemovedGoalsScreen(removedGoals, onRestore = { vm.restoreGoal(it.id) }, onBack = ::pop)
             "reward" -> androidx.compose.runtime.key(route) { RewardEditor(id, vm, onClose = ::pop) }
             "settings" -> SettingsScreen(
@@ -288,6 +290,8 @@ fun ChecklistApp(vm: MainViewModel = viewModel()) {
                             padding = padding,
                             removed = removedGoals.size,
                             onRemoved = { push("removed") },
+                            doneCount = doneList.size,
+                            onDoneList = { push("done") },
                         )
                         AppTab.PLAN -> PlanScreen(planDays, vm, padding)
                         AppTab.REVIEW -> if (settings.locks.review && !unlocked) {

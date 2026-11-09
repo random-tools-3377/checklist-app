@@ -415,9 +415,19 @@ fun TodayScreen(
                     items(todos, key = { "todo-${it.goal.id}" }) { row ->
                         TodoCard(
                             row = row,
-                            onDone = { spot -> vm.tickHabit(row.goal.id) { result -> celebrateTick(result, spot, bigWhenFinished = false) } },
-                            onUndo = { vm.undoHabitTick(row.goal.id) },
+                            onDone = { spot ->
+                                // With steps, Done ticks the rest of them, which does the to-do.
+                                val action: (Long, (TickResult) -> Unit) -> Unit = if (row.items.isNotEmpty()) vm::finishRoutine else vm::tickHabit
+                                action(row.goal.id) { result -> celebrateTick(result, spot, bigWhenFinished = row.items.isNotEmpty()) }
+                            },
+                            onUndo = { if (row.items.isNotEmpty()) vm.undoRoutine(row.goal.id) else vm.undoHabitTick(row.goal.id) },
                             onEdit = { onEditTodo(row.goal.id) },
+                            onItem = { item, spot ->
+                                vm.checkItem(item.step.id) { result ->
+                                    if (result is TickResult.Ticked && result.finished) celebrateTick(result, spot, bigWhenFinished = true)
+                                }
+                            },
+                            onUncheck = { item -> vm.uncheckItem(item.step.id) },
                         )
                         Spacer(Modifier.height(10.dp))
                     }
@@ -520,12 +530,20 @@ private fun QuickTodoField(onAdd: (String) -> Unit, onMore: (String) -> Unit) {
 
 /** A to-do without a date: open until it's done. Tap it to edit it or give it a date. */
 @Composable
-private fun TodoCard(row: io.github.randomtools3377.checklist.core.TodoRow, onDone: (Spot) -> Unit, onUndo: () -> Unit, onEdit: () -> Unit) {
+private fun TodoCard(
+    row: io.github.randomtools3377.checklist.core.TodoRow,
+    onDone: (Spot) -> Unit,
+    onUndo: () -> Unit,
+    onEdit: () -> Unit,
+    onItem: (StepRow, Spot) -> Unit = { _, _ -> },
+    onUncheck: (StepRow) -> Unit = {},
+) {
     val goal = row.goal
     val spot = remember { Spot() }
     val cardSize = LocalCardSize.current
     Card(Modifier.fillMaxWidth().clickable(onClick = onEdit).testTag("todo:${goal.name}")) {
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.goalStrip(goal.color).padding(cardSize.padding)) {
+      Column(Modifier.goalStrip(goal.color)) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(cardSize.padding)) {
             Text(goal.icon, fontSize = cardSize.icon, modifier = Modifier.width(44.dp), textAlign = TextAlign.Center)
             Spacer(Modifier.width(8.dp))
             Column(Modifier.weight(1f)) {
@@ -536,7 +554,8 @@ private fun TodoCard(row: io.github.randomtools3377.checklist.core.TodoRow, onDo
                     overflow = TextOverflow.Ellipsis,
                     textDecoration = if (row.done) androidx.compose.ui.text.style.TextDecoration.LineThrough else null,
                 )
-                Text("+${goal.points}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                val detail = if (row.items.isEmpty()) "+${goal.points}" else "+${goal.points} · ${row.items.count { it.done }} of ${row.items.size} steps"
+                Text(detail, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             TickButton(
                 done = row.done,
@@ -548,6 +567,14 @@ private fun TodoCard(row: io.github.randomtools3377.checklist.core.TodoRow, onDo
                 onClick = { if (row.done) onUndo() else onDone(spot) },
             )
         }
+        if (row.items.isNotEmpty()) {
+            Column(Modifier.padding(start = 64.dp, end = 12.dp, bottom = 8.dp)) {
+                row.items.forEach { item ->
+                    RoutineItemLine(item, onTick = { onItem(item, it) }, onUndo = { onUncheck(item) })
+                }
+            }
+        }
+      }
     }
 }
 

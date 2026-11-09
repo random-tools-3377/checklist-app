@@ -1,7 +1,9 @@
 package io.github.randomtools3377.checklist
 
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -49,5 +51,32 @@ class TodoTest {
         // Tapping Done again takes it back.
         app.tap("tick:Call the dentist")
         app.waitFor { balance() == 0 }
+    }
+
+    @Test
+    fun aToDosStepsAreTickedOnTodayAndItLandsInTheDoneList() {
+        runBlocking {
+            container.repository.saveTodo(
+                io.github.randomtools3377.checklist.data.TodoDraft(
+                    id = 0, name = "Move the desk", points = 6,
+                    steps = listOf(
+                        io.github.randomtools3377.checklist.data.StepDraft(0, "Clear it", 0),
+                        io.github.randomtools3377.checklist.data.StepDraft(0, "Carry it", 0),
+                    ),
+                ),
+            )
+        }
+        app.waitFor { app.shownIn("today-list", "item:Clear it") }
+        app.onNodeWithTag("item:Clear it", useUnmergedTree = true).performClick()
+        app.waitFor { runBlocking { container.db.dao().allTicks() }.count { it.stepId != null } == 1 }
+        assertEquals(0, balance())
+        app.waitFor { app.shownIn("today-list", "item:Carry it") }
+        app.onNodeWithTag("item:Carry it", useUnmergedTree = true).performClick()
+        app.waitFor { balance() == 6 }
+
+        app.onNodeWithTag("nav:goals").performClick()
+        app.waitFor { app.onAllNodesWithTag("done-list").fetchSemanticsNodes().isNotEmpty() }
+        app.tap("done-list")
+        app.waitFor { app.onAllNodesWithTag("done:Move the desk", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
     }
 }

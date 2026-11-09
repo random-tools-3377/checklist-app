@@ -66,4 +66,54 @@ class TodosTest {
         assertEquals(null, Todos.dateOf(back.goals[0]))
         assertEquals(monday, Todos.dateOf(back.goals[1]))
     }
+
+    @Test
+    fun aToDosStepsStayTickedUntilTheLastDoesIt() = runTest {
+        val move = store.addGoal(Todos.of("Move the desk", points = 6))
+        val steps = listOf("Clear it", "Carry it", "Plug in").mapIndexed { i, name ->
+            store.addStep(Step(goalId = move.id, name = name, points = 0, position = i, archived = false))
+        }
+        lapses.closeDays()
+        assertEquals(TickResult.Ticked(0, 0, false), book.checkItem(steps[0].id))
+        assertEquals(0, book.balance())
+
+        // Steps carry over to the next day.
+        at(10)
+        lapses.closeDays()
+        val row = TodayList.build(LocalDate(2026, 11, 10), store.goals, store.steps, store.ticks, 0).todos.single()
+        assertEquals(listOf(true, false, false), row.items.map { it.done })
+        book.checkItem(steps[1].id)
+        val done = book.checkItem(steps[2].id) as TickResult.Ticked
+        assertTrue(done.finished)
+        assertEquals(6, book.balance())
+
+        // Taking a step back takes the to-do back.
+        assertTrue(book.uncheckItem(steps[2].id))
+        assertEquals(0, book.balance())
+        // Done ticks the rest; undo takes back the to-do and its steps.
+        assertTrue(book.finishRoutine(move.id) is TickResult.Ticked)
+        assertEquals(6, book.balance())
+        assertTrue(book.undoRoutine(move.id))
+        assertEquals(0, book.balance())
+        assertTrue(store.stepTicks(move.id).isEmpty())
+    }
+
+    @Test
+    fun theDoneListHoldsFinishedProjectsAndDoneToDosNewestFirst() = runTest {
+        val call = store.addGoal(Todos.of("Call the dentist"))
+        val open = store.addGoal(Todos.of("Fix the gate"))
+        val shelf = store.addGoal(Goal(kind = GoalKind.PROJECT, name = "Shelf", icon = "🪚", points = 0, repeat = null))
+        val step = store.addStep(Step(goalId = shelf.id, name = "Build it", points = 3, position = 0, archived = false))
+        lapses.closeDays()
+        book.tickStep(step.id)
+        at(10)
+        book.tickHabit(call.id)
+        val done = DoneList.of(store.goals, store.steps, store.ticks)
+        assertEquals(listOf(call.id, shelf.id), done.map { it.goal.id })
+        assertEquals(LocalDate(2026, 11, 10), done.first().day)
+        assertTrue(done.none { it.goal.id == open.id })
+        // The widget shows to-dos without a date at the end of the agenda.
+        val agenda = CalendarView.agenda(LocalDate(2026, 11, 10), store.goals, store.ticks)
+        assertEquals(listOf(true, false), agenda.map { it.done })
+    }
 }

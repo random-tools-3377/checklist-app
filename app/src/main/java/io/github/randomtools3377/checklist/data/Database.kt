@@ -262,6 +262,10 @@ interface ChecklistDao {
     @Query("SELECT * FROM ticks WHERE stepId IS NOT NULL")
     fun observeStepTicks(): Flow<List<TickEntity>>
 
+    /** Ticks of to-dos themselves (not their steps), for the Done list. */
+    @Query("SELECT ticks.* FROM ticks JOIN goals ON goals.id = ticks.goalId WHERE goals.kind = 'TODO' AND ticks.stepId IS NULL")
+    fun observeTodoTicks(): Flow<List<TickEntity>>
+
     @Query("SELECT * FROM ticks WHERE stepId IS NULL AND periodStart >= :since")
     suspend fun habitTicksSince(since: Long): List<TickEntity>
 

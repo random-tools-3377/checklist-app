@@ -203,9 +203,10 @@ object Reminders {
             dayStart = dao.setting(SETTING_DAY_START)?.toIntOrNull()?.toTime(),
         )
         val plan = MorningPlan.of(now, view, settings) ?: return
-        val title = when (plan.goals) {
-            0 -> "Today: nothing due, ${plan.alsoOpen} still open this week"
-            1 -> "Today: 1 goal"
+        val title = when {
+            plan.goals == 0 && plan.alsoOpen == 0 -> "Today: nothing due"
+            plan.goals == 0 -> "Today: nothing due, ${plan.alsoOpen} still open this week"
+            plan.goals == 1 -> "Today: 1 goal"
             else -> "Today: ${plan.goals} goals"
         }
         val text = buildList {
@@ -219,6 +220,7 @@ object Reminders {
                 add("done by ${timeText(pace.finishAt.time)}")
             }
             if (plan.goals > 0 && plan.alsoOpen > 0) add("${plan.alsoOpen} more open this week or month")
+            if (plan.todos > 0) add(if (plan.todos == 1) "1 to-do waiting" else "${plan.todos} to-dos waiting")
         }.joinToString(" · ")
         val open = PendingIntent.getActivity(
             context,

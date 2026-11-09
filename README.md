@@ -67,6 +67,8 @@ keeps the data.
   a miss.
 - 0.24.0: a first-run guide with example goals, search in the Goals list, and shortcuts on the
   app's icon.
+- 0.25.0: steps and reminders on to-dos, to-dos in the widget and the morning plan, and a Done
+  list.
 
 Every step in CLAUDE.md's build order is built. The iPhone app waits for a way to install it.
 

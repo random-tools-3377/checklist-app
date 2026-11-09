@@ -26,6 +26,10 @@ object Todos {
         createdAt = createdAt,
     )
 
+    /** Whether a to-do without a date was done on [day]. */
+    fun doneOn(goal: Goal, day: LocalDate, ticks: List<Tick>): Boolean =
+        ticks.any { it.goalId == goal.id && it.stepId == null && it.periodStart == day }
+
     /** The date a to-do is due on, if it has one. */
     fun dateOf(goal: Goal): LocalDate? = goal.repeat?.takeIf { goal.kind == GoalKind.TODO }?.start
 }

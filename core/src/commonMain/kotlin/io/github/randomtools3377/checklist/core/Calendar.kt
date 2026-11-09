@@ -28,7 +28,12 @@ object CalendarView {
                 val times = goal.times.sorted()
                 AgendaItem(goal, count, goal.at ?: times.getOrNull(count) ?: times.firstOrNull())
             }
-        return items.sortedWith(compareBy({ it.time == null }, { it.time }, { it.goal.position }, { it.goal.id }))
+        // To-dos without a date wait at the end, open or done today.
+        val todos = goals
+            .filter { !it.archived && it.kind == GoalKind.TODO && it.repeat == null }
+            .sortedWith(compareBy({ it.position }, { it.id }))
+            .map { goal -> AgendaItem(goal, if (Todos.doneOn(goal, day, ticks)) 1 else 0, null) }
+        return items.sortedWith(compareBy({ it.time == null }, { it.time }, { it.goal.position }, { it.goal.id })) + todos
     }
 
     /** Single-day habits due on [day], and how many of them were done. */

@@ -152,16 +152,19 @@ data class MorningPlan(
     /** "Times per" habits and projects still open. */
     val alsoOpen: Int,
     val pace: TodayPace?,
+    /** To-dos without a date still waiting. */
+    val todos: Int = 0,
 ) {
     companion object {
         /** The plan for [view] at [now], or null when there's nothing to plan today. */
         fun of(now: LocalDateTime, view: TodayView, settings: PaceSettings, usual: Map<Long, Int> = emptyMap()): MorningPlan? {
             val left = view.dueToday.filter { !it.done }
             val open = (view.thisWeek + view.thisMonth + view.thisYear).count { !it.done } + view.projects.count { !it.finished }
-            if (left.isEmpty() && open == 0) return null
+            val todos = view.todos.count { !it.done }
+            if (left.isEmpty() && open == 0 && todos == 0) return null
             val pace = Pace.today(now, view.day, view.dueToday, settings)
             val first = Order.recommend(now, view.day, view.dueToday, settings, usual, pace).firstOrNull { !it.row.done }
-            return MorningPlan(left.size, first, open, pace)
+            return MorningPlan(left.size, first, open, pace, todos)
         }
     }
 }

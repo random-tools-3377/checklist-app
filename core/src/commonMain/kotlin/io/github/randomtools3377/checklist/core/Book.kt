@@ -189,6 +189,7 @@ class Book(
     suspend fun checkItem(stepId: Long): TickResult = store.transaction {
         val step = store.step(stepId)
         val goal = step?.let { store.goal(it.goalId) }
+        if (goal?.kind == GoalKind.TODO) return@transaction tickStep(stepId)
         if (step == null || step.archived || goal == null || goal.archived || goal.kind != GoalKind.HABIT) {
             return@transaction TickResult.NotFound
         }
@@ -208,6 +209,7 @@ class Book(
     suspend fun uncheckItem(stepId: Long): Boolean = store.transaction {
         val step = store.step(stepId) ?: return@transaction false
         val goal = store.goal(step.goalId) ?: return@transaction false
+        if (goal.kind == GoalKind.TODO) return@transaction undoStep(stepId)
         val window = goal.repeat?.window(today()) ?: return@transaction false
         val check = store.checks(goal.id, window.start).find { it.stepId == stepId } ?: return@transaction false
         store.removeCheck(check.id)
@@ -219,6 +221,7 @@ class Book(
     /** "Done" on a routine: ticks every item still open, which ticks the routine. */
     suspend fun finishRoutine(goalId: Long): TickResult = store.transaction {
         val goal = store.goal(goalId) ?: return@transaction TickResult.NotFound
+        if (goal.kind == GoalKind.TODO) return@transaction finishTodo(goalId)
         val window = goal.repeat?.window(today()) ?: return@transaction TickResult.NotDue
         val ticked = store.checks(goalId, window.start).map { it.stepId }.toSet()
         val open = store.activeSteps(goalId).filter { it.id !in ticked }
@@ -231,6 +234,7 @@ class Book(
     /** Takes back a finished routine: the routine's tick and every item ticked in this window. */
     suspend fun undoRoutine(goalId: Long): Boolean = store.transaction {
         val goal = store.goal(goalId) ?: return@transaction false
+        if (goal.kind == GoalKind.TODO) return@transaction undoTodo(goalId)
         val window = goal.repeat?.window(today()) ?: return@transaction false
         store.checks(goalId, window.start).forEach { store.removeCheck(it.id) }
         undoHabitTick(goalId)
@@ -240,10 +244,11 @@ class Book(
     suspend fun tickStep(stepId: Long): TickResult = store.transaction {
         val step = store.step(stepId)
         val goal = step?.let { store.goal(it.goalId) }
-        if (step == null || step.archived || goal == null || goal.archived || goal.kind != GoalKind.PROJECT) {
+        if (step == null || step.archived || goal == null || goal.archived || goal.kind == GoalKind.HABIT) {
             return@transaction TickResult.NotFound
         }
         if (store.stepTick(stepId) != null) return@transaction TickResult.AlreadyDone
+        if (goal.kind == GoalKind.TODO) return@transaction tickTodoStep(goal, step)
 
         val day = today()
         val at = millis()
@@ -270,11 +275,48 @@ class Book(
         TickResult.Ticked(points = step.points, bonus = bonus, finished = finished)
     }
 
+    /**
+     * A step of a to-do ticked. Steps pay nothing alone; ticking the last one does the to-do,
+     * which pays its points. They stay ticked from day to day until it is done.
+     */
+    private suspend fun tickTodoStep(goal: Goal, step: Step): TickResult {
+        val day = today()
+        store.addTick(Tick(goalId = goal.id, stepId = step.id, at = millis(), day = day, period = null, periodStart = day))
+        val ticked = store.stepTicks(goal.id).mapNotNull { it.stepId }.toSet()
+        if (store.activeSteps(goal.id).all { it.id in ticked }) {
+            val result = tickHabit(goal.id)
+            if (result is TickResult.Ticked) return result
+        }
+        return TickResult.Ticked(points = 0, bonus = 0, finished = false)
+    }
+
+    /** Done on a to-do with steps: ticks the steps still open, then the to-do. */
+    private suspend fun finishTodo(goalId: Long): TickResult {
+        val goal = store.goal(goalId) ?: return TickResult.NotFound
+        val day = today()
+        val ticked = store.stepTicks(goalId).mapNotNull { it.stepId }.toSet()
+        store.activeSteps(goalId).filter { it.id !in ticked }.forEach { step ->
+            store.addTick(Tick(goalId = goal.id, stepId = step.id, at = millis(), day = day, period = null, periodStart = day))
+        }
+        return tickHabit(goalId)
+    }
+
+    /** Takes back a done to-do with steps: its tick, and every step. */
+    private suspend fun undoTodo(goalId: Long): Boolean {
+        store.stepTicks(goalId).forEach { removeTickAndItsEntries(it.id) }
+        return undoHabitTick(goalId)
+    }
+
     /** Marks a project step not done, taking back its points and the project bonus if it was paid. */
     suspend fun undoStep(stepId: Long): Boolean = store.transaction {
         val step = store.step(stepId) ?: return@transaction false
         val tick = store.stepTick(stepId) ?: return@transaction false
         removeTickAndItsEntries(tick.id)
+        // A to-do with a step taken back isn't done any more.
+        if (store.goal(step.goalId)?.kind == GoalKind.TODO) {
+            undoHabitTick(step.goalId)
+            return@transaction true
+        }
         // The project is no longer finished, so its bonus no longer stands.
         bonusesOn(store.stepTicks(step.goalId)).forEach { store.removeEntry(it.id) }
         true

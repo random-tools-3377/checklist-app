@@ -351,6 +351,55 @@ Build order **(default)**, each step a Release the owner can try:
     list's search matches every word typed against names and categories. The icon's shortcuts are
     New to-do, New goal, Plan and Shop.
 
+14. Then, chosen by the owner, each step a Release: to-dos in the widget, the morning plan and
+    reminders, steps on to-dos, and a list of what's done (0.25.0); suggested points and prices,
+    and a difficulty setting that ramps up (0.26.0); a balance check with goal tuning hints, and
+    savings interest (0.27.0); a boost on the goal missed most, a perfect-day bonus, and prices
+    that rise on repeat buys (0.28.0); an Undo bar and a quick settings tile (0.29.0); "since
+    last done" repeats (0.30.0); a day timeline (0.31.0); the phone's calendar in the planner
+    (0.32.0); goals to quit and challenges (0.33.0); a streak bonus and a mood check-in (0.34.0).
+
+    Decided: a "since last done" goal not done on its day is one miss as usual, then stays on
+    Today until done with no more misses, and the next one counts from when it is done. A goal to
+    quit is ticked each day it was avoided, like a habit, and a day not ticked is a miss. A
+    missed day restarts a challenge from day 1. The difficulty setting changes the points goals
+    pay and how many skips and misses are free, not reward prices, and ramps up on a schedule the
+    user sets (where it starts, where it ends up, over how many weeks), changeable any time. A
+    reward's suggested price comes from its value, typed as money or picked as a size; a goal's
+    suggested points come from its difficulty and its length.
+
+    **Details (default):** a to-do's steps pay nothing, and it is done, and pays, when every step
+    is ticked; the Done list holds finished projects and done to-dos, newest first. Difficulty
+    has five levels: Very easy pays double and allows 2 more free skips or misses, Easy pays 1.5
+    times and allows 1 more, Normal is as set, Hard pays three quarters and allows 1 fewer, Very
+    hard pays half and allows none; points are rounded down but a goal paying something pays at
+    least 1, and penalties stay half the goal's own points. The ramp moves a level at a time on
+    Mondays, spread evenly over the weeks; picking a level by hand turns the ramp off. Suggested
+    points per tick: easy 2, medium 5, hard 10, very hard 20, plus 1 for every 10 minutes of its
+    length, shared out over the times of a counted goal. Suggested prices come from the user's
+    usual earnings at Normal: a small treat a day's worth, medium 3 days, big 2 weeks, huge 6
+    weeks; a money value uses a weekly treat budget the user types once (a normal week's
+    earnings are worth that budget). The balance check sits in the shop: usual earnings, each
+    reward's days of earning, rewards too cheap (under half a day) or out of reach (over 2
+    months), and goals done 95% of the time or more (could pay less) or half the time or less
+    (could pay more) over the last 4 weeks. Savings interest is 2% of a positive balance at the
+    end of each week, rounded down, in the points history, and can be changed or turned off. The
+    goal missed most over the last 4 weeks (2 misses or more) pays 50% more for the week,
+    chosen each Monday. A perfect day, everything due done, pays 10 points when it ends. A reward
+    costs 25% more for each time it was already bought that week, back to its price on Monday;
+    a return refunds what was paid. The Undo bar shows for 5 seconds after a tick, removing a
+    goal or buying a reward. The quick settings tile ticks the next goal in Today's order and
+    leaves out locked ones. Dragging on the timeline changes a goal's time for that day only. The
+    calendar is off until turned on in Settings, which asks for the calendar permission; events
+    are only read, from the calendars the user picks, and pacing counts them as busy time. "I
+    slipped" on a goal to quit records the miss straight away. A skip neither counts toward a
+    challenge nor restarts it; finishing pays its bonus, and the goal carries on as a habit. The
+    streak bonus adds 10% to a tick's points from a 7-day main streak, 20% from 30 and 30% from
+    100, rounded down, can be turned off, and goes with an undone tick. The mood check-in is five
+    faces and an optional note once a day, as a card on Today, shown in the review beside how
+    much got done, and behind the lock with reasons and notes. Point changes stack by
+    multiplying (difficulty, the boost, the streak bonus) and are rounded down once.
+
 ## Talking to the owner
 
 - Short and plain. The owner is not an Android developer. Say what changed, what to try, and what

@@ -140,6 +140,10 @@ data class TodoDraft(
     /** The day it is due; null for one that waits until it is done and is never missed. */
     val date: LocalDate? = null,
     val private: Boolean = false,
+    /** Its steps, if it has any: it is done when every one is ticked. Steps pay nothing. */
+    val steps: List<StepDraft> = emptyList(),
+    /** A reminder on its date, for a to-do with one. */
+    val remindAt: LocalTime? = null,
 )
 
 /** What the reward editor saves. */
@@ -284,8 +288,9 @@ class Repository(private val db: AppDatabase, private val celebrations: Celebrat
     suspend fun saveTodo(draft: TodoDraft): Long = db.withTransaction {
         val existing = if (draft.id != 0L) dao.goal(draft.id)?.takeIf { it.kind == GoalKind.TODO.name } else null
         val made = Todos.of(draft.name, draft.points, draft.date, draft.icon.ifBlank { Todos.ICON })
-        if (existing == null) {
-            dao.insertGoal(made.copy(private = draft.private, position = dao.nextGoalPosition(), createdAt = nowMillis()).toEntity())
+        val reminder = draft.remindAt?.takeIf { draft.date != null }?.let { Reminder(onTime = true, at = it) }
+        val goalId = if (existing == null) {
+            dao.insertGoal(made.copy(private = draft.private, reminder = reminder, position = dao.nextGoalPosition(), createdAt = nowMillis()).toEntity())
         } else {
             val repeat = made.repeat
             dao.updateGoal(
@@ -296,10 +301,14 @@ class Repository(private val db: AppDatabase, private val celebrations: Celebrat
                     repeat = repeat?.let { RepeatText.encode(it) },
                     period = repeat?.windowPeriod?.name,
                     isPrivate = draft.private,
+                    reminder = reminder?.let { RepeatText.encodeReminder(it) },
                 ),
             )
             existing.id
         }
+        val steps = draft.steps.filter { it.name.isNotBlank() }.map { it.copy(name = it.name.trim().take(60), points = 0) }
+        if (steps.isNotEmpty() || dao.activeSteps(goalId).isNotEmpty()) saveSteps(goalId, steps)
+        goalId
     }
 
     /**
