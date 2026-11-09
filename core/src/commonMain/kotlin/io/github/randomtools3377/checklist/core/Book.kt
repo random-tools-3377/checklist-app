@@ -72,6 +72,8 @@ class Book(
         val window = repeat.window(day) ?: return@transaction TickResult.NotDue
         val start = window.start
         val ticks = store.habitTicks(goalId, start).filter { it.countsToward(goal, start) }
+        // A goal with an amount: "Done" enters what is left of it.
+        if (goal.hasAmount) return@transaction logAmount(goalId, (goal.amount!! - goal.progressOf(ticks)).coerceAtLeast(0.0))
         if (ticks.size >= goal.target) return@transaction TickResult.AlreadyDone
 
         val at = millis()
@@ -91,6 +93,39 @@ class Book(
             )
         }
         TickResult.Ticked(points = goal.points, bonus = bonus, finished = finished)
+    }
+
+    /**
+     * Enters how much of a goal's amount was done, like 8 pages, and how long it took if it was
+     * timed. The entry that reaches the amount pays the goal's points; the ones before it pay
+     * nothing. Once it is reached, more can't be entered until it is due again.
+     */
+    suspend fun logAmount(goalId: Long, amount: Double, seconds: Int? = null): TickResult = store.transaction {
+        val goal = store.goal(goalId)
+        val repeat = goal?.repeat
+        if (goal == null || goal.archived || goal.kind != GoalKind.HABIT || repeat == null || !goal.hasAmount) {
+            return@transaction TickResult.NotFound
+        }
+        val day = today()
+        val window = repeat.window(day) ?: return@transaction TickResult.NotDue
+        val ticks = store.habitTicks(goalId, window.start).filter { it.countsToward(goal, window.start) }
+        val before = goal.progressOf(ticks)
+        if (Amounts.reached(before, goal.amount!!)) return@transaction TickResult.AlreadyDone
+        val entered = Amounts.tidy(amount) ?: return@transaction TickResult.NotFound
+        val at = millis()
+        val tickId = store.addTick(
+            Tick(
+                goalId = goalId, stepId = null, at = at, day = day, period = window.period, periodStart = window.start,
+                amount = entered, seconds = seconds?.takeIf { it > 0 },
+            ),
+        )
+        val finished = Amounts.reached(before + entered, goal.amount)
+        if (finished) {
+            store.addEntry(
+                Entry(at = at, day = day, kind = EntryKind.TICK, amount = goal.points, goalId = goalId, tickId = tickId, label = goal.name),
+            )
+        }
+        TickResult.Ticked(points = if (finished) goal.points else 0, bonus = 0, finished = finished)
     }
 
     /**

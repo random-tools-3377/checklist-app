@@ -107,7 +107,7 @@ object Review {
                 val window = goal.repeat!!.window(day)
                 if (window != null && window.end == day) {
                     due++
-                    val count = ticks.count { it.countsToward(goal, window.start) }
+                    val count = goal.timesDone(ticks.filter { it.countsToward(goal, window.start) })
                     val skips = live.count { it.goalId == goal.id && it.kind == LapseKind.SKIP && it.periodStart == window.start }
                     val finished = if (window.period == Period.DAILY) count >= goal.target || skips > 0 else count + skips >= goal.target
                     if (skips > 0 && count < goal.target) skipped++

@@ -65,12 +65,23 @@ data class Goal(
     val category: String? = null,
     /** Its own colour, as 0xFFRRGGBB, shown on its card, in the calendar widget and the grid (see [Colors]). */
     val color: Int? = null,
+    /**
+     * How much of the user's own [unit] makes it done each time it is due, like 20 pages or 1
+     * mile. The user enters how much they did, and it is done, and pays, when this is reached
+     * (see [Amounts]). Null for a goal that is simply ticked.
+     */
+    val amount: Double? = null,
+    /** The unit of [amount], in the user's own words, like "pages" or "mile". */
+    val unit: String? = null,
     val archived: Boolean = false,
     val position: Int = 0,
     val createdAt: Long = 0,
 ) {
     /** The kind of stretch its ticks count toward. Null for a project. */
     val period: Period? get() = repeat?.windowPeriod
+
+    /** It is done when an amount in the user's own unit is reached, rather than by ticking. */
+    val hasAmount: Boolean get() = amount != null && amount > 0
 
     /** Done several times on each day it is due. */
     val severalADay: Boolean get() = kind == GoalKind.HABIT && target > 1 && repeat?.windowPeriod == Period.DAILY
@@ -149,6 +160,10 @@ data class Tick(
     val periodStart: LocalDate,
     /** A note the user wrote about it, like "ran 5 km". */
     val note: String? = null,
+    /** For a goal with an amount: how much this entry was, like 8 pages. */
+    val amount: Double? = null,
+    /** How long it took, in seconds, when it was timed with Start and Stop. */
+    val seconds: Int? = null,
 )
 
 /**

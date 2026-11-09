@@ -58,6 +58,8 @@ keeps the data.
 - 0.18.0: renaming points (coins, stars, XP or your own words), three bundled fonts, and
   celebration settings: sound, buzz, how much confetti and a GIF for every goal.
 - 0.19.0: app icon choices, and the widgets solid in the app's colours or see-through.
+- 0.20.0: goals with an amount in the user's own unit, like 20 pages or 1 mile, entered as they
+  go, with a typed time to budget or a usual speed learned from Start and Stop.
 
 Every step in CLAUDE.md's build order is built. The iPhone app waits for a way to install it.
 

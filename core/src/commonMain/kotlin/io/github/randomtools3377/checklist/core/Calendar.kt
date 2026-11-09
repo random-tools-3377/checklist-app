@@ -23,7 +23,7 @@ object CalendarView {
             .filter { !it.archived && it.kind == GoalKind.HABIT }
             .mapNotNull { goal ->
                 val window = goal.repeat?.window(day) ?: return@mapNotNull null
-                val count = ticks.count { it.countsToward(goal, window.start) }
+                val count = goal.timesDone(ticks.filter { it.countsToward(goal, window.start) })
                 // A habit done several times a day shows its next set time, or its first.
                 val times = goal.times.sorted()
                 AgendaItem(goal, count, goal.at ?: times.getOrNull(count) ?: times.firstOrNull())
@@ -41,7 +41,7 @@ object CalendarView {
             val repeat = goal.repeat ?: continue
             if (repeat.kind == RepeatKind.TIMES_PER || !repeat.isDueOn(day)) continue
             due++
-            if (ticks.count { it.countsToward(goal, day) } >= goal.target) done++
+            if (goal.timesDone(ticks.filter { it.countsToward(goal, day) }) >= goal.target) done++
         }
         return due to done
     }

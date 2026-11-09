@@ -61,6 +61,14 @@ The app has no network access unless the owner decides otherwise for this app.
   with search by name, a skin tone choice, and the most recent ones first. Emoji the phone can't
   show are left out. The list comes from Unicode's emoji data (via the MIT-licensed
   `unicode-emoji-json` package) and is bundled with the app.
+- A goal can have an amount in the user's own unit, like 20 pages or 1 mile. The user enters how
+  much they did each time, and it is done, and pays its points, when the amount is reached. For
+  pacing, how long it takes comes from a time the user types in for the whole amount, or is
+  learned from timing it with Start and Stop; a typed time wins until it is cleared.
+  **Details (default):** the usual speed comes from the latest 10 timings. Done from a reminder,
+  the widget or "I forgot to tick it" enters what is left. A goal with an amount is done once
+  each time it is due, so it isn't also counted or a routine. One timing runs at a time, and
+  keeps running when the app is closed.
 - Each step of a project pays, and finishing the project pays a bonus. A project can have a
   deadline, and missing it counts as a miss **(default)**.
 - Changing a goal applies from then on, never to the past **(default)**.
@@ -323,6 +331,7 @@ Build order **(default)**, each step a Release the owner can try:
     Ocean, Forest and Sunset; the colour picker has a colour square, a hue slider and a hex
     code box, and the app builds the whole theme from the picked colour so text stays
     readable**)**.
+12. Goals with an amount in the user's own unit (0.20.0).
 
 ## Talking to the owner
 

@@ -63,7 +63,8 @@ class Lapses(
         val window = repeat.window(today) ?: return SkipCheck.NotDue
         val ticks = store.habitTicks(goalId, window.start).filter { it.countsToward(goal, window.start) }
         val skips = store.lapses(goalId, window.start, window.end).filter { it.kind == LapseKind.SKIP && it.periodStart == window.start }
-        val done = if (window.period == Period.DAILY) ticks.size >= goal.target || skips.isNotEmpty() else ticks.size + skips.size >= goal.target
+        val times = goal.timesDone(ticks)
+        val done = if (window.period == Period.DAILY) times >= goal.target || skips.isNotEmpty() else times + skips.size >= goal.target
         if (done) return SkipCheck.AlreadyDone
         val used = used(goal, today)
         val over = used >= goal.allowed
@@ -145,7 +146,7 @@ class Lapses(
                     val repeat = goal.repeat ?: continue
                     val window = repeat.window(day) ?: continue
                     if (window.end != day) continue // its time hasn't run out yet
-                    val count = ticks.count { it.countsToward(goal, window.start) }
+                    val count = goal.timesDone(ticks.filter { it.countsToward(goal, window.start) })
                     val skips = store.lapses(goal.id, window.start, window.end)
                         .count { it.kind == LapseKind.SKIP && it.periodStart == window.start }
                     val done = if (window.period == Period.DAILY) count >= goal.target || skips > 0 else count + skips >= goal.target

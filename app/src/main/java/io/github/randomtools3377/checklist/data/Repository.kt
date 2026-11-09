@@ -1,6 +1,7 @@
 package io.github.randomtools3377.checklist.data
 
 import androidx.room.withTransaction
+import io.github.randomtools3377.checklist.core.Amounts
 import io.github.randomtools3377.checklist.core.Backup
 import io.github.randomtools3377.checklist.core.Categories
 import io.github.randomtools3377.checklist.core.Celebration
@@ -59,6 +60,8 @@ const val SETTING_CONFETTI = "confetti"
 const val SETTING_DEFAULT_GIF = "default_gif"
 /** The app's home-screen icon (see AppIcon), and the widgets' style (see WidgetStyle). */
 const val SETTING_APP_ICON = "app_icon"
+/** The running Start and Stop timing, as "goalId|startedAt" in epoch milliseconds. */
+const val SETTING_STOPWATCH = "stopwatch"
 const val SETTING_WIDGET_STYLE = "widget_style"
 const val DEFAULT_SNOOZE_MINUTES = 10
 const val SETTING_TODAY_ORDER = "today_order"
@@ -98,6 +101,9 @@ data class HabitDraft(
     /** As typed; tidied on saving (see Categories). */
     val category: String? = null,
     val color: Int? = null,
+    /** How much of [unit] makes it done each time, like 20 pages; null for a goal that is simply ticked. */
+    val amount: Double? = null,
+    val unit: String? = null,
 )
 
 /** One step in the project editor. [id] is 0 for a new step. */
@@ -175,6 +181,8 @@ class Repository(private val db: AppDatabase, private val celebrations: Celebrat
             celebration = draft.celebration?.takeIf { Celebration.isValid(it) },
             category = category(draft.category, draft.id),
             color = draft.color,
+            amount = draft.amount?.let { Amounts.tidy(it) },
+            unit = draft.unit?.trim()?.take(Amounts.UNIT_LENGTH)?.takeIf { it.isNotEmpty() && draft.amount != null },
         )
         val goalId = if (existing == null) dao.insertGoal(row) else row.id.also { dao.updateGoal(row) }
         // A routine's checklist: removed items are archived, so their past ticks still make sense.

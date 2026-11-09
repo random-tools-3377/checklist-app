@@ -45,6 +45,17 @@ object Days {
 fun LocalDate.plusDays(days: Int): LocalDate = plus(days, DateTimeUnit.DAY)
 fun LocalDate.minusDays(days: Int): LocalDate = minus(days, DateTimeUnit.DAY)
 
+/**
+ * How many of [goal]'s times [ticks] (those of one window) make done: one per tick, or, for a
+ * goal with an amount, one once the amounts entered add up to it. A tick without an amount, from
+ * before the goal had one, counts as the whole amount.
+ */
+fun Goal.timesDone(ticks: List<Tick>): Int =
+    if (hasAmount) (if (Amounts.reached(progressOf(ticks), amount!!)) 1 else 0) else ticks.size
+
+/** How much of a goal's amount [ticks] (those of one window) add up to. */
+fun Goal.progressOf(ticks: List<Tick>): Double = ticks.sumOf { it.amount ?: amount ?: 1.0 }
+
 /** Whether [tick] counts toward [goal]'s period that starts on [periodStart]. */
 fun Tick.countsToward(goal: Goal, periodStart: LocalDate): Boolean =
     goalId == goal.id && stepId == null && period == goal.period && this.periodStart == periodStart

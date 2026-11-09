@@ -9,6 +9,9 @@ import io.github.randomtools3377.checklist.core.Backup
 import io.github.randomtools3377.checklist.core.BackupError
 import io.github.randomtools3377.checklist.core.BuyResult
 import io.github.randomtools3377.checklist.core.Days
+import io.github.randomtools3377.checklist.data.SETTING_STOPWATCH
+import io.github.randomtools3377.checklist.core.HabitRow
+import io.github.randomtools3377.checklist.core.Amounts
 import io.github.randomtools3377.checklist.data.SETTING_WIDGET_STYLE
 import io.github.randomtools3377.checklist.data.SETTING_APP_ICON
 import io.github.randomtools3377.checklist.widget.WidgetStyle
@@ -184,6 +187,9 @@ data class TodayState(
     val lastTicks: Map<Long, Tick> = emptyMap(),
 )
 
+/** A Start and Stop timing of a goal with an amount, running since [startedAt] (epoch milliseconds). */
+data class Stopwatch(val goalId: Long, val startedAt: Long)
+
 /** What the privacy lock covers, as chosen in Settings. */
 data class Locks(
     val history: Boolean = false,
@@ -318,7 +324,21 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         combine(view, lapsesFlow, now, settings, unlocked) { raw, (lapses, checks), moment, s, isUnlocked ->
             val hidePrivate = s.locks.privateGoals && !isUnlocked
             val shownGoals = if (hidePrivate) raw.goals.filter { !it.private } else raw.goals
-            val todayView = TodayList.build(day, shownGoals, raw.steps, raw.ticks, raw.balance, lapses, checks)
+            // Goals with an amount get the time what is left takes, from a typed time or the
+            // usual speed learned from their timings, so pacing and the order can plan for it.
+            val todayView = TodayList.build(day, shownGoals, raw.steps, raw.ticks, raw.balance, lapses, checks).let { built ->
+                val rates = shownGoals.filter { it.hasAmount }.associate { goal ->
+                    goal.id to Amounts.minutesPerUnit(raw.ticks.filter { it.goalId == goal.id && it.stepId == null })
+                }
+                fun timed(row: HabitRow) =
+                    if (row.goal.hasAmount) row.copy(goal = row.goal.copy(minutes = Amounts.minutesFor(row.goal, row.amountLeft, rates[row.goal.id]))) else row
+                built.copy(
+                    dueToday = built.dueToday.map(::timed),
+                    thisWeek = built.thisWeek.map(::timed),
+                    thisMonth = built.thisMonth.map(::timed),
+                    thisYear = built.thisYear.map(::timed),
+                )
+            }
             val usual = raw.usual
             val records = StreakCounter.records(day.minusDays(STREAK_DAYS), day, raw.goals, raw.ticks.filter { it.stepId == null }, lapses)
             val streaks = StreakCounter.count(records, day, s.streak)
@@ -889,6 +909,38 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun undoHabitTick(goalId: Long) {
         viewModelScope.launch { book.undoHabitTick(goalId) }
+    }
+
+    /** Enters how much of a goal's amount was done; a timing from Start and Stop ends with it. */
+    fun logAmount(goalId: Long, amount: Double, seconds: Int?, onResult: (TickResult) -> Unit = {}) {
+        viewModelScope.launch {
+            val result = book.logAmount(goalId, amount, seconds)
+            if (seconds != null) repository.setSetting(SETTING_STOPWATCH, "")
+            onResult(result)
+        }
+    }
+
+    /** The Start and Stop timing running now, if any. It keeps running when the app is closed. */
+    val stopwatch: StateFlow<Stopwatch?> = dao.observeSetting(SETTING_STOPWATCH).map { text ->
+        val parts = text?.split("|")?.takeIf { it.size == 2 } ?: return@map null
+        val goalId = parts[0].toLongOrNull() ?: return@map null
+        val startedAt = parts[1].toLongOrNull() ?: return@map null
+        Stopwatch(goalId, startedAt)
+    }.state(null)
+
+    fun startStopwatch(goalId: Long) {
+        viewModelScope.launch { repository.setSetting(SETTING_STOPWATCH, "$goalId|${System.currentTimeMillis()}") }
+    }
+
+    fun cancelStopwatch() {
+        viewModelScope.launch { repository.setSetting(SETTING_STOPWATCH, "") }
+    }
+
+    /** A goal's usual speed, from its latest timings: minutes for one unit, and how many timings. */
+    suspend fun usualSpeed(goalId: Long): Pair<Double, Int>? {
+        val ticks = dao.allTicks().map { it.toCore() }.filter { it.goalId == goalId && it.stepId == null }
+        val rate = Amounts.minutesPerUnit(ticks) ?: return null
+        return rate to ticks.count { (it.seconds ?: 0) > 0 && (it.amount ?: 0.0) > 0 }.coerceAtMost(Amounts.TIMINGS)
     }
 
     /** Ticks one item of a routine; the last one ticks the routine. */

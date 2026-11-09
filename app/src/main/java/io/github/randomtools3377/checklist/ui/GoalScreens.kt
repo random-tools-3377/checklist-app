@@ -81,6 +81,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.Box
 import io.github.randomtools3377.checklist.core.Colors
+import io.github.randomtools3377.checklist.core.Amounts
+import androidx.compose.runtime.produceState
 import io.github.randomtools3377.checklist.core.Categories
 import io.github.randomtools3377.checklist.core.Goal
 import io.github.randomtools3377.checklist.core.GoalKind
@@ -246,6 +248,7 @@ private fun describe(goal: Goal, stepCount: Int): String = when (goal.kind) {
         add("+${goal.points}")
         goal.repeat?.let { add(it.describe(goal.target)) }
         if (goal.repeat?.kind != RepeatKind.TIMES_PER && goal.target > 1) add("${goal.target} times")
+        goal.amount?.let { add(Amounts.format(it) + (goal.unit?.let { u -> " $u" } ?: "")) }
         goal.at?.let { add("at ${timeText(it)}") }
         if (goal.times.isNotEmpty()) add("at " + goal.times.sorted().joinToString(", ") { timeText(it) })
         goal.minutes?.let { add(minutesText(it)) }
@@ -360,6 +363,9 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Long)
     var celebration by rememberSaveable { mutableStateOf<String?>(null) }
     var category by rememberSaveable { mutableStateOf("") }
     var color by rememberSaveable { mutableStateOf<Int?>(null) }
+    // An amount in the user's own unit, like 20 pages.
+    var amountText by rememberSaveable { mutableStateOf("") }
+    var unit by rememberSaveable { mutableStateOf("") }
     var showErrors by rememberSaveable { mutableStateOf(false) }
     var choosingRepeat by remember { mutableStateOf(false) }
     val context = LocalContext.current
@@ -392,6 +398,8 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Long)
                 celebration = goal.celebration
                 category = goal.category.orEmpty()
                 color = goal.color
+                amountText = goal.amount?.let { Amounts.format(it) }.orEmpty()
+                unit = goal.unit.orEmpty()
                 goal.reminder?.let { r ->
                     notifyOnTime = r.onTime
                     alertBefore = r.minutesBefore
@@ -451,8 +459,16 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Long)
     val nameError = if (name.isBlank()) "Give it a name" else null
     val pointsError = if (points.toIntOrNull() == null) "How many ${pointsWord()} it pays" else null
     val targetValue = target.toIntOrNull()
-    val routine = items.any { it.name.isNotBlank() }
-    val targetError = if (!routine && (targetValue == null || targetValue !in 1..999)) "From 1 to 999" else null
+    val amountValue = Amounts.parse(amountText)
+    val hasAmount = amountText.isNotBlank()
+    val amountError = when {
+        !hasAmount -> null
+        amountValue == null -> "A number above 0, like 20 or 1.5"
+        unit.isBlank() -> "Name the unit, like pages or miles"
+        else -> null
+    }
+    val routine = !hasAmount && items.any { it.name.isNotBlank() }
+    val targetError = if (!routine && !hasAmount && (targetValue == null || targetValue !in 1..999)) "From 1 to 999" else null
     val end = endDay
     val repeatError = when {
         repeat == null -> "Finish choosing how often"
@@ -460,7 +476,7 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Long)
         else -> null
     }
     val minutesValue = minutes.toIntOrNull()?.takeIf { it > 0 }
-    val counted = !routine && (targetValue ?: 1) > 1
+    val counted = !routine && !hasAmount && (targetValue ?: 1) > 1
     // Done several times on each day it's due: it can have a time for each one.
     val severalADay = counted && choice != RepeatChoice.TIMES_PER
     val eachTimesSet = if (severalADay && eachTimeOn) eachTimes.filter { it >= 0 }.distinct().sorted().take(targetValue ?: 1) else emptyList()
@@ -469,7 +485,7 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Long)
         title = if (id == 0L) "New habit" else "Edit habit",
         onBack = onClose,
         onSave = {
-            if (nameError != null || pointsError != null || targetError != null || repeatError != null || repeat == null) {
+            if (nameError != null || pointsError != null || targetError != null || repeatError != null || amountError != null || repeat == null) {
                 showErrors = true
             } else {
                 vm.saveHabit(
@@ -479,12 +495,14 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Long)
                         icon = icon,
                         points = points.toInt(),
                         repeat = repeat,
-                        target = if (routine) 1 else targetValue ?: 1,
+                        target = if (routine || hasAmount) 1 else targetValue ?: 1,
                         bonus = if (counted) bonus.toIntOrNull() ?: 0 else 0,
                         minutes = minutesValue,
                         at = if (severalADay) null else atMinute?.toTime(),
                         times = eachTimesSet.map { it.toTime() },
-                        items = items.filter { it.name.isNotBlank() }.map { StepDraft(it.id, it.name.trim(), 0) },
+                        items = if (hasAmount) emptyList() else items.filter { it.name.isNotBlank() }.map { StepDraft(it.id, it.name.trim(), 0) },
+                        amount = if (hasAmount) amountValue else null,
+                        unit = if (hasAmount) unit.trim() else null,
                         finishBy = finishByMinute?.toTime(),
                         finishDay = if (choice == RepeatChoice.TIMES_PER) finishDay else null,
                         reminder = Reminder(
@@ -618,7 +636,35 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Long)
             Period.YEARLY -> "year"
             else -> "week"
         }
-        if (!routine) {
+        // An amount in the user's own unit, like 20 pages or 1 mile.
+        Text("Amount (optional)", style = MaterialTheme.typography.titleSmall)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedTextField(
+                value = amountText,
+                onValueChange = { typed -> amountText = typed.filter { it.isDigit() || it == '.' || it == ',' }.take(9) },
+                label = { Text("How much") },
+                singleLine = true,
+                isError = showErrors && amountError != null,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                modifier = Modifier.weight(1f).testTag("field:amount"),
+            )
+            OutlinedTextField(
+                value = unit,
+                onValueChange = { unit = it.take(Amounts.UNIT_LENGTH) },
+                label = { Text("Unit") },
+                placeholder = { Text("pages") },
+                singleLine = true,
+                isError = showErrors && amountError != null,
+                modifier = Modifier.weight(1f).testTag("field:unit"),
+            )
+        }
+        Text(
+            if (showErrors && amountError != null) amountError
+            else "Like 20 pages, 3 chapters or 1 mile. You enter how much you did each time, and it's done, and pays its ${pointsWord()}, when this is reached.",
+            style = MaterialTheme.typography.bodySmall,
+            color = if (showErrors && amountError != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        if (!routine && !hasAmount) {
             NumberField(
                 label = if (choice == RepeatChoice.TIMES_PER) "Times per $perWord" else "Times each day it's due",
                 value = target,
@@ -639,6 +685,7 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Long)
         }
 
         // A checklist inside makes it a routine.
+        if (!hasAmount) {
         HorizontalDivider()
         Text("Checklist (optional)", style = MaterialTheme.typography.titleSmall)
         Text(
@@ -665,17 +712,35 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Long)
         TextButton(onClick = { items += StepField(nextItemKey++, 0L, "", "0") }, modifier = Modifier.testTag("add-item")) {
             Text(if (items.isEmpty()) "Add a checklist" else "Add an item")
         }
+        }
 
         // Time
         HorizontalDivider()
         Text("Time (optional)", style = MaterialTheme.typography.titleSmall)
-        NumberField(
-            label = "How long it takes, in minutes",
-            value = minutes,
-            onValueChange = { minutes = it },
-            tag = "field:minutes",
-            hint = "Pacing keeps this much time for it. Leave empty to share the free time evenly.",
-        )
+        if (hasAmount) {
+            val speed by produceState<Pair<Double, Int>?>(null, id) { value = if (id != 0L) vm.usualSpeed(id) else null }
+            val usual = speed?.let { (rate, timings) ->
+                amountValue?.let { whole ->
+                    " Your usual: ${Amounts.format(whole)} ${unit.trim()} in about ${minutesText(kotlin.math.ceil(rate * whole).toInt().coerceAtLeast(1))}" +
+                        (if (timings == 1) ", from 1 timing." else ", from $timings timings.")
+                }
+            }.orEmpty()
+            NumberField(
+                label = "Time to budget for all of it, in minutes",
+                value = minutes,
+                onValueChange = { minutes = it },
+                tag = "field:minutes",
+                hint = "Leave it empty and the app learns how long it takes when you time it with Start and Stop on Today.$usual",
+            )
+        } else {
+            NumberField(
+                label = "How long it takes, in minutes",
+                value = minutes,
+                onValueChange = { minutes = it },
+                tag = "field:minutes",
+                hint = "Pacing keeps this much time for it. Leave empty to share the free time evenly.",
+            )
+        }
         if (severalADay) {
             EachTimeSetting(
                 dayStart = remember { vm.settings.value.dayStart },

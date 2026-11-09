@@ -60,6 +60,9 @@ data class GoalEntity(
     val category: String? = null,
     /** The goal's own colour, as 0xFFRRGGBB. Added in version 12. */
     val color: Int? = null,
+    /** How much of [unit] makes it done each time, like 20 pages (see Amounts in the shared code). Added in version 13. */
+    val amount: Double? = null,
+    val unit: String? = null,
 )
 
 @Entity(tableName = "steps", indices = [Index("goalId")])
@@ -83,6 +86,9 @@ data class TickEntity(
     val periodStart: Long,
     /** A note about it, like "ran 5 km". Added in version 9. */
     val note: String? = null,
+    /** For a goal with an amount: how much this entry was, and how long it took if timed. Added in version 13. */
+    val amount: Double? = null,
+    val seconds: Int? = null,
 )
 
 /** The points ledger. The balance is the sum of [amount]. */
@@ -525,10 +531,10 @@ interface ChecklistDao {
         GapEntity::class,
         CheckEntity::class,
     ],
-    version = 12,
+    version = 13,
     exportSchema = true,
     // Versions 4 to 8 only add tables and columns, so Room works the migrations out from the layouts.
-    autoMigrations = [AutoMigration(from = 3, to = 4), AutoMigration(from = 4, to = 5), AutoMigration(from = 5, to = 6), AutoMigration(from = 6, to = 7), AutoMigration(from = 7, to = 8), AutoMigration(from = 8, to = 9), AutoMigration(from = 9, to = 10), AutoMigration(from = 10, to = 11), AutoMigration(from = 11, to = 12)],
+    autoMigrations = [AutoMigration(from = 3, to = 4), AutoMigration(from = 4, to = 5), AutoMigration(from = 5, to = 6), AutoMigration(from = 6, to = 7), AutoMigration(from = 7, to = 8), AutoMigration(from = 8, to = 9), AutoMigration(from = 9, to = 10), AutoMigration(from = 10, to = 11), AutoMigration(from = 11, to = 12), AutoMigration(from = 12, to = 13)],
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun dao(): ChecklistDao

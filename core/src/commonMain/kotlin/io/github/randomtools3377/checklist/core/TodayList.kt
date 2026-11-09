@@ -14,7 +14,12 @@ data class HabitRow(
     val skips: Int = 0,
     /** A routine's checklist, each item with whether it is ticked in this window. Empty for other habits. */
     val items: List<StepRow> = emptyList(),
+    /** For a goal with an amount: how much has been entered in this window. */
+    val progress: Double = 0.0,
 ) {
+    /** For a goal with an amount: how much is left to do in this window. */
+    val amountLeft: Double get() = ((goal.amount ?: 0.0) - progress).coerceAtLeast(0.0)
+
     val isRoutine: Boolean get() = items.isNotEmpty()
     val skipped: Boolean get() = skips > 0 && count < goal.target
     val done: Boolean
@@ -65,13 +70,14 @@ object TodayList {
         val habits = active.filter { it.kind == GoalKind.HABIT }.mapNotNull { goal ->
             val window = goal.repeat?.window(day) ?: return@mapNotNull null
             val skips = lapses.count { it.goalId == goal.id && it.kind == LapseKind.SKIP && it.periodStart == window.start && !it.forgotten }
-            val count = ticks.count { it.countsToward(goal, window.start) }
+            val windowTicks = ticks.filter { it.countsToward(goal, window.start) }
+            val count = goal.timesDone(windowTicks)
             // A routine's items: ticked if ticked in this window, or all of them once it is done.
             val ticked = checks.filter { it.goalId == goal.id && it.periodStart == window.start }.map { it.stepId }.toSet()
             val items = steps.filter { it.goalId == goal.id && !it.archived }
                 .sortedWith(compareBy({ it.position }, { it.id }))
                 .map { StepRow(it, it.id in ticked || count >= goal.target) }
-            HabitRow(goal, count, window, skips, items)
+            HabitRow(goal, count, window, skips, items, progress = if (goal.hasAmount) goal.progressOf(windowTicks) else 0.0)
         }
         val stepTicks = ticks.filter { it.stepId != null }.associateBy { it.stepId }
         val projects = active.filter { it.kind == GoalKind.PROJECT }.map { goal ->

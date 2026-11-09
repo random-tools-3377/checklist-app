@@ -46,6 +46,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedIconButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
@@ -114,6 +115,9 @@ fun TodayScreen(
     val grid = look.layout == TodayLayout.GRID
     // In the grid, holding a tile opens its full card here.
     var details by remember { mutableStateOf<Long?>(null) }
+    // For a goal with an amount: the box to enter how much, and the running timing.
+    val stopwatch by vm.stopwatch.collectAsStateWithLifecycle()
+    var entering by remember { mutableStateOf<AmountRequest?>(null) }
     val newBadges by vm.newBadges.collectAsStateWithLifecycle()
     var editingTick by remember { mutableStateOf<Long?>(null) }
     editingTick?.let { id -> EditTickDialog(id, vm) { editingTick = null } }
@@ -200,7 +204,44 @@ fun TodayScreen(
                         onFocus = row.goal.minutes?.let { minutes -> { details = null; vm.startFocus(id, minutes) } },
                         lastTick = screen.lastTicks[id],
                         onNote = { details = null; editingTick = it },
+                        stopwatch = stopwatch,
+                        onAmount = { spot, seconds -> details = null; entering = AmountRequest(id, seconds, spot) },
+                        onStart = { vm.startStopwatch(id) },
                     )
+                },
+            )
+        }
+    }
+
+    entering?.let { request ->
+        val row = (screen.plan.map { it.row } + view.thisWeek + view.thisMonth + view.thisYear).firstOrNull { it.goal.id == request.goalId }
+        if (row == null) {
+            entering = null
+        } else {
+            AmountDialog(
+                row = row,
+                seconds = request.seconds,
+                onDismiss = { entering = null },
+                onDiscardTiming = {
+                    entering = null
+                    vm.cancelStopwatch()
+                },
+                onSave = { amount ->
+                    entering = null
+                    vm.logAmount(row.goal.id, amount, request.seconds) { result ->
+                        if (result !is TickResult.Ticked) return@logAmount
+                        if (result.finished) {
+                            val gif = row.goal.celebration?.takeIf { Celebration.isValid(it) } ?: celebrations.style.defaultGif
+                            if (gif != null) {
+                                celebrations.buzz(haptics)
+                                celebrations.show(BigCelebration.GoalFinished(row.goal.icon, row.goal.name, result.points, gif))
+                            } else {
+                                celebrateTick(result, request.spot, bigWhenFinished = true)
+                            }
+                        } else {
+                            celebrations.burst(request.spot.center, "+" + io.github.randomtools3377.checklist.core.Amounts.format(amount) + (row.goal.unit?.let { " $it" } ?: ""))
+                        }
+                    }
                 },
             )
         }
@@ -322,6 +363,9 @@ fun TodayScreen(
                                 onFocus = planned.row.goal.minutes?.let { minutes -> { vm.startFocus(planned.row.goal.id, minutes) } },
                                 lastTick = screen.lastTicks[planned.row.goal.id],
                                 onNote = { editingTick = it },
+                                stopwatch = stopwatch,
+                                onAmount = { spot, seconds -> entering = AmountRequest(planned.row.goal.id, seconds, spot) },
+                                onStart = { vm.startStopwatch(planned.row.goal.id) },
                             )
                             Spacer(Modifier.height(10.dp))
                         }
@@ -329,15 +373,15 @@ fun TodayScreen(
                 }
                 TodaySection.THIS_WEEK -> {
                     startGoals()
-                    habitSection("This week", shown(view.thisWeek), screen, ::tick, vm, grid, { details = it }) { skipping = it }
+                    habitSection("This week", shown(view.thisWeek), screen, ::tick, vm, grid, { details = it }, stopwatch, { r -> entering = r }) { skipping = it }
                 }
                 TodaySection.THIS_MONTH -> {
                     startGoals()
-                    habitSection("This month", shown(view.thisMonth), screen, ::tick, vm, grid, { details = it }) { skipping = it }
+                    habitSection("This month", shown(view.thisMonth), screen, ::tick, vm, grid, { details = it }, stopwatch, { r -> entering = r }) { skipping = it }
                 }
                 TodaySection.THIS_YEAR -> {
                     startGoals()
-                    habitSection("This year", shown(view.thisYear), screen, ::tick, vm, grid, { details = it }) { skipping = it }
+                    habitSection("This year", shown(view.thisYear), screen, ::tick, vm, grid, { details = it }, stopwatch, { r -> entering = r }) { skipping = it }
                 }
                 TodaySection.PROJECTS -> {
                     startGoals()
@@ -429,6 +473,8 @@ private fun LazyListScope.habitSection(
     vm: MainViewModel,
     grid: Boolean,
     onDetails: (Long) -> Unit,
+    stopwatch: Stopwatch?,
+    onEnter: (AmountRequest) -> Unit,
     onSkip: (Goal) -> Unit,
 ) {
     if (rows.isEmpty()) return
@@ -448,6 +494,9 @@ private fun LazyListScope.habitSection(
             onSkip = { onSkip(row.goal) },
             onItem = { item, _ -> vm.checkItem(item.step.id) },
             onUncheck = { item -> vm.uncheckItem(item.step.id) },
+            stopwatch = stopwatch,
+            onAmount = { spot, seconds -> onEnter(AmountRequest(row.goal.id, seconds, spot)) },
+            onStart = { vm.startStopwatch(row.goal.id) },
         )
         Spacer(Modifier.height(10.dp))
     }
@@ -539,10 +588,16 @@ private fun HabitCard(
     onFocus: (() -> Unit)? = null,
     lastTick: io.github.randomtools3377.checklist.core.Tick? = null,
     onNote: (Long) -> Unit = {},
+    /** For a goal with an amount: the running Start and Stop timing, if any (of any goal). */
+    stopwatch: Stopwatch? = null,
+    /** For a goal with an amount: opens the box to enter how much, with the timed seconds if it was timed. */
+    onAmount: ((Spot, Int?) -> Unit)? = null,
+    onStart: (() -> Unit)? = null,
 ) {
     val goal = row.goal
     val spot = remember { Spot() }
-    val counted = goal.target > 1 || row.isRoutine
+    val amountMode = goal.hasAmount && onAmount != null
+    val counted = !amountMode && (goal.target > 1 || row.isRoutine)
     val cardSize = LocalCardSize.current
     Card(Modifier.fillMaxWidth()) {
       Column(Modifier.goalStrip(goal.color)) {
@@ -554,9 +609,55 @@ private fun HabitCard(
                 val detail = buildList {
                     add("+${goal.points}" + if (counted) " each" else "")
                     if (counted && goal.bonus > 0) add("bonus +${goal.bonus}")
-                    goal.minutes?.let { add(minutesText(it)) }
+                    if (!goal.hasAmount) goal.minutes?.let { add(minutesText(it)) }
                 }.joinToString(" · ")
                 Text(detail, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (goal.hasAmount) {
+                    // "12 of 20 pages · about 16 min left": the time comes from a typed time or the usual speed.
+                    val left = goal.minutes?.takeIf { !row.done && it > 0 }?.let { " · about ${minutesText(it)} left" } ?: ""
+                    Text(
+                        io.github.randomtools3377.checklist.core.Amounts.progressText(row.progress, goal) + left,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.testTag("amount:${goal.name}"),
+                    )
+                    if (amountMode && !row.done) {
+                        val running = stopwatch?.takeIf { it.goalId == goal.id }
+                        if (running != null) {
+                            var now by remember { mutableStateOf(System.currentTimeMillis()) }
+                            LaunchedEffect(running.startedAt) {
+                                while (true) {
+                                    now = System.currentTimeMillis()
+                                    kotlinx.coroutines.delay(1000)
+                                }
+                            }
+                            val seconds = ((now - running.startedAt) / 1000).coerceAtLeast(0)
+                            Text(
+                                "⏱ %02d:%02d · Stop".format(seconds / 60, seconds % 60),
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.error,
+                                modifier = Modifier
+                                    .clickable { onAmount?.invoke(spot, ((System.currentTimeMillis() - running.startedAt) / 1000).toInt().coerceAtLeast(1)) }
+                                    .padding(vertical = 4.dp)
+                                    .testTag("stop:${goal.name}"),
+                            )
+                        } else if (stopwatch == null && onStart != null) {
+                            Text(
+                                "▶ Start",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.clickable(onClick = onStart).padding(vertical = 4.dp).testTag("start:${goal.name}"),
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(4.dp))
+                    LinearProgressIndicator(
+                        progress = { ((row.progress / (goal.amount ?: 1.0)).toFloat()).coerceIn(0f, 1f) },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
                 if (timeLabel != null) {
                     Text(
                         if (late) "$timeLabel · late" else timeLabel,
@@ -579,7 +680,7 @@ private fun HabitCard(
                     )
                 }
                 val length = goal.minutes
-                if (onFocus != null && !row.done && length != null) {
+                if (onFocus != null && !row.done && length != null && !goal.hasAmount) {
                     Text(
                         "▶ Focus for ${minutesText(length)}",
                         style = MaterialTheme.typography.labelLarge,
@@ -615,6 +716,31 @@ private fun HabitCard(
                 }
             }
             Spacer(Modifier.width(8.dp))
+            if (amountMode) {
+                if (row.progress > 0) {
+                    OutlinedIconButton(
+                        onClick = onUndo,
+                        modifier = Modifier.semantics { contentDescription = "Take back the last entry of ${goal.name}" }.testTag("undo:${goal.name}"),
+                    ) {
+                        Text("−", fontSize = 22.sp)
+                    }
+                }
+                if (row.done) {
+                    Button(onClick = {}, modifier = Modifier.testTag("tick:${goal.name}").semantics { contentDescription = "${goal.name} is done" }) {
+                        Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("Done")
+                    }
+                } else {
+                    FilledTonalButton(
+                        onClick = { onAmount?.invoke(spot, null) },
+                        modifier = Modifier
+                            .onGloballyPositioned { spot.center = it.boundsInRoot().center }
+                            .semantics { contentDescription = "Add how much of ${goal.name} you did" }
+                            .testTag("add-amount:${goal.name}"),
+                    ) { Text("Add", fontWeight = FontWeight.Bold) }
+                }
+            } else {
             if (counted && row.count > 0) {
                 OutlinedIconButton(
                     onClick = onUndo,
@@ -649,6 +775,7 @@ private fun HabitCard(
                         modifier = Modifier.padding(top = 2.dp).testTag("count:${goal.name}"),
                     )
                 }
+            }
             }
         }
         // A routine's checklist, ticked item by item.
@@ -849,8 +976,8 @@ private fun TileRow(rows: List<HabitRow>, screen: TodayState, tick: (HabitRow, S
             GoalTile(row, tileLine(row, screen), Modifier.weight(1f), onTap = { spot ->
                 val done = row.count >= row.goal.target
                 when {
-                    // A routine's items, and taking back a counted goal, are on its card.
-                    row.isRoutine -> onDetails(row.goal.id)
+                    // A routine's items, an amount to enter, and taking back a counted goal, are on its card.
+                    row.isRoutine || row.goal.hasAmount -> onDetails(row.goal.id)
                     done && row.goal.target > 1 -> onDetails(row.goal.id)
                     else -> tick(row, spot)
                 }
@@ -865,6 +992,7 @@ private fun tileLine(row: HabitRow, screen: TodayState): String {
     val goal = row.goal
     return when {
         row.count >= goal.target -> "Done ✓"
+        goal.hasAmount -> io.github.randomtools3377.checklist.core.Amounts.progressText(row.progress, goal)
         row.isRoutine -> "${row.items.count { it.done }} of ${row.items.size} items"
         goal.target > 1 -> buildString {
             append("${row.count} of ${goal.target}")
@@ -949,4 +1077,51 @@ private fun TodayBackdrop(look: Appearance) {
             }
         }
     }
+}
+
+/** The box to enter how much of a goal's amount was done, opened by Add or by stopping a timing. */
+private class AmountRequest(val goalId: Long, val seconds: Int?, val spot: Spot)
+
+@Composable
+private fun AmountDialog(row: HabitRow, seconds: Int?, onDismiss: () -> Unit, onDiscardTiming: () -> Unit, onSave: (Double) -> Unit) {
+    val goal = row.goal
+    val unit = goal.unit.orEmpty()
+    val left = row.amountLeft
+    var text by remember { mutableStateOf("") }
+    val value = io.github.randomtools3377.checklist.core.Amounts.parse(text)
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("${goal.icon} ${goal.name}") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (seconds != null) {
+                    Text("Timed: ${minutesText(((seconds + 59) / 60).coerceAtLeast(1))}.", style = MaterialTheme.typography.bodyMedium)
+                }
+                Text(
+                    io.github.randomtools3377.checklist.core.Amounts.progressText(row.progress, goal) + " so far. How much did you do?",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { typed -> text = typed.filter { it.isDigit() || it == '.' || it == ',' }.take(9) },
+                    label = { Text(if (unit.isNotEmpty()) "How much ($unit)" else "How much") },
+                    singleLine = true,
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal),
+                    modifier = Modifier.fillMaxWidth().testTag("field:amount"),
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(onClick = { onSave(left) }, modifier = Modifier.testTag("amount-all")) {
+                        Text("All ${io.github.randomtools3377.checklist.core.Amounts.format(left)} left")
+                    }
+                    if (seconds != null) {
+                        TextButton(onClick = onDiscardTiming, modifier = Modifier.testTag("discard-timing")) { Text("Discard the timing") }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { value?.let(onSave) }, enabled = value != null, modifier = Modifier.testTag("save-amount")) { Text("Save") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
 }
