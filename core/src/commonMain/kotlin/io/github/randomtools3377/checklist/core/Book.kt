@@ -45,6 +45,21 @@ class Book(
     /** Today's difficulty. */
     suspend fun difficulty(): Difficulty = difficulty(today())
 
+    /** Whether [goal] is the boosted goal (see [Boost]) in the week of [day]. */
+    suspend fun boosted(goal: Goal, day: LocalDate): Boolean {
+        if (store.setting(Boost.SETTING) == "0") return false
+        val monday = Boost.weekOf(day)
+        val lapses = store.allLapses(monday.minusDays(Boost.DAYS), monday.minusDays(1))
+        return Boost.goalFor(day, store.activeGoals(), lapses)?.id == goal.id
+    }
+
+    /** What [goal]'s points pay on [day]: its difficulty and the boost (see [payFor]). */
+    suspend fun payer(goal: Goal, day: LocalDate): (Int) -> Int {
+        val rate = difficulty(day)
+        val boost = boosted(goal, day)
+        return { points -> payFor(points, rate, boost) }
+    }
+
     companion object {
         /** A tick's note is kept short, like "ran 5 km". */
         const val NOTE_LENGTH = 200
@@ -87,24 +102,24 @@ class Book(
         }
         if (ticks.size >= goal.target) return@transaction TickResult.AlreadyDone
 
-        val rate = difficulty(day)
+        val pay = payer(goal, day)
         val at = millis()
         val tickId = store.addTick(
             Tick(goalId = goalId, stepId = null, at = at, day = day, period = window.period, periodStart = start),
         )
         store.addEntry(
-            Entry(at = at, day = day, kind = EntryKind.TICK, amount = rate.pay(goal.points), goalId = goalId, tickId = tickId, label = goal.name),
+            Entry(at = at, day = day, kind = EntryKind.TICK, amount = pay(goal.points), goalId = goalId, tickId = tickId, label = goal.name),
         )
 
         val finished = ticks.size + 1 >= goal.target
         var bonus = 0
         if (finished && goal.target > 1 && goal.bonus > 0 && bonusesOn(ticks).isEmpty()) {
-            bonus = rate.pay(goal.bonus)
+            bonus = pay(goal.bonus)
             store.addEntry(
                 Entry(at = at, day = day, kind = EntryKind.BONUS, amount = bonus, goalId = goalId, tickId = tickId, label = goal.name),
             )
         }
-        TickResult.Ticked(points = rate.pay(goal.points), bonus = bonus, finished = finished)
+        TickResult.Ticked(points = pay(goal.points), bonus = bonus, finished = finished)
     }
 
     /**
@@ -116,7 +131,7 @@ class Book(
         if (store.habitTicks(goal.id, day).any { it.stepId == null }) return TickResult.AlreadyDone
         val at = millis()
         val tickId = store.addTick(Tick(goalId = goal.id, stepId = null, at = at, day = day, period = Period.DAILY, periodStart = day))
-        val points = difficulty(day).pay(goal.points)
+        val points = payer(goal, day)(goal.points)
         store.addEntry(Entry(at = at, day = day, kind = EntryKind.TICK, amount = points, goalId = goal.id, tickId = tickId, label = goal.name))
         return TickResult.Ticked(points = points, bonus = 0, finished = true)
     }
@@ -149,8 +164,8 @@ class Book(
         )
         val timesAfter = Amounts.times(before + entered, goal.amount).coerceAtMost(goal.target)
         val newTimes = timesAfter - timesBefore
-        val rate = difficulty(day)
-        val points = rate.pay(goal.points) * newTimes
+        val pay = payer(goal, day)
+        val points = pay(goal.points) * newTimes
         if (points != 0) {
             store.addEntry(
                 Entry(at = at, day = day, kind = EntryKind.TICK, amount = points, goalId = goalId, tickId = tickId, label = goal.name),
@@ -159,7 +174,7 @@ class Book(
         val finished = timesAfter >= goal.target
         var bonus = 0
         if (finished && goal.target > 1 && goal.bonus > 0) {
-            bonus = rate.pay(goal.bonus)
+            bonus = pay(goal.bonus)
             store.addEntry(
                 Entry(at = at, day = day, kind = EntryKind.BONUS, amount = bonus, goalId = goalId, tickId = tickId, label = goal.name),
             )
@@ -260,14 +275,14 @@ class Book(
         if (goal.kind == GoalKind.TODO) return@transaction tickTodoStep(goal, step)
 
         val day = today()
-        val rate = difficulty(day)
+        val pay = payer(goal, day)
         val at = millis()
         val tickId = store.addTick(
             Tick(goalId = goal.id, stepId = stepId, at = at, day = day, period = null, periodStart = day),
         )
         store.addEntry(
             Entry(
-                at = at, day = day, kind = EntryKind.TICK, amount = rate.pay(step.points),
+                at = at, day = day, kind = EntryKind.TICK, amount = pay(step.points),
                 goalId = goal.id, tickId = tickId, label = "${goal.name}: ${step.name}",
             ),
         )
@@ -277,12 +292,12 @@ class Book(
         val finished = store.activeSteps(goal.id).all { it.id in done }
         var bonus = 0
         if (finished && goal.bonus > 0 && bonusesOn(stepTicks).isEmpty()) {
-            bonus = rate.pay(goal.bonus)
+            bonus = pay(goal.bonus)
             store.addEntry(
                 Entry(at = at, day = day, kind = EntryKind.BONUS, amount = bonus, goalId = goal.id, tickId = tickId, label = goal.name),
             )
         }
-        TickResult.Ticked(points = rate.pay(step.points), bonus = bonus, finished = finished)
+        TickResult.Ticked(points = pay(step.points), bonus = bonus, finished = finished)
     }
 
     /**
@@ -338,8 +353,10 @@ class Book(
      * with [random]; the prize is what goes in the inventory, at the mystery reward's price.
      */
     suspend fun buy(rewardId: Long, random: kotlin.random.Random = kotlin.random.Random.Default): BuyResult = store.transaction {
-        val reward = store.reward(rewardId)
-        if (reward == null || reward.archived) return@transaction BuyResult.NotFound
+        val found = store.reward(rewardId)
+        if (found == null || found.archived) return@transaction BuyResult.NotFound
+        // Bought already this week: it costs more each time (see [RepeatPrice]).
+        val reward = found.copy(price = priceNow(found))
         val balance = store.balance()
         if (reward.price > balance) return@transaction BuyResult.TooExpensive(reward.price, balance)
 
@@ -355,6 +372,18 @@ class Book(
             ),
         )
         BuyResult.Bought(purchaseId = purchaseId, price = reward.price, balanceAfter = balance - reward.price, prize = prize)
+    }
+
+    /** What [reward] costs now: its price, raised for each time it was bought this week and kept. */
+    suspend fun priceNow(reward: Reward): Int {
+        val monday = Boost.weekOf(today())
+        val zone = timeZone()
+        val dayEnd = store.dayEndHour()
+        val thisWeek = store.purchasesOf(reward.id).count { purchase ->
+            purchase.returnedAt == null &&
+                Days.dayOf(kotlinx.datetime.Instant.fromEpochMilliseconds(purchase.at).toLocalDateTime(zone), dayEnd) >= monday
+        }
+        return RepeatPrice.now(reward.price, thisWeek, on = store.setting(RepeatPrice.SETTING) != "0")
     }
 
     /** Takes a bought reward out of the inventory because it has been used. */

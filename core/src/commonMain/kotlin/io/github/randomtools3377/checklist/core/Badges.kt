@@ -25,7 +25,7 @@ enum class Badge(val icon: String, val title: String, val how: String) {
 data class EarnedBadge(val badge: Badge, val on: LocalDate)
 
 object Badges {
-    private val EARNED = setOf(EntryKind.TICK, EntryKind.BONUS, EntryKind.REFUND)
+    private val EARNED = setOf(EntryKind.TICK, EntryKind.BONUS, EntryKind.REFUND, EntryKind.PERFECT_DAY)
 
     /**
      * Every badge the history shows, each with the day it was first earned. [records] are the

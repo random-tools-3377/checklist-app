@@ -387,10 +387,11 @@ Build order **(default)**, each step a Release the owner can try:
     of each week, rounded down, paid on the Monday, in the points history, and can be set to off,
     1%, 2% or 5%; it counts from the first week the app looked. The
     goal missed most over the last 4 weeks (2 misses or more) pays 50% more for the week,
-    chosen each Monday. A perfect day, everything due done, pays 10 points when it ends. A reward
+    chosen each Monday, marked on Today. A perfect day, everything due done and none of it
+    skipped, pays 10 points when it ends (off, 5, 10 or 20 in Settings). A reward
     costs 25% more for each time it was already bought that week, back to its price on Monday;
-    a return refunds what was paid. The Undo bar shows for 5 seconds after a tick, removing a
-    goal or buying a reward. The quick settings tile ticks the next goal in Today's order and
+    a return refunds what was paid and takes it off the count. Each of these can be turned off.
+    The Undo bar shows for 5 seconds after a tick, removing a goal or buying a reward. The quick settings tile ticks the next goal in Today's order and
     leaves out locked ones. Dragging on the timeline changes a goal's time for that day only. The
     calendar is off until turned on in Settings, which asks for the calendar permission; events
     are only read, from the calendars the user picks, and pacing counts them as busy time. "I

@@ -199,6 +199,9 @@ enum class EntryKind {
 
     /** Savings interest on a positive balance at the end of a week (see [Interest]). */
     INTEREST,
+
+    /** A day when everything due was done (see [PerfectDays]). */
+    PERFECT_DAY,
 }
 
 /** One line in the points ledger. Positive amounts are earned, negative ones are spent. */

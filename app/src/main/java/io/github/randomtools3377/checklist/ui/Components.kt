@@ -62,6 +62,14 @@ import java.util.Locale
 const val GOAL_ICON = "⭐"
 const val REWARD_ICON = "🎁"
 
+/** The goal boosted this week, which pays 50% more (see Boost in the shared code). */
+val LocalBoosted = androidx.compose.runtime.compositionLocalOf<Long?> { null }
+
+/** What [points] of [goalId] pay now, with today's difficulty and the boost. */
+@androidx.compose.runtime.Composable
+fun payNow(points: Int, goalId: Long): Int =
+    io.github.randomtools3377.checklist.core.payFor(points, LocalPayRate.current, LocalBoosted.current == goalId)
+
 /** Today's difficulty, which sets what goals pay; screens show points at this rate. */
 val LocalPayRate = androidx.compose.runtime.compositionLocalOf { io.github.randomtools3377.checklist.core.Difficulty.NORMAL }
 

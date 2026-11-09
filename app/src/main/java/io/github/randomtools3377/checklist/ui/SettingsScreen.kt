@@ -180,6 +180,53 @@ private fun DifficultySettings(vm: MainViewModel) {
     }
 }
 
+/** The boost on the goal missed most, the perfect-day bonus, and prices that rise on repeat buys. */
+@Composable
+private fun BoostSettings(vm: MainViewModel) {
+    val boosts by vm.boosts.collectAsState()
+    Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        SwitchLine(
+            "Boost the goal missed most",
+            "Each week, the goal missed most over the last 4 weeks pays 50% more, to make it more tempting.",
+            boosts.boost,
+            "boost",
+        ) { vm.setBoost(it) }
+        Text("Perfect-day bonus", style = MaterialTheme.typography.bodyLarge)
+        Text(
+            "Paid when a day ends with everything due done, none of it skipped.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf(0, 5, 10, 20).forEach { choice ->
+                androidx.compose.material3.FilterChip(
+                    selected = boosts.perfectDayBonus == choice,
+                    onClick = { vm.setPerfectDayBonus(choice) },
+                    label = { Text(if (choice == 0) "Off" else "+$choice") },
+                    modifier = Modifier.testTag("perfect-bonus:$choice"),
+                )
+            }
+        }
+        SwitchLine(
+            "Prices rise on repeat buys",
+            "A reward costs 25% more for each time it was already bought this week, back to its price on Monday.",
+            boosts.repeatPrice,
+            "repeat-price",
+        ) { vm.setRepeatPrice(it) }
+    }
+}
+
+@Composable
+private fun SwitchLine(title: String, hint: String, on: Boolean, tag: String, onChange: (Boolean) -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.bodyLarge)
+            Text(hint, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Switch(checked = on, onCheckedChange = onChange, modifier = Modifier.testTag("switch:$tag"))
+    }
+}
+
 /** Savings interest: a positive balance grows a little at the end of each week. */
 @Composable
 private fun InterestSetting(vm: MainViewModel) {
@@ -312,6 +359,7 @@ fun SettingsScreen(
             Section("Difficulty")
             DifficultySettings(vm)
             InterestSetting(vm)
+            BoostSettings(vm)
             HorizontalDivider()
             Section("Your day")
             Column(

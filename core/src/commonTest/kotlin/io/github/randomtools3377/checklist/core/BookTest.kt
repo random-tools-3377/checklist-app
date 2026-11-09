@@ -207,6 +207,8 @@ class BookTest {
 
     @Test
     fun aRewardCanBeBoughtAgainAndAgain() = runTest {
+        // No limit on buying; with the repeat price off, each costs the same (see BoostsTest for the rise).
+        store.putSetting(RepeatPrice.SETTING, "0")
         book.tickHabit(habit(points = 30).id)
         val treat = reward(price = 10)
 

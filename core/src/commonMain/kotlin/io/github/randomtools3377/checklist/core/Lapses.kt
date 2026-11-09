@@ -206,7 +206,7 @@ class Lapses(
             Tick(goalId = goal.id, stepId = null, at = now, day = lapse.day, period = lapse.period, periodStart = lapse.periodStart),
         )
         store.addEntry(
-            Entry(at = now, day = book.today(), kind = EntryKind.TICK, amount = book.difficulty(lapse.day).pay(goal.points), goalId = goal.id, tickId = tickId, label = goal.name),
+            Entry(at = now, day = book.today(), kind = EntryKind.TICK, amount = book.payer(goal, lapse.day)(goal.points), goalId = goal.id, tickId = tickId, label = goal.name),
         )
         if (lapse.cost > 0) {
             store.addEntry(

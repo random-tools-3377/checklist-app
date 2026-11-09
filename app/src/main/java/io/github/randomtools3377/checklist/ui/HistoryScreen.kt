@@ -47,6 +47,7 @@ private fun kindText(kind: EntryKind): String = when (kind) {
     EntryKind.PENALTY -> "Over the limit"
     EntryKind.REFUND -> "Penalty given back"
     EntryKind.INTEREST -> "Savings interest"
+    EntryKind.PERFECT_DAY -> "Perfect-day bonus"
 }
 
 /** Every change to the balance, newest first, grouped by day. */

@@ -18,7 +18,7 @@ data class WeekProgress(val weekStart: LocalDate, val earned: Int, val target: I
  * are the same as the review's: ticks, bonuses and refunds. Reaching it pays nothing extra.
  */
 object WeeklyTarget {
-    private val EARNED = setOf(EntryKind.TICK, EntryKind.BONUS, EntryKind.REFUND)
+    private val EARNED = setOf(EntryKind.TICK, EntryKind.BONUS, EntryKind.REFUND, EntryKind.PERFECT_DAY)
 
     fun progress(entries: List<Entry>, today: LocalDate, target: Int): WeekProgress {
         val start = Days.periodStart(today, Period.WEEKLY)

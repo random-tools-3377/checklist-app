@@ -352,6 +352,13 @@ interface ChecklistDao {
     @Query("SELECT * FROM purchases WHERE id = :id")
     suspend fun purchase(id: Long): PurchaseEntity?
 
+    @Query("SELECT * FROM purchases WHERE rewardId = :rewardId")
+    suspend fun purchasesOf(rewardId: Long): List<PurchaseEntity>
+
+    /** Purchases since a moment, for prices that rise on repeat buys this week. */
+    @Query("SELECT * FROM purchases WHERE at >= :since")
+    fun observePurchasesSince(since: Long): Flow<List<PurchaseEntity>>
+
     @Insert
     suspend fun insertPurchase(purchase: PurchaseEntity): Long
 

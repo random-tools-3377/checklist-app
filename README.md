@@ -71,6 +71,8 @@ keeps the data.
   list.
 - 0.26.0: suggested points and prices, and a difficulty setting that can ramp up over time.
 - 0.27.0: a balance check of prices and points, and savings interest.
+- 0.28.0: a boost for the goal missed most, a perfect-day bonus, and prices that rise on repeat
+  buys.
 
 Every step in CLAUDE.md's build order is built. The iPhone app waits for a way to install it.
 

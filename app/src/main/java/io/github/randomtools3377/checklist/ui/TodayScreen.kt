@@ -22,6 +22,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.foundation.layout.Arrangement
 import io.github.randomtools3377.checklist.core.Categories
 import io.github.randomtools3377.checklist.core.Moves
+import io.github.randomtools3377.checklist.core.payFor
 import io.github.randomtools3377.checklist.core.TodaySection
 import io.github.randomtools3377.checklist.core.WeekProgress
 import io.github.randomtools3377.checklist.core.Badge
@@ -141,6 +142,7 @@ fun TodayScreen(
     }
     val newBadges by vm.newBadges.collectAsStateWithLifecycle()
     val welcome by vm.showWelcome.collectAsStateWithLifecycle()
+    val boosts by vm.boosts.collectAsStateWithLifecycle()
     var editingTick by remember { mutableStateOf<Long?>(null) }
     editingTick?.let { id -> EditTickDialog(id, vm) { editingTick = null } }
     val haptics = LocalHapticFeedback.current
@@ -372,6 +374,17 @@ fun TodayScreen(
                 TodaySection.DUE_TODAY -> {
                     startGoals()
                     if (plan.isNotEmpty()) item(key = "title-today") { SectionTitle("Today") }
+                    // Everything due today done, none skipped: the perfect-day bonus comes when the day ends.
+                    if (filter == null && boosts.perfectDayBonus > 0 && screen.plan.isNotEmpty() && screen.plan.all { it.row.count >= it.row.goal.target }) {
+                        item(key = "perfect-day") {
+                            Text(
+                                "🌟 Perfect day so far: +${boosts.perfectDayBonus} when the day ends",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(bottom = 8.dp).testTag("perfect-day"),
+                            )
+                        }
+                    }
                     if (grid) {
                         items(plan.chunked(2), key = { "today-tiles-${it.first().row.goal.id}" }) { pair ->
                             TileRow(pair.map { it.row }, screen, ::tick) { details = it }
@@ -554,7 +567,7 @@ private fun TodoCard(
                     overflow = TextOverflow.Ellipsis,
                     textDecoration = if (row.done) androidx.compose.ui.text.style.TextDecoration.LineThrough else null,
                 )
-                val pay = LocalPayRate.current.pay(goal.points)
+                val pay = payNow(goal.points, goal.id)
                 val detail = if (row.items.isEmpty()) "+$pay" else "+$pay · ${row.items.count { it.done }} of ${row.items.size} steps"
                 Text(detail, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
@@ -756,6 +769,7 @@ private fun HabitCard(
     val counted = !amountMode && (goal.target > 1 || row.isRoutine)
     val cardSize = LocalCardSize.current
     val rate = LocalPayRate.current
+    val boosted = LocalBoosted.current == goal.id
     Card(Modifier.fillMaxWidth()) {
       Column(Modifier.goalStrip(goal.color)) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(cardSize.padding)) {
@@ -764,8 +778,9 @@ private fun HabitCard(
             Column(Modifier.weight(1f)) {
                 Text(goal.name, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 val detail = buildList {
-                    add("+${rate.pay(goal.points)}" + if (counted) " each" else "")
-                    if (counted && goal.bonus > 0) add("bonus +${rate.pay(goal.bonus)}")
+                    add("+${payFor(goal.points, rate, boosted)}" + if (counted) " each" else "")
+                    if (counted && goal.bonus > 0) add("bonus +${payFor(goal.bonus, rate, boosted)}")
+                    if (boosted) add("🔥 50% more this week")
                     if (!goal.hasAmount) goal.minutes?.let { add(minutesText(it)) }
                 }.joinToString(" · ")
                 Text(detail, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -1086,7 +1101,7 @@ private fun StepLine(step: StepRow, onTick: (Spot) -> Unit, onUndo: () -> Unit) 
             modifier = Modifier.weight(1f),
             color = if (step.done) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
         )
-        Text("+${LocalPayRate.current.pay(step.step.points)}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("+${payNow(step.step.points, step.step.goalId)}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
@@ -1140,7 +1155,7 @@ private fun NewBadgesCard(badges: List<Badge>, onSee: () -> Unit, onDismiss: () 
 private fun TileRow(rows: List<HabitRow>, screen: TodayState, tick: (HabitRow, Spot) -> Unit, onDetails: (Long) -> Unit) {
     Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp)) {
         rows.forEach { row ->
-            GoalTile(row, tileLine(row, screen, LocalPayRate.current), Modifier.weight(1f), onTap = { spot ->
+            GoalTile(row, tileLine(row, screen, LocalPayRate.current, LocalBoosted.current), Modifier.weight(1f), onTap = { spot ->
                 val done = row.count >= row.goal.target
                 when {
                     // A routine's items, an amount to enter, and taking back a counted goal, are on its card.
@@ -1155,7 +1170,7 @@ private fun TileRow(rows: List<HabitRow>, screen: TodayState, tick: (HabitRow, S
 }
 
 /** What a tile says under its name. */
-private fun tileLine(row: HabitRow, screen: TodayState, rate: io.github.randomtools3377.checklist.core.Difficulty): String {
+private fun tileLine(row: HabitRow, screen: TodayState, rate: io.github.randomtools3377.checklist.core.Difficulty, boosted: Long?): String {
     val goal = row.goal
     return when {
         row.count >= goal.target -> "Done ✓"
@@ -1166,7 +1181,7 @@ private fun tileLine(row: HabitRow, screen: TodayState, rate: io.github.randomto
             screen.nextSlots[goal.id]?.let { append(" · next by ${momentText(it.at, screen.view.day)}") }
         }
         row.skipped -> "Skipped"
-        else -> listOfNotNull("+${rate.pay(goal.points)}", goal.minutes?.let { minutesText(it) }).joinToString(" · ")
+        else -> listOfNotNull("+${payFor(goal.points, rate, boosted == goal.id)}", goal.minutes?.let { minutesText(it) }).joinToString(" · ")
     }
 }
 

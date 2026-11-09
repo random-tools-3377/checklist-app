@@ -131,7 +131,7 @@ object Review {
 
         val reasons = live.filter { it.day >= from && it.day <= to }.mapNotNull { reasonLabel(it.reason, it.reasonText) }.groupingBy { it }.eachCount().toList().sortedByDescending { it.second }
         fun sum(vararg kinds: EntryKind) = inRange.filter { it.kind in kinds }.sumOf { it.amount }
-        val earnedKinds = setOf(EntryKind.TICK, EntryKind.BONUS, EntryKind.REFUND)
+        val earnedKinds = setOf(EntryKind.TICK, EntryKind.BONUS, EntryKind.REFUND, EntryKind.PERFECT_DAY)
         val earnedByDay = inRange.filter { it.kind in earnedKinds }.groupBy { it.day }.mapValues { (_, e) -> e.sumOf { it.amount } }
         val lostByDay = inRange.filter { it.kind == EntryKind.PENALTY }.groupBy { it.day }.mapValues { (_, e) -> -e.sumOf { it.amount } }
         return ReviewSummary(
@@ -139,7 +139,7 @@ object Review {
             to = to,
             goals = summaries,
             reasons = reasons,
-            earned = sum(EntryKind.TICK, EntryKind.BONUS, EntryKind.REFUND),
+            earned = sum(EntryKind.TICK, EntryKind.BONUS, EntryKind.REFUND, EntryKind.PERFECT_DAY),
             spent = -sum(EntryKind.PURCHASE, EntryKind.RETURN),
             lost = -sum(EntryKind.PENALTY),
             days = StreakCounter.records(from, to, goals, ticks, lapses),

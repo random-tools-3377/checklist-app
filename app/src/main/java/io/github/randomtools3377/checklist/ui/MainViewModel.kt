@@ -9,6 +9,10 @@ import io.github.randomtools3377.checklist.core.Backup
 import io.github.randomtools3377.checklist.core.BackupError
 import io.github.randomtools3377.checklist.core.BuyResult
 import io.github.randomtools3377.checklist.core.Days
+import io.github.randomtools3377.checklist.core.payFor
+import io.github.randomtools3377.checklist.core.PerfectDays
+import io.github.randomtools3377.checklist.core.RepeatPrice
+import io.github.randomtools3377.checklist.core.Boost
 import io.github.randomtools3377.checklist.core.Interest
 import io.github.randomtools3377.checklist.core.GoalCheck
 import io.github.randomtools3377.checklist.core.RewardCheck
@@ -153,6 +157,8 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.LocalDate
+import kotlinx.datetime.toInstant
+import kotlinx.datetime.TimeZone
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.LocalTime
 
@@ -177,7 +183,8 @@ private const val MAX_WEEKLY_TARGET = 100_000
 /** How long to wait after a change before looking for new badges, so a run of changes is looked at once. */
 private const val BADGE_CHECK_DELAY_MS = 800L
 
-data class RewardRow(val reward: Reward, val usual: String?)
+/** A reward in the shop at what it costs now; [usualPrice] is its own price, before repeat buys this week. */
+data class RewardRow(val reward: Reward, val usual: String?, val usualPrice: Int = reward.price, val boughtThisWeek: Int = 0)
 
 data class ShopView(val balance: Int, val rewards: List<RewardRow>, val bought: List<Purchase>)
 
@@ -201,7 +208,12 @@ data class TodayState(
     val hasDayStart: Boolean = false,
     /** Each ticked habit's latest tick in its window, to add a note to. */
     val lastTicks: Map<Long, Tick> = emptyMap(),
+    /** The goal missed most lately, which pays 50% more this week (see Boost). */
+    val boostedGoalId: Long? = null,
 )
+
+/** Which extras are on: the boost, the perfect-day bonus (0 is off) and repeat-buy prices. */
+data class Boosts(val boost: Boolean = true, val perfectDayBonus: Int = PerfectDays.DEFAULT_BONUS, val repeatPrice: Boolean = true)
 
 /** What the balance check shows: usual earnings now, and each reward and goal judged. */
 data class BalanceCheckView(val perDay: Double?, val rate: Difficulty, val rewards: List<RewardCheck>, val goals: List<GoalCheck>)
@@ -339,8 +351,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         val lapsesFlow = combine(
             dao.observeLapsesSince(since.toEpochDay()).map { rows -> rows.map { it.toCore() } },
             dao.observeChecksSince(since.toEpochDay()).map { rows -> rows.map { it.toCore() } },
-        ) { lapses, checks -> lapses to checks }
-        combine(view, lapsesFlow, now, settings, unlocked) { raw, (lapses, checks), moment, s, isUnlocked ->
+            dao.observeSetting(Boost.SETTING),
+        ) { lapses, checks, boost -> Triple(lapses, checks, boost != "0") }
+        combine(view, lapsesFlow, now, settings, unlocked) { raw, (lapses, checks, boostOn), moment, s, isUnlocked ->
             val hidePrivate = s.locks.privateGoals && !isUnlocked
             val shownGoals = if (hidePrivate) raw.goals.filter { !it.private } else raw.goals
             // Goals with an amount get the time what is left takes, from a typed time or the
@@ -385,6 +398,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 streaks, s.streak, hiddenPrivate = raw.goals.count { it.private && !it.archived } - shownGoals.count { it.private && !it.archived },
                 nextSlots = nextSlots,
                 hasDayStart = s.dayStart != null,
+                boostedGoalId = if (boostOn) Boost.goalFor(day, raw.goals, lapses)?.id else null,
                 lastTicks = (todayView.dueToday + todayView.thisWeek + todayView.thisMonth + todayView.thisYear).mapNotNull { row ->
                     raw.ticks.filter { it.stepId == null && it.countsToward(row.goal, row.window.start) }.maxByOrNull { it.at }?.let { row.goal.id to it }
                 }.toMap(),
@@ -908,10 +922,20 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 today = day,
             )
         }
-        combine(dao.observeBalance(), dao.observeRewards(), dao.observeUnusedPurchases(), pointsPerDay) { balance, rewards, bought, perDay ->
+        // Rewards bought this week cost more each time (see RepeatPrice): from Monday, when the day ends.
+        val weekStart = LocalDateTime(Boost.weekOf(day), LocalTime(settings.value.dayEndHour, 0)).toInstant(TimeZone.currentSystemDefault()).toEpochMilliseconds()
+        val thisWeek = combine(dao.observePurchasesSince(weekStart), dao.observeSetting(RepeatPrice.SETTING)) { list, on ->
+            (on != "0") to list.filter { it.returnedAt == null }.groupingBy { it.rewardId }.eachCount()
+        }
+        combine(dao.observeBalance(), dao.observeRewards(), dao.observeUnusedPurchases(), pointsPerDay, thisWeek) { balance, rewards, bought, perDay, (on, counts) ->
             ShopView(
                 balance = balance,
-                rewards = rewards.map { RewardRow(it.toCore(), Usual.describe(it.price, perDay)) },
+                rewards = rewards.map {
+                    val reward = it.toCore()
+                    val times = counts[reward.id] ?: 0
+                    val now = RepeatPrice.now(reward.price, times, on)
+                    RewardRow(reward.copy(price = now), Usual.describe(now, perDay), usualPrice = reward.price, boughtThisWeek = times)
+                },
                 bought = bought.map { it.toCore() },
             )
         }
@@ -1091,6 +1115,25 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     /** Savings interest on a positive balance each week, as a whole percentage; 0 is off. */
     val interestPercent: StateFlow<Int> =
         dao.observeSetting(Interest.PERCENT).map { it?.toIntOrNull()?.coerceIn(0, 100) ?: Interest.DEFAULT_PERCENT }.state(Interest.DEFAULT_PERCENT)
+
+    /** The boost, the perfect-day bonus and repeat-buy prices, each of which can be turned off. */
+    val boosts: StateFlow<Boosts> = combine(
+        dao.observeSetting(Boost.SETTING), dao.observeSetting(PerfectDays.BONUS), dao.observeSetting(RepeatPrice.SETTING),
+    ) { boost, perfect, repeat ->
+        Boosts(boost != "0", perfect?.toIntOrNull()?.coerceIn(0, 10_000) ?: PerfectDays.DEFAULT_BONUS, repeat != "0")
+    }.state(Boosts())
+
+    fun setBoost(on: Boolean) {
+        viewModelScope.launch { repository.setSetting(Boost.SETTING, if (on) "1" else "0") }
+    }
+
+    fun setPerfectDayBonus(points: Int) {
+        viewModelScope.launch { repository.setSetting(PerfectDays.BONUS, points.coerceIn(0, 10_000).toString()) }
+    }
+
+    fun setRepeatPrice(on: Boolean) {
+        viewModelScope.launch { repository.setSetting(RepeatPrice.SETTING, if (on) "1" else "0") }
+    }
 
     fun setInterest(percent: Int) {
         viewModelScope.launch { repository.setSetting(Interest.PERCENT, percent.coerceIn(0, 100).toString()) }

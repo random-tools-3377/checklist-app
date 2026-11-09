@@ -76,6 +76,7 @@ class RoomStore(private val db: AppDatabase) : Store {
 
     override suspend fun reward(id: Long): Reward? = dao.reward(id)?.toCore()
     override suspend fun purchase(id: Long): Purchase? = dao.purchase(id)?.toCore()
+    override suspend fun purchasesOf(rewardId: Long): List<Purchase> = dao.purchasesOf(rewardId).map { it.toCore() }
     override suspend fun addPurchase(purchase: Purchase): Long = dao.insertPurchase(purchase.toEntity())
     override suspend fun markUsed(purchaseId: Long, at: Long) = dao.markUsed(purchaseId, at)
     override suspend fun markReturned(purchaseId: Long, at: Long) = dao.markReturned(purchaseId, at)

@@ -274,19 +274,21 @@ fun ChecklistApp(vm: MainViewModel = viewModel()) {
                     },
                 ) { padding ->
                     when (tab) {
-                        AppTab.TODAY -> TodayScreen(
-                            today, vm, celebrations,
-                            onAddGoal = { goTo(AppTab.GOALS); newGoal = true },
-                            onHistory = { push("history") },
-                            onSettings = { push("settings") },
-                            onUnlock = unlock,
-                            onBadges = { push("badges") },
-                            onEditTodo = { id -> push("todo/$id") },
-                            onGuide = { push("guide") },
-                            skipRequest = skipRequest,
-                            onSkipRequestHandled = vm::clearSkipRequest,
-                            padding = padding,
-                        )
+                        AppTab.TODAY -> androidx.compose.runtime.CompositionLocalProvider(LocalBoosted provides today?.boostedGoalId) {
+                            TodayScreen(
+                                today, vm, celebrations,
+                                onAddGoal = { goTo(AppTab.GOALS); newGoal = true },
+                                onHistory = { push("history") },
+                                onSettings = { push("settings") },
+                                onUnlock = unlock,
+                                onBadges = { push("badges") },
+                                onEditTodo = { id -> push("todo/$id") },
+                                onGuide = { push("guide") },
+                                skipRequest = skipRequest,
+                                onSkipRequestHandled = vm::clearSkipRequest,
+                                padding = padding,
+                            )
+                        }
                         AppTab.GOALS -> GoalsScreen(
                             goals,
                             reordering = reorderGoals,

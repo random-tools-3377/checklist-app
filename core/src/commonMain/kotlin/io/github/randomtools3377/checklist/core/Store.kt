@@ -48,6 +48,9 @@ interface Store {
 
     suspend fun reward(id: Long): Reward?
     suspend fun purchase(id: Long): Purchase?
+
+    /** Every purchase of a reward, for its price on repeat buys. */
+    suspend fun purchasesOf(rewardId: Long): List<Purchase>
     suspend fun addPurchase(purchase: Purchase): Long
     suspend fun markUsed(purchaseId: Long, at: Long)
     suspend fun markReturned(purchaseId: Long, at: Long)

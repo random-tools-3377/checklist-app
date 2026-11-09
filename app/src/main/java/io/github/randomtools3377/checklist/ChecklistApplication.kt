@@ -6,6 +6,7 @@ import androidx.room.withTransaction
 import io.github.randomtools3377.checklist.core.Book
 import io.github.randomtools3377.checklist.core.Gaps
 import io.github.randomtools3377.checklist.core.Interest
+import io.github.randomtools3377.checklist.core.PerfectDays
 import io.github.randomtools3377.checklist.core.Lapses
 import io.github.randomtools3377.checklist.core.PointsName
 import io.github.randomtools3377.checklist.ui.PointsLabel
@@ -48,6 +49,7 @@ class Container(app: Application) {
     val lapses = Lapses(RoomStore(db), book)
     val gaps = Gaps(RoomStore(db), book)
     val interest = Interest(RoomStore(db), book)
+    val perfectDays = PerfectDays(RoomStore(db), book)
 
     /**
      * Finds misses since the last check, then gaps. When the app opens, and when the day ends.
@@ -58,6 +60,7 @@ class Container(app: Application) {
             lapses.closeDays()
             gaps.find()
             interest.pay()
+            perfectDays.pay()
         }
     }
     val celebrationFiles = CelebrationFiles(app.filesDir)

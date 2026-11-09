@@ -47,6 +47,7 @@ class MemoryStore : Store {
     override suspend fun balanceOn(day: LocalDate): Int = entries.filter { it.day <= day }.sumOf { it.amount }
     override suspend fun reward(id: Long): Reward? = rewards.find { it.id == id }
     override suspend fun purchase(id: Long): Purchase? = purchases.find { it.id == id }
+    override suspend fun purchasesOf(rewardId: Long): List<Purchase> = purchases.filter { it.rewardId == rewardId }
     override suspend fun addPurchase(purchase: Purchase): Long = nextId++.also { purchases += purchase.copy(id = it) }
     override suspend fun markUsed(purchaseId: Long, at: Long) {
         val i = purchases.indexOfFirst { it.id == purchaseId }

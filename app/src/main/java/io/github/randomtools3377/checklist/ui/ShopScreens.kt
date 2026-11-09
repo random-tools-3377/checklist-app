@@ -226,6 +226,14 @@ private fun RewardCard(
                 Column(Modifier.weight(1f)) {
                     Text(reward.name, style = MaterialTheme.typography.titleMedium)
                     Text(pointsText(reward.price), style = MaterialTheme.typography.bodyMedium)
+                    if (reward.price != row.usualPrice) {
+                        Text(
+                            "Usually ${row.usualPrice}: bought ${if (row.boughtThisWeek == 1) "once" else "${row.boughtThisWeek} times"} this week. Back to normal on Monday.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.testTag("repeat-price:${reward.name}"),
+                        )
+                    }
                     if (reward.isMystery) {
                         Text(
                             "A mystery: one of ${reward.prizes.size}, drawn when you buy it",
