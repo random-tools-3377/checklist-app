@@ -37,6 +37,15 @@ data class ReviewSummary(
     val gaps: List<Gap>,
     /** Done out of due for each day of the week, Monday = 1. */
     val weekdays: Map<Int, Pair<Int, Int>>,
+    /** Points earned on each day of the stretch (ticks, bonuses, refunds), for the chart. */
+    val earnedByDay: Map<LocalDate, Int> = emptyMap(),
+    /** Points lost on each day of the stretch (penalties), as positive numbers. */
+    val lostByDay: Map<LocalDate, Int> = emptyMap(),
+    /**
+     * Each category the goals use, in their order, then goals without one. Empty when no goal
+     * has a category.
+     */
+    val categories: List<CategorySummary> = emptyList(),
 ) {
     val mostSkipped: GoalSummary? get() = goals.filter { it.skipped > 0 }.maxByOrNull { it.skipped }
     val mostMissed: GoalSummary? get() = goals.filter { it.missed > 0 }.maxByOrNull { it.missed }
@@ -49,6 +58,19 @@ data class ReviewSummary(
 }
 
 object Review {
+    /** Due and done from the habits, and points (ticks and bonuses) from every goal, per category. */
+    private fun byCategory(goals: List<Goal>, summaries: List<GoalSummary>, entries: List<Entry>): List<CategorySummary> {
+        val names = Categories.of(goals)
+        if (names.isEmpty()) return emptyList()
+        val categoryOf = goals.associate { it.id to it.category }
+        val points = entries.filter { it.goalId != null && (it.kind == EntryKind.TICK || it.kind == EntryKind.BONUS) }
+            .groupBy { categoryOf[it.goalId] }.mapValues { (_, e) -> e.sumOf { it.amount } }
+        return (names + listOf<String?>(null)).map { name ->
+            val inIt = summaries.filter { it.goal.category == name }
+            CategorySummary(name, inIt.sumOf { it.due }, inIt.sumOf { it.done }, points[name] ?: 0)
+        }.filter { it.name != null || it.due > 0 || it.points > 0 }
+    }
+
     /** The day, the Monday-to-Sunday week, or the calendar month containing [day]. */
     fun range(day: LocalDate, period: Period): Pair<LocalDate, LocalDate> = Days.periodStart(day, period) to Days.periodEnd(day, period)
 
@@ -109,6 +131,9 @@ object Review {
 
         val reasons = live.filter { it.day >= from && it.day <= to }.mapNotNull { reasonLabel(it.reason, it.reasonText) }.groupingBy { it }.eachCount().toList().sortedByDescending { it.second }
         fun sum(vararg kinds: EntryKind) = inRange.filter { it.kind in kinds }.sumOf { it.amount }
+        val earnedKinds = setOf(EntryKind.TICK, EntryKind.BONUS, EntryKind.REFUND)
+        val earnedByDay = inRange.filter { it.kind in earnedKinds }.groupBy { it.day }.mapValues { (_, e) -> e.sumOf { it.amount } }
+        val lostByDay = inRange.filter { it.kind == EntryKind.PENALTY }.groupBy { it.day }.mapValues { (_, e) -> -e.sumOf { it.amount } }
         return ReviewSummary(
             from = from,
             to = to,
@@ -120,6 +145,9 @@ object Review {
             days = StreakCounter.records(from, to, goals, ticks, lapses),
             gaps = gaps.filter { it.to >= from && it.from <= to },
             weekdays = (1..7).associateWith { weekdayDue[it] to weekdayDone[it] },
+            earnedByDay = earnedByDay,
+            lostByDay = lostByDay,
+            categories = byCategory(goals, summaries, inRange),
         )
     }
 }

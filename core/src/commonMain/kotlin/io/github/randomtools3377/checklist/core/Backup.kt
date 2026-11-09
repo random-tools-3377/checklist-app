@@ -29,14 +29,17 @@ data class Backup(
     val gaps: List<Gap> = emptyList(),
     /** The celebration GIFs the user picked, by file name, in base64 (format 4). */
     val files: Map<String, String> = emptyMap(),
-    /** Routine items ticked (format 5). A routine's items are its steps. Format 6 adds the user's own reasons and notes on ticks. */
+    /**
+     * Routine items ticked (format 5). A routine's items are its steps. Format 6 adds the user's
+     * own reasons and notes on ticks; format 7 adds goals' categories.
+     */
     val checks: List<Check> = emptyList(),
 ) {
     companion object {
         const val APP = "checklist"
 
         /** Raised whenever the file's layout changes in a way older versions can't read. */
-        const val FORMAT = 6
+        const val FORMAT = 7
 
         private val json = Json {
             prettyPrint = true

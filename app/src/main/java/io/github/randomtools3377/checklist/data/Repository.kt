@@ -2,6 +2,7 @@ package io.github.randomtools3377.checklist.data
 
 import androidx.room.withTransaction
 import io.github.randomtools3377.checklist.core.Backup
+import io.github.randomtools3377.checklist.core.Categories
 import io.github.randomtools3377.checklist.core.Celebration
 import io.github.randomtools3377.checklist.core.Goal
 import io.github.randomtools3377.checklist.core.GoalKind
@@ -56,6 +57,8 @@ data class HabitDraft(
     val times: List<LocalTime> = emptyList(),
     /** A routine's checklist. Empty for a plain habit. */
     val items: List<StepDraft> = emptyList(),
+    /** As typed; tidied on saving (see Categories). */
+    val category: String? = null,
 )
 
 /** One step in the project editor. [id] is 0 for a new step. */
@@ -73,6 +76,8 @@ data class ProjectDraft(
     val allowance: Int? = null,
     val private: Boolean = false,
     val celebration: String? = null,
+    /** As typed; tidied on saving (see Categories). */
+    val category: String? = null,
 )
 
 /** What the reward editor saves. */
@@ -88,6 +93,10 @@ class Repository(private val db: AppDatabase, private val celebrations: Celebrat
     }
 
     suspend fun goal(id: Long): Goal? = dao.goal(id)?.toCore()
+
+    /** What the user typed for a category, tidied, joining one already in use when it matches. */
+    private suspend fun category(typed: String?, goalId: Long): String? =
+        Categories.tidy(typed, Categories.of(dao.allGoals().filter { it.id != goalId }.map { it.toCore() }))
 
     suspend fun steps(goalId: Long): List<Step> = dao.activeSteps(goalId).map { it.toCore() }
 
@@ -117,6 +126,7 @@ class Repository(private val db: AppDatabase, private val celebrations: Celebrat
             allowancePer = draft.allowancePer?.name,
             isPrivate = draft.private,
             celebration = draft.celebration?.takeIf { Celebration.isValid(it) },
+            category = category(draft.category, draft.id),
         )
         val goalId = if (existing == null) dao.insertGoal(row) else row.id.also { dao.updateGoal(row) }
         // A routine's checklist: removed items are archived, so their past ticks still make sense.
@@ -158,6 +168,7 @@ class Repository(private val db: AppDatabase, private val celebrations: Celebrat
                     allowance = draft.allowance,
                     isPrivate = draft.private,
                     celebration = draft.celebration?.takeIf { Celebration.isValid(it) },
+                    category = category(draft.category, 0),
                 ),
             )
         } else {
@@ -171,6 +182,7 @@ class Repository(private val db: AppDatabase, private val celebrations: Celebrat
                     allowance = draft.allowance,
                     isPrivate = draft.private,
                     celebration = draft.celebration?.takeIf { Celebration.isValid(it) },
+                    category = category(draft.category, existing.id),
                 ),
             )
             existing.id

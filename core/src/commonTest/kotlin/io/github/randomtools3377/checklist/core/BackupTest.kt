@@ -48,7 +48,7 @@ class BackupTest {
     fun theFileSaysWhatItIs() {
         val text = Backup.encode(backup)
         assertTrue(text.contains("\"app\": \"checklist\""))
-        assertTrue(text.contains("\"format\": 6"))
+        assertTrue(text.contains("\"format\": ${Backup.FORMAT}"))
     }
 
     @Test
@@ -60,7 +60,7 @@ class BackupTest {
 
     @Test
     fun aBackupFromANewerVersionIsRefused() {
-        val newer = Backup.encode(backup).replace("\"format\": 6", "\"format\": 99")
+        val newer = Backup.encode(backup).replace("\"format\": ${Backup.FORMAT}", "\"format\": 99")
         val error = assertFailsWith<BackupError> { Backup.decode(newer) }
         assertEquals("This backup was made by a newer version of the app. Update the app first.", error.message)
     }
@@ -68,7 +68,7 @@ class BackupTest {
     @Test
     fun aFormat1BackupStillReads() {
         val old = Backup.encode(backup.copy(lapses = emptyList(), penalties = emptyList(), penaltyTasks = emptyList(), gaps = emptyList()))
-            .replace("\"format\": 6", "\"format\": 1")
+            .replace("\"format\": ${Backup.FORMAT}", "\"format\": 1")
             .replace(Regex(",\\s*\"lapses\": \\[\\],\\s*\"penalties\": \\[\\],\\s*\"penaltyTasks\": \\[\\]"), "")
         val read = Backup.decode(old)
         assertEquals(1, read.format)

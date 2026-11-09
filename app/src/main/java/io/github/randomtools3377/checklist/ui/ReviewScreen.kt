@@ -3,6 +3,17 @@
 package io.github.randomtools3377.checklist.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.layout.wrapContentWidth
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.Dp
+import kotlinx.datetime.LocalDate
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -98,8 +109,10 @@ fun ReviewScreen(
             }
         }
         item { PointsCard(summary) }
+        if (period != Period.DAILY) item { DayCharts(summary, period) }
         if (period == Period.MONTHLY) item { MonthCalendar(summary) }
         item { GoalsCard(summary) }
+        if (summary.categories.isNotEmpty()) item { CategoriesCard(summary) }
         item { ReasonsCard(summary, hideReasons) }
         if (summary.gaps.isNotEmpty()) item { GapsCard(summary.gaps, hideGapNotes) }
         item { StatsCard(summary, streaks) }
@@ -279,5 +292,142 @@ private fun StatsCard(summary: ReviewSummary, streaks: Streaks?) {
             }
         }
         Spacer(Modifier.height(2.dp))
+    }
+}
+
+/** Each day of a week or a month as bars: how much of what was due got done, and the points. */
+@Composable
+private fun DayCharts(summary: ReviewSummary, period: Period) {
+    val days = summary.days
+    if (days.isEmpty()) return
+    val shares = days.map { if (it.due == 0) null else it.done * 100 / it.due }
+    val earned = days.map { summary.earnedByDay[it.day] ?: 0 }
+    val lost = days.map { summary.lostByDay[it.day] ?: 0 }
+    val primary = MaterialTheme.colorScheme.primary
+    val error = MaterialTheme.colorScheme.error
+    val faint = MaterialTheme.colorScheme.outlineVariant
+    ReviewCard("Each day") {
+        Text("Done", style = MaterialTheme.typography.labelLarge)
+        BarChart(
+            up = shares.map { it ?: 0 },
+            top = 100,
+            upColor = primary,
+            downColor = error,
+            marks = shares.map { share -> when (share) { null -> faint; 0 -> error; else -> null } },
+            lineColor = faint,
+            description = "Done each day: " + days.zip(shares).joinToString("; ") { (record, share) ->
+                "${dayName(record.day, period)} " + (share?.let { "$it%" } ?: "nothing due")
+            },
+            tag = "chart:done",
+        )
+        DayLabels(days.map { it.day }, period)
+        Spacer(Modifier.height(6.dp))
+        Text("Points", style = MaterialTheme.typography.labelLarge)
+        BarChart(
+            up = earned,
+            down = lost,
+            upColor = primary,
+            downColor = error,
+            marks = List(days.size) { null },
+            lineColor = faint,
+            description = "Points each day: " + days.indices.joinToString("; ") { i ->
+                "${dayName(days[i].day, period)} +${earned[i]}" + if (lost[i] > 0) ", −${lost[i]} lost" else ""
+            },
+            tag = "chart:points",
+        )
+        DayLabels(days.map { it.day }, period)
+        val best = days.indices.filter { earned[it] > 0 }.maxByOrNull { earned[it] }
+        Text(
+            listOfNotNull(
+                best?.let { "Most points: ${shortDate(days[it].day)}, +${earned[it]}" },
+                if (lost.any { it > 0 }) "red below the line: points lost" else null,
+            ).joinToString(" · ").ifEmpty { "No points earned yet in this stretch." },
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+private fun dayName(day: LocalDate, period: Period): String =
+    if (period == Period.WEEKLY) weekdayShort(day.dayOfWeek.isoDayNumber) else shortDate(day)
+
+/** Bars up from a line, and optionally down from it in another colour, one per day. */
+@Composable
+private fun BarChart(
+    up: List<Int>,
+    down: List<Int> = emptyList(),
+    top: Int? = null,
+    upColor: Color,
+    downColor: Color,
+    marks: List<Color?>,
+    lineColor: Color,
+    description: String,
+    tag: String,
+    height: Dp = 88.dp,
+) {
+    val upMost = (top ?: up.maxOrNull() ?: 0).coerceAtLeast(1)
+    val downMost = down.maxOrNull() ?: 0
+    Canvas(
+        Modifier.fillMaxWidth().height(if (downMost > 0) height + 28.dp else height)
+            .semantics { contentDescription = description }
+            .testTag(tag),
+    ) {
+        val slot = size.width / up.size
+        val bar = slot * 0.62f
+        val radius = CornerRadius(minOf(bar / 2, 4.dp.toPx()))
+        val zero = if (downMost > 0) size.height - 28.dp.toPx() else size.height - 2.dp.toPx()
+        val below = size.height - zero
+        up.forEachIndexed { i, value ->
+            val x = i * slot + (slot - bar) / 2
+            val h = zero * value.coerceAtMost(upMost) / upMost
+            if (h > 0f) drawRoundRect(upColor, Offset(x, zero - h), Size(bar, h), radius)
+            val d = if (downMost == 0) 0f else below * (down.getOrNull(i) ?: 0) / downMost
+            if (d > 0f) drawRoundRect(downColor, Offset(x, zero), Size(bar, d), radius)
+            marks.getOrNull(i)?.let { drawCircle(it, radius = minOf(bar / 2, 3.dp.toPx()), center = Offset(x + bar / 2, zero - 3.dp.toPx())) }
+        }
+        drawLine(lineColor, Offset(0f, zero), Offset(size.width, zero), strokeWidth = 1.dp.toPx())
+    }
+}
+
+/** The days under a chart: each weekday for a week, every 7th date for a month. */
+@Composable
+private fun DayLabels(days: List<LocalDate>, period: Period) {
+    Row(Modifier.fillMaxWidth()) {
+        days.forEach { day ->
+            val label = when {
+                period == Period.WEEKLY -> weekdayShort(day.dayOfWeek.isoDayNumber).take(1)
+                (day.dayOfMonth - 1) % 7 == 0 -> "${day.dayOfMonth}"
+                else -> ""
+            }
+            Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                Text(
+                    label,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    softWrap = false,
+                    modifier = Modifier.wrapContentWidth(unbounded = true),
+                )
+            }
+        }
+    }
+}
+
+/** Each category: how much of what was due got done, and the points its goals earned. */
+@Composable
+private fun CategoriesCard(summary: ReviewSummary) {
+    ReviewCard("By category") {
+        summary.categories.forEach { category ->
+            val name = category.name ?: "No category"
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.testTag("review:category:$name")) {
+                Text(name, modifier = Modifier.weight(1f), maxLines = 1)
+                Text(if (category.due > 0) "${category.done}/${category.due} done" else "nothing due", textAlign = TextAlign.End, modifier = Modifier.width(96.dp))
+                Text("+${category.points}", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, textAlign = TextAlign.End, modifier = Modifier.width(56.dp))
+            }
+            if (category.due > 0) {
+                LinearProgressIndicator(progress = { category.consistency.toFloat() }, modifier = Modifier.fillMaxWidth())
+            }
+        }
+        Text("Points come from ticks and bonuses.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }

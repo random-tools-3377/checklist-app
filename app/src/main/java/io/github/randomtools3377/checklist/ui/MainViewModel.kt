@@ -10,6 +10,7 @@ import io.github.randomtools3377.checklist.core.BackupError
 import io.github.randomtools3377.checklist.core.BuyResult
 import io.github.randomtools3377.checklist.core.Days
 import io.github.randomtools3377.checklist.core.Entry
+import io.github.randomtools3377.checklist.core.Categories
 import io.github.randomtools3377.checklist.core.Goal
 import io.github.randomtools3377.checklist.core.GoalKind
 import io.github.randomtools3377.checklist.core.LongPace
@@ -700,6 +701,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Goals the user removed, to bring back. */
     val removedGoals: StateFlow<List<Goal>> = dao.observeRemovedGoals().map { rows -> rows.map { it.toCore() } }.state(emptyList())
+
+    /** The categories the goals use, offered in the goal editor. */
+    val categories: StateFlow<List<String>> = dao.observeGoals().map { rows -> Categories.of(rows.map { it.toCore() }) }.state(emptyList())
 
     fun duplicateGoal(id: Long, onDone: (Long) -> Unit) {
         viewModelScope.launch { repository.duplicateGoal(id)?.let(onDone) }

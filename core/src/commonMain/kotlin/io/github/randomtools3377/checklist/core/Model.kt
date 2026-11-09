@@ -61,6 +61,8 @@ data class Goal(
     val private: Boolean = false,
     /** Its own celebration GIF, if it has one (see [Celebration]). */
     val celebration: String? = null,
+    /** The user's own category for it, like "Health" or "Home", if they gave it one (see [Categories]). */
+    val category: String? = null,
     val archived: Boolean = false,
     val position: Int = 0,
     val createdAt: Long = 0,

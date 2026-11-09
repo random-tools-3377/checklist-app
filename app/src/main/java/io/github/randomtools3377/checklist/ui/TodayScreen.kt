@@ -15,6 +15,12 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material3.FilterChip
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.foundation.layout.Arrangement
+import io.github.randomtools3377.checklist.core.Categories
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
@@ -107,6 +113,16 @@ fun TodayScreen(
     }
     skipping?.let { goal -> SkipDialog(goal, vm) { skipping = null } }
 
+    // Showing one category at a time, when goals have them.
+    var category by rememberSaveable { mutableStateOf<String?>(null) }
+    val categories = Categories.of(
+        screen.plan.map { it.row.goal } + (view.thisWeek + view.thisMonth + view.thisYear).map { it.goal } + view.projects.map { it.goal },
+    )
+    val filter = category?.takeIf { it in categories }
+    val plan = screen.plan.filter { Categories.shows(filter, it.row.goal) }
+    fun shown(rows: List<HabitRow>) = rows.filter { Categories.shows(filter, it.goal) }
+    val projects = view.projects.filter { Categories.shows(filter, it.goal) }
+
     fun celebrateTick(result: TickResult, spot: Spot, bigWhenFinished: Boolean) {
         if (result !is TickResult.Ticked) return
         haptics.performHapticFeedback(HapticFeedbackType.LongPress)
@@ -168,6 +184,24 @@ fun TodayScreen(
                 }
             }
         }
+        if (categories.isNotEmpty()) {
+            item {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(top = 12.dp).testTag("today-categories"),
+                ) {
+                    FilterChip(selected = filter == null, onClick = { category = null }, label = { Text("All") }, modifier = Modifier.testTag("today-category:All"))
+                    categories.forEach { name ->
+                        FilterChip(
+                            selected = filter == name,
+                            onClick = { category = if (filter == name) null else name },
+                            label = { Text(name) },
+                            modifier = Modifier.testTag("today-category:$name"),
+                        )
+                    }
+                }
+            }
+        }
         if (view.isEmpty) {
             item {
                 Column(
@@ -190,8 +224,8 @@ fun TodayScreen(
                 Spacer(Modifier.height(12.dp))
                 OrderSwitch(screen.recommended) { vm.setTodayOrder(if (it) ORDER_RECOMMENDED else ORDER_OWN) }
             }
-            item { SectionTitle("Today") }
-            items(screen.plan, key = { "today-${it.row.goal.id}" }) { planned ->
+            if (plan.isNotEmpty()) item { SectionTitle("Today") }
+            items(plan, key = { "today-${it.row.goal.id}" }) { planned ->
                 HabitCard(
                     row = planned.row,
                     // A habit done several times a day shows its next one instead.
@@ -211,12 +245,12 @@ fun TodayScreen(
                 Spacer(Modifier.height(10.dp))
             }
         }
-        habitSection("This week", view.thisWeek, screen, ::tick, vm) { skipping = it }
-        habitSection("This month", view.thisMonth, screen, ::tick, vm) { skipping = it }
-        habitSection("This year", view.thisYear, screen, ::tick, vm) { skipping = it }
-        if (view.projects.isNotEmpty()) {
+        habitSection("This week", shown(view.thisWeek), screen, ::tick, vm) { skipping = it }
+        habitSection("This month", shown(view.thisMonth), screen, ::tick, vm) { skipping = it }
+        habitSection("This year", shown(view.thisYear), screen, ::tick, vm) { skipping = it }
+        if (projects.isNotEmpty()) {
             item { SectionTitle("Projects") }
-            items(view.projects, key = { "project-${it.goal.id}" }) { project ->
+            items(projects, key = { "project-${it.goal.id}" }) { project ->
                 ProjectCard(
                     project = project,
                     paceLine = screen.longPaces[project.goal.id]?.let { paceText(it) },

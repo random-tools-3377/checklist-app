@@ -55,6 +55,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -70,6 +71,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import io.github.randomtools3377.checklist.core.Categories
 import io.github.randomtools3377.checklist.core.Goal
 import io.github.randomtools3377.checklist.core.GoalKind
 import io.github.randomtools3377.checklist.core.Period
@@ -346,6 +348,7 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Long)
     var allowancePer by rememberSaveable { mutableStateOf(Period.WEEKLY) }
     var isPrivate by rememberSaveable { mutableStateOf(false) }
     var celebration by rememberSaveable { mutableStateOf<String?>(null) }
+    var category by rememberSaveable { mutableStateOf("") }
     var showErrors by rememberSaveable { mutableStateOf(false) }
     var choosingRepeat by remember { mutableStateOf(false) }
     val context = LocalContext.current
@@ -376,6 +379,7 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Long)
                 allowancePer = goal.allowanceWindow
                 isPrivate = goal.private
                 celebration = goal.celebration
+                category = goal.category.orEmpty()
                 goal.reminder?.let { r ->
                     notifyOnTime = r.onTime
                     alertBefore = r.minutesBefore
@@ -481,6 +485,7 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Long)
                         allowancePer = allowancePer,
                         private = isPrivate,
                         celebration = celebration,
+                        category = category,
                     ),
                     onDone = {
                         val wantsNotifications = when {
@@ -515,6 +520,7 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Long)
             tag = "field:points",
             error = if (showErrors) pointsError else null,
         )
+        CategoryField(category, { category = it }, vm)
 
         // How often
         Text("How often", style = MaterialTheme.typography.titleSmall)
@@ -862,6 +868,7 @@ fun ProjectEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Lon
     var allowance by rememberSaveable { mutableStateOf(Goal.DEFAULT_ALLOWANCE.toString()) }
     var isPrivate by rememberSaveable { mutableStateOf(false) }
     var celebration by rememberSaveable { mutableStateOf<String?>(null) }
+    var category by rememberSaveable { mutableStateOf("") }
     var nextKey by rememberSaveable { mutableStateOf(2L) }
     val steps = rememberSaveable(saver = StepFieldsSaver) { mutableListOf(StepField(1L, 0L, "", "")).toMutableStateList() }
     var showErrors by rememberSaveable { mutableStateOf(false) }
@@ -877,6 +884,7 @@ fun ProjectEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Lon
                 allowance = goal.allowed.toString()
                 isPrivate = goal.private
                 celebration = goal.celebration
+                category = goal.category.orEmpty()
                 steps.clear()
                 existingSteps.forEach { steps += StepField(nextKey++, it.id, it.name, it.points.toString()) }
                 if (steps.isEmpty()) steps += StepField(nextKey++, 0L, "", "")
@@ -912,6 +920,7 @@ fun ProjectEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Lon
                         allowance = allowance.toIntOrNull() ?: Goal.DEFAULT_ALLOWANCE,
                         private = isPrivate,
                         celebration = celebration,
+                        category = category,
                     ),
                     onDone = onClose,
                 )
@@ -929,6 +938,7 @@ fun ProjectEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Lon
             supportingText = if (showErrors && nameError != null) ({ Text(nameError) }) else null,
             modifier = Modifier.fillMaxWidth().testTag("field:name"),
         )
+        CategoryField(category, { category = it }, vm)
         Text("Steps", style = MaterialTheme.typography.titleSmall)
         steps.forEachIndexed { index, step ->
             key(step.key) {
@@ -1140,5 +1150,32 @@ private fun PrivateSwitch(isPrivate: Boolean, onPrivate: (Boolean) -> Unit) {
             )
         }
         Switch(checked = isPrivate, onCheckedChange = onPrivate, modifier = Modifier.testTag("field:private"))
+    }
+}
+
+/** An optional category for a goal, typed or picked from the ones already in use. */
+@Composable
+private fun CategoryField(value: String, onValue: (String) -> Unit, vm: MainViewModel) {
+    val existing by vm.categories.collectAsStateWithLifecycle()
+    OutlinedTextField(
+        value = value,
+        onValueChange = { onValue(it.take(Categories.LENGTH)) },
+        label = { Text("Category (optional)") },
+        placeholder = { Text("Like Health, Home or Work") },
+        singleLine = true,
+        modifier = Modifier.fillMaxWidth().testTag("field:category"),
+    )
+    if (existing.isNotEmpty()) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            existing.forEach { name ->
+                val picked = value.trim().equals(name, ignoreCase = true)
+                FilterChip(
+                    selected = picked,
+                    onClick = { onValue(if (picked) "" else name) },
+                    label = { Text(name) },
+                    modifier = Modifier.testTag("category:$name"),
+                )
+            }
+        }
     }
 }

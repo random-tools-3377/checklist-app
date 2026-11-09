@@ -296,7 +296,10 @@ Build order **(default)**, each step a Release the owner can try:
     timer for goals with a length; a weekly summary; "every few hours" goals; the user's own
     miss reasons; duplicating a goal and bringing back a removed one; fixing a tick's time;
     notes on ticks; categories; charts in the review; badges; a balance and streaks widget; a
-    mystery reward and a weekly points target.
+    mystery reward and a weekly points target. **Details (default):** a category is a name the
+    user types on a goal or picks from the ones in use; Today can show one category at a time,
+    and the review sums each one up. The week and month reviews chart each day: how much of
+    what was due got done, and points earned above the line with points lost below it.
 11. Customising the look, after all of step 10. Decided: dark mode choices (light, dark, follow
     the phone, pure black); an accent colour from a palette, any colour from a colour picker,
     or matched to the wallpaper; a colour for each goal (its card, the calendar, the widget),
