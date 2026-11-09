@@ -147,6 +147,19 @@
                 android:resource="@xml/stats_widget_info" />
         </receiver>
 
+        <!-- The quick-add widget: one tap to add a to-do. -->
+        <receiver
+            android:name=".widget.QuickAddWidgetReceiver"
+            android:exported="true"
+            android:label="@string/quick_add_widget_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/quick_add_widget_info" />
+        </receiver>
+
         <!-- Reminders: the alarm, the Done button, and setting the alarm again after a restart. -->
         <receiver
             android:name=".reminders.AlarmReceiver"

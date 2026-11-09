@@ -2,6 +2,7 @@
 
 package io.github.randomtools3377.checklist.ui
 
+import androidx.compose.material3.Checkbox
 import android.Manifest
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -134,8 +135,14 @@ fun GoalsScreen(
     onRemoved: () -> Unit = {},
     doneCount: Int = 0,
     onDoneList: () -> Unit = {},
+    selecting: Boolean = false,
+    vm: MainViewModel? = null,
 ) {
     if (view == null) return
+    // Goals chosen while selecting, to change or remove together.
+    var selected by rememberSaveable { mutableStateOf(listOf<Long>()) }
+    LaunchedEffect(selecting) { if (!selecting) selected = emptyList() }
+    var asking by remember { mutableStateOf<String?>(null) }
     // Search: every word typed has to be in a goal's name or category. Not while reordering.
     var query by rememberSaveable { mutableStateOf("") }
     val found = if (reordering) view.goals else GoalSearch.filter(view.goals, query)
@@ -168,6 +175,16 @@ fun GoalsScreen(
                 OutlinedButton(onClick = onUnlock, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
                     Text(if (view.hiddenPrivate == 1) "🔒 1 private goal · Unlock" else "🔒 ${view.hiddenPrivate} private goals · Unlock")
                 }
+            }
+        }
+        if (selecting) {
+            item(key = "selection") {
+                SelectionBar(
+                    count = selected.size,
+                    onCategory = { asking = "category" },
+                    onDifficulty = { asking = "difficulty" },
+                    onRemove = { asking = "remove" },
+                )
             }
         }
         if (!reordering && view.goals.size > 1) {
@@ -205,9 +222,10 @@ fun GoalsScreen(
                 )
             }
         }
-        goalSection("Habits", habits, view, reordering, onEdit, onMove)
-        goalSection("Projects", projects, view, reordering, onEdit, onMove)
-        goalSection("To-dos", todos, view, reordering, onEdit, onMove)
+        val pick: ((Goal) -> Unit)? = if (selecting) ({ goal -> selected = if (goal.id in selected) selected - goal.id else selected + goal.id }) else null
+        goalSection("Habits", habits, view, reordering, onEdit, onMove, pick, selected)
+        goalSection("Projects", projects, view, reordering, onEdit, onMove, pick, selected)
+        goalSection("To-dos", todos, view, reordering, onEdit, onMove, pick, selected)
         if (doneCount > 0 && !reordering) {
             item {
                 TextButton(onClick = onDoneList, modifier = Modifier.padding(top = 8.dp).testTag("done-list")) {
@@ -222,6 +240,52 @@ fun GoalsScreen(
                 }
             }
         }
+    }
+    val chosen = view.goals.filter { it.id in selected }
+    when (asking) {
+        "category" -> {
+            var text by remember { mutableStateOf("") }
+            AlertDialog(
+                onDismissRequest = { asking = null },
+                title = { Text("Category for ${chosen.size}") },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(value = text, onValueChange = { text = it.take(30) }, label = { Text("Category") }, singleLine = true, modifier = Modifier.testTag("bulk-category"))
+                        Text("Leave it empty to take them out of any category.", style = MaterialTheme.typography.bodySmall)
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { vm?.setCategories(selected, text); asking = null }, modifier = Modifier.testTag("bulk-category-ok")) { Text("Set") }
+                },
+                dismissButton = { TextButton(onClick = { asking = null }) { Text("Cancel") } },
+            )
+        }
+        "difficulty" -> AlertDialog(
+            onDismissRequest = { asking = null },
+            title = { Text("How hard are they?") },
+            text = {
+                Column {
+                    Effort.entries.forEach { effort ->
+                        TextButton(onClick = { vm?.setEfforts(selected, effort); asking = null }, modifier = Modifier.testTag("bulk-effort:${effort.name}")) {
+                            Text("${effort.label} · suggests ${effort.points}")
+                        }
+                    }
+                    TextButton(onClick = { vm?.setEfforts(selected, null); asking = null }) { Text("Not set") }
+                }
+            },
+            confirmButton = { TextButton(onClick = { asking = null }) { Text("Cancel") } },
+        )
+        "remove" -> AlertDialog(
+            onDismissRequest = { asking = null },
+            title = { Text("Remove ${chosen.size} goals?") },
+            text = { Text("They disappear from your lists. ${pointsTitle()} they already earned stay in your balance, and Undo brings them back.") },
+            confirmButton = {
+                TextButton(onClick = { vm?.removeGoals(selected); selected = emptyList(); asking = null }, modifier = Modifier.testTag("bulk-remove-ok")) {
+                    Text("Remove", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = { TextButton(onClick = { asking = null }) { Text("Cancel") } },
+        )
     }
 }
 
@@ -258,6 +322,23 @@ fun DoneListScreen(items: List<io.github.randomtools3377.checklist.core.DoneItem
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
+                }
+            }
+        }
+    }
+}
+
+/** While selecting goals: how many, and what to do with them. */
+@Composable
+private fun SelectionBar(count: Int, onCategory: () -> Unit, onDifficulty: () -> Unit, onRemove: () -> Unit) {
+    Card(Modifier.fillMaxWidth().padding(top = 8.dp).testTag("selection-bar")) {
+        Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+            Text(if (count == 0) "Tap goals to choose them" else "$count chosen", style = MaterialTheme.typography.titleSmall)
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                TextButton(onClick = onCategory, enabled = count > 0, modifier = Modifier.testTag("bulk:category")) { Text("Category") }
+                TextButton(onClick = onDifficulty, enabled = count > 0, modifier = Modifier.testTag("bulk:difficulty")) { Text("Difficulty") }
+                TextButton(onClick = onRemove, enabled = count > 0, modifier = Modifier.testTag("bulk:remove")) {
+                    Text("Remove", color = if (count > 0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }
@@ -301,6 +382,8 @@ private fun LazyListScope.goalSection(
     reordering: Boolean,
     onEdit: (Goal) -> Unit,
     onMove: (Goal, Int) -> Unit,
+    onPick: ((Goal) -> Unit)? = null,
+    picked: List<Long> = emptyList(),
 ) {
     if (goals.isEmpty()) return
     item { SectionTitle(title) }
@@ -309,10 +392,13 @@ private fun LazyListScope.goalSection(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(bottom = 10.dp)
-                .clickable(enabled = !reordering) { onEdit(goal) }
+                .clickable(enabled = !reordering) { if (onPick != null) onPick(goal) else onEdit(goal) }
                 .testTag("goal:${goal.name}"),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.goalStrip(goal.color).padding(12.dp)) {
+                if (onPick != null) {
+                    Checkbox(checked = goal.id in picked, onCheckedChange = { onPick(goal) }, modifier = Modifier.testTag("pick:${goal.name}"))
+                }
                 Text(goal.icon, fontSize = 28.sp, modifier = Modifier.width(44.dp), textAlign = TextAlign.Center)
                 Spacer(Modifier.width(8.dp))
                 Column(Modifier.weight(1f)) {

@@ -420,6 +420,18 @@ class Repository(private val db: AppDatabase, private val celebrations: Celebrat
         copyId
     }
 
+    /** One category for several goals, tidied like a typed one; empty takes them out of any. */
+    suspend fun setCategories(ids: List<Long>, typed: String): Unit = db.withTransaction {
+        val first = ids.firstOrNull() ?: return@withTransaction
+        val category = category(typed.takeIf { it.isNotBlank() }, first)
+        ids.forEach { id -> dao.goal(id)?.let { dao.updateGoal(it.copy(category = category)) } }
+    }
+
+    /** How hard several goals are, which suggests their points. */
+    suspend fun setEfforts(ids: List<Long>, effort: Effort?): Unit = db.withTransaction {
+        ids.forEach { id -> dao.goal(id)?.let { dao.updateGoal(it.copy(effort = effort?.name)) } }
+    }
+
     /** Brings a removed goal back, at the end of the list. Its past stays as it was. */
     suspend fun restoreGoal(id: Long) = db.withTransaction {
         dao.goal(id)?.let { dao.updateGoal(it.copy(archived = false, position = dao.nextGoalPosition())) }

@@ -2,6 +2,8 @@
 
 package io.github.randomtools3377.checklist.ui
 
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.ui.focus.focusRequester
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.collectLatest
 import androidx.activity.compose.BackHandler
@@ -79,6 +81,8 @@ fun ChecklistApp(vm: MainViewModel = viewModel()) {
     val stack = rememberSaveable(saver = RoutesSaver) { mutableListOf(AppTab.TODAY.route).toMutableStateList() }
     var showBought by rememberSaveable { mutableStateOf(false) }
     var newGoal by remember { mutableStateOf(false) }
+    // The box from the quick-add widget.
+    var quickTodo by remember { mutableStateOf(false) }
     // The Undo bar: the last tick, purchase or removed goal, for 5 seconds. A newer one replaces it.
     val undoHost = remember { androidx.compose.material3.SnackbarHostState() }
     LaunchedEffect(Unit) {
@@ -95,6 +99,8 @@ fun ChecklistApp(vm: MainViewModel = viewModel()) {
         }
     }
     var reorderGoals by rememberSaveable { mutableStateOf(false) }
+    // Choosing several goals to change or remove together.
+    var selectGoals by rememberSaveable { mutableStateOf(false) }
     var reorderRewards by rememberSaveable { mutableStateOf(false) }
 
     val route = stack.last()
@@ -108,6 +114,7 @@ fun ChecklistApp(vm: MainViewModel = viewModel()) {
         stack.clear()
         stack.add(tab.route)
         reorderGoals = false
+        selectGoals = false
         reorderRewards = false
     }
 
@@ -189,6 +196,10 @@ fun ChecklistApp(vm: MainViewModel = viewModel()) {
             OPEN_NEW_GOAL -> {
                 goTo(AppTab.GOALS)
                 newGoal = true
+            }
+            OPEN_QUICK_TODO -> {
+                goTo(AppTab.TODAY)
+                quickTodo = true
             }
             else -> AppTab.entries.firstOrNull { it.route == asked }?.let { goTo(it) }
         }
@@ -291,7 +302,12 @@ fun ChecklistApp(vm: MainViewModel = viewModel()) {
                     onSettings = { push("settings") },
                     snackbarHost = { androidx.compose.material3.SnackbarHost(undoHost, modifier = Modifier.testTag("undo-bar")) },
                     actions = {
-                        if (tab == AppTab.GOALS && goals?.goals?.isNotEmpty() == true) {
+                        if (tab == AppTab.GOALS && (goals?.goals?.size ?: 0) > 1 && !reorderGoals) {
+                            TextButton(onClick = { selectGoals = !selectGoals }, modifier = Modifier.testTag("select")) {
+                                Text(if (selectGoals) "Done" else "Select")
+                            }
+                        }
+                        if (tab == AppTab.GOALS && goals?.goals?.isNotEmpty() == true && !selectGoals) {
                             TextButton(onClick = { reorderGoals = !reorderGoals }, modifier = Modifier.testTag("reorder")) {
                                 Text(if (reorderGoals) "Done" else "Reorder")
                             }
@@ -303,7 +319,7 @@ fun ChecklistApp(vm: MainViewModel = viewModel()) {
                         }
                     },
                     fab = {
-                        if (tab == AppTab.GOALS && !reorderGoals) AddButton("New goal", "add-goal") { newGoal = true }
+                        if (tab == AppTab.GOALS && !reorderGoals && !selectGoals) AddButton("New goal", "add-goal") { newGoal = true }
                         if (tab == AppTab.SHOP && !showBought && !reorderRewards) AddButton("New reward", "add-reward") { push("reward/0") }
                     },
                 ) { padding ->
@@ -339,6 +355,8 @@ fun ChecklistApp(vm: MainViewModel = viewModel()) {
                             onRemoved = { push("removed") },
                             doneCount = doneList.size,
                             onDoneList = { push("done") },
+                            selecting = selectGoals,
+                            vm = vm,
                         )
                         AppTab.PLAN -> PlanScreen(planDays, vm, padding, onTimeline = { index -> push("timeline/$index") })
                         AppTab.REVIEW -> if (settings.locks.review && !unlocked) {
@@ -377,6 +395,9 @@ fun ChecklistApp(vm: MainViewModel = viewModel()) {
             }
         }
 
+        if (quickTodo) {
+            QuickTodoDialog(onAdd = { name -> vm.addTodo(name); quickTodo = false }, onDismiss = { quickTodo = false })
+        }
         if (newGoal) {
             NewGoalDialog(
                 onHabit = { newGoal = false; push("habit/0") },
@@ -460,3 +481,32 @@ private const val UNDO_MILLIS = 5_000L
 /** What the app shortcuts ask for, through MainActivity.EXTRA_OPEN (see res/xml/shortcuts.xml). */
 const val OPEN_NEW_TODO = "new-todo"
 const val OPEN_NEW_GOAL = "new-goal"
+
+/** From the quick-add widget: a box on Today to add a to-do. */
+const val OPEN_QUICK_TODO = "quick-todo"
+
+/** The box the quick-add widget opens: type a to-do and add it. */
+@Composable
+private fun QuickTodoDialog(onAdd: (String) -> Unit, onDismiss: () -> Unit) {
+    var text by remember { mutableStateOf("") }
+    val focus = remember { androidx.compose.ui.focus.FocusRequester() }
+    LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Add a to-do") },
+        text = {
+            androidx.compose.material3.OutlinedTextField(
+                value = text,
+                onValueChange = { text = it.take(80) },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth().focusRequester(focus).testTag("quick-todo-field"),
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = { if (text.isNotBlank()) onAdd(text) }, enabled = text.isNotBlank(), modifier = Modifier.testTag("quick-todo-add")) {
+                Text("Add")
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
+}

@@ -14,6 +14,7 @@ import io.github.randomtools3377.checklist.core.Backup
 import io.github.randomtools3377.checklist.core.BackupError
 import io.github.randomtools3377.checklist.core.BuyResult
 import io.github.randomtools3377.checklist.core.Days
+import io.github.randomtools3377.checklist.core.Effort
 import io.github.randomtools3377.checklist.core.Feature
 import io.github.randomtools3377.checklist.core.StreakBonus
 import io.github.randomtools3377.checklist.core.Mood
@@ -1425,6 +1426,24 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun restoreGoal(id: Long) {
         viewModelScope.launch { repository.restoreGoal(id) }
+    }
+
+    /** Several goals at once: a category for them all ("" for none). */
+    fun setCategories(ids: List<Long>, category: String) {
+        viewModelScope.launch { repository.setCategories(ids, category) }
+    }
+
+    /** Several goals at once: how hard they are, which suggests their points. */
+    fun setEfforts(ids: List<Long>, effort: Effort?) {
+        viewModelScope.launch { repository.setEfforts(ids, effort) }
+    }
+
+    /** Several goals removed at once; the Undo bar brings them all back. */
+    fun removeGoals(ids: List<Long>) {
+        viewModelScope.launch {
+            ids.forEach { repository.removeGoal(it) }
+            offerUndo(if (ids.size == 1) "Removed 1 goal" else "Removed ${ids.size} goals") { ids.forEach { repository.restoreGoal(it) } }
+        }
     }
 
     fun removeGoal(id: Long, onDone: () -> Unit) {

@@ -83,6 +83,7 @@ keeps the data.
 - 0.35.0: a Features page where extras are turned on, starting off; empty things hide; search in
   Settings.
 - 0.36.0: reminders at the usual time, and habit chains.
+- 0.37.0: a quick-add to-do widget, and choosing several goals to change or remove together.
 
 Every step in CLAUDE.md's build order is built. The iPhone app waits for a way to install it.
 
