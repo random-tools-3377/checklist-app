@@ -432,9 +432,10 @@ private fun HabitCard(
                         modifier = Modifier.testTag("next:${goal.name}"),
                     )
                 }
-                if (onFocus != null && !row.done && goal.minutes != null) {
+                val length = goal.minutes
+                if (onFocus != null && !row.done && length != null) {
                     Text(
-                        "▶ Focus for ${minutesText(goal.minutes)}",
+                        "▶ Focus for ${minutesText(length)}",
                         style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.clickable(onClick = onFocus).padding(vertical = 4.dp).testTag("focus:${goal.name}"),
