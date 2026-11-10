@@ -21,4 +21,4 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "checklist"
-include(":core", ":app")
+include(":core", ":app", ":ai")

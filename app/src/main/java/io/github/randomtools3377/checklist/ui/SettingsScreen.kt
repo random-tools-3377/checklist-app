@@ -286,6 +286,7 @@ fun FeaturesScreen(vm: MainViewModel, onAppearance: () -> Unit, onBack: () -> Un
                     }
                     Column(Modifier.padding(horizontal = 16.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         SwitchLine(feature.title, feature.about, feature in features, "feature:${feature.name}") { vm.setFeature(feature, it) }
+                        if (feature == Feature.AI && feature in features) AiStatusPanel(vm)
                         // How much, for the two that pay an amount.
                         if (feature == Feature.INTEREST && feature in features) {
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

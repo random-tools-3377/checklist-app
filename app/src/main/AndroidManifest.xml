@@ -24,6 +24,20 @@
         events in the planner and on Today. Nothing is written to it or sent anywhere.
     -->
     <uses-permission android:name="android.permission.READ_CALENDAR" />
+    <!--
+        The optional AI runs in a separate app, Checklist AI. Only apps signed with the same key
+        hold this permission, so only this app can ask it. Both apps declare it, so either can be
+        installed first.
+    -->
+    <permission
+        android:name="io.github.randomtools3377.checklist.permission.AI"
+        android:description="@string/ai_permission_description"
+        android:label="@string/ai_permission_label"
+        android:protectionLevel="signature" />
+    <uses-permission android:name="io.github.randomtools3377.checklist.permission.AI" />
+    <queries>
+        <package android:name="io.github.randomtools3377.checklist.ai" />
+    </queries>
     <!-- Added by a library the widget uses, for work the app never does. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" tools:node="remove" />
 

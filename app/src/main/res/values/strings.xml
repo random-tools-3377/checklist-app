@@ -16,4 +16,6 @@
     <string name="tile_label">Tick next</string>
     <string name="quick_add_widget_name">Checklist quick to-do</string>
     <string name="quick_add_widget_description">One tap to add a to-do.</string>
+    <string name="ai_permission_label">Use Checklist AI</string>
+    <string name="ai_permission_description">Lets the checklist app ask the AI on this phone for suggestions.</string>
 </resources>

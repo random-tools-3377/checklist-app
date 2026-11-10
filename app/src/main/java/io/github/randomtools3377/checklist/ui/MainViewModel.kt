@@ -533,6 +533,26 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch { repository.setSetting(SETTING_WIDGET_STYLE, style.name) }
     }
 
+    // The optional AI, in the separate Checklist AI app.
+
+    /** How Checklist AI stands; null until checked. */
+    val aiStatus = MutableStateFlow<io.github.randomtools3377.checklist.data.AiStatus?>(null)
+
+    fun refreshAi() {
+        viewModelScope.launch { aiStatus.value = io.github.randomtools3377.checklist.data.AiClient.status(getApplication()) }
+    }
+
+    /** Asks the AI to read a goal from [sentence]; [onResult] gets the goal, or why there isn't one. */
+    fun goalFromSentence(sentence: String, onResult: (io.github.randomtools3377.checklist.core.GoalIdea?, String?) -> Unit) {
+        viewModelScope.launch {
+            val ask = io.github.randomtools3377.checklist.core.GoalFromSentence
+            io.github.randomtools3377.checklist.data.AiClient.ask(getApplication(), ask.SYSTEM, ask.prompt(sentence), ask.SCHEMA, ask.MAX_TOKENS).fold(
+                onSuccess = { answer -> onResult(ask.parse(answer), null) },
+                onFailure = { e -> onResult(null, "The AI couldn't answer: ${e.message ?: "unknown error"}.") },
+            )
+        }
+    }
+
     fun setColourBlind(on: Boolean) {
         viewModelScope.launch { repository.setSetting(io.github.randomtools3377.checklist.core.ColourBlind.SETTING, if (on) "1" else "0") }
     }

@@ -469,7 +469,13 @@ Build order **(default)**, each step a Release the owner can try:
     the AI app is older than itself.
 
     **Details (default):** every suggestion is shown for the user to check before anything is
-    saved, and the AI never ticks, skips or spends on its own. The files come from the models'
+    saved, and the AI never ticks, skips or spends on its own. The engine is Google's LiteRT-LM
+    (Apache 2.0) and the AI file is Qwen3 0.6B (Apache 2.0, 614 MB), from its Hugging Face page
+    at a fixed commit; a CI job downloads it from the same address and checks the size and
+    checksum the apps expect. Checklist AI answers the checklist app through a door guarded by a
+    signature permission, so only apps signed with the release key can ask it, and keeps nothing
+    it is asked. Its APK carries the engine for 64-bit phones only. The first feature is "Describe
+    it" on a new habit (0.42.0). The files come from the models'
     own public download pages, under licences that allow it, and the app checks each file's
     checksum before using it. They are kept in the app's own storage, left out of the backup
     file, and can be removed in Settings to free the space.

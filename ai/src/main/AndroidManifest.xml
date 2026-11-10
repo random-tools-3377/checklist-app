@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+    <!--
+        No network access, like the checklist app. The AI file is downloaded in the phone's
+        browser and picked here. These lines strip network permissions a library might add;
+        CI also checks the built APK.
+    -->
+    <uses-permission android:name="android.permission.INTERNET" tools:node="remove" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" tools:node="remove" />
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" tools:node="remove" />
+    <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" tools:node="remove" />
+    <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" tools:node="remove" />
+
+    <!--
+        Only apps signed with the same key as this one, which means only the checklist app, may
+        ask the AI anything. Both apps declare it, so either can be installed first.
+    -->
+    <permission
+        android:name="io.github.randomtools3377.checklist.permission.AI"
+        android:description="@string/permission_description"
+        android:label="@string/permission_label"
+        android:protectionLevel="signature" />
+
+    <!-- To see whether the checklist app is installed, and open it. -->
+    <queries>
+        <package android:name="io.github.randomtools3377.checklist" />
+    </queries>
+
+    <!-- No phone backup and no phone-to-phone transfer, like the checklist app. -->
+    <application
+        android:allowBackup="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="@xml/backup_rules"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.ChecklistAi"
+        tools:targetApi="31">
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- Where the checklist app asks the AI. The permission keeps everyone else out. -->
+        <provider
+            android:name=".AiProvider"
+            android:authorities="io.github.randomtools3377.checklist.ai.engine"
+            android:exported="true"
+            android:permission="io.github.randomtools3377.checklist.permission.AI" />
+    </application>
+</manifest>

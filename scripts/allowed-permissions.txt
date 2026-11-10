@@ -18,3 +18,7 @@ android.permission.USE_FINGERPRINT
 
 # The phone's own calendar (0.32.0), read on the phone only, once the user turns it on in Settings.
 android.permission.READ_CALENDAR
+
+# Asks Checklist AI, the optional separate app (0.42.0). A signature permission: only apps signed
+# with the same key hold it. Not a network permission; neither app has network access.
+io.github.randomtools3377.checklist.permission.AI

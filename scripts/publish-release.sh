@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
-# Publishes the signed APK as a GitHub Release for the version in gradle.properties, with the
-# notes in release-notes/<version>.md. Does nothing if that version already has a Release, so
-# a push that doesn't bump the version publishes nothing.
-# Usage: publish-release.sh signed.apk     (needs GH_TOKEN, GITHUB_REPOSITORY, GITHUB_SHA)
+# Publishes the signed APKs as one GitHub Release for the version in gradle.properties, with the
+# notes in release-notes/<version>.md: the checklist app and Checklist AI, always together and
+# always the same version. Does nothing if that version already has a Release, so a push that
+# doesn't bump the version publishes nothing.
+# Usage: publish-release.sh checklist.apk checklist-ai.apk   (needs GH_TOKEN, GITHUB_REPOSITORY, GITHUB_SHA)
 set -euo pipefail
 apk="$1"
+ai_apk="$2"
 here="$(cd "$(dirname "$0")" && pwd)"
 version="$(sed -n 's/^appVersionName=//p' gradle.properties | tr -d '[:space:]')"
 tag="v$version"
@@ -26,15 +28,29 @@ if [ ! -s "$notes" ]; then
 fi
 
 aapt2="$("$here/android-tool.sh" aapt2)"
-apk_version="$("$aapt2" dump badging "$apk" | sed -n "s/.*versionName='\([^']*\)'.*/\1/p" | head -n 1)"
-if [ "$apk_version" != "$version" ]; then
-  echo "::error::The APK says version '$apk_version' but gradle.properties says '$version'."
-  exit 1
-fi
+# Both APKs must be the version being published, and each the app it should be.
+check_apk() {
+  local file="$1" package="$2" badging found_version found_package
+  badging="$("$aapt2" dump badging "$file")"
+  found_version="$(sed -n "s/.*versionName='\([^']*\)'.*/\1/p" <<< "$badging" | head -n 1)"
+  found_package="$(sed -n "s/^package: name='\([^']*\)'.*/\1/p" <<< "$badging" | head -n 1)"
+  if [ "$found_version" != "$version" ]; then
+    echo "::error::$file says version '$found_version' but gradle.properties says '$version'."
+    exit 1
+  fi
+  if [ "$found_package" != "$package" ]; then
+    echo "::error::$file is '$found_package', not '$package'."
+    exit 1
+  fi
+}
+check_apk "$apk" io.github.randomtools3377.checklist
+check_apk "$ai_apk" io.github.randomtools3377.checklist.ai
 
 asset="$(dirname "$apk")/checklist-$version.apk"
+ai_asset="$(dirname "$ai_apk")/checklist-ai-$version.apk"
 cp "$apk" "$asset"
-gh release create "$tag" "$asset" \
+cp "$ai_apk" "$ai_asset"
+gh release create "$tag" "$asset" "$ai_asset" \
   --repo "$GITHUB_REPOSITORY" \
   --target "$GITHUB_SHA" \
   --title "Checklist $version" \

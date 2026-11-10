@@ -1,0 +1,51 @@
+name: AI file check
+# Downloads the AI file from the address built into the apps and checks its size and checksum,
+# so a file Checklist AI would refuse is caught here, not on the owner's phone. It runs when the
+# file's details change, or by hand. No secrets are used, and nothing is kept or published.
+on:
+  push:
+    branches: ["**"]
+    paths:
+      - "core/src/commonMain/kotlin/io/github/randomtools3377/checklist/core/AiFile.kt"
+      - ".github/workflows/ai-files.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Download the AI file and check it
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Download and check the AI file
+        run: |
+          set -euo pipefail
+          src=core/src/commonMain/kotlin/io/github/randomtools3377/checklist/core/AiFile.kt
+          url="$(sed -n 's/^ *const val URL = "\(.*\)"$/\1/p' "$src")"
+          size="$(sed -n 's/^ *const val SIZE = \([0-9_]*\)L$/\1/p' "$src" | tr -d _)"
+          sha="$(sed -n 's/^ *const val SHA256 = "\([0-9a-f]*\)"$/\1/p' "$src")"
+          if [ -z "$url" ] || [ -z "$size" ] || [ ${#sha} != 64 ]; then
+            echo "::error::Couldn't read the AI file's address, size and checksum from $src."
+            exit 1
+          fi
+          echo "Address: $url"
+          curl -fL --retry 3 --retry-delay 10 -o ai-file "$url"
+          got_size="$(stat -c %s ai-file)"
+          got_sha="$(sha256sum ai-file | cut -d' ' -f1)"
+          echo "Size: $got_size (expected $size)"
+          echo "SHA-256: $got_sha (expected $sha)"
+          if [ "$got_size" != "$size" ]; then
+            echo "::error::The AI file at that address is $got_size bytes, not $size."
+            exit 1
+          fi
+          if [ "$got_sha" != "$sha" ]; then
+            echo "::error::The AI file at that address has a different checksum."
+            exit 1
+          fi
+          echo "The AI file matches what Checklist AI expects."

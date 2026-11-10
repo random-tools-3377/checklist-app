@@ -88,6 +88,7 @@ keeps the data.
 - 0.39.0: the points history as a spreadsheet, and restoring an automatic backup.
 - 0.40.0: tablets, and phones turned on their side.
 - 0.41.0: a colour-blind friendly look.
+- 0.42.0: the optional AI, in a separate app (Checklist AI), and a new habit from a sentence.
 
 Every step in CLAUDE.md's build order is built. The iPhone app waits for a way to install it.
 

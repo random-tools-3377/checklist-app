@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Checklist AI</string>
+    <string name="permission_label">Use Checklist AI</string>
+    <string name="permission_description">Lets the checklist app ask the AI on this phone for suggestions.</string>
+</resources>

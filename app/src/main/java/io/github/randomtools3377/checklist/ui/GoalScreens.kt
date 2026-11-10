@@ -753,6 +753,31 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Long)
         },
     ) {
         if (!loaded) return@EditorScaffold
+        if (id == 0L) {
+            // With the AI helper on: a sentence fills in the fields below, to check and save.
+            AiDescribeCard(vm) { idea ->
+                name = idea.name
+                idea.icon?.let { icon = it }
+                when (idea.repeat) {
+                    io.github.randomtools3377.checklist.core.IdeaRepeat.EVERY_DAY -> choice = RepeatChoice.EVERY_DAY
+                    io.github.randomtools3377.checklist.core.IdeaRepeat.DAYS_OF_WEEK -> {
+                        choice = RepeatChoice.WEEKDAYS
+                        weekdays = idea.days
+                    }
+                    io.github.randomtools3377.checklist.core.IdeaRepeat.TIMES_PER_WEEK -> {
+                        choice = RepeatChoice.TIMES_PER
+                        per = Period.WEEKLY
+                        target = (idea.timesPerWeek ?: 1).toString()
+                    }
+                }
+                atMinute = idea.time?.let { it.hour * 60 + it.minute }
+                idea.minutes?.let { minutes = it.toString() }
+                idea.amount?.let { amount ->
+                    amountText = io.github.randomtools3377.checklist.core.Amounts.format(amount)
+                    unit = idea.unit.orEmpty()
+                }
+            }
+        }
         IconPicker(icon) { icon = it }
         OutlinedTextField(
             value = name,

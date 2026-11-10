@@ -43,20 +43,28 @@ jobs:
       - name: Unit tests (the shared rules, on the JVM)
         run: ./gradlew --no-daemon :core:jvmTest :app:testDebugUnitTest
 
-      - name: Build the release APK, unsigned
-        run: ./gradlew --no-daemon :app:assembleRelease
+      - name: Build the release APKs, unsigned (the checklist app and Checklist AI)
+        run: ./gradlew --no-daemon :app:assembleRelease :ai:assembleRelease
 
       - name: Check the database layout is committed
         run: scripts/check-schema.sh
 
       - name: Check there is no network permission (before signing)
-        run: scripts/check-permissions.sh app/build/outputs/apk/release/app-release-unsigned.apk
+        run: |
+          scripts/check-permissions.sh app/build/outputs/apk/release/app-release-unsigned.apk
+          scripts/check-permissions.sh ai/build/outputs/apk/release/ai-release-unsigned.apk
 
-      - name: Keep the unsigned APK for the sign job
+      - name: Put both unsigned APKs together
+        run: |
+          mkdir -p unsigned
+          cp app/build/outputs/apk/release/app-release-unsigned.apk ai/build/outputs/apk/release/ai-release-unsigned.apk unsigned/
+          ls -l unsigned
+
+      - name: Keep the unsigned APKs for the sign job
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: unsigned-apk
-          path: app/build/outputs/apk/release/app-release-unsigned.apk
+          path: unsigned/*.apk
           if-no-files-found: error
           retention-days: 7
 
@@ -68,6 +76,7 @@ jobs:
           path: |
             core/build/reports
             app/build/reports
+            ai/build/reports
           if-no-files-found: ignore
           retention-days: 7
 
@@ -164,7 +173,7 @@ jobs:
           retention-days: 7
 
   sign:
-    name: Sign and check the release APK
+    name: Sign and check the release APKs
     needs: build
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -185,22 +194,33 @@ jobs:
           SIGNING_STORE_PASSWORD: ${{ secrets.SIGNING_STORE_PASSWORD }}
           SIGNING_KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
           SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
-        run: scripts/sign-apk.sh dist/app-release-unsigned.apk dist/checklist.apk
+        # Both apps with the same key: Checklist AI only answers apps signed like itself.
+        run: |
+          scripts/sign-apk.sh dist/app-release-unsigned.apk dist/checklist.apk
+          scripts/sign-apk.sh dist/ai-release-unsigned.apk dist/checklist-ai.apk
 
-      - name: Check the signature is the release certificate
-        run: scripts/check-signature.sh dist/checklist.apk "$RELEASE_CERT_SHA256"
+      - name: Check the signatures are the release certificate
+        run: |
+          scripts/check-signature.sh dist/checklist.apk "$RELEASE_CERT_SHA256"
+          scripts/check-signature.sh dist/checklist-ai.apk "$RELEASE_CERT_SHA256"
 
       - name: Check there is no network permission
-        run: scripts/check-permissions.sh dist/checklist.apk
+        run: |
+          scripts/check-permissions.sh dist/checklist.apk
+          scripts/check-permissions.sh dist/checklist-ai.apk
 
       - name: Check phone backup is off
-        run: scripts/check-backup.sh dist/checklist.apk
+        run: |
+          scripts/check-backup.sh dist/checklist.apk
+          scripts/check-backup.sh dist/checklist-ai.apk
 
-      - name: Keep the signed APK
+      - name: Keep the signed APKs
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: signed-apk
-          path: dist/checklist.apk
+          path: |
+            dist/checklist.apk
+            dist/checklist-ai.apk
           if-no-files-found: error
           retention-days: 30
 
@@ -224,11 +244,13 @@ jobs:
 
       - name: Check once more before publishing
         run: |
-          scripts/check-signature.sh dist/checklist.apk "$RELEASE_CERT_SHA256"
-          scripts/check-permissions.sh dist/checklist.apk
-          scripts/check-backup.sh dist/checklist.apk
+          for apk in dist/checklist.apk dist/checklist-ai.apk; do
+            scripts/check-signature.sh "$apk" "$RELEASE_CERT_SHA256"
+            scripts/check-permissions.sh "$apk"
+            scripts/check-backup.sh "$apk"
+          done
 
-      - name: Publish the signed APK as a Release
+      - name: Publish both signed APKs as one Release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: scripts/publish-release.sh dist/checklist.apk
+        run: scripts/publish-release.sh dist/checklist.apk dist/checklist-ai.apk
