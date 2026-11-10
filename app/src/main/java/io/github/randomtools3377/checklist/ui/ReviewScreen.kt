@@ -79,6 +79,8 @@ fun ReviewScreen(
     onBadges: () -> Unit,
     padding: PaddingValues,
     moods: List<io.github.randomtools3377.checklist.core.Mood> = emptyList(),
+    /** A note on the week from the optional AI, shown in the week view. */
+    coachCard: @Composable (ReviewSummary) -> Unit = {},
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize().testTag("review"),
@@ -124,6 +126,7 @@ fun ReviewScreen(
             }
         }
         item { PointsCard(summary) }
+        if (period == Period.WEEKLY) item { coachCard(summary) }
         if (period == Period.WEEKLY || period == Period.MONTHLY) item { DayCharts(summary, period) }
         if (period == Period.YEARLY) item { YearCard(summary, moods, hideMoods = hideReasons) }
         if (period == Period.MONTHLY) item { MonthCalendar(summary) }

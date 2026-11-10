@@ -63,4 +63,26 @@ class AiHelperTest {
         app.waitFor { shown("field:name") }
         assert(!shown("ai-fill")) { "Fill in shows only when Checklist AI is ready" }
     }
+
+    @Test
+    fun aProjectAndTheWeekOfferTheAiToo() {
+        // A new project offers suggested steps; without Checklist AI, it says where to get it.
+        app.waitFor { shown("nav:goals") }
+        app.onNodeWithTag("nav:goals").performClick()
+        app.waitFor { shown("add-goal") }
+        app.onNodeWithTag("add-goal").performClick()
+        app.waitFor { shown("new-project") }
+        app.onNodeWithTag("new-project").performClick()
+        app.waitFor { shown("ai-steps") }
+        assert(!shown("ai-suggest-steps")) { "Suggest steps shows only when Checklist AI is ready" }
+
+        // The week in the review offers a note.
+        app.activityRule.scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
+        app.waitFor { shown("nav:review") }
+        app.onNodeWithTag("nav:review").performClick()
+        app.waitFor { shown("review:Week") }
+        app.tap("review:Week")
+        app.waitFor { app.shownIn("review", "ai-coach") }
+        assert(!shown("ai-coach-write")) { "Write a note shows only when Checklist AI is ready" }
+    }
 }

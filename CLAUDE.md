@@ -475,7 +475,10 @@ Build order **(default)**, each step a Release the owner can try:
     checksum the apps expect. Checklist AI answers the checklist app through a door guarded by a
     signature permission, so only apps signed with the release key can ask it, and keeps nothing
     it is asked. Its APK carries the engine for 64-bit phones only. The first feature is "Describe
-    it" on a new habit (0.42.0). The files come from the models'
+    it" on a new habit (0.42.0). Then (0.43.0) "Suggest steps" in a project, from its name, with
+    each suggestion ticked to keep; and "A note on your week" in the review's week view, written
+    from that week's numbers only, with private goals unnamed and the reasons for misses left out
+    while they are locked. The files come from the models'
     own public download pages, under licences that allow it, and the app checks each file's
     checksum before using it. They are kept in the app's own storage, left out of the backup
     file, and can be removed in Settings to free the space.

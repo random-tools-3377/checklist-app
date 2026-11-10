@@ -393,6 +393,7 @@ fun ChecklistApp(vm: MainViewModel = viewModel()) {
                                 onBadges = { push("badges") },
                                 padding = padding,
                                 moods = moods,
+                                coachCard = { week -> AiCoachCard(vm, week, hideReasons = settings.locks.reasons && !unlocked) },
                             )
                         }
                         AppTab.SHOP -> if (settings.locks.shop && !unlocked) {

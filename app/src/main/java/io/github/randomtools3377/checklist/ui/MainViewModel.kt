@@ -553,6 +553,28 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** Asks the AI for steps for a project called [name]; [onResult] gets them, or why there are none. */
+    fun projectSteps(name: String, onResult: (List<String>, String?) -> Unit) {
+        viewModelScope.launch {
+            val ask = io.github.randomtools3377.checklist.core.ProjectSteps
+            io.github.randomtools3377.checklist.data.AiClient.ask(getApplication(), ask.SYSTEM, ask.prompt(name), ask.SCHEMA, ask.MAX_TOKENS).fold(
+                onSuccess = { answer -> onResult(ask.parse(answer), null) },
+                onFailure = { e -> onResult(emptyList(), "The AI couldn't answer: ${e.message ?: "unknown error"}.") },
+            )
+        }
+    }
+
+    /** Asks the AI for a note on the week in [summary]; [onResult] gets it, or why there isn't one. */
+    fun coachNote(summary: io.github.randomtools3377.checklist.core.ReviewSummary, hideReasons: Boolean, onResult: (String?, String?) -> Unit) {
+        viewModelScope.launch {
+            val ask = io.github.randomtools3377.checklist.core.CoachNote
+            io.github.randomtools3377.checklist.data.AiClient.ask(getApplication(), ask.SYSTEM, ask.prompt(summary, hideReasons), null, ask.MAX_TOKENS).fold(
+                onSuccess = { answer -> onResult(ask.clean(answer), null) },
+                onFailure = { e -> onResult(null, "The AI couldn't answer: ${e.message ?: "unknown error"}.") },
+            )
+        }
+    }
+
     fun setColourBlind(on: Boolean) {
         viewModelScope.launch { repository.setSetting(io.github.randomtools3377.checklist.core.ColourBlind.SETTING, if (on) "1" else "0") }
     }

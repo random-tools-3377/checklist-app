@@ -1413,6 +1413,15 @@ fun ProjectEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Lon
             onClick = { steps += StepField(nextKey++, 0L, "", steps.lastOrNull()?.points ?: "") },
             modifier = Modifier.testTag("add-step"),
         ) { Text("Add a step") }
+        // With the AI helper on: steps suggested from the name, into empty steps first.
+        AiStepsCard(vm, projectName = name) { suggested ->
+            val points = steps.lastOrNull()?.points.orEmpty()
+            val empty = steps.indices.filter { steps[it].name.isBlank() }.toMutableList()
+            suggested.forEach { step ->
+                val at = empty.removeFirstOrNull()
+                if (at != null) steps[at] = steps[at].copy(name = step) else steps += StepField(nextKey++, 0L, step, points)
+            }
+        }
         // One difficulty for the steps: its suggestion goes in every step's points.
         EffortField(
             effort = effort?.let { Effort.valueOf(it) },

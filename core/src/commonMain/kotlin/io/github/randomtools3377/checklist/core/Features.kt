@@ -23,7 +23,7 @@ enum class Feature(val key: String, val onValue: String, val title: String, val 
     PERFECT_DAY("perfect_day_bonus", "10", "Perfect-day bonus", "A day with everything due done pays a bonus when it ends.", "Points"),
     STREAK_BONUS("streak_bonus", "1", "Streak bonus", "Goals pay 10% more from a 7-day main streak, 20% from 30 and 30% from 100.", "Points"),
     REPEAT_PRICE("repeat_price", "1", "Prices rise on repeat buys", "A reward costs 25% more for each time it was already bought that week.", "Points"),
-    AI("feature_ai", "1", "AI helper", "Fills in a new habit from a sentence you type, using an AI that runs on this phone with no internet. Needs the Checklist AI app and its AI file.", "AI"),
+    AI("feature_ai", "1", "AI helper", "Suggestions from an AI that runs on this phone, with no internet: a new habit from a sentence, steps for a project, and a note on your week. Needs the Checklist AI app and its AI file.", "AI"),
     ;
 
     /** Whether the stored [value] means on. */

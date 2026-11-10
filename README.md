@@ -89,6 +89,7 @@ keeps the data.
 - 0.40.0: tablets, and phones turned on their side.
 - 0.41.0: a colour-blind friendly look.
 - 0.42.0: the optional AI, in a separate app (Checklist AI), and a new habit from a sentence.
+- 0.43.0: AI-suggested steps for a project, and a note on your week.
 
 Every step in CLAUDE.md's build order is built. The iPhone app waits for a way to install it.
 

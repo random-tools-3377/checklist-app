@@ -5,7 +5,11 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedCard
@@ -30,6 +34,8 @@ import io.github.randomtools3377.checklist.core.AiFile
 import io.github.randomtools3377.checklist.core.Feature
 import io.github.randomtools3377.checklist.core.GoalFromSentence
 import io.github.randomtools3377.checklist.core.GoalIdea
+import io.github.randomtools3377.checklist.core.ReviewSummary
+import androidx.compose.ui.Alignment
 import io.github.randomtools3377.checklist.data.AiClient
 import io.github.randomtools3377.checklist.data.AiStatus
 
@@ -126,6 +132,124 @@ fun AiDescribeCard(vm: MainViewModel, onIdea: (GoalIdea) -> Unit) {
                 )
             }
             message?.let { Text(it, style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("ai-message")) }
+        }
+    }
+}
+
+/**
+ * In a project, with the AI helper on: steps suggested from the project's name. The user ticks
+ * the ones to keep, and they go into the steps above, to change or remove like any other.
+ */
+@Composable
+fun AiStepsCard(vm: MainViewModel, projectName: String, onSteps: (List<String>) -> Unit) {
+    val features by vm.features.collectAsState()
+    if (Feature.AI !in features) return
+    val status by vm.aiStatus.collectAsState()
+    LaunchedEffect(Unit) { vm.refreshAi() }
+    var thinking by remember { mutableStateOf(false) }
+    var suggestions by remember { mutableStateOf<List<String>>(emptyList()) }
+    var picked by remember { mutableStateOf(setOf<Int>()) }
+    var message by remember { mutableStateOf<String?>(null) }
+    OutlinedCard(Modifier.fillMaxWidth().testTag("ai-steps")) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("✨ Suggest steps", style = MaterialTheme.typography.titleSmall)
+            if (status?.usable != true) {
+                Text(status.describe(), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                return@Column
+            }
+            if (suggestions.isEmpty()) {
+                Text(
+                    "The AI suggests steps from the project's name. You choose which to keep.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Button(
+                    onClick = {
+                        thinking = true
+                        message = null
+                        vm.projectSteps(projectName) { list, error ->
+                            thinking = false
+                            if (list.isNotEmpty()) {
+                                suggestions = list
+                                picked = list.indices.toSet()
+                            } else {
+                                message = error ?: "The AI couldn't suggest steps for that. Try a fuller name, like \"plan a birthday party\"."
+                            }
+                        }
+                    },
+                    enabled = projectName.isNotBlank() && !thinking,
+                    modifier = Modifier.testTag("ai-suggest-steps"),
+                ) { Text("Suggest steps") }
+            } else {
+                suggestions.forEachIndexed { index, step ->
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.testTag("ai-step:$index")) {
+                        Checkbox(checked = index in picked, onCheckedChange = { on -> picked = if (on) picked + index else picked - index })
+                        Text(step, style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
+                Row {
+                    Button(
+                        onClick = {
+                            onSteps(suggestions.filterIndexed { i, _ -> i in picked })
+                            suggestions = emptyList()
+                            message = "Added to the steps above. Change or remove any of them there."
+                        },
+                        enabled = picked.isNotEmpty(),
+                        modifier = Modifier.testTag("ai-add-steps"),
+                    ) { Text("Add these") }
+                    Spacer(Modifier.width(8.dp))
+                    TextButton(onClick = { suggestions = emptyList() }) { Text("Not these") }
+                }
+            }
+            if (thinking) {
+                LinearProgressIndicator(Modifier.fillMaxWidth())
+                Text("Thinking, on this phone.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            message?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+        }
+    }
+}
+
+/**
+ * In the review of a week, with the AI helper on: a few sentences about the week, written on the
+ * phone from its own numbers, with one small change to try.
+ */
+@Composable
+fun AiCoachCard(vm: MainViewModel, summary: ReviewSummary, hideReasons: Boolean) {
+    val features by vm.features.collectAsState()
+    if (Feature.AI !in features) return
+    val status by vm.aiStatus.collectAsState()
+    LaunchedEffect(Unit) { vm.refreshAi() }
+    var note by remember(summary.from) { mutableStateOf<String?>(null) }
+    var thinking by remember { mutableStateOf(false) }
+    var message by remember(summary.from) { mutableStateOf<String?>(null) }
+    Card(Modifier.fillMaxWidth().testTag("ai-coach")) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("✨ A note on your week", style = MaterialTheme.typography.titleSmall)
+            if (status?.usable != true) {
+                Text(status.describe(), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                return@Column
+            }
+            note?.let { Text(it, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("ai-coach-note")) }
+            Button(
+                onClick = {
+                    thinking = true
+                    message = null
+                    vm.coachNote(summary, hideReasons) { text, error ->
+                        thinking = false
+                        if (text != null) note = text else message = error ?: "The AI couldn't write a note this time. Try again."
+                    }
+                },
+                enabled = !thinking && summary.goals.any { it.due > 0 },
+                modifier = Modifier.testTag("ai-coach-write"),
+            ) { Text(if (note == null) "Write a note" else "Another note") }
+            if (thinking) LinearProgressIndicator(Modifier.fillMaxWidth())
+            message?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+            Text(
+                "Written by the AI on this phone, from this week's numbers only. It can get things wrong.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }
