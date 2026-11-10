@@ -462,6 +462,12 @@ Build order **(default)**, each step a Release the owner can try:
     summary from the user's own stats, reasons and notes, and voice (saying "done reading" or
     "add buy milk"), which needs its own speech file.
 
+    Decided: the AI engine is a separate app, "Checklist AI", so the checklist app stays the
+    same size for anyone who doesn't use AI. Both apps are always released together: every
+    Release carries both APKs, built from the same code with the same version number, and every
+    new feature updates both without the owner having to ask. The checklist app says so when
+    the AI app is older than itself.
+
     **Details (default):** every suggestion is shown for the user to check before anything is
     saved, and the AI never ticks, skips or spends on its own. The files come from the models'
     own public download pages, under licences that allow it, and the app checks each file's
