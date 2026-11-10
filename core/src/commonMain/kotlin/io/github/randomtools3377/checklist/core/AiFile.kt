@@ -16,3 +16,20 @@ object AiFile {
     /** The size for people: "614 MB". */
     val sizeText: String get() = "${SIZE / 1_000_000} MB"
 }
+
+/**
+ * The speech file for voice: a small English model for Vosk, downloaded once in the browser and
+ * picked in Checklist AI, like [AiFile]. It is a zip that Checklist AI unpacks. CI checks it too.
+ */
+object SpeechFile {
+    const val NAME = "Vosk small English"
+    const val LICENCE = "Apache 2.0"
+    const val FILE = "vosk-model-small-en-us-0.15.zip"
+    const val FOLDER = "vosk-model-small-en-us-0.15"
+    const val SIZE = 41_205_931L
+    const val SHA256 = "30f26242c4eb449f948e42cb302dd7a686cb29a3423a8367f99ff41780942498"
+    const val URL = "https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip"
+
+    /** The size for people: "41 MB". */
+    val sizeText: String get() = "${SIZE / 1_000_000} MB"
+}

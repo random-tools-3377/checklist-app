@@ -41,6 +41,12 @@ object AiContract {
     const val KEY_MAX_TOKENS = "maxTokens"
     const val KEY_TEXT = "text"
     const val KEY_ERROR = "error"
+
+    /** In the status: whether the speech file is added, for voice. */
+    const val KEY_SPEECH_READY = "speechReady"
+
+    /** Opens Checklist AI's listening screen; it answers with what was said in [KEY_TEXT]. */
+    const val ACTION_LISTEN = "io.github.randomtools3377.checklist.ai.LISTEN"
 }
 
 /** How a goal the AI read repeats. */

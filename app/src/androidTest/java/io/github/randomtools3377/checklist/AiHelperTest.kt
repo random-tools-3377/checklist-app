@@ -43,6 +43,7 @@ class AiHelperTest {
     @Test
     fun withoutChecklistAiItSaysWhereToGetIt() {
         app.waitFor { shown("settings") }
+        assert(!shown("voice")) { "The voice button shows only with Checklist AI's speech file" }
         app.onNodeWithTag("settings").performClick()
         app.waitFor { shown("setting:features") }
         app.tap("setting:features")

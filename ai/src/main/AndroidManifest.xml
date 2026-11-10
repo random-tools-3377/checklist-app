@@ -13,6 +13,13 @@
     <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" tools:node="remove" />
 
     <!--
+        Voice (0.44.0): the microphone, asked for the first time voice is used, to turn a short
+        command into words on the phone. Nothing is recorded or kept. The checklist app itself
+        never has the microphone.
+    -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+
+    <!--
         Only apps signed with the same key as this one, which means only the checklist app, may
         ask the AI anything. Both apps declare it, so either can be installed first.
     -->
@@ -44,6 +51,18 @@
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- Listens for one voice command for the checklist app. Only it can open this. -->
+        <activity
+            android:name=".ListenActivity"
+            android:exported="true"
+            android:permission="io.github.randomtools3377.checklist.permission.AI"
+            android:theme="@android:style/Theme.Material.Light.Dialog.NoActionBar">
+            <intent-filter>
+                <action android:name="io.github.randomtools3377.checklist.ai.LISTEN" />
+                <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </activity>
 

@@ -478,7 +478,11 @@ Build order **(default)**, each step a Release the owner can try:
     it" on a new habit (0.42.0). Then (0.43.0) "Suggest steps" in a project, from its name, with
     each suggestion ticked to keep; and "A note on your week" in the review's week view, written
     from that week's numbers only, with private goals unnamed and the reasons for misses left out
-    while they are locked. The files come from the models'
+    while they are locked. Then (0.44.0) voice: a 🎙 button on Today opens Checklist AI's
+    listening screen, which turns one short command into words with Vosk (Apache 2.0) and its
+    small English speech file (41 MB, picked and checked like the AI file); the checklist app
+    works out "done <goal due today>" or "add <to-do>" and asks before doing it. Only Checklist
+    AI has the microphone, and nothing is recorded or kept. The files come from the models'
     own public download pages, under licences that allow it, and the app checks each file's
     checksum before using it. They are kept in the app's own storage, left out of the backup
     file, and can be removed in Settings to free the space.

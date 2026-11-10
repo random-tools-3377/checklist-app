@@ -152,6 +152,25 @@ fun ChecklistApp(vm: MainViewModel = viewModel()) {
     val calendarEvents by vm.calendarEvents.collectAsStateWithLifecycle()
     val moods by vm.reviewMoods.collectAsStateWithLifecycle()
     val features by vm.features.collectAsStateWithLifecycle()
+    // The optional AI: how Checklist AI stands, and voice through its listening screen.
+    val aiStatus by vm.aiStatus.collectAsStateWithLifecycle()
+    LaunchedEffect(io.github.randomtools3377.checklist.core.Feature.AI in features) {
+        if (io.github.randomtools3377.checklist.core.Feature.AI in features) vm.refreshAi()
+    }
+    var voiceCommand by remember { mutableStateOf<io.github.randomtools3377.checklist.core.VoiceCommand?>(null) }
+    var voiceProblem by remember { mutableStateOf<String?>(null) }
+    val listen = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult(),
+    ) { result ->
+        val heard = result.data?.getStringExtra(io.github.randomtools3377.checklist.core.AiContract.KEY_TEXT)
+        if (heard != null) {
+            // Goals due today, by name, to match what was said.
+            val choices = vm.todayState.value?.view?.dueToday.orEmpty().map { it.goal.id to it.goal.name }
+            voiceCommand = io.github.randomtools3377.checklist.core.VoiceCommand.parse(heard, choices)
+        } else {
+            result.data?.getStringExtra(io.github.randomtools3377.checklist.core.AiContract.KEY_ERROR)?.let { voiceProblem = it }
+        }
+    }
     val badges by vm.badges.collectAsStateWithLifecycle()
     val appearance by vm.appearance.collectAsStateWithLifecycle()
     val planDays by vm.planDays.collectAsStateWithLifecycle()
@@ -320,6 +339,16 @@ fun ChecklistApp(vm: MainViewModel = viewModel()) {
                     onSettings = { push("settings") },
                     snackbarHost = { androidx.compose.material3.SnackbarHost(undoHost, modifier = Modifier.testTag("undo-bar")) },
                     actions = {
+                        // Voice, with the AI helper on and Checklist AI's speech file added.
+                        if (tab == AppTab.TODAY && io.github.randomtools3377.checklist.core.Feature.AI in features && aiStatus?.speechReady == true) {
+                            IconButton(
+                                onClick = {
+                                    runCatching { listen.launch(io.github.randomtools3377.checklist.data.AiClient.listenIntent()) }
+                                        .onFailure { voiceProblem = "Checklist AI couldn't be opened. Is it installed?" }
+                                },
+                                modifier = Modifier.testTag("voice"),
+                            ) { Text("🎙") }
+                        }
                         if (tab == AppTab.GOALS && (goals?.goals?.size ?: 0) > 1 && !reorderGoals) {
                             TextButton(onClick = { selectGoals = !selectGoals }, modifier = Modifier.testTag("select")) {
                                 Text(if (selectGoals) "Done" else "Select")
@@ -416,6 +445,22 @@ fun ChecklistApp(vm: MainViewModel = viewModel()) {
         }
         }
 
+        voiceCommand?.let { command ->
+            VoiceDialog(
+                command,
+                onTick = { id -> vm.tickHabit(id) },
+                onAdd = { todo -> vm.addTodo(todo) },
+                onDismiss = { voiceCommand = null },
+            )
+        }
+        voiceProblem?.let { problem ->
+            androidx.compose.material3.AlertDialog(
+                onDismissRequest = { voiceProblem = null },
+                title = { Text("Voice") },
+                text = { Text(problem) },
+                confirmButton = { TextButton(onClick = { voiceProblem = null }) { Text("OK") } },
+            )
+        }
         if (quickTodo) {
             QuickTodoDialog(onAdd = { name -> vm.addTodo(name); quickTodo = false }, onDismiss = { quickTodo = false })
         }

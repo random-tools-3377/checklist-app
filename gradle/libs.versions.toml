@@ -20,6 +20,9 @@ fragment = "1.8.5"
 androidxTestRules = "1.6.1"
 # The on-phone AI engine, used only by the separate Checklist AI app.
 litertlm = "0.18.1"
+# Voice in the Checklist AI app.
+vosk = "0.3.75"
+jna = "5.18.1"
 
 [libraries]
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "coreKtx" }
@@ -50,6 +53,8 @@ glance-appwidget = { module = "androidx.glance:glance-appwidget", version.ref = 
 androidx-biometric = { module = "androidx.biometric:biometric", version.ref = "biometric" }
 androidx-fragment-ktx = { module = "androidx.fragment:fragment-ktx", version.ref = "fragment" }
 litertlm = { module = "com.google.ai.edge.litertlm:litertlm-android", version.ref = "litertlm" }
+vosk-android = { module = "com.alphacephei:vosk-android", version.ref = "vosk" }
+jna = { module = "net.java.dev.jna:jna", version.ref = "jna" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

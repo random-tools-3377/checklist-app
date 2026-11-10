@@ -43,6 +43,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import io.github.randomtools3377.checklist.core.AiContract
 import io.github.randomtools3377.checklist.core.AiFile
+import io.github.randomtools3377.checklist.core.SpeechFile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -80,6 +81,26 @@ private fun AiScreen() {
     var ready by remember { mutableStateOf(AiFileStore.ready(context)) }
     var picking by remember { mutableStateOf<Picking>(Picking.Idle) }
     var share by remember { mutableFloatStateOf(0f) }
+    var speechReady by remember { mutableStateOf(SpeechStore.ready(context)) }
+    var speechPicking by remember { mutableStateOf<Picking>(Picking.Idle) }
+    var speechShare by remember { mutableFloatStateOf(0f) }
+    val pickSpeech = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        speechPicking = Picking.Checking(0f)
+        scope.launch {
+            val result = withContext(Dispatchers.IO) { SpeechStore.copyIn(context, uri) { speechShare = it } }
+            speechReady = SpeechStore.ready(context)
+            speechPicking = when (result) {
+                AiFileStore.Result.Ready -> Picking.Done("Done: voice is ready. You can delete the download from your Downloads folder.", true)
+                is AiFileStore.Result.WrongSize -> Picking.Done(
+                    "That isn't the speech file: it's ${result.size / 1_000_000} MB, and the speech file is ${SpeechFile.sizeText}. If the download stopped part way, download it again.",
+                    false,
+                )
+                AiFileStore.Result.WrongFile -> Picking.Done("That file is the right size but not the right file, or it was damaged. Download it again.", false)
+                is AiFileStore.Result.Failed -> Picking.Done(result.reason, false)
+            }
+        }
+    }
     val checklistInstalled = remember {
         runCatching { context.packageManager.getPackageInfo(AiContract.PACKAGE.removeSuffix(".ai"), 0) }.isSuccess
     }
@@ -184,6 +205,53 @@ private fun AiScreen() {
                 style = MaterialTheme.typography.bodyMedium,
                 color = if (now.good) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
             )
+        }
+
+        // Voice: a second, smaller file, only for those who want it.
+        Card(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("🎙 Voice (optional)", style = MaterialTheme.typography.titleMedium)
+                if (speechReady) {
+                    Text(
+                        "Ready. Tap 🎙 on Today in the Checklist app and say \"done reading\" or \"add buy milk\". It asks before doing anything.",
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    OutlinedButton(onClick = {
+                        SpeechStore.remove(context)
+                        speechReady = false
+                        speechPicking = Picking.Idle
+                    }) { Text("Remove the speech file") }
+                } else {
+                    Text(
+                        "Voice needs its own speech file: ${SpeechFile.NAME}, ${SpeechFile.sizeText}, ${SpeechFile.LICENCE} licence. " +
+                            "Download it in the browser, then pick it here. The microphone is asked for the first time you use voice.",
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    Button(onClick = {
+                        try {
+                            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(SpeechFile.URL)))
+                        } catch (e: ActivityNotFoundException) {
+                            speechPicking = Picking.Done("There's no browser on this phone to download it with.", false)
+                        }
+                    }) { Text("Download the speech file") }
+                    Button(
+                        onClick = { pickSpeech.launch(arrayOf("*/*")) },
+                        enabled = speechPicking !is Picking.Checking,
+                    ) { Text("Pick the speech file") }
+                }
+                when (val now = speechPicking) {
+                    Picking.Idle -> Unit
+                    is Picking.Checking -> Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text("Checking and unpacking… ${(speechShare * 100).toInt()}%.", style = MaterialTheme.typography.bodyMedium)
+                        LinearProgressIndicator(progress = { speechShare }, modifier = Modifier.fillMaxWidth())
+                    }
+                    is Picking.Done -> Text(
+                        now.message,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = if (now.good) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                    )
+                }
+            }
         }
 
         if (!checklistInstalled) {

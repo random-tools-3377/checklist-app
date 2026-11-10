@@ -22,3 +22,7 @@ android.permission.READ_CALENDAR
 # Asks Checklist AI, the optional separate app (0.42.0). A signature permission: only apps signed
 # with the same key hold it. Not a network permission; neither app has network access.
 io.github.randomtools3377.checklist.permission.AI
+
+# Voice in Checklist AI (0.44.0): the microphone, asked for when voice is first used, to turn a
+# short command into words on the phone. Only Checklist AI asks for it; nothing is recorded.
+android.permission.RECORD_AUDIO

@@ -80,4 +80,7 @@ dependencies {
     implementation(libs.compose.material3)
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.litertlm)
+    // Voice: Vosk turns speech into words on the phone (Apache 2.0), with JNA to reach it.
+    implementation(libs.vosk.android)
+    implementation("net.java.dev.jna:jna:${libs.versions.jna.get()}@aar")
 }

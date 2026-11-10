@@ -35,6 +35,8 @@ import io.github.randomtools3377.checklist.core.Feature
 import io.github.randomtools3377.checklist.core.GoalFromSentence
 import io.github.randomtools3377.checklist.core.GoalIdea
 import io.github.randomtools3377.checklist.core.ReviewSummary
+import io.github.randomtools3377.checklist.core.VoiceCommand
+import androidx.compose.material3.AlertDialog
 import androidx.compose.ui.Alignment
 import io.github.randomtools3377.checklist.data.AiClient
 import io.github.randomtools3377.checklist.data.AiStatus
@@ -251,5 +253,37 @@ fun AiCoachCard(vm: MainViewModel, summary: ReviewSummary, hideReasons: Boolean)
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
+    }
+}
+
+/** What was heard by voice, to confirm before anything happens. */
+@Composable
+fun VoiceDialog(command: VoiceCommand, onTick: (Long) -> Unit, onAdd: (String) -> Unit, onDismiss: () -> Unit) {
+    when (command) {
+        is VoiceCommand.Tick -> AlertDialog(
+            onDismissRequest = onDismiss,
+            title = { Text("Tick it?") },
+            text = { Text("\u201c${command.name}\u201d, as done today.") },
+            confirmButton = { TextButton(onClick = { onTick(command.goalId); onDismiss() }, modifier = Modifier.testTag("voice-tick")) { Text("Tick") } },
+            dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        )
+        is VoiceCommand.Add -> AlertDialog(
+            onDismissRequest = onDismiss,
+            title = { Text("Add a to-do?") },
+            text = { Text("\u201c${command.todo}\u201d") },
+            confirmButton = { TextButton(onClick = { onAdd(command.todo); onDismiss() }, modifier = Modifier.testTag("voice-add")) { Text("Add") } },
+            dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        )
+        is VoiceCommand.NotUnderstood -> AlertDialog(
+            onDismissRequest = onDismiss,
+            title = { Text("Didn't catch that") },
+            text = {
+                Text(
+                    (if (command.heard.isNotBlank()) "Heard: \u201c${command.heard}\u201d. " else "") +
+                        "Say \u201cdone\u201d and a goal due today, like \u201cdone reading\u201d, or \u201cadd\u201d and a to-do, like \u201cadd buy milk\u201d.",
+                )
+            },
+            confirmButton = { TextButton(onClick = onDismiss) { Text("OK") } },
+        )
     }
 }

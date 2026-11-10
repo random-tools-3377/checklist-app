@@ -26,6 +26,7 @@ class AiProvider : ContentProvider() {
             AiContract.METHOD_STATUS -> Bundle().apply {
                 putString(AiContract.KEY_VERSION, BuildConfig.VERSION_NAME)
                 putBoolean(AiContract.KEY_READY, AiFileStore.ready(context))
+                putBoolean(AiContract.KEY_SPEECH_READY, SpeechStore.ready(context))
             }
             AiContract.METHOD_GENERATE -> {
                 val asked = extras ?: Bundle()

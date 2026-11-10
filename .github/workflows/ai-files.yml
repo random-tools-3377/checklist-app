@@ -1,7 +1,7 @@
 name: AI file check
-# Downloads the AI file from the address built into the apps and checks its size and checksum,
-# so a file Checklist AI would refuse is caught here, not on the owner's phone. It runs when the
-# file's details change, or by hand. No secrets are used, and nothing is kept or published.
+# Downloads the AI file and the speech file from the addresses built into the apps and checks
+# their sizes and checksums, so a file Checklist AI would refuse is caught here, not on the
+# owner's phone. It runs when the files' details change, or by hand. No secrets are used, and nothing is kept or published.
 on:
   push:
     branches: ["**"]
@@ -15,7 +15,7 @@ permissions:
 
 jobs:
   check:
-    name: Download the AI file and check it
+    name: Download the AI files and check them
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -23,29 +23,39 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Download and check the AI file
+      - name: Download and check each file
         run: |
           set -euo pipefail
           src=core/src/commonMain/kotlin/io/github/randomtools3377/checklist/core/AiFile.kt
-          url="$(sed -n 's/^ *const val URL = "\(.*\)"$/\1/p' "$src")"
-          size="$(sed -n 's/^ *const val SIZE = \([0-9_]*\)L$/\1/p' "$src" | tr -d _)"
-          sha="$(sed -n 's/^ *const val SHA256 = "\([0-9a-f]*\)"$/\1/p' "$src")"
-          if [ -z "$url" ] || [ -z "$size" ] || [ ${#sha} != 64 ]; then
-            echo "::error::Couldn't read the AI file's address, size and checksum from $src."
+          # Each file's address, size and checksum, in the order they are written.
+          paste -d' ' \
+            <(sed -n 's/^ *const val URL = "\(.*\)"$/\1/p' "$src") \
+            <(sed -n 's/^ *const val SIZE = \([0-9_]*\)L$/\1/p' "$src" | tr -d _) \
+            <(sed -n 's/^ *const val SHA256 = "\([0-9a-f]*\)"$/\1/p' "$src") > files.txt
+          cat files.txt
+          count="$(wc -l < files.txt)"
+          if [ "$count" -lt 2 ]; then
+            echo "::error::Expected the AI file and the speech file in $src, found $count."
             exit 1
           fi
-          echo "Address: $url"
-          curl -fL --retry 3 --retry-delay 10 -o ai-file "$url"
-          got_size="$(stat -c %s ai-file)"
-          got_sha="$(sha256sum ai-file | cut -d' ' -f1)"
-          echo "Size: $got_size (expected $size)"
-          echo "SHA-256: $got_sha (expected $sha)"
-          if [ "$got_size" != "$size" ]; then
-            echo "::error::The AI file at that address is $got_size bytes, not $size."
-            exit 1
-          fi
-          if [ "$got_sha" != "$sha" ]; then
-            echo "::error::The AI file at that address has a different checksum."
-            exit 1
-          fi
-          echo "The AI file matches what Checklist AI expects."
+          failed=0
+          while read -r url size sha; do
+            if [ -z "$url" ] || [ -z "$size" ] || [ ${#sha} != 64 ]; then
+              echo "::error::A file in $src is missing its address, size or checksum."
+              failed=1
+              continue
+            fi
+            echo "== $url"
+            curl -fL --retry 3 --retry-delay 10 -o download "$url"
+            got_size="$(stat -c %s download)"
+            got_sha="$(sha256sum download | cut -d' ' -f1)"
+            echo "Size: $got_size (expected $size)"
+            echo "SHA-256: $got_sha (expected $sha)"
+            if [ "$got_size" != "$size" ] || [ "$got_sha" != "$sha" ]; then
+              echo "::error::$url doesn't match what Checklist AI expects."
+              failed=1
+            fi
+            rm -f download
+          done < files.txt
+          [ "$failed" = 0 ] && echo "Every file matches what Checklist AI expects."
+          exit "$failed"
