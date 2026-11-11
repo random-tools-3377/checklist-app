@@ -54,6 +54,10 @@ class CheckinTest {
     private fun text(tag: String): String = app.onAllNodesWithTag(tag, useUnmergedTree = true).fetchSemanticsNodes()
         .joinToString(" ") { node -> node.config.getOrElse(SemanticsProperties.Text) { emptyList() }.joinToString(" ") { it.text } }
 
+    /** A button's words, which sit on the text inside it: read as one, the way they are shown. */
+    private fun label(tag: String): String = app.onAllNodesWithTag(tag).fetchSemanticsNodes()
+        .joinToString(" ") { node -> node.config.getOrElse(SemanticsProperties.Text) { emptyList() }.joinToString(" ") { it.text } }
+
     @Test
     fun theCharacterChecksInAndHelpsGetGoing() {
         // It asks how the user feels, on its own card instead of the separate mood card.
@@ -64,7 +68,7 @@ class CheckinTest {
         // A hard day: gentle, and one small thing, the quickest goal.
         app.tap("companion-mood:2")
         app.waitFor { runBlocking { dao.allMoods() }.singleOrNull()?.score == 2 }
-        app.waitFor { shown("companion-do") && text("companion-do").contains("Water plants") }
+        app.waitFor { shown("companion-do") && label("companion-do").contains("Water plants") }
         assert(shown("companion-face:CALM"))
         app.tap("companion-do")
         app.waitFor { runBlocking { dao.allTicks() }.size == 1 }
