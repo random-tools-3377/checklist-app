@@ -294,6 +294,7 @@ fun DoneListScreen(items: List<io.github.randomtools3377.checklist.core.DoneItem
                 navigationIcon = {
                     IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") }
                 },
+                actions = { HelpAction() },
             )
         },
     ) { padding ->
@@ -350,6 +351,7 @@ fun RemovedGoalsScreen(goals: List<Goal>, onRestore: (Goal) -> Unit, onBack: () 
                 navigationIcon = {
                     IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") }
                 },
+                actions = { HelpAction() },
             )
         },
     ) { padding ->
@@ -1758,7 +1760,8 @@ fun EditorScaffold(title: String, onBack: () -> Unit, onSave: () -> Unit, conten
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
-                actions = {
+                actions = { HelpAction()
+
                     TextButton(onClick = onSave, modifier = Modifier.testTag("save")) { Text("Save") }
                 },
             )
@@ -1796,7 +1799,7 @@ private fun AllowanceAndPrivacy(
         value = allowance,
         onValueChange = onAllowance,
         tag = "field:allowance",
-        hint = "Within this, a skip needs nothing and a miss only a reason. Over it, each costs half the ${pointsWord()} and a penalty task.",
+        hint = "Within this, a skip needs nothing and a miss only a reason. Over it, each costs ${io.github.randomtools3377.checklist.core.Rules.current.penaltyPercent}% of the ${pointsWord()} and a penalty task.",
     )
     if (per != null) {
         SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {

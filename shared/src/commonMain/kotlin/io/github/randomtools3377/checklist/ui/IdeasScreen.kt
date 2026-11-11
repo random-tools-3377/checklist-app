@@ -78,6 +78,7 @@ fun IdeasScreen(vm: MainViewModel, start: SkillArea, onAdd: (AreaIdea) -> Unit, 
             TopAppBar(
                 title = { Text("Ideas to level up") },
                 navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") } },
+                actions = { HelpAction() },
             )
         },
     ) { padding ->

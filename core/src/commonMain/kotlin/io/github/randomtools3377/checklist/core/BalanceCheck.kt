@@ -21,17 +21,21 @@ data class GoalCheck(val goal: Goal, val due: Int, val done: Int, val hint: Goal
  * what suits how often they get done.
  */
 object BalanceCheck {
-    /** Under half a day of earning is too cheap; over 2 months is out of reach. */
-    const val CHEAP_DAYS = 0.5
-    const val FAR_DAYS = 60.0
+    /** Under half a day of earning is too cheap; over 2 months is out of reach (see [Rules]). */
+    val CHEAP_DAYS: Double get() = Rules.current.cheapDaysTenths / 10.0
+    val FAR_DAYS: Double get() = Rules.current.farDays.toDouble()
 
     /** Goals are judged over the last 4 weeks, once they were due at least 4 times. */
     const val DAYS = 28
     const val MIN_DUE = 4
 
-    /** Nearly always done (95% or more) could pay less; done half the time or less could pay more. */
-    const val EASY_SHARE = 0.95
-    const val HARD_SHARE = 0.5
+    /** Nearly always done (95% or more) could pay less; done half the time or less could pay more (see [Rules]). */
+    val EASY_SHARE: Double get() = Rules.current.easySharePercent / 100.0
+    val HARD_SHARE: Double get() = Rules.current.hardSharePercent / 100.0
+
+    /** What a goal could pay instead, in percent of its points: three quarters, or half as much again. */
+    val PAY_LESS_PERCENT: Int get() = Rules.current.payLessPercent
+    val PAY_MORE_PERCENT: Int get() = Rules.current.payMorePercent
 
     /**
      * Each reward with its days of earning at [perDay] (what the user earns now) and a verdict.
@@ -39,13 +43,15 @@ object BalanceCheck {
      * [perDayAtNormal] (see [Suggest.price]) where it has one, or else, for one too cheap or out
      * of reach, a day's or six weeks' worth.
      */
-    fun rewards(rewards: List<Reward>, perDay: Double?, perDayAtNormal: Double?, rate: MoneyPrices.Rate?): List<RewardCheck> =
-        rewards.filter { !it.archived }.map { reward ->
+    fun rewards(rewards: List<Reward>, perDay: Double?, perDayAtNormal: Double?, rate: MoneyPrices.Rate?): List<RewardCheck> {
+        val cheap = CHEAP_DAYS
+        val far = FAR_DAYS
+        return rewards.filter { !it.archived }.map { reward ->
             val days = perDay?.takeIf { it > 0 }?.let { reward.price / it }
             val verdict = days?.let {
                 when {
-                    it < CHEAP_DAYS -> PriceVerdict.TOO_CHEAP
-                    it > FAR_DAYS -> PriceVerdict.OUT_OF_REACH
+                    it < cheap -> PriceVerdict.TOO_CHEAP
+                    it > far -> PriceVerdict.OUT_OF_REACH
                     else -> PriceVerdict.FAIR
                 }
             }
@@ -58,6 +64,7 @@ object BalanceCheck {
             }
             RewardCheck(reward, days, verdict, suggested?.takeIf { it != reward.price })
         }
+    }
 
     /**
      * Each goal due at least [MIN_DUE] times over the last [DAYS] days (from when it was made,
@@ -66,6 +73,10 @@ object BalanceCheck {
      */
     fun goals(goals: List<Goal>, ticks: List<Tick>, today: LocalDate, madeOn: (Goal) -> LocalDate = { today.minusDays(DAYS) }): List<GoalCheck> {
         val from = today.minusDays(DAYS)
+        val easy = EASY_SHARE
+        val hard = HARD_SHARE
+        val less = PAY_LESS_PERCENT
+        val more = PAY_MORE_PERCENT
         return goals.filter { !it.archived && it.isHabitLike && it.points > 0 }.mapNotNull { goal ->
             val repeat = goal.repeat ?: return@mapNotNull null
             val start = maxOf(from, madeOn(goal))
@@ -83,13 +94,13 @@ object BalanceCheck {
             if (due < MIN_DUE) return@mapNotNull null
             val share = done.toDouble() / due
             val hint = when {
-                share >= EASY_SHARE -> GoalHint.PAY_LESS
-                share <= HARD_SHARE -> GoalHint.PAY_MORE
+                share >= easy -> GoalHint.PAY_LESS
+                share <= hard -> GoalHint.PAY_MORE
                 else -> null
             }
             val suggested = when (hint) {
-                GoalHint.PAY_LESS -> maxOf(1, goal.points * 3 / 4).takeIf { it < goal.points }
-                GoalHint.PAY_MORE -> goal.points * 3 / 2
+                GoalHint.PAY_LESS -> maxOf(1L, goal.points.toLong() * less / 100).toInt().takeIf { it < goal.points }
+                GoalHint.PAY_MORE -> (goal.points.toLong() * more / 100).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
                 null -> null
             }
             GoalCheck(goal, due, done, hint, suggested)

@@ -25,7 +25,8 @@ sealed interface SkipResult {
  *
  * One allowance per goal, shared by skips and misses, counted per calendar week (from Monday) or
  * month. Within it, a skip needs nothing and a miss only its reason. Over the limit, each one
- * needs a reason, costs half the points the goal pays (rounded down), and owes a penalty task
+ * needs a reason, costs half the points the goal pays (rounded down; the share is the user's to
+ * change, see [Rules.penaltyPercent]), and owes a penalty task
  * that is done right away: for a skip, the moment it is confirmed; for a miss, the next time the
  * app opens.
  */
@@ -45,8 +46,14 @@ class Lapses(
         const val MAX_DAYS_BACK = 400
     }
 
-    /** Half of what the goal pays: its points for a habit, its finishing bonus for a project. */
-    fun cost(goal: Goal): Int = (if (goal.kind == GoalKind.PROJECT) goal.bonus else goal.points) / 2
+    /**
+     * What going over the limit costs: half (see [Rules.penaltyPercent]) of what the goal pays,
+     * rounded down: its points for a habit, its finishing bonus for a project.
+     */
+    fun cost(goal: Goal): Int {
+        val pays = if (goal.kind == GoalKind.PROJECT) goal.bonus else goal.points
+        return (pays.toLong() * Rules.current.penaltyPercent / 100).coerceIn(Int.MIN_VALUE.toLong(), Int.MAX_VALUE.toLong()).toInt()
+    }
 
     /** Skips and misses that count against the allowance of the week or month containing [day]. */
     private suspend fun used(goal: Goal, day: LocalDate): Int {
@@ -63,6 +70,7 @@ class Lapses(
 
     /** Whether the habit can be skipped today, and what it would cost. */
     suspend fun checkSkip(goalId: Long): SkipCheck {
+        Rules.load(store)
         val goal = store.goal(goalId)
         val repeat = goal?.repeat
         if (goal == null || goal.archived || !goal.isHabitLike || repeat == null) return SkipCheck.NotFound
@@ -84,6 +92,7 @@ class Lapses(
      * allowance no reason is needed. Over the limit, [reason] is required.
      */
     suspend fun skip(goalId: Long, reason: Reason?, note: String?, reasonText: String? = null): SkipResult = store.transaction {
+        Rules.load(store)
         val check = checkSkip(goalId)
         if (check !is SkipCheck.Allowed) return@transaction SkipResult.NotAllowed(check)
         if (check.overLimit && reason == null) return@transaction SkipResult.NeedsReason
@@ -133,6 +142,7 @@ class Lapses(
      * it only notes where to start, so nothing from before is counted.
      */
     suspend fun closeDays(): List<Lapse> = store.transaction {
+        Rules.load(store)
         val today = book.today()
         val yesterday = today.minusDays(1)
         val checked = store.setting(CHECKED_THROUGH)?.let { LocalDate.parse(it) }
@@ -217,6 +227,7 @@ class Lapses(
      * dropped if it wasn't done yet.
      */
     suspend fun forgotToTick(lapseId: Long): Boolean = store.transaction {
+        Rules.load(store)
         val lapse = store.lapse(lapseId)
         if (lapse == null || lapse.kind != LapseKind.MISS || lapse.forgotten || lapse.period == null) return@transaction false
         val goal = store.goal(lapse.goalId) ?: return@transaction false
@@ -248,6 +259,7 @@ class Lapses(
      * any miss, and over the limit a penalty. A tick for today ("Avoided") is taken back.
      */
     suspend fun slip(goalId: Long): Lapse? = store.transaction {
+        Rules.load(store)
         val goal = store.goal(goalId) ?: return@transaction null
         val today = book.today()
         val window = goal.repeat?.window(today) ?: return@transaction null

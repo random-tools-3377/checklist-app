@@ -21,6 +21,9 @@ typealias PickedFile = String
 interface Phone {
     val parts: SharedParts
 
+    /** Whether the app is running under its own tests, where first-time tips would get in the way. */
+    val underTest: Boolean get() = false
+
     /** The app's version, like "0.55.0". */
     val appVersion: String
 

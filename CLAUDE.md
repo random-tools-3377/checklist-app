@@ -301,7 +301,10 @@ The app has no network access unless the owner decides otherwise for this app.
     each day), and the today bar as a card on Today. A new bill is counted from the day it is
     added (earlier ones are the user's to add), only while Budget is on, and a stopped bill keeps
     what it counted; a monthly bill on the 29th to 31st falls on the last day of shorter months.
-    The Budget tab lists the bills due in the next 30 days. Money put into savings comes off
+    The Budget tab lists the bills due in the next 30 days. Then, chosen by the owner, a budget
+    widget for the home screen (0.59.0, Android): today's pay filling up, and wider, the month's
+    pay, what's spent today, what's left and the next bill; it redraws when money changes and
+    every half hour, says when it was drawn, and stays blank behind the privacy lock. Money put into savings comes off
     what's left in the month, and taking it out puts it back. Today's pay on Today is one of
     Today's sections, just under the balance, shown while Budget is on and pay is set; a section
     a newer version adds now goes just after the one before it in the usual order.
@@ -314,6 +317,26 @@ The app has no network access unless the owner decides otherwise for this app.
     are paid the next time the app opens on a new day, from the day the game was turned on,
     never further back; points go in the points history as bonuses. What was paid shows in a
     note on the Budget tab.
+
+## Points and rules
+
+- Every number that decides points, penalties, bonuses, the game and prices can be changed by
+  the user. **Details (default):** one "Points and rules" page in Settings lists them in groups,
+  each with its usual value and a Reset, and "Reset all". Changes apply from then on; what was
+  already paid stays. The usual values are the ones written elsewhere in this file. The share of
+  lucky ticks that pay again rather than open a chest stays half and half.
+
+## Help
+
+- There are helpful hints and guides for the different parts of the app, so no user is confused
+  about what things do or how to use them. **Details (default):** each screen has ⓘ at the top
+  for a short guide (what it's for, then how to use it, with the real button names); the first
+  time each part opens, its guide shows as a tip with "Got it" and "No more tips"; Settings →
+  Help and tips lists every guide, turns tips on or off and can show them all again.
+
+## Windows
+
+- A Windows version, decided after 0.59.0. Its details aren't decided yet.
 
 ## iPhone
 
@@ -662,6 +685,8 @@ Build order **(default)**, each step a Release the owner can try:
 
 18. Then, chosen by the owner, a budget (see "Budget"): the budget itself (0.57.0), then bills,
     savings goals, reports and the budget game (0.58.0).
+19. Then, chosen by the owner: a budget widget, every number changeable ("Points and rules"),
+    and help and tips everywhere (0.59.0); then a Windows version.
 
 ## Talking to the owner
 

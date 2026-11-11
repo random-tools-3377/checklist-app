@@ -55,11 +55,11 @@ data class BossView(val fight: BossFight, val items: Map<Item, Int>) {
 data class Attack(val dealt: Int, val beaten: Boolean, val paid: Int)
 
 object Bosses {
-    /** What an item does to a boss; twice that for an area it is weaker to. */
-    const val HIT = 10
+    /** What an item does to a boss; twice that for an area it is weaker to (see [Rules]). */
+    val HIT: Int get() = Rules.current.bossHit
 
     /** What beating a boss pays. */
-    const val REWARD = 25
+    val REWARD: Int get() = Rules.current.bossReward
 
     /** The settings: this week's fight as "monday:damage"; items used as "FITNESS:3,MIND:2"; when items started; the week paid for. */
     const val FIGHT = "boss_fight"
@@ -79,13 +79,20 @@ object Bosses {
 
     /**
      * The boss's health: what doing about 70% of the week's goals would deal with plain items,
-     * so it can be beaten with an ordinary good week. [expectedTicks] is how many ticks the
-     * week's goals ask for.
+     * so it can be beaten with an ordinary good week, and at least 50 (see [Rules]).
+     * [expectedTicks] is how many ticks the week's goals ask for.
      */
-    fun health(expectedTicks: Int): Int = (expectedTicks * HIT * 7 / 10).coerceAtLeast(5 * HIT)
+    fun health(expectedTicks: Int): Int {
+        val rules = Rules.current
+        val health = expectedTicks.toLong() * rules.bossHit * rules.bossHealthPercent / 100
+        return health.coerceIn(rules.bossMinHealth.toLong(), Int.MAX_VALUE.toLong()).toInt()
+    }
 
     /** What [item] does to [boss]. */
-    fun hit(item: Item, boss: Boss): Int = if (item.area in boss.weakTo) HIT * 2 else HIT
+    fun hit(item: Item, boss: Boss): Int {
+        val rules = Rules.current
+        return if (item.area in boss.weakTo) (rules.bossHit.toLong() * rules.bossWeakPercent / 100).toInt() else rules.bossHit
+    }
 
     /** What using [items] does to [boss]. */
     fun damage(items: Map<Item, Int>, boss: Boss): Int = items.entries.sumOf { (item, count) -> hit(item, boss) * count }
@@ -123,8 +130,9 @@ object Bosses {
 
 /**
  * Lucky ticks (an extra): now and then a tick pays extra. One tick in ten is lucky: half of
- * those pay their points again, the other half open a chest of 5 to 15 points. It never takes
- * anything away; the same tick is always as lucky, and undoing it takes the extra back too.
+ * those pay their points again, the other half open a chest of 5 to 15 points (the numbers are
+ * the user's to change, see [Rules]). It never takes anything away; the same tick is always as
+ * lucky, and undoing it takes the extra back too.
  */
 object Lucky {
     sealed interface Luck {
@@ -134,9 +142,12 @@ object Lucky {
 
     /** The luck of a tick: [seed] identifies it (its goal, day and which tick of the day it is). */
     fun of(seed: Long, points: Int): Luck? {
+        val rules = Rules.current
+        val least = rules.luckyChestMin
+        val most = maxOf(least, rules.luckyChestMax)
         val random = Random(seed * 7919 + 13)
-        if (random.nextInt(10) != 0) return null
-        return if (random.nextBoolean() && points > 0) Luck.Double(points) else Luck.Chest(5 + random.nextInt(11))
+        if (random.nextInt(rules.luckyOneIn.coerceAtLeast(1)) != 0) return null
+        return if (random.nextBoolean() && points > 0) Luck.Double(points) else Luck.Chest(least + random.nextInt(most - least + 1))
     }
 }
 

@@ -753,7 +753,8 @@ fun CategoriesScreen(vm: MainViewModel, onBack: () -> Unit) {
             TopAppBar(
                 title = { Text("Categories") },
                 navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") } },
-                actions = {
+                actions = { HelpAction()
+
                     TextButton(onClick = { editing = MoneyCategory(name = "", icon = "📦") }, modifier = Modifier.testTag("add-category")) { Text("Add") }
                 },
             )

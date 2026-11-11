@@ -287,6 +287,9 @@ data class Stopwatch(val goalId: Long, val startedAt: Long)
 /** Today in the budget game: its share, what's spent, and good money days in a row with and without today. */
 data class MoneyGameView(val share: Double?, val spentCents: Long, val streak: Int, val streakBefore: Int)
 
+/** First-time tips: whether they're on, and the guides (by name) already shown. */
+data class TipsState(val on: Boolean, val seen: Set<String>)
+
 /** The Budget tab's month: [first] is its first day. */
 data class BudgetView(
     val first: LocalDate,
@@ -1419,6 +1422,44 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
         viewModelScope.launch {
             combine(dao.observeGoals(), treatBudget, dao.observeRewards(), today) { _, _, _, day -> day }
                 .collectLatest { day -> repository.keepMoneyPricesInStep(day) }
+        }
+    }
+
+    /** First-time tips: on unless turned off, and the guides already shown. Null until read. */
+    val tips: StateFlow<TipsState?> = combine(dao.observeSetting(SETTING_TIPS_OFF), dao.observeSetting(SETTING_TIPS_SEEN)) { off, seen ->
+        TipsState(on = off != "1", seen = seen.orEmpty().split(",").filter { it.isNotBlank() }.toSet())
+    }.state(null)
+
+    fun tipSeen(topic: HelpTopic) {
+        val seen = (tips.value?.seen.orEmpty() + topic.name).sorted().joinToString(",")
+        viewModelScope.launch { repository.setSetting(SETTING_TIPS_SEEN, seen) }
+    }
+
+    fun setTipsOn(on: Boolean) {
+        viewModelScope.launch { repository.setSetting(SETTING_TIPS_OFF, if (on) "0" else "1") }
+    }
+
+    fun showTipsAgain() {
+        viewModelScope.launch {
+            repository.setSetting(SETTING_TIPS_SEEN, "")
+            repository.setSetting(SETTING_TIPS_OFF, "0")
+        }
+    }
+
+    /** Every number for points, prices and the game, as the user set them (see Rules). */
+    val rules: StateFlow<io.github.randomtools3377.checklist.core.Rules> =
+        dao.observeSetting(io.github.randomtools3377.checklist.core.Rules.SETTING)
+            .map { io.github.randomtools3377.checklist.core.Rules.decode(it) }
+            .state(io.github.randomtools3377.checklist.core.Rules())
+
+    init {
+        // The rules in force follow the setting, from the first moment it is read.
+        viewModelScope.launch { rules.collect { io.github.randomtools3377.checklist.core.Rules.current = it } }
+    }
+
+    fun setRules(rules: io.github.randomtools3377.checklist.core.Rules) {
+        viewModelScope.launch {
+            repository.setSetting(io.github.randomtools3377.checklist.core.Rules.SETTING, io.github.randomtools3377.checklist.core.Rules.encode(rules))
         }
     }
 

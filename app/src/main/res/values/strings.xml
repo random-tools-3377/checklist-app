@@ -6,6 +6,8 @@
     <string name="widget_name">Checklist calendar</string>
     <string name="widget_description">Goals due today, with tick boxes. Make it wider for the week, taller for the month.</string>
     <string name="stats_widget_name">Checklist balance and streaks</string>
+    <string name="budget_widget_name">Checklist budget</string>
+    <string name="budget_widget_description">Today\'s pay filling up as you work. Make it wider for the month, what you\'ve spent and the next bill.</string>
     <string name="stats_widget_description">Your balance, your streak and how much of today is done. Make it wider for every streak.</string>
     <string name="shortcut_todo_short">New to-do</string>
     <string name="shortcut_todo_long">Add a to-do</string>

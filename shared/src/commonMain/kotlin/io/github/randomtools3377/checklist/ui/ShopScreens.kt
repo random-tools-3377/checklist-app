@@ -310,7 +310,7 @@ private fun BoughtCard(purchase: Purchase, onUse: () -> Unit, onReturn: () -> Un
 }
 
 /** [value] in the phone's own currency, like "$25", "$3.50" or "−$1,240.50". */
-internal fun moneyText(value: Double, alwaysCents: Boolean = false): String {
+fun moneyText(value: Double, alwaysCents: Boolean = false): String {
     val cents = kotlin.math.round(kotlin.math.abs(value) * 100).toLong()
     val whole = (cents / 100).toString().reversed().chunked(3).joinToString(",").reversed()
     val rest = cents % 100
@@ -319,7 +319,7 @@ internal fun moneyText(value: Double, alwaysCents: Boolean = false): String {
 }
 
 /** [cents] in the phone's own currency, with cents always shown. */
-internal fun centsText(cents: Long): String = moneyText(cents / 100.0, alwaysCents = true)
+fun centsText(cents: Long): String = moneyText(cents / 100.0, alwaysCents = true)
 
 /**
  * What a reward costs in money, and whether its price follows it. Following, the price in points
@@ -444,6 +444,7 @@ fun BalanceCheckScreen(view: BalanceCheckView?, vm: MainViewModel, onBack: () ->
                 navigationIcon = {
                     IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") }
                 },
+                actions = { HelpAction() },
             )
         },
     ) { padding ->

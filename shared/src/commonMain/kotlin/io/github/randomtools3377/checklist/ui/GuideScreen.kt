@@ -85,6 +85,7 @@ fun GuideScreen(onExamples: () -> Unit, onScratch: () -> Unit, onBack: () -> Uni
                 navigationIcon = {
                     IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") }
                 },
+                actions = { HelpAction() },
             )
         },
     ) { padding ->

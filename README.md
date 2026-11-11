@@ -105,6 +105,7 @@ keeps the data.
 - 0.56.0: rewards priced in money, with points prices that work themselves out and keep in step.
 - 0.57.0: a budget: pay that fills up as you work, spending in categories with limits, and rewards bought.
 - 0.58.0: bills, saving goals, a report for each month, today's pay on Today, and a budget game.
+- 0.59.0: a budget widget, every number for points changeable, and help and tips on every screen.
 
 Every step in CLAUDE.md's build order is built. The iPhone app is installed with SideStore or
 AltStore (see the 0.55.0 release notes).

@@ -5,13 +5,15 @@ import kotlinx.datetime.isoDayNumber
 
 /**
  * The boost: the goal missed most over the 4 weeks before this week (2 misses or more) pays 50%
- * more all week, to make it more tempting. Chosen afresh each Monday. It can be turned off.
+ * more all week, to make it more tempting. Chosen afresh each Monday. It can be turned off. The
+ * numbers are the user's to change (see [Rules]).
  */
 object Boost {
     /** "0" turns it off. */
     const val SETTING = "boost"
-    const val PERCENT = 150
-    const val MIN_MISSES = 2
+    /** What the boosted goal pays, in percent. */
+    val PERCENT: Int get() = 100 + Rules.current.boostExtraPercent
+    val MIN_MISSES: Int get() = Rules.current.boostMinMisses
     const val DAYS = 28
 
     /** The Monday that starts the week of [day]. */
@@ -23,7 +25,8 @@ object Boost {
         val from = monday.minusDays(DAYS)
         val misses = lapses.filter { it.kind == LapseKind.MISS && !it.forgotten && it.day >= from && it.day < monday }
             .groupingBy { it.goalId }.eachCount()
-        return goals.filter { !it.archived && it.points > 0 && (misses[it.id] ?: 0) >= MIN_MISSES }
+        val least = MIN_MISSES
+        return goals.filter { !it.archived && it.points > 0 && (misses[it.id] ?: 0) >= least }
             .sortedWith(compareByDescending<Goal> { misses[it.id] ?: 0 }.thenBy { it.position }.thenBy { it.id })
             .firstOrNull()
     }
@@ -40,8 +43,9 @@ fun payFor(points: Int, difficulty: Difficulty, boosted: Boolean, streakPercent:
 }
 
 /**
- * The streak bonus: a tick pays 10% more from a 7-day main streak, 20% from 30 and 30% from 100,
- * counted to the end of yesterday so it holds all day. It can be turned off.
+ * The streak bonus: a tick pays 10% more from a 7-day main streak, 20% from 30 and 30% from 100
+ * (unless the user changed them, see [Rules]), counted to the end of yesterday so it holds all
+ * day. It can be turned off.
  */
 object StreakBonus {
     /** "0" turns it off. */
@@ -51,11 +55,15 @@ object StreakBonus {
     const val TARGET = "streak_target"
     const val VALUE = "streak_value"
 
-    fun percentFor(streak: Int): Int = when {
-        streak >= 100 -> 130
-        streak >= 30 -> 120
-        streak >= 7 -> 110
-        else -> 100
+    /** What a tick pays with a main streak of [streak] days, in percent: the step with the longest streak reached. */
+    fun percentFor(streak: Int): Int {
+        val r = Rules.current
+        val steps = listOf(
+            r.streakBonus3Days to r.streakBonus3Percent,
+            r.streakBonus2Days to r.streakBonus2Percent,
+            r.streakBonus1Days to r.streakBonus1Percent,
+        )
+        return 100 + (steps.sortedByDescending { it.first }.firstOrNull { streak >= it.first }?.second ?: 0)
     }
 
     fun settingsOf(target: String?, value: String?): StreakSettings {
@@ -111,13 +119,15 @@ class PerfectDays(private val store: Store, private val book: Book) {
 
 /**
  * A reward costs more for each time it was already bought that week (Monday to Sunday, not
- * counting ones returned): 25% of its price each time, rounded down. It can be turned off.
+ * counting ones returned): 25% of its price each time (see [Rules]), rounded down. It can be
+ * turned off.
  */
 object RepeatPrice {
     /** "0" turns it off. */
     const val SETTING = "repeat_price"
-    const val RISE_PERCENT = 25
+    val RISE_PERCENT: Int get() = Rules.current.repeatPriceRisePercent
 
     fun now(price: Int, boughtThisWeek: Int, on: Boolean = true): Int =
-        if (!on || boughtThisWeek <= 0) price else price + price * RISE_PERCENT * boughtThisWeek / 100
+        if (!on || boughtThisWeek <= 0) price
+        else (price + price.toLong() * RISE_PERCENT * boughtThisWeek / 100).coerceIn(Int.MIN_VALUE.toLong(), Int.MAX_VALUE.toLong()).toInt()
 }

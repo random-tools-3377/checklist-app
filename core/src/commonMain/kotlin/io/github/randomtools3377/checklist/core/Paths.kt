@@ -26,8 +26,8 @@ object Paths {
     /** The level a path can be chosen at. */
     const val AT_LEVEL = 10
 
-    /** How much more experience the path's skill gets, in percent. */
-    const val BONUS_PERCENT = 10
+    /** How much more experience the path's skill gets, in percent (see [Rules]). */
+    val BONUS_PERCENT: Int get() = Rules.current.pathBonusPercent
 
     fun decode(text: String?): Path? = Path.entries.firstOrNull { it.name == text }
 }

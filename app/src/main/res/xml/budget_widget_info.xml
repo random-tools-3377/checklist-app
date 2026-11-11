@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The budget widget. It redraws when money, pay or work days change, and every half hour while on the home screen. -->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:description="@string/budget_widget_description"
+    android:initialLayout="@layout/glance_default_loading_layout"
+    android:minWidth="120dp"
+    android:minHeight="110dp"
+    android:minResizeWidth="120dp"
+    android:minResizeHeight="100dp"
+    android:targetCellWidth="2"
+    android:targetCellHeight="2"
+    android:resizeMode="horizontal|vertical"
+    android:updatePeriodMillis="1800000"
+    android:widgetCategory="home_screen" />

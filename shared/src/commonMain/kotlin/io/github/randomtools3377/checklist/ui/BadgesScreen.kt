@@ -46,6 +46,7 @@ fun BadgesScreen(earned: Map<Badge, LocalDate>, onSeen: () -> Unit, onBack: () -
                 navigationIcon = {
                     IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") }
                 },
+                actions = { HelpAction() },
             )
         },
     ) { padding ->

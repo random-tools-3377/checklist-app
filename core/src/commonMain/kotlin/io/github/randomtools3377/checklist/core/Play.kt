@@ -32,8 +32,11 @@ data class QuestProgress(val quest: Quest, val done: Int, val complete: Boolean)
 data class DayQuests(val day: LocalDate, val list: List<QuestProgress>)
 
 object Quests {
-    /** What a quest pays. */
-    const val REWARD = 5
+    /** What a quest pays (see [Rules]). */
+    val REWARD: Int get() = Rules.current.questReward
+
+    /** What the "everything due by 8 pm" quest pays. */
+    val BIG_REWARD: Int get() = Rules.current.questBigReward
 
     /** The quests already paid, as "2026-11-11:0,2" for that day. */
     const val SETTING_PAID = "quests_paid"
@@ -47,24 +50,26 @@ object Quests {
      */
     fun of(day: LocalDate, due: List<Goal>): List<Quest> {
         if (due.isEmpty()) return emptyList()
+        val reward = REWARD
+        val bigReward = BIG_REWARD
         val random = Random(day.toEpochDays().toLong() * 31 + 7)
         val possible = mutableListOf<(Int) -> Quest>()
         if (due.size >= 2) {
             val early = if (due.size >= 4) 3 else 2
-            possible += { id -> Quest(id, QuestKind.EARLY, "Tick $early goals before noon", early, REWARD, by = NOON) }
-            possible += { id -> Quest(id, QuestKind.ALL_BY, "Finish everything due by 8 pm", due.size, REWARD * 2, by = EVENING) }
+            possible += { id -> Quest(id, QuestKind.EARLY, "Tick $early goals before noon", early, reward, by = NOON) }
+            possible += { id -> Quest(id, QuestKind.ALL_BY, "Finish everything due by 8 pm", due.size, bigReward, by = EVENING) }
         }
         val goal = due[random.nextInt(due.size)]
-        possible += { id -> Quest(id, QuestKind.GOAL, "Do ${goal.icon} ${goal.name}", 1, REWARD, goalId = goal.id) }
+        possible += { id -> Quest(id, QuestKind.GOAL, "Do ${goal.icon} ${goal.name}", 1, reward, goalId = goal.id) }
         SkillArea.entries.filter { area -> due.count { SkillArea.of(it) == area } >= 2 }.takeIf { it.isNotEmpty() }?.let { areas ->
             val area = areas[random.nextInt(areas.size)]
             val count = due.count { SkillArea.of(it) == area }
-            possible += { id -> Quest(id, QuestKind.AREA, "Do all $count ${area.icon} ${area.label} goals", count, REWARD, area = area) }
+            possible += { id -> Quest(id, QuestKind.AREA, "Do all $count ${area.icon} ${area.label} goals", count, reward, area = area) }
         }
         val points = due.sumOf { it.points * it.target }
         if (points >= 15) {
             val aim = ((points * 0.6) / 5).toInt().coerceAtLeast(2) * 5
-            possible += { id -> Quest(id, QuestKind.POINTS, "Earn $aim points from goals", aim, REWARD, by = null) }
+            possible += { id -> Quest(id, QuestKind.POINTS, "Earn $aim points from goals", aim, reward, by = null) }
         }
         return possible.shuffled(random).take(3).mapIndexed { index, make -> make(index) }
     }
@@ -101,13 +106,13 @@ object Quests {
 
 /**
  * Combos: every perfect day in a row (everything due done, nothing skipped) adds one, and pays
- * [PER_STEP] points for each, up to [MOST]. A day with something left undone ends the combo;
- * a day with nothing due neither adds to it nor ends it.
+ * [PER_STEP] points for each, up to [MOST] (see [Rules]). A day with something left undone ends
+ * the combo; a day with nothing due neither adds to it nor ends it.
  */
 class Combos(private val store: Store, private val book: Book) {
     companion object {
-        const val PER_STEP = 2
-        const val MOST = 10
+        val PER_STEP: Int get() = Rules.current.comboPerDay
+        val MOST: Int get() = Rules.current.comboMostDays
         const val COUNT = "combo_count"
         const val THROUGH = "combo_through"
 
@@ -117,6 +122,7 @@ class Combos(private val store: Store, private val book: Book) {
 
     /** Pays for every day that ended since the last time, if combos are on. Returns what was paid. */
     suspend fun pay(): List<Entry> = store.transaction {
+        Rules.load(store)
         val yesterday = book.today().minusDays(1)
         if (!Feature.isOn(store, Feature.COMBOS)) {
             store.putSetting(THROUGH, yesterday.toString())

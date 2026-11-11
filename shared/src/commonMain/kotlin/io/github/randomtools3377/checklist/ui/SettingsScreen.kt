@@ -95,12 +95,15 @@ private fun DifficultySettings(vm: MainViewModel) {
     val ramp = setting.ramp
     Column(Modifier.padding(horizontal = 16.dp, vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
-            "Now: ${now.label}. Goals pay ${now.percent}% of their ${pointsWord()}" + when (now) {
-                Difficulty.VERY_EASY -> ", and 2 more skips or misses are free."
-                Difficulty.EASY -> ", and 1 more skip or miss is free."
-                Difficulty.NORMAL -> ", and skips and misses are as each goal sets."
-                Difficulty.HARD -> ", and 1 fewer skip or miss is free."
-                Difficulty.VERY_HARD -> ", and no skip or miss is free."
+            "Now: ${now.label}. Goals pay ${now.percent}% of their ${pointsWord()}" + run {
+                // What this level does to free skips and misses, as the rules set it.
+                val extra = now.allowed(1000) - 1000
+                when {
+                    now.allowed(1000) == 0 -> ", and no skip or miss is free."
+                    extra > 0 -> ", and $extra more skip${if (extra == 1) " or miss is" else "s or misses are"} free."
+                    extra < 0 -> ", and ${-extra} fewer skip${if (extra == -1) " or miss is" else "s or misses are"} free."
+                    else -> ", and skips and misses are as each goal sets."
+                }
             },
             style = MaterialTheme.typography.bodyMedium,
             modifier = Modifier.testTag("difficulty-now"),
@@ -252,6 +255,7 @@ fun FeaturesScreen(vm: MainViewModel, onAppearance: () -> Unit, onBack: () -> Un
                 navigationIcon = {
                     IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") }
                 },
+                actions = { HelpAction() },
             )
         },
     ) { padding ->
@@ -349,6 +353,8 @@ fun SettingsScreen(
     onAppearance: () -> Unit,
     onGuide: () -> Unit,
     onFeatures: () -> Unit = {},
+    onRules: () -> Unit = {},
+    onHelp: () -> Unit = {},
     onOpenTab: (io.github.randomtools3377.checklist.core.AppTabKind) -> Unit,
     onBack: () -> Unit,
 ) {
@@ -388,6 +394,7 @@ fun SettingsScreen(
                 navigationIcon = {
                     IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") }
                 },
+                actions = { HelpAction() },
             )
         },
     ) { padding ->
@@ -428,6 +435,36 @@ fun SettingsScreen(
                 Text("Features", style = MaterialTheme.typography.bodyLarge)
                 Text(
                     "Turn extras on or off: to-dos, the timeline, bonuses and more. They start off, to keep the app simple.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
+            if (shows("Points and rules penalty bonus quest combo boss lucky bet shield path budget game prices balance check suggested difficulty percent"))
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onRules)
+                    .testTag("setting:rules")
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+            ) {
+                Text("Points and rules", style = MaterialTheme.typography.bodyLarge)
+                Text(
+                    "Every number for ${pointsWord()}, penalties, bonuses, the game and prices, to change as you like.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
+            if (shows("Help tips guides how to what does"))
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onHelp)
+                    .testTag("setting:help")
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+            ) {
+                Text("Help and tips", style = MaterialTheme.typography.bodyLarge)
+                Text(
+                    "A short guide to every part of the app, and the tips that show the first time.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.primary,
                 )

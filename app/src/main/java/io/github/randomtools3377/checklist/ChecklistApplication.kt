@@ -74,7 +74,7 @@ class Container(app: Application) {
         // Whenever goals, ticks (a routine's items too) or settings change, from the app, a
         // widget or a notification, set the next reminder and redraw the widgets.
         db.invalidationTracker.addObserver(
-            object : InvalidationTracker.Observer(arrayOf("goals", "ticks", "settings", "steps", "lapses", "entries", "checks")) {
+            object : InvalidationTracker.Observer(arrayOf("goals", "ticks", "settings", "steps", "lapses", "entries", "checks", "money", "work_days", "bills", "saving_goals")) {
                 override fun onInvalidated(tables: Set<String>) {
                     changes.tryEmit(Unit)
                 }

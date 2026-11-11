@@ -43,6 +43,9 @@ class AndroidPhone(private val app: ChecklistApplication) : Phone {
     var activity: WeakReference<Activity>? = null
 
     override val parts: SharedParts get() = container.parts
+
+    // The phone tests bring their own runner into the app; a real install never has it.
+    override val underTest: Boolean = runCatching { Class.forName("androidx.test.platform.app.InstrumentationRegistry") }.isSuccess
     override val appVersion: String = BuildConfig.VERSION_NAME
 
     override suspend fun rescheduleReminders() = Reminders.reschedule(app)

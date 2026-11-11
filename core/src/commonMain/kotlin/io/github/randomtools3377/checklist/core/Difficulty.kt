@@ -5,41 +5,91 @@ import kotlinx.datetime.isoDayNumber
 import kotlinx.serialization.Serializable
 import kotlin.math.roundToInt
 
-/** How hard a goal is, which suggests the points it pays. */
+/** How hard a goal is, which suggests the points it pays (2, 5, 10 and 20 unless the user changed them, see [Rules]). */
 @Serializable
-enum class Effort(val label: String, val points: Int) {
-    EASY("Easy", 2),
-    MEDIUM("Medium", 5),
-    HARD("Hard", 10),
-    VERY_HARD("Very hard", 20),
+enum class Effort(val label: String) {
+    EASY("Easy"),
+    MEDIUM("Medium"),
+    HARD("Hard"),
+    VERY_HARD("Very hard"),
+    ;
+
+    /** The points suggested for a goal this hard. */
+    val points: Int
+        get() = Rules.current.let {
+            when (this) {
+                EASY -> it.effortEasyPoints
+                MEDIUM -> it.effortMediumPoints
+                HARD -> it.effortHardPoints
+                VERY_HARD -> it.effortVeryHardPoints
+            }
+        }
 }
 
-/** How big a reward is, which suggests its price: so many days of the user's usual earnings. */
+/**
+ * How big a reward is, which suggests its price: so many days of the user's usual earnings (1,
+ * 3, 14 and 42 unless the user changed them, see [Rules]).
+ */
 @Serializable
-enum class RewardSize(val label: String, val days: Int) {
-    SMALL("Small treat", 1),
-    MEDIUM("Medium", 3),
-    BIG("Big", 14),
-    HUGE("Huge", 42),
+enum class RewardSize(val label: String) {
+    SMALL("Small treat"),
+    MEDIUM("Medium"),
+    BIG("Big"),
+    HUGE("Huge"),
+    ;
+
+    val days: Int
+        get() = Rules.current.let {
+            when (this) {
+                SMALL -> it.rewardSmallDays
+                MEDIUM -> it.rewardMediumDays
+                BIG -> it.rewardBigDays
+                HUGE -> it.rewardHugeDays
+            }
+        }
 }
 
 /**
  * How easy rewards are to earn. It changes the points goals pay (ticks and bonuses) and how many
- * skips and misses are free. Penalties stay half a goal's own points, and prices don't change.
+ * skips and misses are free. Penalties stay a share of a goal's own points, and prices don't
+ * change. What each level pays and allows is in [Rules]: usually 200%, 150%, 100%, 75% and 50%,
+ * with 2 and 1 more free skips, the goal's own, 1 fewer, and none at all.
  */
-enum class Difficulty(val label: String, val percent: Int, private val extraAllowance: Int) {
-    VERY_EASY("Very easy", 200, 2),
-    EASY("Easy", 150, 1),
-    NORMAL("Normal", 100, 0),
-    HARD("Hard", 75, -1),
-    VERY_HARD("Very hard", 50, -1000),
+enum class Difficulty(val label: String) {
+    VERY_EASY("Very easy"),
+    EASY("Easy"),
+    NORMAL("Normal"),
+    HARD("Hard"),
+    VERY_HARD("Very hard"),
     ;
 
+    /** What goals pay at this level, in percent. */
+    val percent: Int
+        get() = Rules.current.let {
+            when (this) {
+                VERY_EASY -> it.veryEasyPayPercent
+                EASY -> it.easyPayPercent
+                NORMAL -> it.normalPayPercent
+                HARD -> it.hardPayPercent
+                VERY_HARD -> it.veryHardPayPercent
+            }
+        }
+
     /** What [points] pay at this level: rounded down, but a goal that pays something pays at least 1. */
-    fun pay(points: Int): Int = if (points <= 0) points else maxOf(1, points * percent / 100)
+    fun pay(points: Int): Int = if (points <= 0) points else maxOf(1L, points.toLong() * percent / 100).toInt()
 
     /** Free skips and misses at this level, for a goal that allows [base]. */
-    fun allowed(base: Int): Int = (base + extraAllowance).coerceAtLeast(0)
+    fun allowed(base: Int): Int {
+        val rules = Rules.current
+        val extra = when (this) {
+            VERY_EASY -> rules.veryEasyExtraSkips
+            EASY -> rules.easyExtraSkips
+            NORMAL -> rules.normalExtraSkips
+            HARD -> rules.hardExtraSkips
+            VERY_HARD -> if (rules.veryHardNoFreeSkips != 0) return 0 else rules.veryHardExtraSkips
+        }
+        return (base + extra).coerceAtLeast(0)
+    }
 }
 
 /**
@@ -108,10 +158,11 @@ data class DifficultySetting(val level: Difficulty = Difficulty.NORMAL, val ramp
 object Suggest {
     /**
      * Points for each tick of a goal: by its difficulty, plus 1 for every 10 minutes of its
-     * length, shared out over the times of a goal done more than once.
+     * length (see [Rules.minutesPerPoint]), shared out over the times of a goal done more than once.
      */
     fun points(effort: Effort, minutes: Int? = null, target: Int = 1): Int {
-        val whole = effort.points + (minutes ?: 0) / 10
+        val per = Rules.current.minutesPerPoint
+        val whole = effort.points + if (per > 0) (minutes ?: 0) / per else 0
         return maxOf(1, whole / target.coerceAtLeast(1))
     }
 

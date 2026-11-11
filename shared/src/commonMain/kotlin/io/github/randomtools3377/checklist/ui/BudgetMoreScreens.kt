@@ -240,7 +240,8 @@ fun BillsScreen(vm: MainViewModel, onBill: (Long) -> Unit, onBack: () -> Unit) {
             TopAppBar(
                 title = { Text("Bills") },
                 navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") } },
-                actions = { TextButton(onClick = { onBill(0) }, modifier = Modifier.testTag("add-bill")) { Text("Add") } },
+                actions = { HelpAction()
+ TextButton(onClick = { onBill(0) }, modifier = Modifier.testTag("add-bill")) { Text("Add") } },
             )
         },
     ) { padding ->
@@ -414,7 +415,8 @@ fun BudgetReportScreen(vm: MainViewModel, onBack: () -> Unit) {
             TopAppBar(
                 title = { Text("Report") },
                 navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") } },
-                actions = {
+                actions = { HelpAction()
+
                     TextButton(onClick = { vm.showBudgetMonth(-1) }, modifier = Modifier.testTag("report-earlier")) { Text("◀") }
                     TextButton(onClick = { vm.showBudgetMonth(1) }, enabled = shown?.thisMonth == false, modifier = Modifier.testTag("report-later")) { Text("▶") }
                 },

@@ -15,10 +15,11 @@ object MoneyGame {
     const val TO = "money_game_to"
     const val GOALS = "money_game_goals"
 
-    const val GOOD_DAY = 3
-    const val NO_SPEND_DAY = 5
-    const val MONTH_BONUS = 25
-    const val SAVED_UP = 20
+    /** What the game pays: the user's to change (see [Rules]). */
+    val GOOD_DAY: Int get() = Rules.current.goodMoneyDay
+    val NO_SPEND_DAY: Int get() = Rules.current.noSpendDay
+    val MONTH_BONUS: Int get() = Rules.current.moneyMonthBonus
+    val SAVED_UP: Int get() = Rules.current.savedUp
 
     enum class Day { NO_SPEND, WITHIN, OVER }
 

@@ -85,6 +85,7 @@ fun AppearanceScreen(appearance: Appearance, vm: MainViewModel, onAnyColour: () 
             TopAppBar(
                 title = { Text("Appearance") },
                 navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") } },
+                actions = { HelpAction() },
             )
         },
     ) { padding ->
@@ -551,7 +552,8 @@ fun AppColourScreen(appearance: Appearance, onUse: (Int) -> Unit, onBack: () -> 
             TopAppBar(
                 title = { Text("App colour") },
                 navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") } },
-                actions = { TextButton(onClick = { onUse(color) }, modifier = Modifier.testTag("use-colour")) { Text("Use it") } },
+                actions = { HelpAction()
+ TextButton(onClick = { onUse(color) }, modifier = Modifier.testTag("use-colour")) { Text("Use it") } },
             )
         },
     ) { padding ->

@@ -30,7 +30,8 @@ sealed interface BuyResult {
 
 /**
  * The points rules: ticking earns, undoing a tick takes its points back, buying spends, and a
- * reward can't be bought for more than the balance. The balance may go negative.
+ * reward can't be bought for more than the balance. The balance may go negative. The numbers
+ * used are the user's [Rules], read from the store at the start of each of these.
  */
 class Book(
     private val store: Store,
@@ -79,6 +80,14 @@ class Book(
         const val NOTE_LENGTH = 200
     }
 
+    /**
+     * Puts the user's rules in use (see [Rules]) before anything is paid, taken or priced, so a
+     * process woken by a notification or the widget uses them too.
+     */
+    private suspend fun useRules() {
+        Rules.load(store)
+    }
+
     /** The user's current day, after the day-end setting. */
     suspend fun today(): LocalDate = Days.dayOf(clock.now().toLocalDateTime(timeZone()), store.dayEndHour())
 
@@ -98,6 +107,7 @@ class Book(
 
     /** Ticks a habit once for its current period, paying its points and, on finishing, its bonus. */
     suspend fun tickHabit(goalId: Long): TickResult = store.transaction {
+        useRules()
         val goal = store.goal(goalId)
         if (goal != null && !goal.archived && goal.kind == GoalKind.TODO && goal.repeat == null) return@transaction tickUndatedTodo(goal)
         val repeat = goal?.repeat
@@ -159,6 +169,7 @@ class Book(
      * entered until it is due again.
      */
     suspend fun logAmount(goalId: Long, amount: Double, seconds: Int? = null): TickResult = store.transaction {
+        useRules()
         val goal = store.goal(goalId)
         val repeat = goal?.repeat
         if (goal == null || goal.archived || !goal.isHabitLike || repeat == null || !goal.hasAmount) {
@@ -205,6 +216,7 @@ class Book(
      * leaves the habit unfinished, its finishing bonus is taken back too.
      */
     suspend fun undoHabitTick(goalId: Long): Boolean = store.transaction {
+        useRules()
         val goal = store.goal(goalId)
         if (goal != null && goal.kind == GoalKind.TODO && goal.repeat == null) {
             // An undated to-do done today: take that back.
@@ -230,6 +242,7 @@ class Book(
      * routine itself is ticked: it pays its points and counts as done. Items pay nothing alone.
      */
     suspend fun checkItem(stepId: Long): TickResult = store.transaction {
+        useRules()
         val step = store.step(stepId)
         val goal = step?.let { store.goal(it.goalId) }
         if (goal?.kind == GoalKind.TODO) return@transaction tickStep(stepId)
@@ -250,6 +263,7 @@ class Book(
 
     /** Takes back one item of a routine. If the routine was done, it isn't any more, and its points go back. */
     suspend fun uncheckItem(stepId: Long): Boolean = store.transaction {
+        useRules()
         val step = store.step(stepId) ?: return@transaction false
         val goal = store.goal(step.goalId) ?: return@transaction false
         if (goal.kind == GoalKind.TODO) return@transaction undoStep(stepId)
@@ -263,6 +277,7 @@ class Book(
 
     /** "Done" on a routine: ticks every item still open, which ticks the routine. */
     suspend fun finishRoutine(goalId: Long): TickResult = store.transaction {
+        useRules()
         val goal = store.goal(goalId) ?: return@transaction TickResult.NotFound
         if (goal.kind == GoalKind.TODO) return@transaction finishTodo(goalId)
         val window = goal.repeat?.window(today()) ?: return@transaction TickResult.NotDue
@@ -276,6 +291,7 @@ class Book(
 
     /** Takes back a finished routine: the routine's tick and every item ticked in this window. */
     suspend fun undoRoutine(goalId: Long): Boolean = store.transaction {
+        useRules()
         val goal = store.goal(goalId) ?: return@transaction false
         if (goal.kind == GoalKind.TODO) return@transaction undoTodo(goalId)
         val window = goal.repeat?.window(today()) ?: return@transaction false
@@ -285,6 +301,7 @@ class Book(
 
     /** Marks a project step done, paying its points and, if it was the last one, the project bonus. */
     suspend fun tickStep(stepId: Long): TickResult = store.transaction {
+        useRules()
         val step = store.step(stepId)
         val goal = step?.let { store.goal(it.goalId) }
         if (step == null || step.archived || goal == null || goal.archived || goal.kind == GoalKind.HABIT) {
@@ -400,6 +417,7 @@ class Book(
 
     /** Marks a project step not done, taking back its points and the project bonus if it was paid. */
     suspend fun undoStep(stepId: Long): Boolean = store.transaction {
+        useRules()
         val step = store.step(stepId) ?: return@transaction false
         val tick = store.stepTick(stepId) ?: return@transaction false
         removeTickAndItsEntries(tick.id)
@@ -419,6 +437,7 @@ class Book(
      * with [random]; the prize is what goes in the inventory, at the mystery reward's price.
      */
     suspend fun buy(rewardId: Long, random: kotlin.random.Random = kotlin.random.Random.Default): BuyResult = store.transaction {
+        useRules()
         val found = store.reward(rewardId)
         if (found == null || found.archived) return@transaction BuyResult.NotFound
         // Bought already this week: it costs more each time (see [RepeatPrice]).
@@ -442,6 +461,7 @@ class Book(
 
     /** What [reward] costs now: its price, raised for each time it was bought this week and kept. */
     suspend fun priceNow(reward: Reward): Int {
+        useRules()
         val monday = Boost.weekOf(today())
         val zone = timeZone()
         val dayEnd = store.dayEndHour()
@@ -462,6 +482,7 @@ class Book(
 
     /** Returns a bought reward that hasn't been used, for a full refund of what it cost. */
     suspend fun returnPurchase(purchaseId: Long): Boolean = store.transaction {
+        useRules()
         val purchase = store.purchase(purchaseId)
         if (purchase == null || purchase.usedAt != null || purchase.returnedAt != null) return@transaction false
         val at = millis()

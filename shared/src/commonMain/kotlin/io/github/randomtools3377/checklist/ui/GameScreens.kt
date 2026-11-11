@@ -313,6 +313,7 @@ fun CharacterScreen(
                 navigationIcon = {
                     IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") }
                 },
+                actions = { HelpAction() },
             )
         },
     ) { padding ->
@@ -567,7 +568,7 @@ fun BossCard(view: BossView, onAttack: ((String) -> Unit) -> Unit) {
                     Text(fight.boss.title, style = MaterialTheme.typography.titleSmall, modifier = Modifier.testTag("boss-name"))
                     Text(
                         "Weak to " + fight.boss.weakTo.sortedBy { it.ordinal }.joinToString(" and ") { "${it.icon} ${it.label}" } +
-                            ": their items hit twice as hard",
+                            ": their items hit ${io.github.randomtools3377.checklist.core.Rules.current.bossWeakPercent}% as hard",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -623,7 +624,7 @@ fun BetsCard(rows: List<BetRow>, habits: List<Goal>, balance: Int, onPlace: (Lon
             Text("🎲 Bet on yourself", style = MaterialTheme.typography.titleSmall)
             if (rows.isEmpty()) {
                 Text(
-                    "Stake points that you'll do a goal so many times this week. Do it and win twice the stake back; fall short and it's gone.",
+                    "Stake ${pointsWord()} that you'll do a goal so many times this week. Do it and win ${io.github.randomtools3377.checklist.core.Rules.current.betWinTimes} times the stake back; fall short and it's gone.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

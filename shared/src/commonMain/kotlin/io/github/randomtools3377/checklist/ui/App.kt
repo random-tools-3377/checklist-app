@@ -281,6 +281,8 @@ fun ChecklistApp(vm: MainViewModel) {
         return
     }
 
+    androidx.compose.runtime.SideEffect { ShownRoute.route = route }
+    FirstTimeTip(route, vm)
     Box(Modifier.fillMaxSize()) {
         val parts = route.split("/")
         val id = parts.getOrNull(1)?.toLongOrNull() ?: 0L
@@ -348,11 +350,15 @@ fun ChecklistApp(vm: MainViewModel) {
             "budget-bills" -> BillsScreen(vm, onBill = { billId -> push("bill/$billId") }, onBack = ::pop)
             "bill" -> androidx.compose.runtime.key(route) { BillEditor(id, vm, onClose = ::pop) }
             "budget-report" -> BudgetReportScreen(vm, onBack = ::pop)
+            "rules" -> RulesScreen(vm, onBack = ::pop)
+            "help" -> HelpScreen(vm, onBack = ::pop)
             "settings" -> SettingsScreen(
                 settings, vm,
                 onAppearance = { push("appearance") },
                 onGuide = { push("guide") },
                 onFeatures = { push("features") },
+                onRules = { push("rules") },
+                onHelp = { push("help") },
                 onOpenTab = { kind -> goTo(AppTab.entries[kind.ordinal]) },
                 onBack = ::pop,
             )
@@ -589,6 +595,7 @@ private fun TabScaffold(
                     title = { Text(tab.label) },
                     actions = {
                         actions()
+                        HelpAction()
                         if (tab == AppTab.TODAY) {
                             IconButton(onClick = onSettings, modifier = Modifier.testTag("settings")) {
                                 Icon(Icons.Filled.Settings, contentDescription = "Settings")

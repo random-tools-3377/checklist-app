@@ -15,8 +15,8 @@ object MoneyPrices {
     /** The setting holding the rate in use (see [encode]). */
     const val RATE = "money_rate"
 
-    /** How far what the goals pay can drift from the rate in use before prices move: a tenth. */
-    const val DRIFT = 0.10
+    /** How far what the goals pay can drift from the rate in use before prices move: a tenth, unless the user changed it (see [Rules]). */
+    val DRIFT: Double get() = Rules.current.moneyDriftPercent / 100.0
 
     /** A full week is worked out over 13 weeks, so goals due monthly count fairly. */
     const val DAYS = 91
