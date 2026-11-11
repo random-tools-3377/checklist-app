@@ -46,12 +46,16 @@ data class Backup(
      * format 23 rewards whose price follows what they cost in money;
      * format 24 the budget;
      * format 25 bills and saving goals;
-     * format 26 a second mood each day, once everything due is done.
+     * format 26 a second mood each day, once everything due is done;
+     * format 27 the mood journal: a note at the second check-in, and what was behind each day's mood.
      */
     val checks: List<Check> = emptyList(),
     /** The user's own photo behind Today, in base64 (format 10). */
     val background: String? = null,
-    /** How the user felt each day (format 19), and again once everything was done (format 26). */
+    /**
+     * How the user felt each day (format 19), again once everything was done (format 26), and the
+     * notes and things behind it (format 27).
+     */
     val moods: List<Mood> = emptyList(),
     /**
      * The budget (format 24): money spent and received, its categories, and work days that
@@ -68,7 +72,7 @@ data class Backup(
         const val APP = "checklist"
 
         /** Raised whenever the file's layout changes in a way older versions can't read. */
-        const val FORMAT = 26
+        const val FORMAT = 27
 
         private val json = Json {
             prettyPrint = true

@@ -31,6 +31,7 @@ import io.github.randomtools3377.checklist.core.Repeat
 import io.github.randomtools3377.checklist.core.RewardSize
 import io.github.randomtools3377.checklist.core.Effort
 import io.github.randomtools3377.checklist.core.Mood
+import io.github.randomtools3377.checklist.core.MoodFactors
 import io.github.randomtools3377.checklist.core.Moods
 import io.github.randomtools3377.checklist.core.Challenge
 import io.github.randomtools3377.checklist.core.RepeatText
@@ -98,6 +99,8 @@ const val SETTING_MOOD = "mood_checkin"
 const val SETTING_MOOD_SKIPPED = "mood_skipped"
 /** The day the check-in once everything is done was put off ("Not now"), or its answer closed. */
 const val SETTING_MOOD_AFTER_CLOSED = "mood_after_closed"
+/** The day the notes under the morning's mood were closed ("Done"). */
+const val SETTING_MOOD_MORE_CLOSED = "mood_more_closed"
 /** The Monday of the last week planned, or put off, from the weekly planning card. */
 const val SETTING_WEEK_PLANNED = "week_planned"
 /** "done" once the welcome card on Today was answered (see GuideScreen). */
@@ -433,17 +436,16 @@ class Repository(private val db: AppDatabase, private val celebrations: GifStore
         dao.putSetting(SettingEntity(SETTING_GUIDE, "done"))
     }
 
-    /** How the user feels today, from the check-in on Today. A mood given once everything was done stays. */
+    /**
+     * How the user feels today, from the check-in on Today. A null [note] keeps the one there;
+     * blank clears it. The mood once everything was done, its note and the day's factors stay.
+     */
     suspend fun setMood(day: LocalDate, score: Int, note: String?) {
-        val old = dao.allMoods().firstOrNull { it.day == day.toEpochDay() }
+        val old = dao.mood(day.toEpochDay())
+        val text = if (note == null) old?.note else Moods.tidyNote(note)
         dao.putMood(
-            MoodEntity(
-                day.toEpochDay(), score.coerceIn(1, 5),
-                note?.trim()?.take(Moods.NOTE_LENGTH)?.takeIf { it.isNotEmpty() } ?: old?.note?.takeIf { note == null },
-                nowMillis(),
-                afterScore = old?.afterScore,
-                afterAt = old?.afterAt,
-            ),
+            old?.copy(score = score.coerceIn(1, 5), note = text, at = nowMillis())
+                ?: MoodEntity(day.toEpochDay(), score.coerceIn(1, 5), text, nowMillis()),
         )
     }
 
@@ -452,9 +454,66 @@ class Repository(private val db: AppDatabase, private val celebrations: GifStore
      * beside the morning's mood, so it needs one; false when there is none.
      */
     suspend fun setMoodAfter(day: LocalDate, score: Int): Boolean {
-        val old = dao.allMoods().firstOrNull { it.day == day.toEpochDay() } ?: return false
+        val old = dao.mood(day.toEpochDay()) ?: return false
         dao.putMood(old.copy(afterScore = score.coerceIn(1, 5), afterAt = nowMillis()))
         return true
+    }
+
+    /**
+     * The note from the morning's check-in, or with [after] the one from the check-in once
+     * everything was done; blank clears it. False when the day has no mood to go with.
+     */
+    suspend fun setMoodNote(day: LocalDate, note: String, after: Boolean = false): Boolean {
+        val old = dao.mood(day.toEpochDay()) ?: return false
+        val text = Moods.tidyNote(note)
+        dao.putMood(if (after) old.copy(afterNote = text) else old.copy(note = text))
+        return true
+    }
+
+    /** Picks [factor] for [day]'s mood, or takes it off if it was picked. Both check-ins share them. */
+    suspend fun toggleMoodFactor(day: LocalDate, factor: String): Boolean = db.withTransaction {
+        val old = dao.mood(day.toEpochDay()) ?: return@withTransaction false
+        val now = MoodFactors.toggle(MoodFactors.decode(old.factors), factor)
+        dao.putMood(old.copy(factors = MoodFactors.encode(now)))
+        true
+    }
+
+    /**
+     * A day changed in the mood journal: its moods, notes and factors. The moods keep when they
+     * were given, unless one is new. False when the day has no mood.
+     */
+    suspend fun editMoodDay(mood: Mood): Boolean = db.withTransaction {
+        val old = dao.mood(mood.day.toEpochDay()) ?: return@withTransaction false
+        val after = mood.after?.coerceIn(1, 5)
+        dao.putMood(
+            old.copy(
+                score = mood.score.coerceIn(1, 5),
+                note = Moods.tidyNote(mood.note),
+                afterScore = after,
+                afterAt = if (after == null) null else old.afterAt ?: nowMillis(),
+                afterNote = Moods.tidyNote(mood.afterNote),
+                factors = MoodFactors.encode(mood.factors),
+            ),
+        )
+        true
+    }
+
+    /** The things offered at the mood check-ins (see MoodFactors). */
+    suspend fun moodFactorList(): List<String> = MoodFactors.list(dao.setting(MoodFactors.SETTING))
+
+    /** Changes the things offered at the mood check-ins. Days that had one keep it. */
+    suspend fun setMoodFactorList(names: List<String>) {
+        setSetting(MoodFactors.SETTING, MoodFactors.encodeList(names))
+    }
+
+    /** Adds the user's own thing to the list, and picks it for [day]'s mood when there is one. */
+    suspend fun addMoodFactor(name: String, day: LocalDate?): Unit = db.withTransaction {
+        val clean = MoodFactors.tidy(name)
+        if (clean.isEmpty()) return@withTransaction
+        setMoodFactorList(MoodFactors.add(moodFactorList(), clean))
+        val old = day?.let { dao.mood(it.toEpochDay()) } ?: return@withTransaction
+        val picked = MoodFactors.decode(old.factors)
+        if (!MoodFactors.has(picked, clean)) dao.putMood(old.copy(factors = MoodFactors.encode(picked + clean)))
     }
 
     /** Puts a habit right after another in a habit chain, unless that would make a loop. False if it can't. */

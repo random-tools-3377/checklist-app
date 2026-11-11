@@ -1,6 +1,7 @@
 package io.github.randomtools3377.checklist.data
 
 import io.github.randomtools3377.checklist.core.Backup
+import io.github.randomtools3377.checklist.core.MoodFactors
 import io.github.randomtools3377.checklist.core.Repeat
 import io.github.randomtools3377.checklist.core.minusDays
 import kotlinx.coroutines.test.runTest
@@ -12,7 +13,10 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/** The morning's mood and the one once everything is done, in the database and the backup; and a chain set from them. */
+/**
+ * The morning's mood and the one once everything is done, their notes and the things behind them,
+ * in the database and the backup; the list of things; and a chain set from the moods.
+ */
 class MoodDataTest {
     private val db = openTestDatabase()
     private val dao = db.dao()
@@ -62,9 +66,71 @@ class MoodDataTest {
     }
 
     @Test
+    fun notesAndTheThingsBehindAMoodAreSavedWithTheDay() = runTest {
+        // Nothing to go with yet.
+        assertFalse(repository.setMoodNote(day, "hello"))
+        assertFalse(repository.toggleMoodFactor(day, "Work"))
+
+        repository.setMood(day, 2, null)
+        assertTrue(repository.toggleMoodFactor(day, "Slept badly"))
+        assertTrue(repository.toggleMoodFactor(day, "Work"))
+        assertTrue(repository.setMoodNote(day, "  tired after a late night  "))
+        assertEquals(listOf("Slept badly", "Work"), mood().factors)
+        assertEquals("tired after a late night", mood().note)
+
+        // Once everything is done: its own note; the factors are the day's, either check-in can change them.
+        repository.setMoodAfter(day, 4)
+        repository.setMoodNote(day, "went for a walk", after = true)
+        repository.toggleMoodFactor(day, "work")
+        repository.addMoodFactor("Sunshine", day)
+        val later = mood()
+        assertEquals(4, later.after)
+        assertEquals("went for a walk", later.afterNote)
+        assertEquals("tired after a late night", later.note, "the morning's note stays")
+        assertEquals(listOf("Slept badly", "Sunshine"), later.factors)
+        // The user's own thing is on the list now, after the app's own.
+        assertEquals(MoodFactors.BUILT_IN + "Sunshine", repository.moodFactorList())
+
+        // Changing the morning's mood keeps all of it.
+        repository.setMood(day, 3, null)
+        assertEquals(listOf("Slept badly", "Sunshine"), mood().factors)
+        assertEquals("went for a walk", mood().afterNote)
+
+        // A blank note clears it.
+        repository.setMoodNote(day, "   ", after = true)
+        assertNull(mood().afterNote)
+
+        // Taking a thing off the list leaves it on the day.
+        repository.setMoodFactorList(MoodFactors.remove(repository.moodFactorList(), "Slept badly"))
+        assertFalse(MoodFactors.has(repository.moodFactorList(), "Slept badly"))
+        assertEquals(listOf("Slept badly", "Sunshine"), mood().factors)
+        // Every one taken off stays taken off.
+        repository.setMoodFactorList(emptyList())
+        assertTrue(repository.moodFactorList().isEmpty())
+    }
+
+    @Test
+    fun aDayCanBeChangedInTheJournal() = runTest {
+        repository.setMood(day, 2, "first")
+        val before = mood()
+        assertTrue(repository.editMoodDay(before.copy(score = 3, after = 4, note = " ", afterNote = "later on", factors = listOf("Food", "food", "Health"))))
+        val changed = mood()
+        assertEquals(3, changed.score)
+        assertEquals(4, changed.after)
+        assertTrue((changed.afterAt ?: 0) > 0, "a new mood after gets its time")
+        assertNull(changed.note)
+        assertEquals("later on", changed.afterNote)
+        assertEquals(listOf("Food", "Health"), changed.factors)
+        assertEquals(before.at, changed.at, "the morning's mood keeps when it was given")
+        assertFalse(repository.editMoodDay(before.copy(day = day.minusDays(3))), "no mood that day")
+    }
+
+    @Test
     fun bothMoodsGoInTheBackup() = runTest {
         repository.setMood(day, 2, null)
         repository.setMoodAfter(day, 5)
+        repository.setMoodNote(day, "a good evening", after = true)
+        repository.toggleMoodFactor(day, "Friends and family")
         repository.setMood(day.minusDays(1), 3, null)
 
         val backup = Backup.decode(repository.exportBackup())
@@ -72,6 +138,8 @@ class MoodDataTest {
         val moods = backup.moods.sortedBy { it.day }
         assertEquals(listOf(3, 2), moods.map { it.score })
         assertEquals(listOf(null, 5), moods.map { it.after })
+        assertEquals(listOf(null, "a good evening"), moods.map { it.afterNote })
+        assertEquals(listOf(emptyList(), listOf("Friends and family")), moods.map { it.factors })
 
         dao.deleteMoods()
         repository.restore(backup)

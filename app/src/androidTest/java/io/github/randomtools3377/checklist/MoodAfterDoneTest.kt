@@ -3,10 +3,14 @@ package io.github.randomtools3377.checklist
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import io.github.randomtools3377.checklist.core.Feature
 import io.github.randomtools3377.checklist.core.Mood
+import io.github.randomtools3377.checklist.core.MoodFactors
 import io.github.randomtools3377.checklist.core.Period
 import io.github.randomtools3377.checklist.core.Repeat
 import io.github.randomtools3377.checklist.core.Tick
@@ -24,9 +28,10 @@ import org.junit.rules.RuleChain
 import org.junit.runner.RunWith
 
 /**
- * With the mood check-in on, a low morning suggests the goal that usually lifts the user, and
- * once everything due today is done, Today asks how they feel now and answers with how the mood
- * moved, the goals that lift them, and "Mood and your goals".
+ * With the mood check-in on, a low morning suggests the goal that usually goes with a better
+ * mood, and once everything due today is done, Today asks how the user feels now and answers
+ * with how the mood moved, never why: "What played a part?" takes the things behind it and a
+ * note, kept in the mood journal, with "Mood and your goals" a tap away.
  */
 @RunWith(AndroidJUnit4::class)
 class MoodAfterDoneTest {
@@ -73,7 +78,24 @@ class MoodAfterDoneTest {
     private fun text(tag: String): String = app.onAllNodesWithTag(tag, useUnmergedTree = true).fetchSemanticsNodes()
         .joinToString(" ") { node -> node.config.getOrElse(SemanticsProperties.Text) { emptyList() }.joinToString(" ") { it.text } }
 
+    /** The words in [tag] and everything inside it, read as one, the way a card shows them. */
+    private fun label(tag: String): String = app.onAllNodesWithTag(tag).fetchSemanticsNodes()
+        .joinToString(" ") { node -> node.config.getOrElse(SemanticsProperties.Text) { emptyList() }.joinToString(" ") { it.text } }
+
     private fun todaysMood() = runBlocking { dao.allMoods() }.firstOrNull { it.day == today.toEpochDay() }
+
+    private fun factorsToday() = MoodFactors.decode(todaysMood()?.factors)
+
+    /** Types [text] into the box tagged [tag], after scrolling it into view. */
+    private fun type(tag: String, text: String) {
+        val node = app.onNodeWithTag(tag)
+        try {
+            node.performScrollTo()
+        } catch (e: Throwable) {
+            // Not inside anything that scrolls.
+        }
+        node.performTextInput(text)
+    }
 
     private fun ticksToday() = runBlocking { dao.allTicks() }.count { it.day == today.toEpochDay() }
 
@@ -87,12 +109,15 @@ class MoodAfterDoneTest {
     }
 
     @Test
-    fun aLowMorningThenEverythingDoneAsksAgainAndShowsWhatLifts() {
-        // A low morning: the usual card, then a goal that usually lifts, to start with.
+    fun aLowMorningThenEverythingDoneAsksAgainAndKeepsWhatPlayedAPart() {
+        // A low morning: the usual card, then what's behind it, and a goal to start with.
         app.waitFor { shown("mood:2") }
         assert(!shown("mood-after"))
         app.tap("mood:2")
         app.waitFor { todaysMood()?.score == 2 }
+        app.waitFor { shown("mood-more") }
+        app.tap("mood-factor:Slept badly")
+        app.waitFor { factorsToday() == listOf("Slept badly") }
         app.waitFor { shown("mood-start-with") && text("mood-start-with").contains("Walk") }
 
         // Everything done: how does it feel now?
@@ -104,14 +129,45 @@ class MoodAfterDoneTest {
         app.waitFor { todaysMood()?.afterScore == 4 }
         assert(todaysMood()?.score == 2) { "the morning's mood stays" }
 
-        // The answer: how it moved, the goals that lift, and the page about them.
+        // The answer: how it moved, and nothing about why. The user says what played a part.
         app.waitFor { shown("mood-after-answer") }
         assert(text("mood-after-line").contains("Up from"))
+        assert(!text("mood-after-line").contains("helped")) { "it doesn't credit the goals" }
+        assert(!label("mood-after-answer").contains("helped"))
+        assert(text("mood-after-part").contains("What played a part?"))
+        app.tap("mood-after-factor:Outdoors")
+        app.waitFor { factorsToday() == listOf("Slept badly", "Outdoors") }
+        // Something of the user's own, added to the list too.
+        app.tap("mood-after-factor-add")
+        app.waitFor { shown("mood-after-factor-new") }
+        type("mood-after-factor-new", "Coffee")
+        app.tap("mood-after-factor-new-add")
+        app.waitFor { factorsToday() == listOf("Slept badly", "Outdoors", "Coffee") }
+        app.waitFor { MoodFactors.has(MoodFactors.list(runBlocking { dao.setting(MoodFactors.SETTING) }), "Coffee") }
+        // And a note of its own.
+        type("mood-after-note", "A walk with a friend")
+        app.tap("mood-after-note-save")
+        app.waitFor { todaysMood()?.afterNote == "A walk with a friend" }
+        assert(todaysMood()?.note == null) { "the morning's note is its own" }
         app.waitFor { text("mood-after-lifts").contains("Walk") }
+        assert(!text("mood-after-lifts").contains("lifts you"))
         assert(text("mood-today").contains("→"))
+
+        // The journal has the day, with what played a part and the note.
+        app.tap("mood-journal-open")
+        app.waitFor { shown("mood-journal") }
+        app.waitFor { shown("journal-day:$today") }
+        assert(label("journal-day:$today").contains("Outdoors"))
+        assert(label("journal-day:$today").contains("A walk with a friend"))
+        app.activityRule.scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
+
+        // Mood and your goals says what goes together.
+        app.waitFor { shown("mood-goals-open") }
         app.tap("mood-goals-open")
         app.waitFor { shown("mood-goals") }
         app.waitFor { shown("mood-lift:Walk") }
+        app.waitFor { app.shownIn("mood-goals", "mood-goals-caveat") }
+        assert(text("mood-goals-caveat").contains("doesn't say what causes what"))
 
         // Asked once a day.
         app.activityRule.scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
@@ -126,6 +182,14 @@ class MoodAfterDoneTest {
         app.waitFor { todaysMood()?.score == 3 }
         // Not a low morning: no suggestion.
         assert(!shown("mood-start-with"))
+        // A note under the morning's mood, then "Done".
+        app.waitFor { shown("mood-more") }
+        type("mood-more-note", "Busy day ahead")
+        app.tap("mood-more-note-save")
+        app.waitFor { todaysMood()?.note == "Busy day ahead" }
+        app.tap("mood-more-done")
+        app.waitFor { !shown("mood-more") }
+        app.waitFor { shown("mood-today") && text("mood-today").contains("note added") }
 
         tickBoth()
         app.waitFor { shown("mood-after") }

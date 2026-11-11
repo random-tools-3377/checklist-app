@@ -115,6 +115,7 @@ fun TodayScreen(
     onIdeas: (io.github.randomtools3377.checklist.core.SkillArea) -> Unit = {},
     onBudget: () -> Unit = {},
     onMoodGoals: () -> Unit = {},
+    onMoodJournal: () -> Unit = {},
     skipRequest: Long?,
     onSkipRequestHandled: () -> Unit,
     padding: PaddingValues,
@@ -165,6 +166,8 @@ fun TodayScreen(
     val moodAfter by vm.moodAfter.collectAsStateWithLifecycle()
     val moodStart by vm.moodStart.collectAsStateWithLifecycle()
     val moodFindings by vm.moodFindings.collectAsStateWithLifecycle()
+    val moodMore by vm.moodMore.collectAsStateWithLifecycle()
+    val moodFactorList by vm.moodFactorList.collectAsStateWithLifecycle()
     val lockSettings by vm.settings.collectAsStateWithLifecycle()
     val isUnlocked by vm.unlocked.collectAsStateWithLifecycle()
     // Moods sit behind the lock with reasons and notes, so what they show about goals does too.
@@ -357,16 +360,30 @@ fun TodayScreen(
                 Spacer(Modifier.height(12.dp))
             }
             todayMood?.let { mood ->
-                Text(
-                    "Today: ${io.github.randomtools3377.checklist.core.Moods.face(mood.score)}" +
-                        (mood.after?.let { " → ${io.github.randomtools3377.checklist.core.Moods.face(it)}" } ?: "") +
-                        (if (mood.note != null) " · note added" else " · Add a note"),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.clickable { moodNote = mood.note.orEmpty() }.padding(bottom = 8.dp).testTag("mood-today"),
-                )
+                if (moodMore) {
+                    // Just picked: what's behind it, and a note.
+                    MoodMoreCard(
+                        mood = mood,
+                        list = moodFactorList,
+                        locked = moodsLocked,
+                        onToggle = { vm.toggleMoodFactor(it) },
+                        onAdd = { vm.addMoodFactor(it) },
+                        onNote = { vm.setMoodNote(it, after = false) },
+                        onUnlock = onUnlock,
+                        onDone = vm::closeMoodMore,
+                    )
+                    Spacer(Modifier.height(12.dp))
+                } else {
+                    Text(
+                        "Today: " + moodFaces(mood) + (if (mood.note != null || mood.afterNote != null) " · note added" else " · Add a note"),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        // Notes sit behind the lock with reasons and notes: unlock first.
+                        modifier = Modifier.clickable { if (moodsLocked) onUnlock() else moodNote = mood.note.orEmpty() }.padding(bottom = 8.dp).testTag("mood-today"),
+                    )
+                }
             }
             // A morning that started low: a goal still to do that usually lifts the user, to start with.
             if (!moodsLocked) {
@@ -388,8 +405,16 @@ fun TodayScreen(
                     MoodAfterAnswer(
                         morning = after.morning,
                         after = answered,
+                        mood = todayMood,
+                        list = moodFactorList,
+                        locked = moodsLocked,
                         lifts = if (moodsLocked) null else io.github.randomtools3377.checklist.core.MoodInsights.liftsLine(moodFindings),
+                        onToggle = { vm.toggleMoodFactor(it) },
+                        onAdd = { vm.addMoodFactor(it) },
+                        onNote = { vm.setMoodNote(it, after = true) },
+                        onUnlock = onUnlock,
                         onMoodGoals = onMoodGoals,
+                        onJournal = onMoodJournal,
                         onClose = vm::closeMoodAfter,
                     )
                 }
@@ -822,11 +847,81 @@ private fun MoodAfterCheckIn(morning: Int, onMood: (Int) -> Unit, onLater: () ->
 }
 
 /**
- * The answer to the check-in once everything is done: how the mood moved, a line for tomorrow,
- * the goals that usually lift the user (left out behind the lock), and "Mood and your goals".
+ * Under the morning's mood, once it is picked: "What's behind it?" with the things that can
+ * play a part, and a note. Behind the lock with reasons and notes, it asks to unlock first.
  */
 @Composable
-private fun MoodAfterAnswer(morning: Int, after: Int, lifts: String?, onMoodGoals: () -> Unit, onClose: () -> Unit) {
+private fun MoodMoreCard(
+    mood: io.github.randomtools3377.checklist.core.Mood,
+    list: List<String>,
+    locked: Boolean,
+    onToggle: (String) -> Unit,
+    onAdd: (String) -> Unit,
+    onNote: (String) -> Unit,
+    onUnlock: () -> Unit,
+    onDone: () -> Unit,
+) {
+    Card(Modifier.fillMaxWidth().testTag("mood-more")) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(
+                "Today: ${io.github.randomtools3377.checklist.core.Moods.face(mood.score)} · " + io.github.randomtools3377.checklist.core.MoodInsights.BEHIND_QUESTION,
+                style = MaterialTheme.typography.titleSmall,
+            )
+            MoodNotes(mood, list, locked, note = mood.note, tag = "mood-factor", noteTag = "mood-more-note", onToggle, onAdd, onNote, onUnlock)
+            TextButton(onClick = onDone, modifier = Modifier.testTag("mood-more-done")) { Text("Done") }
+        }
+    }
+}
+
+/** The chips and note box at a check-in, or, behind the lock, a button to unlock them. */
+@Composable
+private fun MoodNotes(
+    mood: io.github.randomtools3377.checklist.core.Mood,
+    list: List<String>,
+    locked: Boolean,
+    note: String?,
+    tag: String,
+    noteTag: String,
+    onToggle: (String) -> Unit,
+    onAdd: (String) -> Unit,
+    onNote: (String) -> Unit,
+    onUnlock: () -> Unit,
+) {
+    if (locked) {
+        OutlinedButton(onClick = onUnlock, modifier = Modifier.testTag("mood-notes-unlock")) { Text("🔒 Notes are locked · Unlock") }
+        return
+    }
+    MoodFactorChips(
+        offered = io.github.randomtools3377.checklist.core.MoodFactors.offered(list, mood.factors),
+        picked = mood.factors,
+        tag = tag,
+        onToggle = onToggle,
+        onAdd = onAdd,
+    )
+    MoodNoteField(stored = note, placeholder = "A note, if you like", tag = noteTag, onSave = onNote)
+}
+
+/**
+ * The answer to the check-in once everything is done: how the mood moved since the morning, and
+ * nothing about why: "What played a part?" lets the user say, with a note. Then the goals that
+ * often go with a better mood (left out behind the lock), the journal and "Mood and your goals".
+ */
+@Composable
+private fun MoodAfterAnswer(
+    morning: Int,
+    after: Int,
+    mood: io.github.randomtools3377.checklist.core.Mood?,
+    list: List<String>,
+    locked: Boolean,
+    lifts: String?,
+    onToggle: (String) -> Unit,
+    onAdd: (String) -> Unit,
+    onNote: (String) -> Unit,
+    onUnlock: () -> Unit,
+    onMoodGoals: () -> Unit,
+    onJournal: () -> Unit,
+    onClose: () -> Unit,
+) {
     Card(
         modifier = Modifier.fillMaxWidth().testTag("mood-after-answer"),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
@@ -838,10 +933,19 @@ private fun MoodAfterAnswer(morning: Int, after: Int, lifts: String?, onMoodGoal
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.testTag("mood-after-line"),
             )
-            Text(io.github.randomtools3377.checklist.core.MoodInsights.encouragement(morning, after), style = MaterialTheme.typography.bodyMedium)
+            Text(
+                io.github.randomtools3377.checklist.core.MoodInsights.PART_QUESTION,
+                style = MaterialTheme.typography.titleSmall,
+                modifier = Modifier.testTag("mood-after-part"),
+            )
+            if (mood != null) {
+                MoodNotes(mood, list, locked, note = mood.afterNote, tag = "mood-after-factor", noteTag = "mood-after-note", onToggle, onAdd, onNote, onUnlock)
+            }
             lifts?.let { Text(it, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("mood-after-lifts")) }
+            // Two rows, so the buttons fit a narrow phone.
+            TextButton(onClick = onMoodGoals, modifier = Modifier.testTag("mood-goals-open")) { Text("Mood and your goals") }
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                TextButton(onClick = onMoodGoals, modifier = Modifier.testTag("mood-goals-open")) { Text("Mood and your goals") }
+                TextButton(onClick = onJournal, modifier = Modifier.testTag("mood-journal-open")) { Text("Mood journal") }
                 Spacer(Modifier.weight(1f))
                 TextButton(onClick = onClose, modifier = Modifier.testTag("mood-after-close")) { Text("Close") }
             }

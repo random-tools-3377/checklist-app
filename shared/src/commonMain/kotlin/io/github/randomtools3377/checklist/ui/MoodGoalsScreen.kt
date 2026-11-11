@@ -31,6 +31,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import io.github.randomtools3377.checklist.core.FactorMood
 import io.github.randomtools3377.checklist.core.Feature
 import io.github.randomtools3377.checklist.core.Goal
 import io.github.randomtools3377.checklist.core.GoalMood
@@ -40,12 +41,13 @@ import io.github.randomtools3377.checklist.core.Way
 import io.github.randomtools3377.checklist.core.WayKind
 
 /**
- * Mood and your goals: from the mood check-ins over the last 90 days, the goals that go with
- * feeling better, and the ones that go with feeling worse, each with kind ways into it.
+ * Mood and your goals: from the mood check-ins over the last 90 days, the goals that go with a
+ * better mood and the ones that go with a lower one, each of those with kind ways into it, and
+ * the same for the things noted at the check-ins. It only says what goes together.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MoodGoalsScreen(vm: MainViewModel, onEdit: (Long) -> Unit, onBack: () -> Unit) {
+fun MoodGoalsScreen(vm: MainViewModel, onEdit: (Long) -> Unit, onBack: () -> Unit, onJournal: () -> Unit = {}) {
     val findings by vm.moodFindings.collectAsStateWithLifecycle()
     val goals by vm.currentGoals.collectAsStateWithLifecycle()
     val features by vm.features.collectAsStateWithLifecycle()
@@ -66,6 +68,7 @@ fun MoodGoalsScreen(vm: MainViewModel, onEdit: (Long) -> Unit, onBack: () -> Uni
             onEdit = onEdit,
             onChain = { goal, after -> vm.setGoalAfter(goal.id, after.id) },
             onPay = { goal, points -> vm.setGoalPoints(goal.id, points) },
+            onJournal = onJournal,
         )
     }
 }
@@ -79,6 +82,7 @@ private fun MoodGoalsList(
     onEdit: (Long) -> Unit,
     onChain: (Goal, Goal) -> Unit,
     onPay: (Goal, Int) -> Unit,
+    onJournal: () -> Unit,
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize().testTag("mood-goals"),
@@ -88,28 +92,30 @@ private fun MoodGoalsList(
         item {
             Text(
                 "From your mood check-ins over the last ${MoodInsights.DAYS} days: how you feel on days you do each goal, " +
-                    "next to days it was due and not done. Moods go from 1 (😞) to 5 (😄).",
+                    "next to days it was due and not done, and on days you note something, next to days you don't. " +
+                    "Moods go from 1 (😞) to 5 (😄).",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            TextButton(onClick = onJournal, modifier = Modifier.testTag("mood-goals-journal")) { Text("Mood journal") }
         }
         when {
             !findings.enough -> item {
                 Text(MoodInsights.NOT_ENOUGH, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(top = 8.dp).testTag("mood-goals-empty"))
             }
-            findings.lifts.isEmpty() && findings.weighs.isEmpty() -> item {
+            !findings.anything -> item {
                 Text(MoodInsights.NOTHING_STANDS_OUT, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(top = 8.dp).testTag("mood-goals-none"))
             }
         }
         if (findings.lifts.isNotEmpty()) {
-            item { SectionTitle("What lifts you") }
+            item { SectionTitle("Goals that go with a better mood") }
             items(findings.lifts, key = { "lift-${it.goal.id}" }) { m -> LiftRow(m) }
         }
         if (findings.weighs.isNotEmpty()) {
-            item { SectionTitle("What weighs on you") }
+            item { SectionTitle("Goals that go with a lower mood") }
             item {
                 Text(
-                    "Not a judgement: some goals are just hard, or fall on hard days. Here are a few ways to make them lighter.",
+                    "Not a judgement: some goals are just hard, or fall on hard days. Here are a few ways that may make them easier.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -125,16 +131,33 @@ private fun MoodGoalsList(
                 )
             }
         }
+        if (findings.betterFactors.isNotEmpty()) {
+            item { SectionTitle("Things that go with a better mood") }
+            items(findings.betterFactors, key = { "better-${it.factor}" }) { f -> FactorRow(f, good = true) }
+        }
+        if (findings.lowerFactors.isNotEmpty()) {
+            item { SectionTitle("Things that go with a lower mood") }
+            items(findings.lowerFactors, key = { "lower-${it.factor}" }) { f -> FactorRow(f, good = false) }
+        }
         if (findings.enough) {
             item {
                 Text(
-                    "These show what tends to go together, not what causes what. They change as you keep checking in.",
+                    MoodInsights.CAVEAT + " They change as you keep checking in.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 8.dp),
+                    modifier = Modifier.padding(top = 8.dp).testTag("mood-goals-caveat"),
                 )
             }
         }
+    }
+}
+
+/** A thing noted at the check-ins, and how the mood goes on days it is noted. */
+@Composable
+private fun FactorRow(f: FactorMood, good: Boolean) {
+    Column(Modifier.fillMaxWidth().testTag("mood-factor-row:${f.factor}")) {
+        Text(MoodInsights.describe(f), style = MaterialTheme.typography.bodyLarge, color = if (good) goodColor() else MaterialTheme.colorScheme.onSurface)
+        Text(MoodInsights.basis(f), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
@@ -150,7 +173,7 @@ private fun LiftRow(m: GoalMood) {
     }
 }
 
-/** A goal that weighs on the user, with up to three ways into it. */
+/** A goal that goes with a lower mood, with up to three ways into it. */
 @Composable
 private fun WeighCard(m: GoalMood, ways: List<Way>, chainsOn: Boolean, onEdit: () -> Unit, onChain: (Goal) -> Unit, onPay: (Int) -> Unit) {
     val name = m.goal.name

@@ -10,7 +10,7 @@ enum class Feature(val key: String, val onValue: String, val title: String, val 
     TODOS("feature_todos", "1", "To-dos on Today", "A box on Today to add quick one-off to-dos, with or without a date.", "Today"),
     TIMELINE("feature_timeline", "1", "Timeline", "A Timeline button on Today and in the planner, to see the day by the hour and drag goals to other times.", "Today"),
     USUAL_REMINDERS("feature_usual_reminders", "1", "Reminders at your usual time", "Goals with no time and no reminder remind you around when you usually tick them, learned from the last 4 weeks.", "Today"),
-    MOOD("mood_checkin", "1", "Mood check-in", "Today asks how you feel each morning, and again once everything is done. The review shows it beside what got done, and \"Mood and your goals\" which goals lift you.", "Today"),
+    MOOD("mood_checkin", "1", "Mood check-in", "Today asks how you feel each morning, and again once everything is done, with a note and what played a part, kept in a mood journal. The review shows it beside what got done, and \"Mood and your goals\" what goes with a better mood.", "Today"),
     CALENDAR("phone_calendar", "1", "Phone calendar", "Your phone's calendar events in the planner, the timeline and Today, and pacing leaves their time out.", "Today"),
     WEEKLY_PLANNING("feature_weekly_planning", "1", "Weekly planning", "From Monday, a card on Today opens a few minutes of planning: last week, this week's target and the days ahead.", "Today"),
     SUGGESTIONS("feature_suggestions", "1", "Suggested points and prices", "\"How hard is it?\" on goals, with suggested points; and on rewards what they cost in money, which their price can follow, or how big they are.", "Goals and rewards"),

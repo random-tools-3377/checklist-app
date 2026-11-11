@@ -15,6 +15,7 @@ import io.github.randomtools3377.checklist.core.Effort
 import io.github.randomtools3377.checklist.core.Feature
 import io.github.randomtools3377.checklist.core.StreakBonus
 import io.github.randomtools3377.checklist.core.Mood
+import io.github.randomtools3377.checklist.core.MoodFactors
 import io.github.randomtools3377.checklist.core.MoodFindings
 import io.github.randomtools3377.checklist.core.MoodInsights
 import io.github.randomtools3377.checklist.core.ChallengeProgress
@@ -135,6 +136,7 @@ import io.github.randomtools3377.checklist.data.SETTING_GUIDE
 import io.github.randomtools3377.checklist.data.SETTING_WEEK_PLANNED
 import io.github.randomtools3377.checklist.data.SETTING_MOOD_SKIPPED
 import io.github.randomtools3377.checklist.data.SETTING_MOOD_AFTER_CLOSED
+import io.github.randomtools3377.checklist.data.SETTING_MOOD_MORE_CLOSED
 import io.github.randomtools3377.checklist.data.SETTING_MOOD
 import io.github.randomtools3377.checklist.data.SETTING_TREAT_BUDGET
 import io.github.randomtools3377.checklist.core.MoneyPrices
@@ -1746,8 +1748,9 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
     // Mood and your goals
 
     /**
-     * Which habits go with a better mood and which with a worse one, over the last 90 days (see
-     * MoodInsights). Private goals are left out while they are locked.
+     * Which habits, and which things noted at the check-ins, go with a better mood and which with
+     * a lower one, over the last 90 days (see MoodInsights). Private goals are left out while
+     * they are locked.
      */
     val moodFindings: StateFlow<MoodFindings> = today.flatMapLatest { day ->
         val from = day.minusDays(MoodInsights.DAYS)
@@ -1779,9 +1782,67 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
         viewModelScope.launch { repository.setMoodAfter(currentDay(), score) }
     }
 
-    /** "Not now" before answering, or closing the answer: either way it is gone until tomorrow. */
+    /**
+     * "Not now" before answering, or closing the answer: either way it is gone until tomorrow,
+     * and so are the morning's notes under it.
+     */
     fun closeMoodAfter() {
-        viewModelScope.launch { repository.setSetting(SETTING_MOOD_AFTER_CLOSED, currentDay().toString()) }
+        viewModelScope.launch {
+            repository.setSetting(SETTING_MOOD_AFTER_CLOSED, currentDay().toString())
+            repository.setSetting(SETTING_MOOD_MORE_CLOSED, currentDay().toString())
+        }
+    }
+
+    // The mood journal: notes and the things behind each day's mood
+
+    /**
+     * Whether Today shows "What's behind it?" under the morning's mood: from when it is given
+     * until "Done", or until the check-in once everything is done takes over.
+     */
+    val moodMore: StateFlow<Boolean> =
+        combine(today, todayMood, features, dao.observeSetting(SETTING_MOOD_MORE_CLOSED), moodAfter) { day, mood, on, closed, after ->
+            Feature.MOOD in on && mood != null && mood.after == null && closed != day.toString() && after == null
+        }.state(false)
+
+    fun closeMoodMore() {
+        viewModelScope.launch { repository.setSetting(SETTING_MOOD_MORE_CLOSED, currentDay().toString()) }
+    }
+
+    /** The things offered at the check-ins: the app's own until the user changes the list. */
+    val moodFactorList: StateFlow<List<String>> = dao.observeSetting(MoodFactors.SETTING).map { MoodFactors.list(it) }.state(MoodFactors.BUILT_IN)
+
+    /** Picks a thing behind today's mood, or takes it off. */
+    fun toggleMoodFactor(name: String, day: LocalDate = currentDay()) {
+        viewModelScope.launch { repository.toggleMoodFactor(day, name) }
+    }
+
+    /** The user's own thing, added to the list and picked for [day] (today unless said). */
+    fun addMoodFactor(name: String, day: LocalDate? = currentDay()) {
+        viewModelScope.launch { repository.addMoodFactor(name, day) }
+    }
+
+    /** Takes a thing off the list offered; days that had it keep it. */
+    fun removeMoodFactor(name: String) {
+        viewModelScope.launch { repository.setMoodFactorList(MoodFactors.remove(repository.moodFactorList(), name)) }
+    }
+
+    /** Puts back any of the app's own things that were taken off the list. */
+    fun restoreMoodFactors() {
+        viewModelScope.launch { repository.setMoodFactorList(MoodFactors.withBuiltIns(repository.moodFactorList())) }
+    }
+
+    /** Today's note from the morning's check-in, or with [after] from the one once everything is done. */
+    fun setMoodNote(note: String, after: Boolean) {
+        viewModelScope.launch { repository.setMoodNote(currentDay(), note, after) }
+    }
+
+    /** Every day with a mood, newest first, for the journal. */
+    val moodJournal: StateFlow<List<Mood>> =
+        dao.observeMoodsSince(Long.MIN_VALUE).map { rows -> rows.map { it.toCore() }.sortedByDescending { it.day } }.state(emptyList())
+
+    /** A day changed in the journal. */
+    fun editMoodDay(mood: Mood) {
+        viewModelScope.launch { repository.editMoodDay(mood) }
     }
 
     /** On a morning that started low (1 or 2): a goal still to do today that usually lifts the user. */

@@ -186,7 +186,8 @@ data class CheckEntity(
 
 /**
  * How the user felt each day, from 1 to 5, with an optional note. Added in version 16. Version 22
- * adds how they felt once everything due that day was done, and when that was answered.
+ * adds how they felt once everything due that day was done, and when that was answered; version
+ * 23 the note written then, and the things behind the day's mood, one to a line (see MoodFactors).
  */
 @Entity(tableName = "moods")
 data class MoodEntity(
@@ -197,6 +198,8 @@ data class MoodEntity(
     val at: Long,
     val afterScore: Int? = null,
     val afterAt: Long? = null,
+    val afterNote: String? = null,
+    val factors: String? = null,
 )
 
 /** Money spent or received, in cents (MoneyEntry in the shared code). Added in version 20. */
@@ -588,6 +591,7 @@ interface ChecklistDao {
     @Query("DELETE FROM checks WHERE id = :id") suspend fun deleteCheck(id: Long)
 
     @Query("SELECT * FROM moods WHERE day = :day") fun observeMood(day: Long): Flow<MoodEntity?>
+    @Query("SELECT * FROM moods WHERE day = :day") suspend fun mood(day: Long): MoodEntity?
     @Query("SELECT * FROM moods WHERE day >= :since ORDER BY day") fun observeMoodsSince(since: Long): Flow<List<MoodEntity>>
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun putMood(mood: MoodEntity)
     @Query("SELECT * FROM moods") suspend fun allMoods(): List<MoodEntity>
@@ -705,10 +709,10 @@ interface ChecklistDao {
         BillEntity::class,
         SavingGoalEntity::class,
     ],
-    version = 22,
+    version = 23,
     exportSchema = true,
     // Versions 4 to 8 only add tables and columns, so Room works the migrations out from the layouts.
-    autoMigrations = [AutoMigration(from = 3, to = 4), AutoMigration(from = 4, to = 5), AutoMigration(from = 5, to = 6), AutoMigration(from = 6, to = 7), AutoMigration(from = 7, to = 8), AutoMigration(from = 8, to = 9), AutoMigration(from = 9, to = 10), AutoMigration(from = 10, to = 11), AutoMigration(from = 11, to = 12), AutoMigration(from = 12, to = 13), AutoMigration(from = 13, to = 14), AutoMigration(from = 14, to = 15), AutoMigration(from = 15, to = 16), AutoMigration(from = 16, to = 17), AutoMigration(from = 17, to = 18), AutoMigration(from = 18, to = 19), AutoMigration(from = 19, to = 20), AutoMigration(from = 20, to = 21), AutoMigration(from = 21, to = 22)],
+    autoMigrations = [AutoMigration(from = 3, to = 4), AutoMigration(from = 4, to = 5), AutoMigration(from = 5, to = 6), AutoMigration(from = 6, to = 7), AutoMigration(from = 7, to = 8), AutoMigration(from = 8, to = 9), AutoMigration(from = 9, to = 10), AutoMigration(from = 10, to = 11), AutoMigration(from = 11, to = 12), AutoMigration(from = 12, to = 13), AutoMigration(from = 13, to = 14), AutoMigration(from = 14, to = 15), AutoMigration(from = 15, to = 16), AutoMigration(from = 16, to = 17), AutoMigration(from = 17, to = 18), AutoMigration(from = 18, to = 19), AutoMigration(from = 19, to = 20), AutoMigration(from = 20, to = 21), AutoMigration(from = 21, to = 22), AutoMigration(from = 22, to = 23)],
 )
 @ConstructedBy(AppDatabaseConstructor::class)
 abstract class AppDatabase : RoomDatabase() {

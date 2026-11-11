@@ -83,8 +83,9 @@ fun ReviewScreen(
     coachCard: @Composable (ReviewSummary) -> Unit = {},
     /** Whether the character is on, which adds the level badges. */
     character: Boolean = false,
-    /** Opens "Mood and your goals", from the mood part. */
+    /** Opens "Mood and your goals", and the mood journal, from the mood part. */
     onMoodGoals: () -> Unit = {},
+    onMoodJournal: () -> Unit = {},
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize().testTag("review"),
@@ -138,7 +139,7 @@ fun ReviewScreen(
         if (summary.categories.isNotEmpty()) item { CategoriesCard(summary) }
         item { ReasonsCard(summary, hideReasons) }
         val shownMoods = moods.filter { it.day >= summary.from && it.day <= summary.to }
-        if (shownMoods.isNotEmpty() && !hideReasons) item { MoodCard(shownMoods, summary, onMoodGoals) }
+        if (shownMoods.isNotEmpty() && !hideReasons) item { MoodCard(shownMoods, summary, onMoodGoals, onMoodJournal) }
         if (summary.gaps.isNotEmpty()) item { GapsCard(summary.gaps, hideGapNotes) }
         item { StatsCard(summary, streaks) }
     }
@@ -234,7 +235,7 @@ private fun YearCard(summary: ReviewSummary, moods: List<io.github.randomtools33
 
 /** How the user felt each day, beside how much of what was due got done. */
 @Composable
-private fun MoodCard(moods: List<io.github.randomtools3377.checklist.core.Mood>, summary: ReviewSummary, onMoodGoals: () -> Unit) {
+private fun MoodCard(moods: List<io.github.randomtools3377.checklist.core.Mood>, summary: ReviewSummary, onMoodGoals: () -> Unit, onMoodJournal: () -> Unit) {
     ReviewCard("Mood") {
         val wide = moods.any { it.after != null }
         Column(Modifier.testTag("review-moods")) {
@@ -250,7 +251,11 @@ private fun MoodCard(moods: List<io.github.randomtools3377.checklist.core.Mood>,
                     )
                     Column(Modifier.weight(1f)) {
                         Text(shortDate(mood.day), style = MaterialTheme.typography.bodyMedium)
+                        if (mood.factors.isNotEmpty()) {
+                            Text(mood.factors.joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                        }
                         mood.note?.let { Text("“$it”", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                        mood.afterNote?.let { Text("Later: “$it”", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                     }
                     Text(
                         record?.takeIf { it.due > 0 }?.let { "${it.done} of ${it.due} done" } ?: "nothing due",
@@ -260,7 +265,10 @@ private fun MoodCard(moods: List<io.github.randomtools3377.checklist.core.Mood>,
                 }
             }
         }
-        androidx.compose.material3.TextButton(onClick = onMoodGoals, modifier = Modifier.testTag("review-mood-goals")) { Text("Mood and your goals") }
+        Row {
+            androidx.compose.material3.TextButton(onClick = onMoodJournal, modifier = Modifier.testTag("review-mood-journal")) { Text("Mood journal") }
+            androidx.compose.material3.TextButton(onClick = onMoodGoals, modifier = Modifier.testTag("review-mood-goals")) { Text("Mood and your goals") }
+        }
     }
 }
 

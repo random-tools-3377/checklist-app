@@ -701,24 +701,46 @@ Build order **(default)**, each step a Release the owner can try:
     asks "How do you feel now?" with the same five faces; after a morning of 1 or 2 it says the
     day started low first. It is a second mood for the day (in the backup file from format 26),
     asked once a day; "Not now" puts it off until the next day, and without a morning mood the
-    usual card asks instead. The answer says how the mood moved ("Up from 🙁 to 🙂 — getting it
-    all done helped"; gentle when it is still 1 or 2: you did everything anyway, and that
-    counts), one line for tomorrow, the goals that usually lift the user, and opens "Mood and
-    your goals". That page, also opened from the review's mood part, looks at each active habit
+    usual card asks instead. The answer says how the mood moved, and since 0.61.0 nothing about
+    why (see below), the goals that often go with a better mood, and opens "Mood and your
+    goals". That page, also opened from the review's mood part, looks at each active habit
     over the 90 days before today, using the mood once everything was done where given and the
     morning's otherwise: the mood on days it was done against days it was due and not done (a
     goal counted per week, month or year: days ticked against days it was still to do), and the
     change from the morning on days it was done with both moods. It needs at least 3 days each
     way, and half a point or more counts; both are in "Points and rules" under "Mood and your
     goals". A goal done on better days lifts; one done on worse days, or whose days fall from the
-    morning by half a point or more, weighs; biggest first, each with its numbers in plain words.
-    Each one that weighs gets up to three ways in: doing it right after the goal that lifts most
-    (with Habit chains on, a button sets the chain), making it smaller (its editor), paying half
-    as much again (one tap, rounded, at least 1 more) and getting it out of the way early. On a
+    morning by half a point or more, weighs; biggest first, each with its numbers in plain words
+    (the page says "goes with a better mood" and "goes with a lower mood", never "lifts" or
+    "helped"). Each one that weighs gets up to three ways in: doing it right after the goal that
+    lifts most (with Habit chains on, a button sets the chain), making it smaller (its editor),
+    paying half as much again (one tap, rounded, at least 1 more) and getting it out of the way
+    early. On a
     morning of 1 or 2, Today suggests starting with a goal due that usually lifts the user. The
     words are kind, never blaming, and say what goes together, not what causes what. The page is
     behind the lock with reasons and notes, or with the review; the lifts on Today and the
     morning suggestion hide with reasons and notes; private goals are left out while locked.
+
+    Then, chosen by the owner (0.61.0). Decided: mood check-ins take notes and the things behind
+    a mood, kept as a journal; the app doesn't claim that getting things done is what changed the
+    mood. **Details (default):** the answer once everything is done only says how the mood moved
+    ("Up from 🙁 to 🙂.", "Same as this morning.", "Down from 🙂 to 🙁 — that's all right.") and
+    asks "What played a part?"; after the morning's face Today asks "What's behind it?" until
+    "Done", or until the check-in once everything is done takes over. Both offer the same chips
+    and a short note with "Save": the chips are for the whole day, so either check-in can add or
+    take one off, and each check-in has its own note (in the backup file from format 27). The
+    chips start as Slept well, Slept badly, Exercise, Outdoors, Friends and family, Alone time,
+    Work, Health, Weather, Food, Money, Screen time and News; "+ Add your own" adds one to the
+    list and picks it. The "Mood journal" page (from the answer card, the review's mood part and
+    "Mood and your goals") lists every day with a mood, newest first: both faces, the chips and
+    both notes; tapping a day changes its faces, chips and notes. "Edit the list" there takes
+    any chip off the list (days that had it keep it), adds the user's own, and puts back the
+    app's own. "Mood and your goals" also lists the things that go with a better or a lower
+    mood, compared like the goals (days noted against days with a mood not noted, the same 90
+    days, day mood and rules), like "Slept well: your mood is about 1.1 higher on days you note
+    it.", under "These go together; it doesn't say what causes what." The journal is locked like
+    "Mood and your goals"; on Today the chips and notes ask to unlock first while reasons and
+    notes are locked; notes never go in a widget or a notification.
 
 18. Then, chosen by the owner, a budget (see "Budget"): the budget itself (0.57.0), then bills,
     savings goals, reports and the budget game (0.58.0).
@@ -727,6 +749,8 @@ Build order **(default)**, each step a Release the owner can try:
 20. Also chosen by the owner after 0.59.0: a mood check-in once everything is done, with the
     goals that lift the mood and ways into those that weigh on it, and the Windows version
     (0.60.0; see the end of 17, and "Windows").
+21. Then, chosen by the owner: notes and the things behind each mood, kept as a mood journal,
+    without claiming that getting things done changed the mood (0.61.0; see the end of 17).
 
 ## Talking to the owner
 

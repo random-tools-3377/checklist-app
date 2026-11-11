@@ -46,7 +46,7 @@ class MoodInsightsTest {
         assertEquals(1, found.compared)
         assertEquals("On days you do it, your mood is about 2.0 higher.", MoodInsights.describe(lift))
         assertEquals("From 5 days done and 5 days not done.", MoodInsights.basis(lift))
-        assertEquals("What usually lifts you: ⭐ Run.", MoodInsights.liftsLine(found))
+        assertEquals("Goals that often go with a better mood: ⭐ Run.", MoodInsights.liftsLine(found))
     }
 
     @Test
@@ -224,13 +224,33 @@ class MoodInsightsTest {
         assertEquals("You started the day feeling low. You've done everything — how do you feel now?", MoodInsights.question(1))
         assertTrue(MoodInsights.question(3).endsWith("How do you feel now?"))
 
-        assertEquals("Up from 🙁 to 🙂 — getting it all done helped.", MoodInsights.answer(2, 4))
-        assertTrue(MoodInsights.encouragement(2, 4).startsWith("Keep it going tomorrow"))
-        assertEquals("Still heavy — and you did everything anyway. That counts.", MoodInsights.answer(2, 2))
-        assertEquals("Still heavy — and you did everything anyway. That counts.", MoodInsights.answer(4, 1))
-        assertEquals("Everything done, and feeling great. Brilliant!", MoodInsights.answer(5, 5))
-        assertEquals("Everything done, and feeling good. Lovely.", MoodInsights.answer(5, 4))
-        assertEquals("Everything done. Nice work — time to rest.", MoodInsights.answer(4, 3))
+        // Only how it moved: never why.
+        assertEquals("Up from 🙁 to 🙂.", MoodInsights.answer(2, 4))
+        assertEquals("Same as this morning.", MoodInsights.answer(2, 2))
+        assertEquals("Same as this morning.", MoodInsights.answer(5, 5))
+        assertEquals("Down from 🙂 to 🙁 — that's all right.", MoodInsights.answer(4, 2))
+        assertEquals("Feeling 😐 now.", MoodInsights.answer(null, 3))
+        for (morning in 1..5) for (after in 1..5) {
+            val said = MoodInsights.answer(morning, after).lowercase()
+            for (word in listOf("helped", "because", "done", "lift")) assertFalse(word in said, "\"$said\" says $word")
+        }
+        assertEquals("What played a part?", MoodInsights.PART_QUESTION)
+        assertEquals("What's behind it?", MoodInsights.BEHIND_QUESTION)
+    }
+
+    @Test
+    fun theWordsSayWhatGoesTogetherNeverWhatCauses() {
+        val run = habit(1, "Run")
+        val desk = habit(2, "Desk")
+        val found = MoodFindings(listOf(GoalMood(run, 5, 5, 4.0, 2.0)), listOf(GoalMood(desk, 5, 5, 2.0, 4.0)), 2)
+        val words = listOf(
+            MoodInsights.liftsLine(found)!!, MoodInsights.NOT_ENOUGH, MoodInsights.NOTHING_STANDS_OUT, MoodInsights.CAVEAT,
+            MoodInsights.describe(found.lifts[0]), MoodInsights.describe(found.weighs[0]),
+        ) + MoodInsights.ways(found.weighs[0], found, listOf(run, desk)).map { it.text }
+        for (text in words) {
+            for (word in listOf("helped", "lifts you", "lift you", "makes a difference", "because")) assertFalse(word in text, "\"$text\" says $word")
+        }
+        assertEquals("These go together; it doesn't say what causes what.", MoodInsights.CAVEAT)
     }
 
     @Test
@@ -257,19 +277,99 @@ class MoodInsightsTest {
     }
 
     @Test
-    fun theSecondMoodGoesThroughTheBackup() {
+    fun theSecondMoodNotesAndFactorsGoThroughTheBackup() {
         val day = LocalDate(2026, 11, 10)
-        val moods = listOf(Mood(day, 2, "rough start", at = 1_000, after = 4, afterAt = 2_000), Mood(day.minusDays(1), 3, at = 500))
+        val moods = listOf(
+            Mood(day, 2, "rough start", at = 1_000, after = 4, afterAt = 2_000, afterNote = "a walk with a friend", factors = listOf("Slept badly", "Friends and family")),
+            Mood(day.minusDays(1), 3, at = 500),
+        )
         val backup = Backup(exportedAt = 0, goals = emptyList(), steps = emptyList(), ticks = emptyList(), entries = emptyList(), rewards = emptyList(), purchases = emptyList(), settings = emptyMap(), moods = moods)
         val back = Backup.decode(Backup.encode(backup))
-        assertEquals(26, back.format)
+        assertEquals(27, back.format)
+        assertEquals("a walk with a friend", back.moods[0].afterNote)
+        assertEquals(listOf("Slept badly", "Friends and family"), back.moods[0].factors)
         assertEquals(moods, back.moods)
         assertEquals(4, back.moods[0].last)
         assertEquals(3, back.moods[1].last)
 
-        // A file from before has no second mood.
-        val older = Backup.encode(backup.copy(moods = listOf(Mood(day, 3, at = 7)))).replace(Regex(",\\s*\"after\": null|,\\s*\"afterAt\": null"), "")
-        assertTrue("\"after\"" !in older)
+        // A file from before has no second mood, notes after it or factors.
+        val older = Backup.encode(backup.copy(moods = listOf(Mood(day, 3, at = 7))))
+            .replace(Regex(",\\s*\"(after|afterAt|afterNote)\": null|,\\s*\"factors\": \\[\\s*]"), "")
+        assertTrue("\"after" !in older && "\"factors\"" !in older)
         assertEquals(listOf(Mood(day, 3, at = 7)), Backup.decode(older).moods)
+    }
+
+    @Test
+    fun thingsNotedOnBetterAndLowerDaysAreFound() {
+        // Moods over the last eight days: "Slept well" on the good ones, "News" on the low ones,
+        // "Work" on both alike, and "Coffee" noted only twice.
+        val moods = listOf(
+            Mood(ago(1), 4, factors = listOf("Slept well", "Work", "Coffee")),
+            Mood(ago(2), 5, factors = listOf("Slept well")),
+            Mood(ago(3), 4, factors = listOf("slept WELL", "Work")),
+            Mood(ago(4), 2, factors = listOf("News", "Work", "Coffee")),
+            Mood(ago(5), 2, factors = listOf("News")),
+            Mood(ago(6), 3, factors = listOf("News", "Work")),
+            Mood(ago(7), 2, after = 4, factors = listOf("Slept well")),
+            Mood(ago(8), 3),
+        )
+        val found = MoodInsights.find(emptyList(), emptyList(), moods, today, Rules())
+        assertTrue(found.lifts.isEmpty() && found.weighs.isEmpty())
+        assertTrue(found.enough)
+
+        // Slept well: 4, 5, 4 and 4 (the mood once everything was done counts) against 2, 2, 3, 3.
+        val slept = found.betterFactors.single()
+        assertEquals("Slept well", slept.factor, "one name, whatever its capitals")
+        assertEquals(4, slept.notedDays)
+        assertEquals(4, slept.otherDays)
+        assertEquals(4.25, slept.moodNoted)
+        assertEquals(2.5, slept.moodOther)
+        assertEquals("Slept well: your mood is about 1.8 higher on days you note it.", MoodInsights.describe(slept))
+        assertEquals("From 4 days noted and 4 days not.", MoodInsights.basis(slept))
+
+        // News: 2, 2, 3 against 4, 5, 4, 4, 3.
+        val news = found.lowerFactors.single()
+        assertEquals("News", news.factor)
+        assertEquals("News: your mood is about 1.7 lower on days you note it.", MoodInsights.describe(news))
+
+        // Work goes with neither; Coffee isn't compared, with only two days.
+        assertEquals(3, found.factorsCompared, "Slept well, Work and News")
+        assertTrue(found.betterFactors.none { it.factor == "Coffee" } && found.lowerFactors.none { it.factor == "Coffee" })
+
+        // The same rules as the goals: a whole point needed, or two days enough.
+        assertTrue(MoodInsights.find(emptyList(), emptyList(), moods, today, Rules(moodNotableTenths = 20)).betterFactors.isEmpty())
+        val two = MoodInsights.find(emptyList(), emptyList(), moods, today, Rules(moodMinDays = 2))
+        assertEquals(4, two.factorsCompared)
+        // Only the 90 days before today count.
+        val old = moods.map { it.copy(day = it.day.minusDays(100)) }
+        assertEquals(MoodFindings.NONE, MoodInsights.find(emptyList(), emptyList(), old, today, Rules()))
+    }
+
+    @Test
+    fun theListOfThingsStartsWithTheAppsOwnAndCanChange() {
+        assertEquals(MoodFactors.BUILT_IN, MoodFactors.list(null))
+        assertEquals(13, MoodFactors.BUILT_IN.size)
+        // Every one taken off: an empty list, not the app's own again.
+        assertEquals(emptyList(), MoodFactors.list(MoodFactors.encodeList(emptyList())))
+        val mine = MoodFactors.add(MoodFactors.remove(MoodFactors.BUILT_IN, "news"), "  Coffee \n time ")
+        assertFalse(MoodFactors.has(mine, "News"))
+        assertEquals("Coffee time", mine.last())
+        assertEquals(mine, MoodFactors.list(MoodFactors.encodeList(mine)))
+        assertEquals(mine, MoodFactors.add(mine, "coffee TIME"), "already there")
+        assertTrue(MoodFactors.has(MoodFactors.withBuiltIns(mine), "News"))
+        assertEquals(MoodFactors.LENGTH, MoodFactors.tidy("x".repeat(80)).length)
+
+        // A day keeps a thing taken off the list, and it is still offered for that day.
+        assertEquals(mine + "News", MoodFactors.offered(mine, listOf("News")))
+        assertEquals(mine, MoodFactors.offered(mine, listOf("coffee time")), "already on the list, as the list spells it")
+
+        // Picking and unpicking.
+        val picked = MoodFactors.toggle(emptyList(), "Work")
+        assertEquals(listOf("Work"), picked)
+        assertEquals(listOf("Work", "Food"), MoodFactors.toggle(picked, "Food"))
+        assertEquals(emptyList(), MoodFactors.toggle(picked, "work"))
+        assertEquals(picked, MoodFactors.toggle(picked, "   "))
+        assertEquals(listOf("A", "B"), MoodFactors.decode(MoodFactors.encode(listOf("A", "", " B ", "a"))))
+        assertNull(MoodFactors.encode(emptyList()))
     }
 }
