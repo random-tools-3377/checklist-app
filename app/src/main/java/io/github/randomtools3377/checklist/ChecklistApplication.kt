@@ -2,7 +2,6 @@ package io.github.randomtools3377.checklist
 
 import android.app.Application
 import androidx.room.InvalidationTracker
-import androidx.room.withTransaction
 import io.github.randomtools3377.checklist.core.Book
 import io.github.randomtools3377.checklist.core.Gaps
 import io.github.randomtools3377.checklist.core.Interest
@@ -18,6 +17,7 @@ import io.github.randomtools3377.checklist.data.SETTING_APP_ICON
 import io.github.randomtools3377.checklist.data.SETTING_POINTS_NAME
 import io.github.randomtools3377.checklist.data.BackgroundPhoto
 import io.github.randomtools3377.checklist.data.AppDatabase
+import io.github.randomtools3377.checklist.data.SharedParts
 import io.github.randomtools3377.checklist.data.open
 import io.github.randomtools3377.checklist.data.CelebrationFiles
 import io.github.randomtools3377.checklist.data.Repository
@@ -35,6 +35,9 @@ class ChecklistApplication : Application() {
     /** Opened on first use, not at start-up. */
     val container: Container by lazy { Container(this) }
 
+    /** What the shared screens ask of this phone. */
+    val phone: AndroidPhone by lazy { AndroidPhone(this) }
+
     override fun onCreate() {
         super.onCreate()
         Reminders.createChannel(this)
@@ -44,31 +47,22 @@ class ChecklistApplication : Application() {
 @OptIn(FlowPreview::class)
 class Container(app: Application) {
     val db: AppDatabase = AppDatabase.open(app)
-    val book = Book(RoomStore(db))
-    val lapses = Lapses(RoomStore(db), book)
-    val gaps = Gaps(RoomStore(db), book)
-    val interest = Interest(RoomStore(db), book)
-    val perfectDays = PerfectDays(RoomStore(db), book)
-    val combos = io.github.randomtools3377.checklist.core.Combos(RoomStore(db), book)
-    val bets = io.github.randomtools3377.checklist.core.Bets(RoomStore(db), book)
+    val celebrationFiles = CelebrationFiles(app.filesDir)
+    val backgroundPhoto = BackgroundPhoto(app.filesDir)
+
+    /** The parts every phone shares: the database and everything built on it. */
+    val parts = SharedParts(db, celebrationFiles, backgroundPhoto)
+    val book get() = parts.book
+    val lapses get() = parts.lapses
+    val gaps get() = parts.gaps
+    val bets get() = parts.bets
+    val repository get() = parts.repository
 
     /**
      * Finds misses since the last check, then gaps. When the app opens, and when the day ends.
      * Both in one transaction, so the misses a gap covers never show on their own first.
      */
-    suspend fun closeDays() {
-        db.withTransaction {
-            lapses.closeDays()
-            gaps.find()
-            interest.pay()
-            perfectDays.pay()
-            combos.pay()
-            bets.settle()
-        }
-    }
-    val celebrationFiles = CelebrationFiles(app.filesDir)
-    val backgroundPhoto = BackgroundPhoto(app.filesDir)
-    val repository = Repository(db, celebrationFiles, backgroundPhoto)
+    suspend fun closeDays() = parts.closeDays()
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val changes = MutableSharedFlow<Unit>(replay = 1, extraBufferCapacity = 1)

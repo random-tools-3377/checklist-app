@@ -9,25 +9,6 @@ import io.github.randomtools3377.checklist.core.AiContract
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-/**
- * What this app knows about Checklist AI, the separate app that runs the AI. [version] is its
- * version when it answered; [ready] whether its AI file is added; [problem] why it didn't answer.
- */
-data class AiStatus(
-    val installed: Boolean,
-    val version: String? = null,
-    val ready: Boolean = false,
-    val problem: String? = null,
-    /** Whether Checklist AI's speech file is added, for voice. */
-    val speechReady: Boolean = false,
-) {
-    /** Whether the AI can be asked now. */
-    val usable: Boolean get() = installed && ready && problem == null
-
-    /** Whether the two apps are different versions, which they shouldn't be. */
-    val outOfStep: Boolean get() = version != null && version != BuildConfig.VERSION_NAME
-}
-
 /** Asks Checklist AI, through the door only apps signed with the same key can use. */
 object AiClient {
     private val uri: Uri = Uri.parse("content://${AiContract.AUTHORITY}")
@@ -39,18 +20,19 @@ object AiClient {
         runCatching { context.packageManager.getPackageInfo(AiContract.PACKAGE, 0) }.isSuccess
 
     suspend fun status(context: Context): AiStatus = withContext(Dispatchers.IO) {
-        if (!installed(context)) return@withContext AiStatus(installed = false)
+        if (!installed(context)) return@withContext AiStatus(installed = false, appVersion = BuildConfig.VERSION_NAME)
         try {
             val answer = context.contentResolver.call(uri, AiContract.METHOD_STATUS, null, null)
-                ?: return@withContext AiStatus(installed = true, problem = "no answer")
+                ?: return@withContext AiStatus(installed = true, problem = "no answer", appVersion = BuildConfig.VERSION_NAME)
             AiStatus(
                 installed = true,
+                appVersion = BuildConfig.VERSION_NAME,
                 version = answer.getString(AiContract.KEY_VERSION),
                 ready = answer.getBoolean(AiContract.KEY_READY),
                 speechReady = answer.getBoolean(AiContract.KEY_SPEECH_READY),
             )
         } catch (e: Exception) {
-            AiStatus(installed = true, problem = e.message ?: e.javaClass.simpleName)
+            AiStatus(installed = true, problem = e.message ?: e.javaClass.simpleName, appVersion = BuildConfig.VERSION_NAME)
         }
     }
 

@@ -1,6 +1,5 @@
 package io.github.randomtools3377.checklist.ui
 
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -47,11 +46,11 @@ private fun clockText(millis: Long): String {
  */
 @Composable
 fun FocusScreen(state: FocusState, goal: Goal?, onPause: () -> Unit, onResume: () -> Unit, onDone: () -> Unit, onStop: () -> Unit) {
-    BackHandler(onBack = onStop)
-    var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    BackButton(onBack = onStop)
+    var now by remember { mutableLongStateOf(io.github.randomtools3377.checklist.data.nowMillis()) }
     LaunchedEffect(state) {
         while (true) {
-            now = System.currentTimeMillis()
+            now = io.github.randomtools3377.checklist.data.nowMillis()
             if (state.running && state.left(now) <= 0) {
                 onDone()
                 break

@@ -3,10 +3,6 @@
 package io.github.randomtools3377.checklist.ui
 
 import androidx.compose.material3.Checkbox
-import android.Manifest
-import android.os.Build
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -67,7 +63,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.toMutableStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
@@ -98,7 +93,6 @@ import io.github.randomtools3377.checklist.core.monthShort
 import io.github.randomtools3377.checklist.core.ordinal
 import io.github.randomtools3377.checklist.core.weekdayShort
 import io.github.randomtools3377.checklist.data.HabitDraft
-import io.github.randomtools3377.checklist.reminders.Reminders
 import io.github.randomtools3377.checklist.data.ProjectDraft
 import io.github.randomtools3377.checklist.data.TodoDraft
 import io.github.randomtools3377.checklist.core.Todos
@@ -572,8 +566,8 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Long)
     var skill by rememberSaveable { mutableStateOf<String?>(null) }
     var showErrors by rememberSaveable { mutableStateOf(false) }
     var choosingRepeat by remember { mutableStateOf(false) }
-    val context = LocalContext.current
-    val askPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { onClose() }
+    val phone = LocalPhone.current
+    val askPermission = rememberAsk(Ask.NOTIFICATIONS) { onClose() }
 
     LaunchedEffect(id) {
         if (!loaded) {
@@ -788,8 +782,8 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Long)
                             eachTimesSet.isNotEmpty() || (!severalADay && atMinute != null) -> notifyOnTime || alertBefore != null
                             else -> remindAtMinute != null
                         }
-                        if (wantsNotifications && !Reminders.canNotify(context) && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                            askPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+                        if (wantsNotifications && !phone.canNotify()) {
+                            askPermission()
                         } else {
                             onClose()
                         }

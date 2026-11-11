@@ -2,6 +2,8 @@
 
 package io.github.randomtools3377.checklist.ui
 
+import org.jetbrains.compose.resources.decodeToImageBitmap
+
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -39,25 +41,18 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import android.text.format.DateFormat
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.TimePicker
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.rememberTimePickerState
-import androidx.compose.ui.platform.LocalContext
 import io.github.randomtools3377.checklist.data.nowLocal
 import io.github.randomtools3377.checklist.data.toDay
 import io.github.randomtools3377.checklist.data.toEpochDay
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.LocalTime
-import kotlinx.datetime.toJavaLocalDate
-import kotlinx.datetime.toJavaLocalTime
-import java.time.format.DateTimeFormatter
-import java.time.format.FormatStyle
-import java.util.Locale
 
 const val GOAL_ICON = "⭐"
 const val REWARD_ICON = "🎁"
@@ -98,17 +93,6 @@ fun pointsWord(n: Int = 2): String = PointsLabel.name.word(n)
 
 /** "Points", or what the user calls them, for headings. */
 fun pointsTitle(): String = PointsLabel.name.title
-
-private val ShortDate = DateTimeFormatter.ofPattern("EEE d MMM", Locale.getDefault())
-private val LongDate = DateTimeFormatter.ofPattern("EEEE d MMMM", Locale.getDefault())
-
-private val ShortTime = DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT)
-
-fun shortDate(date: LocalDate): String = date.toJavaLocalDate().format(ShortDate)
-fun longDate(date: LocalDate): String = date.toJavaLocalDate().format(LongDate)
-
-/** "6:00 PM" or "18:00", as the phone is set. */
-fun timeText(time: LocalTime): String = time.toJavaLocalTime().format(ShortTime)
 
 /** A time on [today], with the day added when it falls on another one. */
 fun momentText(moment: LocalDateTime, today: LocalDate): String =
@@ -234,7 +218,7 @@ fun TimeSetting(
         val state = rememberTimePickerState(
             initialHour = start.hour,
             initialMinute = start.minute,
-            is24Hour = DateFormat.is24HourFormat(LocalContext.current),
+            is24Hour = is24HourClock(),
         )
         AlertDialog(
             onDismissRequest = { open = false },
@@ -276,7 +260,7 @@ fun DateSetting(
             onDismissRequest = { open = false },
             confirmButton = {
                 TextButton(onClick = {
-                    state.selectedDateMillis?.let { onChange(Math.floorDiv(it, 86_400_000L).toDay()) }
+                    state.selectedDateMillis?.let { onChange(it.floorDiv(86_400_000L).toDay()) }
                     open = false
                 }) { Text("OK") }
             },
@@ -294,3 +278,7 @@ fun Modifier.goalStrip(color: Int?): Modifier {
     val strip = androidx.compose.ui.graphics.Color(io.github.randomtools3377.checklist.core.Schemes.goalStrip(color, LocalBrightness.current))
     return this.drawBehind { drawRect(strip, size = androidx.compose.ui.geometry.Size(6.dp.toPx(), size.height)) }
 }
+
+/** A photo's bytes as an image to draw. */
+@OptIn(org.jetbrains.compose.resources.ExperimentalResourceApi::class)
+fun decodeImage(bytes: ByteArray): androidx.compose.ui.graphics.ImageBitmap = bytes.decodeToImageBitmap()

@@ -105,9 +105,9 @@ keeps the data.
 Every step in CLAUDE.md's build order is built. The iPhone app waits for a way to install it.
 
 The emoji list is built from Unicode's emoji data via the MIT-licensed `unicode-emoji-json`
-package; its notice ships in `app/src/main/assets/emoji-NOTICE.txt`. The fonts Nunito, Atkinson
+package; its notice ships in `shared/src/commonMain/composeResources/files/emoji-NOTICE.txt`. The fonts Nunito, Atkinson
 Hyperlegible and Lora are under the SIL Open Font License; their notices ship in
-`app/src/main/assets/fonts-NOTICE.txt`. The celebration sounds are made by `tools/make-sounds.py`.
+`shared/src/commonMain/composeResources/files/fonts-NOTICE.txt`. The celebration sounds are made by `tools/make-sounds.py`.
 
 ## How it is built
 

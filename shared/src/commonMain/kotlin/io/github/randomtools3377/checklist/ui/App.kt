@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.ui.focus.focusRequester
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.collectLatest
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.RowScope
@@ -58,7 +57,6 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.randomtools3377.checklist.core.GoalKind
 
 private enum class AppTab(val route: String, val label: String, val icon: ImageVector) {
@@ -79,16 +77,33 @@ private val RoutesSaver = listSaver<SnapshotStateList<String>, String>(
  * at the bottom, with "settings" or an editor ("habit/12", "project/0" for a new one, "todo/3",
  * "reward/3") on top.
  */
+/**
+ * The app on any phone: the [phone]'s own parts, the theme, and the screens. Android's activity
+ * and the iPhone's view controller each show this.
+ */
 @Composable
-fun ChecklistApp(vm: MainViewModel = viewModel()) {
+fun ChecklistRoot(phone: Phone, vm: MainViewModel) {
+    androidx.compose.runtime.CompositionLocalProvider(LocalPhone provides phone) {
+        val appearance by vm.appearance.collectAsStateWithLifecycle()
+        val rate by vm.currentDifficulty.collectAsStateWithLifecycle()
+        ChecklistTheme(appearance) {
+            androidx.compose.runtime.CompositionLocalProvider(LocalPayRate provides rate) {
+                // Measures the window, for tablets and phones on their side.
+                WindowSized { ChecklistApp(vm) }
+            }
+        }
+    }
+}
+
+@Composable
+fun ChecklistApp(vm: MainViewModel) {
     val celebrations = remember { Celebrations() }
-    val context = androidx.compose.ui.platform.LocalContext.current
-    androidx.compose.runtime.DisposableEffect(Unit) {
-        val sounds = Sounds(context.applicationContext)
+    val sounds = rememberSounds()
+    androidx.compose.runtime.DisposableEffect(sounds) {
         celebrations.sounds = sounds
         onDispose {
             celebrations.sounds = null
-            sounds.release()
+            sounds?.release()
         }
     }
     val stack = rememberSaveable(saver = RoutesSaver) { mutableListOf(AppTab.TODAY.route).toMutableStateList() }
@@ -131,7 +146,7 @@ fun ChecklistApp(vm: MainViewModel = viewModel()) {
         reorderRewards = false
     }
 
-    BackHandler(enabled = stack.size > 1 || route != AppTab.TODAY.route) { pop() }
+    BackButton(enabled = stack.size > 1 || route != AppTab.TODAY.route) { pop() }
 
     val today by vm.todayState.collectAsStateWithLifecycle()
     val goals by vm.goalsView.collectAsStateWithLifecycle()
@@ -159,18 +174,14 @@ fun ChecklistApp(vm: MainViewModel = viewModel()) {
     }
     var voiceCommand by remember { mutableStateOf<io.github.randomtools3377.checklist.core.VoiceCommand?>(null) }
     var voiceProblem by remember { mutableStateOf<String?>(null) }
-    val listen = androidx.activity.compose.rememberLauncherForActivityResult(
-        androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult(),
-    ) { result ->
-        val heard = result.data?.getStringExtra(io.github.randomtools3377.checklist.core.AiContract.KEY_TEXT)
-        if (heard != null) {
+    val listen = rememberVoice(
+        onHeard = { heard ->
             // Goals due today, by name, to match what was said.
             val choices = vm.todayState.value?.view?.dueToday.orEmpty().map { it.goal.id to it.goal.name }
             voiceCommand = io.github.randomtools3377.checklist.core.VoiceCommand.parse(heard, choices)
-        } else {
-            result.data?.getStringExtra(io.github.randomtools3377.checklist.core.AiContract.KEY_ERROR)?.let { voiceProblem = it }
-        }
-    }
+        },
+        onProblem = { voiceProblem = it },
+    )
     val badges by vm.badges.collectAsStateWithLifecycle()
     val appearance by vm.appearance.collectAsStateWithLifecycle()
     val planDays by vm.planDays.collectAsStateWithLifecycle()
@@ -242,9 +253,9 @@ fun ChecklistApp(vm: MainViewModel = viewModel()) {
     val focusState by vm.focus.collectAsStateWithLifecycle()
     focusState?.let { state ->
         val goal = goals?.goals?.find { it.id == state.goalId }
-        val config = androidx.compose.ui.platform.LocalConfiguration.current
+        val window = LocalWindowSize.current ?: androidx.compose.ui.unit.DpSize(360.dp, 640.dp)
         val density = androidx.compose.ui.platform.LocalDensity.current
-        val center = with(density) { androidx.compose.ui.geometry.Offset(config.screenWidthDp.dp.toPx() / 2, config.screenHeightDp.dp.toPx() / 2) }
+        val center = with(density) { androidx.compose.ui.geometry.Offset(window.width.toPx() / 2, window.height.toPx() / 2) }
         Box(Modifier.fillMaxSize()) {
             FocusScreen(
                 state, goal,
@@ -359,12 +370,9 @@ fun ChecklistApp(vm: MainViewModel = viewModel()) {
                     snackbarHost = { androidx.compose.material3.SnackbarHost(undoHost, modifier = Modifier.testTag("undo-bar")) },
                     actions = {
                         // Voice, with the AI helper on and Checklist AI's speech file added.
-                        if (tab == AppTab.TODAY && io.github.randomtools3377.checklist.core.Feature.AI in features && aiStatus?.speechReady == true) {
+                        if (tab == AppTab.TODAY && io.github.randomtools3377.checklist.core.Feature.AI in features && aiStatus?.speechReady == true && listen != null) {
                             IconButton(
-                                onClick = {
-                                    runCatching { listen.launch(io.github.randomtools3377.checklist.data.AiClient.listenIntent()) }
-                                        .onFailure { voiceProblem = "Checklist AI couldn't be opened. Is it installed?" }
-                                },
+                                onClick = listen,
                                 modifier = Modifier.testTag("voice"),
                             ) { Text("🎙") }
                         }

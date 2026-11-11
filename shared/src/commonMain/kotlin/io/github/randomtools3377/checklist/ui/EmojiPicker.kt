@@ -1,7 +1,5 @@
 package io.github.randomtools3377.checklist.ui
 
-import android.content.Context
-import android.graphics.Paint
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -40,7 +38,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -68,28 +65,23 @@ object EmojiData {
     /** The skin tone modifiers, light to dark, after the default yellow. */
     val TONES = listOf("", "🏻", "🏼", "🏽", "🏾", "🏿")
 
-    @Volatile private var cache: List<EmojiGroup>? = null
-    private val paint = Paint()
+    private var cache: List<EmojiGroup>? = null
 
-    fun canShow(text: String): Boolean = try {
-        paint.hasGlyph(text)
-    } catch (e: Exception) {
-        false
-    }
+    fun canShow(text: String): Boolean = canShowEmoji(text)
 
-    fun load(context: Context): List<EmojiGroup> {
+    @OptIn(org.jetbrains.compose.resources.ExperimentalResourceApi::class)
+    suspend fun load(): List<EmojiGroup> {
         cache?.let { return it }
+        val text = io.github.randomtools3377.checklist.ui.resources.Res.readBytes("files/emoji.tsv").decodeToString()
         val groups = linkedMapOf<String, MutableList<EmojiEntry>>()
-        context.assets.open("emoji.tsv").bufferedReader().useLines { lines ->
-            for (line in lines) {
-                val parts = line.split('\t')
-                if (parts.size < 3) continue
-                val (group, emoji, name) = parts
-                if (!canShow(emoji)) continue
-                // Only offer tones the phone can draw.
-                val toned = parts.getOrNull(3)?.takeIf { it.isNotEmpty() && canShow(it.replace("~", TONES[3])) }
-                groups.getOrPut(group) { mutableListOf() } += EmojiEntry(emoji, name, toned)
-            }
+        for (line in text.lineSequence()) {
+            val parts = line.split('\t')
+            if (parts.size < 3) continue
+            val (group, emoji, name) = parts
+            if (!canShow(emoji)) continue
+            // Only offer tones the phone can draw.
+            val toned = parts.getOrNull(3)?.takeIf { it.isNotEmpty() && canShow(it.replace("~", TONES[3])) }
+            groups.getOrPut(group) { mutableListOf() } += EmojiEntry(emoji, name, toned)
         }
         return groups.map { (name, emojis) -> EmojiGroup(name, emojis) }.also { cache = it }
     }
@@ -102,18 +94,18 @@ private object EmojiPrefs {
     private const val TONE = "tone"
     private const val MAX_RECENT = 24
 
-    fun recent(context: Context): List<String> =
-        context.getSharedPreferences(FILE, Context.MODE_PRIVATE).getString(RECENT, null)?.split(' ')?.filter { it.isNotEmpty() }.orEmpty()
+    fun recent(phone: Phone): List<String> =
+        phone.localValue(FILE, RECENT)?.split(' ')?.filter { it.isNotEmpty() }.orEmpty()
 
-    fun remember(context: Context, emoji: String) {
-        val list = (listOf(emoji) + recent(context).filter { it != emoji }).take(MAX_RECENT)
-        context.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit().putString(RECENT, list.joinToString(" ")).apply()
+    fun remember(phone: Phone, emoji: String) {
+        val list = (listOf(emoji) + recent(phone).filter { it != emoji }).take(MAX_RECENT)
+        phone.setLocalValue(FILE, RECENT, list.joinToString(" "))
     }
 
-    fun tone(context: Context): Int = context.getSharedPreferences(FILE, Context.MODE_PRIVATE).getInt(TONE, 0).coerceIn(0, EmojiData.TONES.lastIndex)
+    fun tone(phone: Phone): Int = (phone.localValue(FILE, TONE)?.toIntOrNull() ?: 0).coerceIn(0, EmojiData.TONES.lastIndex)
 
-    fun setTone(context: Context, tone: Int) {
-        context.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit().putInt(TONE, tone).apply()
+    fun setTone(phone: Phone, tone: Int) {
+        phone.setLocalValue(FILE, TONE, tone.toString())
     }
 }
 
@@ -136,16 +128,16 @@ private val GroupIcons = mapOf(
  */
 @Composable
 fun EmojiPickerDialog(current: String, onPick: (String) -> Unit, onDismiss: () -> Unit) {
-    val context = LocalContext.current
-    val groups by produceState<List<EmojiGroup>?>(null) { value = withContext(Dispatchers.IO) { EmojiData.load(context) } }
+    val phone = LocalPhone.current
+    val groups by produceState<List<EmojiGroup>?>(null) { value = withContext(Dispatchers.Default) { EmojiData.load() } }
     var query by remember { mutableStateOf("") }
-    var tone by remember { mutableStateOf(EmojiPrefs.tone(context)) }
-    val recent = remember { EmojiPrefs.recent(context) }
+    var tone by remember { mutableStateOf(EmojiPrefs.tone(phone)) }
+    val recent = remember { EmojiPrefs.recent(phone) }
     val grid = rememberLazyGridState()
     val scope = rememberCoroutineScope()
 
     fun pick(emoji: String) {
-        EmojiPrefs.remember(context, emoji)
+        EmojiPrefs.remember(phone, emoji)
         onPick(emoji)
     }
 
@@ -179,7 +171,7 @@ fun EmojiPickerDialog(current: String, onPick: (String) -> Unit, onDismiss: () -
                                 .then(if (index == tone) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, CircleShape) else Modifier)
                                 .clickable {
                                     tone = index
-                                    EmojiPrefs.setTone(context, index)
+                                    EmojiPrefs.setTone(phone, index)
                                 }
                                 .semantics { contentDescription = if (index == 0) "Default skin tone" else "Skin tone $index" }
                                 .testTag("emoji-tone:$index"),

@@ -25,11 +25,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
-import io.github.randomtools3377.checklist.BuildConfig
 import io.github.randomtools3377.checklist.core.AiFile
 import io.github.randomtools3377.checklist.core.Feature
 import io.github.randomtools3377.checklist.core.GoalFromSentence
@@ -38,17 +36,16 @@ import io.github.randomtools3377.checklist.core.ReviewSummary
 import io.github.randomtools3377.checklist.core.VoiceCommand
 import androidx.compose.material3.AlertDialog
 import androidx.compose.ui.Alignment
-import io.github.randomtools3377.checklist.data.AiClient
 import io.github.randomtools3377.checklist.data.AiStatus
 
 /** One line on how the AI stands, for the Features page and the goal editor. */
 fun AiStatus?.describe(): String = when {
     this == null -> "Checking Checklist AI…"
     !installed -> "Checklist AI isn't installed. It's a separate app, on the same Releases page as this one: " +
-        "checklist-ai-${BuildConfig.VERSION_NAME}.apk. Keeping the AI separate keeps this app small for anyone who doesn't use it."
+        "checklist-ai-$appVersion.apk. Keeping the AI separate keeps this app small for anyone who doesn't use it."
     problem != null -> "Checklist AI didn't answer ($problem). Try opening it once."
     !ready -> "Checklist AI is installed. Open it to download and add its AI file (${AiFile.sizeText}, once)."
-    outOfStep -> "Ready, but Checklist AI is version $version and this app is ${BuildConfig.VERSION_NAME}. " +
+    outOfStep -> "Ready, but Checklist AI is version $version and this app is $appVersion. " +
         "Install both from the same Release so they stay in step."
     else -> "Ready: Checklist AI $version, with its AI file."
 }
@@ -57,7 +54,7 @@ fun AiStatus?.describe(): String = when {
 @Composable
 fun AiStatusPanel(vm: MainViewModel) {
     val status by vm.aiStatus.collectAsState()
-    val context = LocalContext.current
+    val phone = LocalPhone.current
     // Checked again on coming back, like after installing Checklist AI or adding its file.
     LifecycleResumeEffect(Unit) {
         vm.refreshAi()
@@ -72,9 +69,9 @@ fun AiStatusPanel(vm: MainViewModel) {
         )
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             if (status?.installed == false) {
-                TextButton(onClick = { AiClient.openReleases(context) }, modifier = Modifier.testTag("ai-get")) { Text("Get Checklist AI") }
+                TextButton(onClick = { phone.openReleases() }, modifier = Modifier.testTag("ai-get")) { Text("Get Checklist AI") }
             } else if (status != null) {
-                TextButton(onClick = { AiClient.open(context) }, modifier = Modifier.testTag("ai-open")) { Text("Open Checklist AI") }
+                TextButton(onClick = { phone.openAiApp() }, modifier = Modifier.testTag("ai-open")) { Text("Open Checklist AI") }
             }
             TextButton(onClick = vm::refreshAi) { Text("Check again") }
         }

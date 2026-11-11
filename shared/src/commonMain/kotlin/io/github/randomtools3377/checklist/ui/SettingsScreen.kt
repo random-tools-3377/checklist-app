@@ -11,16 +11,6 @@ import androidx.compose.material3.Button
 import androidx.compose.foundation.horizontalScroll
 import io.github.randomtools3377.checklist.core.Amounts
 import io.github.randomtools3377.checklist.core.Difficulty
-import android.Manifest
-import android.app.Activity
-import android.content.Context
-import android.content.ContextWrapper
-import android.content.Intent
-import android.content.pm.PackageManager
-import android.os.Build
-import android.widget.Toast
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -57,20 +47,15 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
-import androidx.core.content.ContextCompat
-import io.github.randomtools3377.checklist.BuildConfig
-import io.github.randomtools3377.checklist.Privacy
 import io.github.randomtools3377.checklist.core.Backup
 import io.github.randomtools3377.checklist.core.GapSettings
 import io.github.randomtools3377.checklist.core.Days
 import io.github.randomtools3377.checklist.core.dateText
+import io.github.randomtools3377.checklist.data.AUTO_BACKUPS_KEPT
 import io.github.randomtools3377.checklist.data.nowLocal
-import io.github.randomtools3377.checklist.data.Backups
 import io.github.randomtools3377.checklist.data.toLocalDateTime
-import io.github.randomtools3377.checklist.reminders.Reminders
 import io.github.randomtools3377.checklist.core.StreakSettings
 import io.github.randomtools3377.checklist.core.StreakTarget
 import io.github.randomtools3377.checklist.data.LOCK_HISTORY
@@ -89,12 +74,6 @@ fun hourText(hour: Int): String = when (hour) {
     0 -> "Midnight"
     12 -> "Noon"
     else -> "$hour am"
-}
-
-private fun Context.findActivity(): Activity? = when (this) {
-    is Activity -> this
-    is ContextWrapper -> baseContext.findActivity()
-    else -> null
 }
 
 /**
@@ -189,11 +168,20 @@ private fun DifficultySettings(vm: MainViewModel) {
  */
 @Composable
 private fun CalendarSettings(vm: MainViewModel) {
-    val context = LocalContext.current
+    val phone = LocalPhone.current
+    if (!phone.hasCalendar) {
+        Text(
+            "This phone's calendar can't be shown yet.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+        )
+        return
+    }
     val choice by vm.calendarChoice.collectAsState()
     var calendars by remember { mutableStateOf<List<io.github.randomtools3377.checklist.calendar.PhoneCalendarInfo>>(emptyList()) }
-    var allowed by remember { mutableStateOf(io.github.randomtools3377.checklist.calendar.PhoneCalendar.allowed(context)) }
-    val ask = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+    var allowed by remember { mutableStateOf(phone.calendarAllowed()) }
+    val ask = rememberAsk(Ask.CALENDAR) { granted ->
         allowed = granted
         if (granted) vm.setCalendarOn(true)
     }
@@ -207,7 +195,7 @@ private fun CalendarSettings(vm: MainViewModel) {
             choice.first && allowed,
             "calendar",
         ) { on ->
-            if (!on) vm.setCalendarOn(false) else if (allowed) vm.setCalendarOn(true) else ask.launch(Manifest.permission.READ_CALENDAR)
+            if (!on) vm.setCalendarOn(false) else if (allowed) vm.setCalendarOn(true) else ask()
         }
         if (choice.first && allowed && calendars.size > 1) {
             Text("Which calendars", style = MaterialTheme.typography.bodyLarge)
@@ -360,30 +348,30 @@ fun SettingsScreen(
     onOpenTab: (io.github.randomtools3377.checklist.core.AppTabKind) -> Unit,
     onBack: () -> Unit,
 ) {
-    val context = LocalContext.current
+    val phone = LocalPhone.current
     var choosingHour by remember { mutableStateOf(false) }
     var pendingImport by remember { mutableStateOf<Backup?>(null) }
-    var hideInRecents by remember { mutableStateOf(Privacy.hideInRecents(context)) }
+    var hideInRecents by remember { mutableStateOf(phone.hidesPreview()) }
 
-    fun toast(message: String) = Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+    fun toast(message: String) = phone.toast(message)
 
     var query by rememberSaveable { mutableStateOf("") }
     fun shows(words: String): Boolean = query.isBlank() || query.trim().split(Regex("\\s+")).all { words.contains(it, ignoreCase = true) }
     val backups by vm.backupState.collectAsState()
     androidx.compose.runtime.LaunchedEffect(Unit) { vm.refreshBackup() }
-    val folderLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
-        if (uri != null) vm.setBackupFolder(uri)
+    val folderLauncher = rememberPickFolder { file ->
+        if (file != null) vm.setBackupFolder(file)
     }
-    val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
-        if (uri != null) vm.exportTo(uri) { toast(it) }
+    val exportLauncher = rememberSaveFile("application/json") { file ->
+        if (file != null) vm.exportTo(file) { toast(it) }
     }
-    val spreadsheetLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri ->
-        if (uri != null) vm.exportSpreadsheet(uri) { toast(it) }
+    val spreadsheetLauncher = rememberSaveFile("text/csv") { file ->
+        if (file != null) vm.exportSpreadsheet(file) { toast(it) }
     }
-    var autoBackups by remember { mutableStateOf<List<Pair<String, android.net.Uri>>?>(null) }
-    val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) {
-            vm.readBackup(uri) { backup, error ->
+    var autoBackups by remember { mutableStateOf<List<Pair<String, PickedFile>>?>(null) }
+    val importLauncher = rememberOpenFile(listOf("application/json", "text/plain", "application/octet-stream")) { file ->
+        if (file != null) {
+            vm.readBackup(file) { backup, error ->
                 if (backup != null) pendingImport = backup else toast(error ?: "Couldn't read that file.")
             }
         }
@@ -597,12 +585,12 @@ fun SettingsScreen(
                     Spacer(Modifier.height(8.dp))
                     Row {
                         FilledTonalButton(
-                            onClick = { exportLauncher.launch("checklist-backup-${nowLocal().date}.json") },
+                            onClick = { exportLauncher("checklist-backup-${nowLocal().date}.json") },
                             modifier = Modifier.testTag("export"),
                         ) { Text("Export everything") }
                         Spacer(Modifier.padding(4.dp))
                         OutlinedButton(
-                            onClick = { importLauncher.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) },
+                            onClick = { importLauncher() },
                             modifier = Modifier.testTag("import"),
                         ) { Text("Import a backup") }
                     }
@@ -613,20 +601,21 @@ fun SettingsScreen(
                         modifier = Modifier.testTag("last-backup"),
                     )
     
-                    // The automatic backup
+                    // The automatic backup, where the phone can keep files in a folder.
+                    if (phone.canPickFolder) {
                     Spacer(Modifier.height(12.dp))
                     Text("Automatic backup", style = MaterialTheme.typography.bodyLarge)
                     Text(
                         when {
                             backups.folderGone -> "The folder can't be reached any more. Choose it again."
-                            backups.folderSet -> "On: each day you use the app, a dated backup is saved in ${backups.folderName ?: "your folder"}. The last ${Backups.KEEP} are kept."
-                            else -> "Off. Choose a folder and each day you use the app, a dated backup is saved there. The last ${Backups.KEEP} are kept."
+                            backups.folderSet -> "On: each day you use the app, a dated backup is saved in ${backups.folderName ?: "your folder"}. The last ${AUTO_BACKUPS_KEPT} are kept."
+                            else -> "Off. Choose a folder and each day you use the app, a dated backup is saved there. The last ${AUTO_BACKUPS_KEPT} are kept."
                         },
                         style = MaterialTheme.typography.bodySmall,
                         color = if (backups.folderGone) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Row {
-                        TextButton(onClick = { folderLauncher.launch(null) }, modifier = Modifier.testTag("auto-backup-folder")) {
+                        TextButton(onClick = { folderLauncher() }, modifier = Modifier.testTag("auto-backup-folder")) {
                             Text(if (backups.folderSet) "Change folder" else "Choose a folder")
                         }
                         if (backups.folderSet) {
@@ -639,6 +628,7 @@ fun SettingsScreen(
                             modifier = Modifier.testTag("auto-backup-restore"),
                         ) { Text("Restore an automatic backup") }
                     }
+                    }
 
                     // The spreadsheet
                     Spacer(Modifier.height(12.dp))
@@ -650,7 +640,7 @@ fun SettingsScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     TextButton(
-                        onClick = { spreadsheetLauncher.launch("checklist-history-${nowLocal().date}.csv") },
+                        onClick = { spreadsheetLauncher("checklist-history-${nowLocal().date}.csv") },
                         modifier = Modifier.testTag("export-spreadsheet"),
                     ) { Text("Export history as a spreadsheet") }
     
@@ -691,7 +681,7 @@ fun SettingsScreen(
                         modifier = Modifier.padding(horizontal = 16.dp),
                     )
                 }
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                if (!phone.previewIsAChoice) {
                     Text(
                         "The app's preview is hidden in the recent-apps screen.",
                         style = MaterialTheme.typography.bodyMedium,
@@ -714,8 +704,7 @@ fun SettingsScreen(
                             checked = hideInRecents,
                             onCheckedChange = {
                                 hideInRecents = it
-                                Privacy.setHideInRecents(context, it)
-                                context.findActivity()?.let { activity -> Privacy.apply(activity) }
+                                phone.setHidesPreview(it)
                             },
                         )
                     }
@@ -729,7 +718,7 @@ fun SettingsScreen(
             }
             HorizontalDivider(Modifier.padding(top = 8.dp))
             Text(
-                "Version ${BuildConfig.VERSION_NAME}",
+                "Version ${phone.appVersion}",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(16.dp),
@@ -821,9 +810,13 @@ fun SettingsScreen(
 /** Whether reminders can show, with a way to turn them on, and whether they arrive exactly on time. */
 @Composable
 private fun NotificationSettings() {
-    val context = LocalContext.current
-    var allowed by remember { mutableStateOf(Reminders.canNotify(context)) }
-    val ask = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { allowed = Reminders.canNotify(context) }
+    val phone = LocalPhone.current
+    var allowed by remember { mutableStateOf(phone.canNotify()) }
+    // Asked first; if the phone still says no (turned off in its settings), its settings open.
+    val ask = rememberAsk(Ask.NOTIFICATIONS) {
+        allowed = phone.canNotify()
+        if (!allowed) phone.openNotificationSettings()
+    }
     Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
         Text(
             if (allowed) "Reminders are on. Each habit sets its own in its editor."
@@ -833,35 +826,22 @@ private fun NotificationSettings() {
         if (!allowed) {
             Spacer(Modifier.height(8.dp))
             FilledTonalButton(
-                onClick = {
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-                        ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
-                    ) {
-                        ask.launch(Manifest.permission.POST_NOTIFICATIONS)
-                    } else {
-                        context.startActivity(
-                            Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS)
-                                .putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, context.packageName),
-                        )
-                    }
-                },
+                onClick = { ask() },
                 modifier = Modifier.testTag("allow-notifications"),
             ) { Text("Turn on reminders") }
         }
-        if (!Reminders.exactAlarmsAllowed(context)) {
+        if (!phone.exactAlarmsAllowed()) {
             Spacer(Modifier.height(8.dp))
             Text(
                 "This phone lets reminders arrive only roughly on time.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                TextButton(onClick = { context.startActivity(Intent(android.provider.Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM)) }) {
-                    Text("Allow exact times")
-                }
+            TextButton(onClick = { phone.openExactAlarmSettings() }) {
+                Text("Allow exact times")
             }
         }
-        Text(
+        if (phone.hasWidgets) Text(
             "Add the Checklist calendar to your home screen from the phone's widget list. Make it wider for the week, taller for the month.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,

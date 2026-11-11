@@ -16,9 +16,6 @@ import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toInstant
 import kotlinx.datetime.toLocalDateTime
 
-/** One of the calendars on the phone, which the user can pick to show. */
-data class PhoneCalendarInfo(val id: Long, val name: String, val account: String)
-
 /**
  * Reads the phone's own calendar, only after the user turned it on in Settings and allowed it.
  * Nothing is written to it and nothing is sent anywhere: it is read on the phone, to show events

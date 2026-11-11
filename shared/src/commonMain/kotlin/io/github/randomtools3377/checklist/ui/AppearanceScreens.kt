@@ -379,15 +379,11 @@ private fun <T> Choice(label: String, options: List<T>, selected: T, name: (T) -
 /** What is behind Today: nothing, a gradient, or the user's own photo, dimmed so text stays readable. */
 @Composable
 private fun BackdropSetting(appearance: Appearance, vm: MainViewModel) {
-    val context = androidx.compose.ui.platform.LocalContext.current
-    val picker = androidx.activity.compose.rememberLauncherForActivityResult(
-        androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia(),
-    ) { uri ->
-        if (uri != null) vm.pickPhoto(uri) { android.widget.Toast.makeText(context, it, android.widget.Toast.LENGTH_LONG).show() }
+    val phone = LocalPhone.current
+    val picker = rememberPickImage(gifOnly = false) { file ->
+        if (file != null) vm.pickPhoto(file) { phone.toast(it) }
     }
-    fun pickPhoto() = picker.launch(
-        androidx.activity.result.PickVisualMediaRequest(androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia.ImageOnly),
-    )
+    fun pickPhoto() = picker()
     Choice("Background", Backdrop.entries, appearance.backdrop, { it.label }, "backdrop") { choice ->
         if (choice == Backdrop.PHOTO && appearance.photoStamp.isEmpty()) pickPhoto() else vm.setBackdrop(choice)
     }

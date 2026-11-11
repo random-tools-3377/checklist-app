@@ -1,6 +1,6 @@
-"""Draws the celebration GIFs that come with the app (app/src/main/assets/celebrations).
+"""Draws the celebration GIFs that come with the app (shared/src/commonMain/composeResources/files/celebrations).
 
-Run: python3 tools/make-celebration-gifs.py app/src/main/assets/celebrations
+Run: python3 tools/make-celebration-gifs.py shared/src/commonMain/composeResources/files/celebrations
 Needs Pillow. The drawings are made here from simple shapes, so they belong to this project.
 """
 import math, os, random, sys

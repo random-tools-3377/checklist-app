@@ -223,7 +223,7 @@ private fun YearCard(summary: ReviewSummary, moods: List<io.github.randomtools33
                         Text("${(share * 100).toInt()}%", style = MaterialTheme.typography.bodySmall, modifier = Modifier.width(44.dp).padding(start = 6.dp))
                     }
                     Text(if (month.earned > 0) "+${month.earned}" else "", style = MaterialTheme.typography.bodySmall, modifier = Modifier.width(56.dp))
-                    Text(month.mood?.let { io.github.randomtools3377.checklist.core.Moods.face(Math.round(it).toInt()) } ?: "", modifier = Modifier.width(28.dp))
+                    Text(month.mood?.let { io.github.randomtools3377.checklist.core.Moods.face(kotlin.math.round(it).toInt()) } ?: "", modifier = Modifier.width(28.dp))
                 }
             }
         }

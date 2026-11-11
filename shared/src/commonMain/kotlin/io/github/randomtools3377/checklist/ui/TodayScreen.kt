@@ -31,7 +31,6 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.background
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.material3.AlertDialog
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
@@ -148,7 +147,7 @@ fun TodayScreen(
         val goalId = stopRequest ?: return@LaunchedEffect
         val running = stopwatch ?: return@LaunchedEffect
         if (running.goalId == goalId) {
-            val seconds = ((System.currentTimeMillis() - running.startedAt) / 1000).toInt().coerceAtLeast(1)
+            val seconds = ((io.github.randomtools3377.checklist.data.nowMillis() - running.startedAt) / 1000).toInt().coerceAtLeast(1)
             entering = AmountRequest(goalId, seconds, Spot())
         }
         vm.stopRequest.value = null
@@ -963,10 +962,10 @@ private fun HabitCard(
                     if (amountMode && !row.done) {
                         val running = stopwatch?.takeIf { it.goalId == goal.id }
                         if (running != null) {
-                            var now by remember { mutableStateOf(System.currentTimeMillis()) }
+                            var now by remember { mutableStateOf(io.github.randomtools3377.checklist.data.nowMillis()) }
                             LaunchedEffect(running.startedAt) {
                                 while (true) {
-                                    now = System.currentTimeMillis()
+                                    now = io.github.randomtools3377.checklist.data.nowMillis()
                                     kotlinx.coroutines.delay(1000)
                                 }
                             }
@@ -977,7 +976,7 @@ private fun HabitCard(
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.error,
                                 modifier = Modifier
-                                    .clickable { onAmount?.invoke(spot, ((System.currentTimeMillis() - running.startedAt) / 1000).toInt().coerceAtLeast(1)) }
+                                    .clickable { onAmount?.invoke(spot, ((io.github.randomtools3377.checklist.data.nowMillis() - running.startedAt) / 1000).toInt().coerceAtLeast(1)) }
                                     .padding(vertical = 4.dp)
                                     .testTag("stop:${goal.name}"),
                             )
@@ -1415,12 +1414,10 @@ private fun TodayBackdrop(look: Appearance) {
                 .testTag("backdrop:gradient"),
         )
         Backdrop.PHOTO -> {
-            val context = androidx.compose.ui.platform.LocalContext.current
+            val phone = LocalPhone.current
             val image by androidx.compose.runtime.produceState<androidx.compose.ui.graphics.ImageBitmap?>(null, look.photoStamp) {
-                value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                    runCatching {
-                        android.graphics.BitmapFactory.decodeFile(java.io.File(context.filesDir, "background.jpg").path)?.asImageBitmap()
-                    }.getOrNull()
+                value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+                    runCatching { phone.backgroundPhoto()?.let { decodeImage(it) } }.getOrNull()
                 }
             }
             image?.let {

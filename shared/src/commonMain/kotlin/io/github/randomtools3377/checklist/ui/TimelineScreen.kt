@@ -2,7 +2,6 @@
 
 package io.github.randomtools3377.checklist.ui
 
-import android.text.format.DateFormat
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
@@ -46,7 +45,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
@@ -238,7 +236,7 @@ private fun Hours(
 @Composable
 private fun RetimeDialog(row: HabitRow, onPick: (Int?) -> Unit, onDismiss: () -> Unit) {
     val start = row.goal.at ?: LocalTime(9, 0)
-    val state = rememberTimePickerState(initialHour = start.hour, initialMinute = start.minute, is24Hour = DateFormat.is24HourFormat(LocalContext.current))
+    val state = rememberTimePickerState(initialHour = start.hour, initialMinute = start.minute, is24Hour = is24HourClock())
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("${row.goal.icon} ${row.goal.name}, this day") },

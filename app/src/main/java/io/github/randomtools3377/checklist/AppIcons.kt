@@ -4,17 +4,6 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.pm.PackageManager
 
-/**
- * The app's home-screen icon. Each icon is a launcher entry in the manifest (an activity alias),
- * and only the chosen one is turned on.
- */
-enum class AppIcon(val label: String, val color: Long, val alias: String) {
-    GARDEN("Garden", 0xFF2E6B5E, "IconGarden"),
-    SUNSET("Sunset", 0xFFD9822B, "IconSunset"),
-    OCEAN("Ocean", 0xFF2F80C0, "IconOcean"),
-    NIGHT("Night", 0xFF161D1B, "IconNight"),
-}
-
 object AppIcons {
     private fun component(context: Context, icon: AppIcon) = ComponentName(context.packageName, "io.github.randomtools3377.checklist.${icon.alias}")
 

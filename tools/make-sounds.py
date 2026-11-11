@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Makes the app's two celebration sounds, drawn for this project, into app/src/main/res/raw.
+"""Makes the app's two celebration sounds, drawn for this project, into shared/src/commonMain/composeResources/files/sounds.
 
 celebrate_tick.wav: a short, soft two-note blip for a tick.
 celebrate_big.wav: a rising four-note chime for finishing something big or buying a reward.
@@ -13,7 +13,7 @@ import wave
 from pathlib import Path
 
 RATE = 22050
-OUT = Path(__file__).resolve().parent.parent / "app" / "src" / "main" / "res" / "raw"
+OUT = Path(__file__).resolve().parent.parent / "shared" / "src" / "commonMain" / "composeResources" / "files" / "sounds"
 
 
 def note(freq, start, length, volume=0.5):

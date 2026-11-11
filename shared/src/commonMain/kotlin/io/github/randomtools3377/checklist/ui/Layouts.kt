@@ -14,7 +14,6 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
@@ -45,7 +44,7 @@ fun WindowSized(content: @Composable () -> Unit) {
 
 /** Wide enough for the tabs to go down the side: a tablet, or a phone on its side. */
 @Composable
-fun isWide(): Boolean = (LocalWindowSize.current?.width ?: LocalConfiguration.current.screenWidthDp.dp) >= 600.dp
+fun isWide(): Boolean = (LocalWindowSize.current?.width ?: 0.dp) >= 600.dp
 
 /** Short, like a phone on its side: big things are laid out side by side to fit. */
 @Composable
@@ -53,7 +52,7 @@ fun isShort(): Boolean = screenHeight() < 480.dp
 
 /** The window's height, to size big pictures so they fit. */
 @Composable
-fun screenHeight(): Dp = LocalWindowSize.current?.height ?: LocalConfiguration.current.screenHeightDp.dp
+fun screenHeight(): Dp = LocalWindowSize.current?.height ?: 640.dp
 
 /** Holds content to [READABLE_WIDTH], in the middle of anything wider. */
 fun Modifier.readable(max: Dp = READABLE_WIDTH): Modifier =

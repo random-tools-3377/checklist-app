@@ -1,20 +1,22 @@
 package io.github.randomtools3377.checklist.ui
 
-import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Typography
-import androidx.compose.ui.text.font.Font
+import org.jetbrains.compose.resources.Font
+import io.github.randomtools3377.checklist.ui.resources.Res
+import io.github.randomtools3377.checklist.ui.resources.atkinson_bold
+import io.github.randomtools3377.checklist.ui.resources.atkinson_regular
+import io.github.randomtools3377.checklist.ui.resources.lora_bold
+import io.github.randomtools3377.checklist.ui.resources.lora_regular
+import io.github.randomtools3377.checklist.ui.resources.nunito_bold
+import io.github.randomtools3377.checklist.ui.resources.nunito_regular
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import io.github.randomtools3377.checklist.R
-import androidx.compose.material3.dynamicDarkColorScheme
-import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
@@ -105,8 +107,6 @@ data class Appearance(
 /** How roomy goal cards are, from Settings → Appearance. */
 val LocalCardSize = staticCompositionLocalOf { CardSize.COMFORTABLE }
 
-/** Whether this phone can match the app's colours to the wallpaper. */
-val canMatchWallpaper: Boolean get() = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
 
 /** The brightness the app is showing now, for colours worked out by hand (like a goal's strip). */
 val LocalBrightness = staticCompositionLocalOf { Brightness.LIGHT }
@@ -150,19 +150,19 @@ private fun schemeOf(seed: Int, brightness: Brightness): ColorScheme {
     )
 }
 
-private val Rounded = FontFamily(Font(R.font.nunito_regular), Font(R.font.nunito_bold, FontWeight.Bold))
-private val Clear = FontFamily(Font(R.font.atkinson_regular), Font(R.font.atkinson_bold, FontWeight.Bold))
-private val Serif = FontFamily(Font(R.font.lora_regular), Font(R.font.lora_bold, FontWeight.Bold))
+/** The fonts that come with the app (see fonts-NOTICE.txt). */
+@Composable
+private fun fontFamily(font: FontChoice): FontFamily? = when (font) {
+    FontChoice.PHONE -> null
+    FontChoice.ROUNDED -> FontFamily(Font(Res.font.nunito_regular), Font(Res.font.nunito_bold, FontWeight.Bold))
+    FontChoice.CLEAR -> FontFamily(Font(Res.font.atkinson_regular), Font(Res.font.atkinson_bold, FontWeight.Bold))
+    FontChoice.SERIF -> FontFamily(Font(Res.font.lora_regular), Font(Res.font.lora_bold, FontWeight.Bold))
+}
 
 /** Every text style in the chosen font. */
-private fun typographyOf(font: FontChoice): Typography {
+private fun typographyOf(family: FontFamily?): Typography {
     val base = Typography()
-    val family = when (font) {
-        FontChoice.PHONE -> return base
-        FontChoice.ROUNDED -> Rounded
-        FontChoice.CLEAR -> Clear
-        FontChoice.SERIF -> Serif
-    }
+    if (family == null) return base
     return Typography(
         displayLarge = base.displayLarge.copy(fontFamily = family),
         displayMedium = base.displayMedium.copy(fontFamily = family),
@@ -202,16 +202,12 @@ fun ChecklistTheme(appearance: Appearance = Appearance(), content: @Composable (
         ThemeMode.BLACK -> Brightness.BLACK
         ThemeMode.PHONE -> if (systemDark) Brightness.DARK else Brightness.LIGHT
     }
-    val context = LocalContext.current
     val chosen = appearance.color
-    val built = if (chosen == null && canMatchWallpaper) {
-        when (brightness) {
-            Brightness.LIGHT -> dynamicLightColorScheme(context)
-            Brightness.DARK -> dynamicDarkColorScheme(context)
-            Brightness.BLACK -> dynamicDarkColorScheme(context).onBlack()
-        }
-    } else {
-        schemeOf(chosen ?: Colors.GARDEN, brightness)
+    val wallpaper = if (chosen == null) wallpaperColors(dark = brightness != Brightness.LIGHT) else null
+    val built = when {
+        wallpaper != null && brightness == Brightness.BLACK -> wallpaper.onBlack()
+        wallpaper != null -> wallpaper
+        else -> schemeOf(chosen ?: Colors.GARDEN, brightness)
     }
     val colors = if (appearance.colourBlind) built.colourBlind(brightness) else built
     val density = LocalDensity.current
@@ -221,6 +217,6 @@ fun ChecklistTheme(appearance: Appearance = Appearance(), content: @Composable (
         LocalCardSize provides appearance.cardSize,
         LocalDensity provides Density(density.density, density.fontScale * appearance.textSize.scale),
     ) {
-        MaterialTheme(colorScheme = colors, typography = typographyOf(appearance.font), content = content)
+        MaterialTheme(colorScheme = colors, typography = typographyOf(fontFamily(appearance.font)), content = content)
     }
 }

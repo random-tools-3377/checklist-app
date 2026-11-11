@@ -2,7 +2,6 @@
 
 package io.github.randomtools3377.checklist.ui
 
-import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -97,7 +96,7 @@ private fun ReasonChips(selected: ReasonChoice?, tagPrefix: String, own: List<St
  */
 @Composable
 fun MissesScreen(misses: List<Lapse>, vm: MainViewModel) {
-    BackHandler {} // can't be skipped
+    BackButton {} // can't be skipped
     val reasons = remember { mutableStateMapOf<Long, ReasonChoice>() }
     val own by vm.ownReasons.collectAsStateWithLifecycle()
     val notes = remember { mutableStateMapOf<Long, String>() }
@@ -157,7 +156,7 @@ fun MissesScreen(misses: List<Lapse>, vm: MainViewModel) {
  */
 @Composable
 fun PenaltyScreen(penalty: Penalty, makeUp: List<Goal>, tasks: List<PenaltyTask>, vm: MainViewModel) {
-    BackHandler {} // no putting it off
+    BackButton {} // no putting it off
     var newTask by remember { mutableStateOf("") }
     Column(
         Modifier
@@ -383,7 +382,7 @@ fun LockedPanel(what: String, onUnlock: () -> Unit, modifier: Modifier = Modifie
  */
 @Composable
 fun GapCheckInScreen(gap: io.github.randomtools3377.checklist.core.Gap, vm: MainViewModel) {
-    BackHandler {}
+    BackButton {}
     var reason by remember { mutableStateOf<ReasonChoice?>(null) }
     val own by vm.ownReasons.collectAsStateWithLifecycle()
     var note by remember { mutableStateOf("") }

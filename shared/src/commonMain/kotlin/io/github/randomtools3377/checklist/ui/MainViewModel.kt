@@ -4,12 +4,8 @@ import kotlinx.coroutines.flow.mapLatest
 import io.github.randomtools3377.checklist.data.SETTING_CALENDAR_IDS
 import io.github.randomtools3377.checklist.data.SETTING_CALENDAR
 import io.github.randomtools3377.checklist.calendar.PhoneCalendarInfo
-import io.github.randomtools3377.checklist.calendar.PhoneCalendar
-import android.app.Application
-import android.net.Uri
-import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import io.github.randomtools3377.checklist.ChecklistApplication
 import io.github.randomtools3377.checklist.core.Backup
 import io.github.randomtools3377.checklist.core.BackupError
 import io.github.randomtools3377.checklist.core.BuyResult
@@ -45,7 +41,6 @@ import io.github.randomtools3377.checklist.core.Amounts
 import io.github.randomtools3377.checklist.data.SETTING_WIDGET_STYLE
 import io.github.randomtools3377.checklist.data.SETTING_APP_ICON
 import io.github.randomtools3377.checklist.widget.WidgetStyle
-import io.github.randomtools3377.checklist.AppIcons
 import io.github.randomtools3377.checklist.AppIcon
 import io.github.randomtools3377.checklist.data.SETTING_DEFAULT_GIF
 import io.github.randomtools3377.checklist.data.SETTING_CONFETTI
@@ -140,20 +135,18 @@ import io.github.randomtools3377.checklist.data.SETTING_MOOD
 import io.github.randomtools3377.checklist.data.SETTING_TREAT_BUDGET
 import io.github.randomtools3377.checklist.data.RewardDraft
 import io.github.randomtools3377.checklist.data.SETTING_DAY_END_HOUR
-import io.github.randomtools3377.checklist.data.Backups
 import io.github.randomtools3377.checklist.data.DEFAULT_SNOOZE_MINUTES
 import io.github.randomtools3377.checklist.data.SETTING_DAY_START
 import io.github.randomtools3377.checklist.data.SETTING_OWN_REASONS
 import io.github.randomtools3377.checklist.data.SETTING_SNOOZE
 import io.github.randomtools3377.checklist.data.SETTING_WEEKLY
-import io.github.randomtools3377.checklist.reminders.Focus
 import io.github.randomtools3377.checklist.reminders.FocusState
-import io.github.randomtools3377.checklist.reminders.Reminders
 import io.github.randomtools3377.checklist.core.BackupReminder
 import io.github.randomtools3377.checklist.data.SETTING_DEFAULT_FINISH
 import io.github.randomtools3377.checklist.data.SETTING_MORNING_PLAN
 import io.github.randomtools3377.checklist.data.SETTING_TODAY_ORDER
 import io.github.randomtools3377.checklist.data.nowLocal
+import io.github.randomtools3377.checklist.data.nowMillis
 import io.github.randomtools3377.checklist.data.parseDayEndHour
 import io.github.randomtools3377.checklist.data.toCore
 import io.github.randomtools3377.checklist.data.toDay
@@ -161,6 +154,7 @@ import io.github.randomtools3377.checklist.data.toEpochDay
 import io.github.randomtools3377.checklist.data.toLocalDateTime
 import io.github.randomtools3377.checklist.data.toTime
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.IO
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -301,11 +295,11 @@ data class Settings(
 )
 
 @OptIn(ExperimentalCoroutinesApi::class)
-class MainViewModel(app: Application) : AndroidViewModel(app) {
-    private val container = (app as ChecklistApplication).container
-    private val dao = container.db.dao()
-    private val book = container.book
-    private val repository = container.repository
+class MainViewModel(private val phone: Phone) : ViewModel() {
+    private val parts = phone.parts
+    private val dao = parts.db.dao()
+    private val book = parts.book
+    private val repository = parts.repository
 
     private fun <T> Flow<T>.state(initial: T): StateFlow<T> =
         stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), initial)
@@ -400,7 +394,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     val calendarEvents: StateFlow<List<Busy>> = combine(today, calendarChoice, calendarRefresh) { day, choice, _ -> day to choice }
         .mapLatest { (day, choice) ->
             if (!choice.first) emptyList() else withContext(kotlinx.coroutines.Dispatchers.IO) {
-                PhoneCalendar.events(getApplication(), choice.second, day, PLAN_DAYS)
+                phone.calendarEvents(choice.second, day, PLAN_DAYS)
             }
         }.state(emptyList())
 
@@ -412,7 +406,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch { repository.setSetting(SETTING_CALENDAR_IDS, ids.joinToString(",")) }
     }
 
-    suspend fun phoneCalendars(): List<PhoneCalendarInfo> = withContext(kotlinx.coroutines.Dispatchers.IO) { PhoneCalendar.calendars(getApplication()) }
+    suspend fun phoneCalendars(): List<PhoneCalendarInfo> = phone.calendars()
 
     val todayState: StateFlow<TodayState?> = today.flatMapLatest { day ->
         // Streaks look back up to a year and a bit; that also covers every open window.
@@ -553,7 +547,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 confetti = ConfettiAmount.entries.firstOrNull { it.name == v[15] } ?: ConfettiAmount.SOME,
                 defaultGif = v[16]?.takeIf { Celebration.isValid(it) },
             ),
-            icon = AppIcons.of(v[17]),
+            icon = AppIcon.entries.firstOrNull { it.name == v[17] } ?: AppIcon.GARDEN,
             widgetStyle = WidgetStyle.entries.firstOrNull { it.name == v[18] } ?: WidgetStyle.SOLID,
             colourBlind = v[19] == "1",
             loaded = true,
@@ -579,14 +573,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     val aiStatus = MutableStateFlow<io.github.randomtools3377.checklist.data.AiStatus?>(null)
 
     fun refreshAi() {
-        viewModelScope.launch { aiStatus.value = io.github.randomtools3377.checklist.data.AiClient.status(getApplication()) }
+        viewModelScope.launch { aiStatus.value = phone.aiStatus() }
     }
 
     /** Asks the AI to read a goal from [sentence]; [onResult] gets the goal, or why there isn't one. */
     fun goalFromSentence(sentence: String, onResult: (io.github.randomtools3377.checklist.core.GoalIdea?, String?) -> Unit) {
         viewModelScope.launch {
             val ask = io.github.randomtools3377.checklist.core.GoalFromSentence
-            io.github.randomtools3377.checklist.data.AiClient.ask(getApplication(), ask.SYSTEM, ask.prompt(sentence), ask.SCHEMA, ask.MAX_TOKENS).fold(
+            phone.askAi(ask.SYSTEM, ask.prompt(sentence), ask.SCHEMA, ask.MAX_TOKENS).fold(
                 onSuccess = { answer -> onResult(ask.parse(answer), null) },
                 onFailure = { e -> onResult(null, "The AI couldn't answer: ${e.message ?: "unknown error"}.") },
             )
@@ -597,7 +591,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun projectSteps(name: String, onResult: (List<String>, String?) -> Unit) {
         viewModelScope.launch {
             val ask = io.github.randomtools3377.checklist.core.ProjectSteps
-            io.github.randomtools3377.checklist.data.AiClient.ask(getApplication(), ask.SYSTEM, ask.prompt(name), ask.SCHEMA, ask.MAX_TOKENS).fold(
+            phone.askAi(ask.SYSTEM, ask.prompt(name), ask.SCHEMA, ask.MAX_TOKENS).fold(
                 onSuccess = { answer -> onResult(ask.parse(answer), null) },
                 onFailure = { e -> onResult(emptyList(), "The AI couldn't answer: ${e.message ?: "unknown error"}.") },
             )
@@ -608,7 +602,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun coachNote(summary: io.github.randomtools3377.checklist.core.ReviewSummary, hideReasons: Boolean, onResult: (String?, String?) -> Unit) {
         viewModelScope.launch {
             val ask = io.github.randomtools3377.checklist.core.CoachNote
-            io.github.randomtools3377.checklist.data.AiClient.ask(getApplication(), ask.SYSTEM, ask.prompt(summary, hideReasons), null, ask.MAX_TOKENS).fold(
+            phone.askAi(ask.SYSTEM, ask.prompt(summary, hideReasons), null, ask.MAX_TOKENS).fold(
                 onSuccess = { answer -> onResult(ask.clean(answer), null) },
                 onFailure = { e -> onResult(null, "The AI couldn't answer: ${e.message ?: "unknown error"}.") },
             )
@@ -682,11 +676,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** Copies a photo from the Photo Picker in and puts it behind Today. */
-    fun pickPhoto(uri: android.net.Uri, onError: (String) -> Unit) {
+    fun pickPhoto(file: PickedFile, onError: (String) -> Unit) {
         viewModelScope.launch {
-            val ok = withContext(Dispatchers.IO) { container.backgroundPhoto.add(getApplication<android.app.Application>(), uri) }
+            val ok = runCatching { phone.addBackgroundPhoto(file) }.getOrDefault(false)
             if (ok) {
-                repository.setSetting(SETTING_PHOTO_STAMP, System.currentTimeMillis().toString())
+                repository.setSetting(SETTING_PHOTO_STAMP, nowMillis().toString())
                 repository.setSetting(SETTING_BACKDROP, Backdrop.PHOTO.name)
             } else {
                 onError("That photo couldn't be read. Try another one.")
@@ -780,7 +774,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     // Skips, misses and penalties
 
-    private val lapses = container.lapses
+    private val lapses = parts.lapses
 
     /** Misses still waiting for a reason. They come first when the app opens. */
     val unexplained: StateFlow<List<Lapse>?> = dao.observeUnexplained().map { rows -> rows.map { it.toCore() } }.state(null)
@@ -801,7 +795,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     /** Looks for misses and gaps since the last check. Called when the app comes to the front. */
     fun closeDays() {
         calendarRefresh.value++
-        viewModelScope.launch { container.closeDays() }
+        viewModelScope.launch { parts.closeDays() }
         autoBackup()
         refreshFocus()
     }
@@ -811,27 +805,27 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     val focus = MutableStateFlow<FocusState?>(null)
 
     private fun refreshFocus() {
-        focus.value = Focus.current(getApplication())
-        viewModelScope.launch { Reminders.reschedule(getApplication()) }
+        focus.value = phone.focus()
+        viewModelScope.launch { phone.rescheduleReminders() }
     }
 
     fun startFocus(goalId: Long, minutes: Int) {
-        Focus.start(getApplication(), goalId, minutes)
+        phone.startFocus(goalId, minutes)
         refreshFocus()
     }
 
     fun pauseFocus() {
-        Focus.pause(getApplication())
+        phone.pauseFocus()
         refreshFocus()
     }
 
     fun resumeFocus() {
-        Focus.resume(getApplication())
+        phone.resumeFocus()
         refreshFocus()
     }
 
     fun stopFocus() {
-        Focus.stop(getApplication())
+        phone.stopFocus()
         refreshFocus()
     }
 
@@ -871,19 +865,18 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun refreshBackup() {
         viewModelScope.launch {
-            val context = getApplication<Application>()
             val state = withContext(Dispatchers.IO) {
-                val now = System.currentTimeMillis()
-                val last = Backups.lastBackup(context)
+                val now = nowMillis()
+                val last = phone.lastBackup()
                 val hasData = dao.activeGoals().isNotEmpty()
-                val due = if (Backups.reminderOn(context) && Backups.laterUntil(context) < now &&
-                    BackupReminder.due(last, Backups.firstSeen(context), now, hasData)
+                val due = if (phone.backupReminderOn() && phone.backupLaterUntil() < now &&
+                    BackupReminder.due(last, phone.firstSeen(), now, hasData)
                 ) {
                     last?.let { BackupReminder.daysSince(it, now) } ?: -1
                 } else {
                     null
                 }
-                BackupState(last, Backups.folderName(context), Backups.folder(context) != null, folderGone.value, Backups.reminderOn(context), due)
+                BackupState(last, phone.backupFolderName(), phone.backupFolder() != null, folderGone.value, phone.backupReminderOn(), due)
             }
             backupState.value = state
         }
@@ -891,32 +884,30 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun autoBackup() {
         viewModelScope.launch {
-            val context = getApplication<Application>()
-            val result = withContext(Dispatchers.IO) {
-                Backups.autoBackupIfDue(context, Days.dayOf(nowLocal(), settings.value.dayEndHour)) { repository.exportBackup() }
-            }
-            if (result == Backups.AutoResult.FolderGone) folderGone.value = true
-            if (result == Backups.AutoResult.Saved) folderGone.value = false
+            val result = runCatching {
+                phone.autoBackupIfDue(Days.dayOf(nowLocal(), settings.value.dayEndHour)) { repository.exportBackup() }
+            }.getOrDefault(io.github.randomtools3377.checklist.data.AutoBackupResult.NotDue)
+            if (result == io.github.randomtools3377.checklist.data.AutoBackupResult.FolderGone) folderGone.value = true
+            if (result == io.github.randomtools3377.checklist.data.AutoBackupResult.Saved) folderGone.value = false
             refreshBackup()
         }
     }
 
     /** "Later" on Today's backup reminder: it comes back tomorrow. */
     fun backupLater() {
-        Backups.later(getApplication(), System.currentTimeMillis() + 86_400_000L)
+        phone.backupLater(nowMillis() + 86_400_000L)
         refreshBackup()
     }
 
     fun setBackupReminder(on: Boolean) {
-        Backups.setReminderOn(getApplication(), on)
+        phone.setBackupReminderOn(on)
         refreshBackup()
     }
 
     /** Picks the automatic backup's folder (null turns it off), then backs up there right away. */
-    fun setBackupFolder(uri: Uri?) {
+    fun setBackupFolder(folder: PickedFile?) {
         viewModelScope.launch {
-            val context = getApplication<Application>()
-            withContext(Dispatchers.IO) { runCatching { Backups.setFolder(context, uri) } }
+            runCatching { phone.setBackupFolder(folder) }
             folderGone.value = false
             autoBackup()
         }
@@ -944,7 +935,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun explainGap(gapId: Long, reason: Reason, note: String?, reasonText: String? = null) {
-        viewModelScope.launch { container.gaps.explain(gapId, reason, note, reasonText) }
+        viewModelScope.launch { parts.gaps.explain(gapId, reason, note, reasonText) }
     }
 
     fun setGapSettings(settings: GapSettings) {
@@ -1159,7 +1150,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     ) {
         if (result !is TickResult.Ticked) return
         // A goal done: the next in its habit chain is reminded.
-        if (result.finished) Reminders.afterDone(getApplication(), goalId)
+        if (result.finished) phone.afterDone(goalId)
         val name = repository.goal(goalId)?.name ?: return
         val paid = result.points + result.bonus
         val lucky = luck?.let { if (it.double) " · 🍀 lucky, twice the points: +${it.points}" else " · 🍀 lucky chest: +${it.points}" }.orEmpty()
@@ -1179,11 +1170,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             }
             // Bets on yourself: one reached by this tick is won straight away.
             val betsOn = result is TickResult.Ticked && Feature.BETS in features.value
-            val won = if (betsOn) container.bets.settle().filter { it.state == io.github.randomtools3377.checklist.core.BetState.WON } else emptyList()
+            val won = if (betsOn) parts.bets.settle().filter { it.state == io.github.randomtools3377.checklist.core.BetState.WON } else emptyList()
             offerTickUndo(goalId, result, luck, wonBets = won.sumOf { it.prize }) {
                 book.undoHabitTick(goalId)
                 luck?.let { repository.removeEntry(it.entryId) }
-                if (won.isNotEmpty()) container.bets.takeBackWins()
+                if (won.isNotEmpty()) parts.bets.takeBackWins()
             }
         }
     }
@@ -1252,7 +1243,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     val stopRequest = MutableStateFlow<Long?>(null)
 
     fun startStopwatch(goalId: Long) {
-        viewModelScope.launch { repository.setSetting(SETTING_STOPWATCH, "$goalId|${System.currentTimeMillis()}") }
+        viewModelScope.launch { repository.setSetting(SETTING_STOPWATCH, "$goalId|${nowMillis()}") }
     }
 
     fun cancelStopwatch() {
@@ -1563,7 +1554,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 day?.let { d ->
                     val monday = d.minusDays(d.dayOfWeek.isoDayNumber - 1)
                     io.github.randomtools3377.checklist.core.Race.of(
-                        dao.entries(monday.minusDays(7).toEpochDay(), d.toEpochDay()).map { it.toCore() }, d, System.currentTimeMillis(),
+                        dao.entries(monday.minusDays(7).toEpochDay(), d.toEpochDay()).map { it.toCore() }, d, nowMillis(),
                     )
                 }
             }.state(null)
@@ -1597,7 +1588,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Bets that [goalId] will be done [times] times this week, for [stake] points; [onDone] gets why not, or null. */
     fun placeBet(goalId: Long, times: Int, stake: Int, onDone: (io.github.randomtools3377.checklist.core.BetRefusal?) -> Unit) {
-        viewModelScope.launch { onDone(container.bets.place(goalId, times, stake)) }
+        viewModelScope.launch { onDone(parts.bets.place(goalId, times, stake)) }
     }
 
     /** How the user has styled the character: skin, hair and eyes. */
@@ -1703,7 +1694,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             val ask = io.github.randomtools3377.checklist.core.AreaIdeasFromAi
             val level = character.value?.skillLevel(area)?.level ?: 1
             val prompt = ask.prompt(area, level, currentGoals.value, shown)
-            io.github.randomtools3377.checklist.data.AiClient.ask(getApplication(), ask.SYSTEM, prompt, ask.SCHEMA, ask.MAX_TOKENS).fold(
+            phone.askAi(ask.SYSTEM, prompt, ask.SCHEMA, ask.MAX_TOKENS).fold(
                 onSuccess = { answer ->
                     val ideas = ask.parse(answer, area, shown + currentGoals.value.map { it.name })
                     onResult(ideas, if (ideas.isEmpty()) "The AI's ideas didn't make sense. Try again." else null)
@@ -1878,16 +1869,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     // Export and import, through files the user picks with the system dialogs.
 
     /** Writes everything to [uri]. Reports a plain message either way. */
-    fun exportTo(uri: Uri, onDone: (String) -> Unit) {
+    fun exportTo(file: PickedFile, onDone: (String) -> Unit) {
         viewModelScope.launch {
             val message = try {
                 val text = repository.exportBackup()
-                withContext(Dispatchers.IO) {
-                    val resolver = getApplication<Application>().contentResolver
-                    val stream = resolver.openOutputStream(uri, "wt") ?: error("no stream")
-                    stream.use { it.write(text.toByteArray(Charsets.UTF_8)) }
-                }
-                Backups.markBackedUp(getApplication())
+                phone.writeText(file, text)
+                phone.markBackedUp()
                 refreshBackup()
                 "Exported. Keep the file somewhere safe."
             } catch (e: Exception) {
@@ -1898,15 +1885,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** Writes the points history to [uri] as a spreadsheet. Reports a plain message either way. */
-    fun exportSpreadsheet(uri: Uri, onDone: (String) -> Unit) {
+    fun exportSpreadsheet(file: PickedFile, onDone: (String) -> Unit) {
         viewModelScope.launch {
             val message = try {
                 val text = repository.historySpreadsheet()
-                withContext(Dispatchers.IO) {
-                    val resolver = getApplication<Application>().contentResolver
-                    val stream = resolver.openOutputStream(uri, "wt") ?: error("no stream")
-                    stream.use { it.write(text.toByteArray(Charsets.UTF_8)) }
-                }
+                phone.writeText(file, text)
                 "Saved. Open it in any spreadsheet app."
             } catch (e: Exception) {
                 "Couldn't write the file."
@@ -1916,21 +1899,17 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** The automatic backups in the chosen folder, newest first, to pick one to restore. */
-    fun listAutoBackups(onList: (List<Pair<String, Uri>>) -> Unit) {
+    fun listAutoBackups(onList: (List<Pair<String, PickedFile>>) -> Unit) {
         viewModelScope.launch {
-            onList(withContext(Dispatchers.IO) { Backups.autoBackups(getApplication()) })
+            onList(runCatching { phone.autoBackups() }.getOrDefault(emptyList()))
         }
     }
 
     /** Reads a backup from [uri] without changing anything, so the user can confirm it first. */
-    fun readBackup(uri: Uri, onRead: (Backup?, String?) -> Unit) {
+    fun readBackup(file: PickedFile, onRead: (Backup?, String?) -> Unit) {
         viewModelScope.launch {
             try {
-                val text = withContext(Dispatchers.IO) {
-                    val resolver = getApplication<Application>().contentResolver
-                    val stream = resolver.openInputStream(uri) ?: error("no stream")
-                    stream.use { it.readBytes().toString(Charsets.UTF_8) }
-                }
+                val text = phone.readText(file)
                 onRead(Backup.decode(text), null)
             } catch (e: BackupError) {
                 onRead(null, e.message)

@@ -1,6 +1,6 @@
-"""Builds the emoji list the icon picker offers (app/src/main/assets/emoji.tsv).
+"""Builds the emoji list the icon picker offers (shared/src/commonMain/composeResources/files/emoji.tsv).
 
-Run: python3 tools/make-emoji-list.py path/to/unicode-emoji-json/data-by-group.json app/src/main/assets/emoji.tsv
+Run: python3 tools/make-emoji-list.py path/to/unicode-emoji-json/data-by-group.json shared/src/commonMain/composeResources/files/emoji.tsv
 
 The data is Unicode's emoji list, from the MIT-licensed npm package unicode-emoji-json
 (https://github.com/muan/unicode-emoji-json). Each line of the output is:

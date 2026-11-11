@@ -20,7 +20,7 @@ object Backups {
     private const val FIRST_SEEN = "first_seen"
 
     /** The automatic backup keeps this many dated files in its folder. */
-    const val KEEP = 7
+    const val KEEP = io.github.randomtools3377.checklist.data.AUTO_BACKUPS_KEPT
 
     private val NAME = Regex("""checklist-backup-\d{4}-\d{2}-\d{2}.*\.json""")
 
@@ -77,34 +77,27 @@ object Backups {
         }.getOrNull()
     }
 
-    sealed interface AutoResult {
-        data object NotDue : AutoResult
-        data object Saved : AutoResult
-        /** The folder can't be written any more, like after it was deleted. */
-        data object FolderGone : AutoResult
-    }
-
     /**
      * Once a day the app is used: writes today's dated backup into the chosen folder, then keeps
      * only the newest [KEEP] backups there. [text] makes the backup file's contents.
      */
-    suspend fun autoBackupIfDue(context: Context, today: LocalDate, text: suspend () -> String): AutoResult {
-        val tree = folder(context) ?: return AutoResult.NotDue
-        if (prefs(context).getString(LAST_AUTO_DAY, null) == today.toString()) return AutoResult.NotDue
+    suspend fun autoBackupIfDue(context: Context, today: LocalDate, text: suspend () -> String): AutoBackupResult {
+        val tree = folder(context) ?: return AutoBackupResult.NotDue
+        if (prefs(context).getString(LAST_AUTO_DAY, null) == today.toString()) return AutoBackupResult.NotDue
         val resolver = context.contentResolver
         return try {
             val parentId = DocumentsContract.getTreeDocumentId(tree)
             val parent = DocumentsContract.buildDocumentUriUsingTree(tree, parentId)
             val doc = DocumentsContract.createDocument(resolver, parent, "application/json", "checklist-backup-$today.json")
-                ?: return AutoResult.FolderGone
+                ?: return AutoBackupResult.FolderGone
             val contents = text()
-            (resolver.openOutputStream(doc, "wt") ?: return AutoResult.FolderGone).use { it.write(contents.toByteArray(Charsets.UTF_8)) }
+            (resolver.openOutputStream(doc, "wt") ?: return AutoBackupResult.FolderGone).use { it.write(contents.toByteArray(Charsets.UTF_8)) }
             prune(context, tree, parentId)
             prefs(context).edit().putString(LAST_AUTO_DAY, today.toString()).apply()
             markBackedUp(context)
-            AutoResult.Saved
+            AutoBackupResult.Saved
         } catch (e: Exception) {
-            AutoResult.FolderGone
+            AutoBackupResult.FolderGone
         }
     }
 

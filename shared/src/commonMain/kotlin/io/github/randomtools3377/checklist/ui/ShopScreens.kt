@@ -13,7 +13,6 @@ import androidx.compose.foundation.horizontalScroll
 import io.github.randomtools3377.checklist.core.Amounts
 import io.github.randomtools3377.checklist.core.Suggest
 import io.github.randomtools3377.checklist.core.RewardSize
-import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -56,7 +55,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextAlign
@@ -82,7 +80,7 @@ fun ShopScreen(
 ) {
     if (view == null) return
     val haptics = LocalHapticFeedback.current
-    val context = LocalContext.current
+    val phone = LocalPhone.current
     var buying by remember { mutableStateOf<Reward?>(null) }
     var using by remember { mutableStateOf<Purchase?>(null) }
     var returning by remember { mutableStateOf<Purchase?>(null) }
@@ -169,7 +167,7 @@ fun ShopScreen(
                                     celebrations.show(BigCelebration.Bought(reward.icon, result.prize ?: reward.name, mystery = result.prize != null))
                                 }
                                 is BuyResult.TooExpensive ->
-                                    Toast.makeText(context, "Not enough ${pointsWord()} for ${reward.name} yet.", Toast.LENGTH_SHORT).show()
+                                    phone.toast("Not enough ${pointsWord()} for ${reward.name} yet.")
                                 BuyResult.NotFound -> Unit
                             }
                         }

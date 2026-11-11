@@ -5,6 +5,7 @@ import android.os.Bundle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import androidx.lifecycle.viewmodel.initializer
 import androidx.compose.runtime.getValue
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -14,23 +15,17 @@ import io.github.randomtools3377.checklist.ui.MainViewModel
 
 /** A FragmentActivity, so the privacy lock can ask for the phone's own lock. */
 class MainActivity : FragmentActivity() {
-    private val vm: MainViewModel by viewModels()
+    private val phone get() = (application as ChecklistApplication).phone
+    private val vm: MainViewModel by viewModels {
+        androidx.lifecycle.viewmodel.viewModelFactory { initializer { MainViewModel((application as ChecklistApplication).phone) } }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         Privacy.apply(this)
         handle(intent)
-        setContent {
-            val appearance by vm.appearance.collectAsStateWithLifecycle()
-            val rate by vm.currentDifficulty.collectAsStateWithLifecycle()
-            ChecklistTheme(appearance) {
-                androidx.compose.runtime.CompositionLocalProvider(io.github.randomtools3377.checklist.ui.LocalPayRate provides rate) {
-                    // Measures the window, for tablets and phones on their side.
-                    io.github.randomtools3377.checklist.ui.WindowSized { ChecklistApp(vm) }
-                }
-            }
-        }
+        setContent { io.github.randomtools3377.checklist.ui.ChecklistRoot(phone, vm) }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -40,6 +35,7 @@ class MainActivity : FragmentActivity() {
 
     override fun onStart() {
         super.onStart()
+        phone.activity = java.lang.ref.WeakReference(this)
         // Opening the app is when misses are found and asked about.
         vm.closeDays()
     }

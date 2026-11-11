@@ -17,6 +17,12 @@ androidxTestExt = "1.2.1"
 androidxTestRunner = "1.6.2"
 espresso = "3.6.1"
 glance = "1.1.1"
+# Compose Multiplatform, for the screens Android and the iPhone share. 1.8 matches the Android
+# Compose, lifecycle and kotlinx-datetime versions above.
+composeMultiplatform = "1.8.2"
+composeMaterial3 = "1.8.2"
+composeIcons = "1.7.3"
+jbLifecycle = "2.8.4"
 biometric = "1.1.0"
 fragment = "1.8.5"
 androidxTestRules = "1.6.1"
@@ -53,6 +59,14 @@ androidx-test-runner = { module = "androidx.test:runner", version.ref = "android
 androidx-test-espresso-core = { module = "androidx.test.espresso:espresso-core", version.ref = "espresso" }
 androidx-test-rules = { module = "androidx.test:rules", version.ref = "androidxTestRules" }
 glance-appwidget = { module = "androidx.glance:glance-appwidget", version.ref = "glance" }
+cmp-runtime = { module = "org.jetbrains.compose.runtime:runtime", version.ref = "composeMultiplatform" }
+cmp-foundation = { module = "org.jetbrains.compose.foundation:foundation", version.ref = "composeMultiplatform" }
+cmp-ui = { module = "org.jetbrains.compose.ui:ui", version.ref = "composeMultiplatform" }
+cmp-material3 = { module = "org.jetbrains.compose.material3:material3", version.ref = "composeMaterial3" }
+cmp-icons-core = { module = "org.jetbrains.compose.material:material-icons-core", version.ref = "composeIcons" }
+cmp-resources = { module = "org.jetbrains.compose.components:components-resources", version.ref = "composeMultiplatform" }
+jb-lifecycle-viewmodel-compose = { module = "org.jetbrains.androidx.lifecycle:lifecycle-viewmodel-compose", version.ref = "jbLifecycle" }
+jb-lifecycle-runtime-compose = { module = "org.jetbrains.androidx.lifecycle:lifecycle-runtime-compose", version.ref = "jbLifecycle" }
 androidx-biometric = { module = "androidx.biometric:biometric", version.ref = "biometric" }
 androidx-fragment-ktx = { module = "androidx.fragment:fragment-ktx", version.ref = "fragment" }
 litertlm = { module = "com.google.ai.edge.litertlm:litertlm-android", version.ref = "litertlm" }
@@ -63,6 +77,7 @@ jna = { module = "net.java.dev.jna:jna", version.ref = "jna" }
 android-application = { id = "com.android.application", version.ref = "agp" }
 android-library = { id = "com.android.library", version.ref = "agp" }
 room = { id = "androidx.room", version.ref = "room" }
+compose-multiplatform = { id = "org.jetbrains.compose", version.ref = "composeMultiplatform" }
 kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 kotlin-multiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
 kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
