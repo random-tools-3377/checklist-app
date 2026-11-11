@@ -68,19 +68,20 @@ class CheckinTest {
         // A hard day: gentle, and one small thing, the quickest goal.
         app.tap("companion-mood:2")
         app.waitFor { runBlocking { dao.allMoods() }.singleOrNull()?.score == 2 }
-        app.waitFor { shown("companion-do") && label("companion-do").contains("Water plants") }
+        // The "What's behind it?" card now sits above the character's card, so scroll down to it.
+        app.waitFor { app.shownIn("today-list", "companion-do") && label("companion-do").contains("Water plants") }
         assert(shown("companion-face:CALM"))
         app.tap("companion-do")
         app.waitFor { runBlocking { dao.allTicks() }.size == 1 }
 
         // Done, it counts as a win, says so, and moves on rather than repeating itself.
-        app.waitFor { shown("companion-wins") && text("companion-wins").contains("1 small win") }
+        app.waitFor { app.shownIn("today-list", "companion-wins") && text("companion-wins").contains("1 small win") }
         assert(shown("companion-face:HAPPY"))
         assert(!text("companion-line").contains("One small step is plenty"))
 
         // A new level: it jumps for joy until the cheer is seen.
         runBlocking { dao.putSetting(SettingEntity(Checkins.LEVEL_SEEN, "0")) }
-        app.waitFor { shown("companion-cheered") }
+        app.waitFor { app.shownIn("today-list", "companion-cheered") }
         assert(text("companion-line").contains("evel"))
         assert(shown("companion-face:PROUD"))
         app.tap("companion-cheered")
