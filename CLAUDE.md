@@ -350,7 +350,8 @@ The app has no network access unless the owner decides otherwise for this app.
   `:desktop` module, with the computer's side in `shared/src/jvmMain` as DesktopPhone). Data is
   kept in `%LOCALAPPDATA%\Checklist`, never the roaming folder, so it isn't copied to a server.
   Reminders show from the notification area only while the app is open; there are no widgets,
-  phone calendar, AI, voice, icon choice or automatic backup folder; the privacy lock opens with a
+  phone calendar, AI, voice, icon choice, automatic backup folder, morning plan, weekly summary
+  or snooze yet (Settings says "Not on this device yet"); the privacy lock opens with a
   note, as on a phone without a screen lock. The installer is an unsigned per-user `.msi` with its
   own Java; Windows warns about it the first time. CI builds it on a Windows runner, checks the
   desktop code has no networking, and opens the app to check it keeps running before a Release
@@ -812,6 +813,39 @@ Build order **(default)**, each step a Release the owner can try:
       switch that highlights what shows up on days something was noted.
     - Not chosen: a note when a money-priced reward's price moves, celebrations for game wins,
       and carrying money over into the next month.
+    - **The 0.62.0 fixes settled these details (default):** a goal counts in streaks, records,
+      the review and the bonuses only from the day it was added or brought back; a copy is a
+      new goal from today, without the original's moved days, lateness or challenge. Switching
+      between single days and times per week, month or year moves the open period's ticks and
+      skips over. A first or last week, month or year only partly inside a goal's dates is never
+      missed, and counts in streaks only if done. "Since last done" and "once" can't be due in
+      the past. Challenges don't apply to goals counted per week, month or year. "I forgot to
+      tick it" finishes the whole missed window. For gaps, a times-per goal counts on the days
+      it was ticked and on the last day of a window that ended short; misses, like gaps, are
+      looked for at most 60 days back; refunded penalties don't count toward a point-loss gap;
+      after an answered gap, new days make a new gap only on their own. A day with nothing due
+      but a miss breaks the main streak. Reminders judge "done" by the same rule as Today, go
+      away when their day ends or their goal is done, and keep their time when something
+      changes the minute before; their buttons do nothing for a day that has ended. The review
+      counts only days up to today, never counts removed goals as due, finds a "since last
+      done" goal's past days from its history, and shows interest and bets on their own. While
+      private goals are locked they are left out of the review, last week's figures and the
+      weekly summary, and named "A private goal" in the points history and the misses and
+      penalty screens; with anything locked, changing a Privacy switch or exporting asks to
+      unlock first, and every page behind a lock closes when the lock closes. Taking a tick back
+      takes its lucky extra with it and reopens a bet it won; bets count whole times and must be
+      for more than is already done; the day's quests and the week's boss health are fixed when
+      first shown; quest and title times follow the user's day end; titles once earned are kept.
+      Mood comparisons use the morning mood on both sides; goals to quit get only "Pay more" and
+      are never the one to start with. The budget game restarts from the day it is turned back
+      on, takes off bills still to come from the first of the month, and counts its streak from
+      all the money; a night shift still going after midnight is today's shift; no more can be
+      taken out of a saving goal than is in it. Automatic backups are named checklist-auto-*
+      and only those are cleaned up; phone-only settings stay out of the backup; on iPhone an
+      export counts only once Save to saves it. Settings, Features and Help leave out what the
+      device can't do, or say "Not on this device yet"; habit chains show "Next up" on iPhone
+      and Windows too; every settings switch is read by screen readers and toggles from its
+      whole row.
 
 ## Talking to the owner
 

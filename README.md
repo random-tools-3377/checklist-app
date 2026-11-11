@@ -119,6 +119,7 @@ on one and import the file on the other. Reminders show only while the app is op
 - 0.59.0: a budget widget, every number for points changeable, and help and tips on every screen.
 - 0.60.0: the app on Windows, and a mood check-in once the day's done, with what lifts your mood.
 - 0.61.0: a mood journal: notes and what's behind each mood, and what goes with better days; every card on Today and the tabs can be put in any order.
+- 0.62.0: a check of the whole app, with 58 fixes: streaks, reminders, the review, privacy, the budget, backups, and iPhone and Windows.
 
 Every step in CLAUDE.md's build order is built. The iPhone app is installed with SideStore or
 AltStore (see the 0.55.0 release notes).
