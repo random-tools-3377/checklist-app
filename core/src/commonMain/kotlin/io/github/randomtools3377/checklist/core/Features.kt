@@ -27,6 +27,8 @@ enum class Feature(val key: String, val onValue: String, val title: String, val 
     QUESTS("feature_quests", "1", "Daily quests", "Three small quests each day from your own goals, like \"tick 2 goals before noon\", each paying a few points.", "Game"),
     COMBOS("feature_combos", "1", "Combos", "Every perfect day in a row builds a combo that pays a little more each day, until a day is left undone.", "Game"),
     RACE("feature_race", "1", "Beat last week", "Today shows this week's points against last week's by the same time, so you can race yourself.", "Game"),
+    BOSSES("feature_bosses", "1", "Items and bosses", "Every tick earns an item from its goal's skill. Each week a boss arrives, weaker to two skills; use your items on it from Today to beat it for a bonus.", "Game"),
+    LUCKY("feature_lucky", "1", "Lucky ticks", "Now and then a tick pays double or opens a small chest of points. It never takes anything away.", "Game"),
     AI("feature_ai", "1", "AI helper", "Help from an AI that runs on this phone, with no internet: a new habit from a sentence, steps for a project, a note on your week, and voice on Today. Needs the Checklist AI app and its AI file.", "AI"),
     ;
 

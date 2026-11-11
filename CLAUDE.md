@@ -517,9 +517,23 @@ Build order **(default)**, each step a Release the owner can try:
     perfect day in a row adds one and pays 2 points for each, up to 20; a day left undone ends
     it, and a day with nothing due does neither. The race compares points earned from Monday
     until now with last week until the same moment.
+    Items and bosses: every tick earns an item from its goal's area (an energy bolt, a potion, a
+    scroll, a hammer, a clip or a paint bomb), counted from when the extra is turned on. Each
+    Monday a boss arrives, picked at random but never the same twice running, weaker to two
+    areas; an item hits it for 10, or 20 from an area it is weaker to. Its health is what plain
+    items from 70% of the week's goals would deal. The items in hand are used together from
+    Today, and beating it pays 25 points once. Lucky ticks: one tick in ten, in the app, pays its
+    points again or opens a chest of 5 to 15; undoing the tick takes the extra back. Quest,
+    combo, boss and lucky points are bonuses: they add to the balance, not to experience.
+    Then, also chosen by the owner: paths and titles (at level 10 the user chooses a path, like
+    Athlete, Scholar or Maker, which gives a title and a little more experience in its skill;
+    more titles come from habits, like "Early bird"); and moods and moves, where the character
+    does more than look the part: it checks in when the user falls behind and motivates getting
+    back on track, like suggesting one small goal to start with, and it responds to the mood
+    check-in, gentle on a hard day and celebrating on a good one. It jumps for joy at a new level.
     Build order: skill areas, levels and badge tiers (0.45.0); the drawn character (0.46.0);
     quests, combos and racing last week (0.47.0); items, lucky ticks and bosses (0.48.0); bets
-    and streak shields (0.49.0).
+    and streak shields (0.49.0); paths and titles (0.50.0); moods and moves (0.51.0).
 
 ## Talking to the owner
 

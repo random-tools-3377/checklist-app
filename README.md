@@ -94,6 +94,7 @@ keeps the data.
 - 0.45.0: a character with levels and six skills, and badge tiers.
 - 0.46.0: the character drawn, styled your way, with gear from its skills.
 - 0.47.0: daily quests, combos, and racing last week.
+- 0.48.0: items, a boss each week, and lucky ticks.
 
 Every step in CLAUDE.md's build order is built. The iPhone app waits for a way to install it.
 

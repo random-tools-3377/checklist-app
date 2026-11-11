@@ -126,6 +126,7 @@ fun TodayScreen(
     val characterLook by vm.look.collectAsStateWithLifecycle()
     val quests by vm.quests.collectAsStateWithLifecycle()
     val race by vm.race.collectAsStateWithLifecycle()
+    val boss by vm.boss.collectAsStateWithLifecycle()
     val grid = look.layout == TodayLayout.GRID
     // In the grid, holding a tile opens its full card here.
     var details by remember { mutableStateOf<Long?>(null) }
@@ -430,6 +431,12 @@ fun TodayScreen(
                     }
                     race?.let { standing ->
                         RaceCard(standing)
+                        Spacer(Modifier.height(12.dp))
+                    }
+                    boss?.let { fight ->
+                        BossCard(fight) { say ->
+                            vm.attackBoss { attack -> say(attack?.let { attackText(it.dealt, it.beaten, it.paid) } ?: "Nothing to use.") }
+                        }
                         Spacer(Modifier.height(12.dp))
                     }
                 }

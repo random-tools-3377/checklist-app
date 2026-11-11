@@ -65,6 +65,12 @@ import io.github.randomtools3377.checklist.core.Looks
 import io.github.randomtools3377.checklist.core.Mark
 import io.github.randomtools3377.checklist.core.Outfit
 import io.github.randomtools3377.checklist.core.QuestProgress
+import io.github.randomtools3377.checklist.core.BossView
+import io.github.randomtools3377.checklist.core.Bosses
+import io.github.randomtools3377.checklist.core.Item
+import androidx.compose.material3.Button
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import io.github.randomtools3377.checklist.core.RaceStanding
 import io.github.randomtools3377.checklist.core.Feature
 import io.github.randomtools3377.checklist.core.Level
@@ -383,4 +389,67 @@ fun RaceCard(race: RaceStanding) {
             }
         }
     }
+}
+
+/**
+ * On Today, with items and bosses on: this week's boss, what it is weaker to, its health, the
+ * items in hand, and a button to use them all on it.
+ */
+@Composable
+fun BossCard(view: BossView, onAttack: ((String) -> Unit) -> Unit) {
+    val fight = view.fight
+    var said by remember(fight.week) { mutableStateOf<String?>(null) }
+    Card(Modifier.fillMaxWidth().testTag("boss")) {
+        Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(fight.boss.icon, fontSize = 34.sp, modifier = Modifier.width(52.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(fight.boss.title, style = MaterialTheme.typography.titleSmall, modifier = Modifier.testTag("boss-name"))
+                    Text(
+                        "Weak to " + fight.boss.weakTo.sortedBy { it.ordinal }.joinToString(" and ") { "${it.icon} ${it.label}" } +
+                            ": their items hit twice as hard",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            if (fight.beaten) {
+                Text("🏆 Beaten this week! A new boss comes on Monday.", style = MaterialTheme.typography.bodyMedium, color = goodColor(), modifier = Modifier.testTag("boss-beaten"))
+            } else {
+                LinearProgressIndicator(progress = { fight.share }, modifier = Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.error)
+                Text("${fight.left} of ${fight.health} health left · it leaves on Sunday night", style = MaterialTheme.typography.bodySmall)
+                if (view.items.isEmpty()) {
+                    Text(
+                        "Every tick earns an item from its goal's skill.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                } else {
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Item.entries.filter { (view.items[it] ?: 0) > 0 }.forEach { item ->
+                            val strong = item.area in fight.boss.weakTo
+                            Text(
+                                "${item.icon} ${view.items[item]}" + if (strong) " ×2" else "",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = if (strong) FontWeight.Bold else FontWeight.Normal,
+                                modifier = Modifier.semantics { contentDescription = "${view.items[item]} ${item.label}" + if (strong) ", hits twice as hard" else "" },
+                            )
+                        }
+                    }
+                    Button(
+                        onClick = { onAttack { said = it } },
+                        modifier = Modifier.testTag("boss-attack"),
+                    ) { Text("Use ${view.itemCount} items: ${view.wouldDeal} damage") }
+                }
+            }
+            said?.let { Text(it, style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("boss-said")) }
+        }
+    }
+}
+
+/** What to say after an attack. */
+fun attackText(dealt: Int, beaten: Boolean, paid: Int): String = when {
+    beaten && paid > 0 -> "💥 $dealt damage, and it's beaten! +${pointsText(paid)}"
+    beaten -> "💥 $dealt damage, and it's beaten!"
+    else -> "💥 $dealt damage!"
 }

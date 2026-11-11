@@ -1111,20 +1111,30 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         undoBar.tryEmit(Undoable(message) { viewModelScope.launch { undo() } })
     }
 
-    private suspend fun offerTickUndo(goalId: Long, result: TickResult, undo: suspend () -> Unit) {
+    private suspend fun offerTickUndo(goalId: Long, result: TickResult, luck: io.github.randomtools3377.checklist.data.Repository.LuckPaid? = null, undo: suspend () -> Unit) {
         if (result !is TickResult.Ticked) return
         // A goal done: the next in its habit chain is reminded.
         if (result.finished) Reminders.afterDone(getApplication(), goalId)
         val name = repository.goal(goalId)?.name ?: return
         val paid = result.points + result.bonus
-        offerUndo(if (paid > 0) "$name · +$paid" else "$name ticked", undo)
+        val lucky = luck?.let { if (it.double) " · 🍀 lucky, twice the points: +${it.points}" else " · 🍀 lucky chest: +${it.points}" }.orEmpty()
+        offerUndo((if (paid > 0) "$name · +$paid" else "$name ticked") + lucky, undo)
     }
 
     fun tickHabit(goalId: Long, onResult: (TickResult) -> Unit = {}) {
         viewModelScope.launch {
             val result = book.tickHabit(goalId)
             onResult(result)
-            offerTickUndo(goalId, result) { book.undoHabitTick(goalId) }
+            // Lucky ticks: now and then a tick pays extra. Undoing the tick takes the extra back.
+            val luck = if (result is TickResult.Ticked && Feature.LUCKY in features.value) {
+                repository.luckyTick(goalId, currentDay(), result.points)
+            } else {
+                null
+            }
+            offerTickUndo(goalId, result, luck) {
+                book.undoHabitTick(goalId)
+                luck?.let { repository.removeEntry(it.entryId) }
+            }
         }
     }
 
@@ -1476,6 +1486,17 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     )
                 }
             }.state(null)
+
+    /** This week's boss and the items in hand, while items and bosses are on; null when off. */
+    val boss: StateFlow<io.github.randomtools3377.checklist.core.BossView?> =
+        combine(features, today, dao.observeBalance(), dao.observeSetting(io.github.randomtools3377.checklist.core.Bosses.FIGHT), dao.observeGoals()) { on, day, _, _, _ ->
+            if (Feature.BOSSES in on) day else null
+        }.mapLatest { day -> day?.let { repository.bossView(it) } }.state(null)
+
+    /** Uses every item in hand on this week's boss; [onDone] says what it did. */
+    fun attackBoss(onDone: (io.github.randomtools3377.checklist.core.Attack?) -> Unit) {
+        viewModelScope.launch { onDone(repository.attackBoss(currentDay())) }
+    }
 
     /** How the user has styled the character: skin, hair and eyes. */
     val look: StateFlow<io.github.randomtools3377.checklist.core.Look> =
