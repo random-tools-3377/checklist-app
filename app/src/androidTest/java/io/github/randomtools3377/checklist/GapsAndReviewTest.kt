@@ -13,7 +13,9 @@ import io.github.randomtools3377.checklist.core.minusDays
 import io.github.randomtools3377.checklist.data.HabitDraft
 import io.github.randomtools3377.checklist.data.SettingEntity
 import io.github.randomtools3377.checklist.data.nowLocal
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
+import kotlinx.datetime.atStartOfDayIn
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.ExternalResource
@@ -35,6 +37,9 @@ class GapCheckInTest {
                     minutes = null, at = null, finishBy = null, finishDay = null, allowance = 0,
                 ),
             )
+            // Added ten days ago, so the quiet days count for it.
+            val added = today.minusDays(10).atStartOfDayIn(kotlinx.datetime.TimeZone.currentSystemDefault()).toEpochMilliseconds()
+            container.db.dao().observeGoals().first().forEach { container.db.dao().updateGoal(it.copy(createdAt = added)) }
             container.db.dao().putSetting(SettingEntity(Lapses.TRACKING_SINCE, today.minusDays(3).toString()))
             container.db.dao().putSetting(SettingEntity(Lapses.CHECKED_THROUGH, today.minusDays(3).toString()))
         }

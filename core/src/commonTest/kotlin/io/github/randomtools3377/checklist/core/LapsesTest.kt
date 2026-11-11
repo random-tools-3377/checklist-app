@@ -93,6 +93,21 @@ class LapsesTest {
     }
 
     @Test
+    fun aGoalIsNeverMissedOnADayBeforeItWasAdded() = runTest {
+        assertTrue(lapses.closeDays().isEmpty()) // tracking starts on Wednesday 11 November
+        // A goal with an old start, added on Friday at noon UTC.
+        val friday = LocalDateTime(2026, 11, 13, 12, 0).toInstant(kotlinx.datetime.TimeZone.UTC).toEpochMilliseconds()
+        val run = store.addGoal(Goal(kind = GoalKind.HABIT, name = "Run", icon = "🏃", points = 10, repeat = Repeat.everyDay(start), createdAt = friday))
+        at(15) // Sunday: Wednesday and Thursday came before it was added; Saturday was missed
+
+        val days = lapses.closeDays().filter { it.goalId == run.id }.map { it.day }
+
+        // The day it was added follows the machine's time zone; Thursday or earlier never counts.
+        assertTrue(days.none { it <= LocalDate(2026, 11, 12) }, "$days")
+        assertTrue(LocalDate(2026, 11, 14) in days, "$days")
+    }
+
+    @Test
     fun aSkippedDayIsNotAMiss() = runTest {
         val run = habit(allowance = 3)
         lapses.closeDays()

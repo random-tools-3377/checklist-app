@@ -162,6 +162,8 @@ class Lapses(
         val from = maxOf(checked.plusDays(1), yesterday.minusDays(MAX_DAYS_BACK))
         val missesFrom = yesterday.minusDays(MISSES_DAYS_BACK)
         val goals = store.activeGoals()
+        // Like the streaks, a goal is never missed on a day before it was added or brought back.
+        val addedDays = goals.associate { it.id to it.addedOn() }
         val ticks = store.habitTicksSince(Days.earliestOpenDay(from).minusDays(7))
         val found = mutableListOf<Lapse>()
 
@@ -210,6 +212,7 @@ class Lapses(
                     continue
                 }
                 if (day < missesFrom) continue
+                if (addedDays[goal.id]?.let { day < it } == true) continue
                 if (goal.isHabitLike) {
                     val repeat = goal.repeat ?: continue
                     val window = repeat.window(day) ?: continue
