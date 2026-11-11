@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.provider.DocumentsContract
+import kotlinx.coroutines.CancellationException
 import kotlinx.datetime.LocalDate
 
 /**
@@ -21,8 +22,6 @@ object Backups {
 
     /** The automatic backup keeps this many dated files in its folder. */
     const val KEEP = io.github.randomtools3377.checklist.data.AUTO_BACKUPS_KEPT
-
-    private val NAME = Regex("""checklist-backup-\d{4}-\d{2}-\d{2}.*\.json""")
 
     private fun prefs(context: Context) = context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
 
@@ -79,29 +78,58 @@ object Backups {
 
     /**
      * Once a day the app is used: writes today's dated backup into the chosen folder, then keeps
-     * only the newest [KEEP] backups there. [text] makes the backup file's contents.
+     * only the newest [KEEP] of its own backups there. [text] makes the backup file's contents.
+     * The contents are made first, and a file that couldn't be written is deleted again, so a
+     * failed backup leaves nothing behind.
      */
     suspend fun autoBackupIfDue(context: Context, today: LocalDate, text: suspend () -> String): AutoBackupResult {
         val tree = folder(context) ?: return AutoBackupResult.NotDue
         if (prefs(context).getString(LAST_AUTO_DAY, null) == today.toString()) return AutoBackupResult.NotDue
         val resolver = context.contentResolver
-        return try {
-            val parentId = DocumentsContract.getTreeDocumentId(tree)
-            val parent = DocumentsContract.buildDocumentUriUsingTree(tree, parentId)
-            val doc = DocumentsContract.createDocument(resolver, parent, "application/json", "checklist-backup-$today.json")
-                ?: return AutoBackupResult.FolderGone
-            val contents = text()
-            (resolver.openOutputStream(doc, "wt") ?: return AutoBackupResult.FolderGone).use { it.write(contents.toByteArray(Charsets.UTF_8)) }
-            prune(context, tree, parentId)
-            prefs(context).edit().putString(LAST_AUTO_DAY, today.toString()).apply()
-            markBackedUp(context)
-            AutoBackupResult.Saved
+        // A folder that's gone is found first, so it doesn't cost a whole export each time the app opens.
+        val parentId: String? = try {
+            val id = DocumentsContract.getTreeDocumentId(tree)
+            val found = resolver.query(
+                DocumentsContract.buildDocumentUriUsingTree(tree, id),
+                arrayOf(DocumentsContract.Document.COLUMN_DOCUMENT_ID),
+                null, null, null,
+            )?.use { true } ?: false
+            id.takeIf { found }
         } catch (e: Exception) {
-            AutoBackupResult.FolderGone
+            null
         }
+        if (parentId == null) return AutoBackupResult.FolderGone
+        val contents = try {
+            text().toByteArray(Charsets.UTF_8)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            return AutoBackupResult.Failed
+        }
+        val doc: Uri? = try {
+            val parent = DocumentsContract.buildDocumentUriUsingTree(tree, parentId)
+            DocumentsContract.createDocument(resolver, parent, "application/json", AutoBackupFiles.name(today))
+        } catch (e: Exception) {
+            null
+        }
+        if (doc == null) return AutoBackupResult.FolderGone
+        val written = runCatching {
+            (resolver.openOutputStream(doc, "wt") ?: error("No stream")).use { it.write(contents) }
+        }.isSuccess
+        if (!written) {
+            runCatching { DocumentsContract.deleteDocument(resolver, doc) }
+            return AutoBackupResult.Failed
+        }
+        runCatching { prune(context, tree, parentId) }
+        prefs(context).edit().putString(LAST_AUTO_DAY, today.toString()).apply()
+        markBackedUp(context)
+        return AutoBackupResult.Saved
     }
 
-    /** The app's own backups in the chosen folder, newest first, by name and address, to restore one. */
+    /**
+     * The backups in the chosen folder, newest first, by name and address, to restore one: the
+     * app's own, and exports saved there. Empty files are left out, as they can't be restored.
+     */
     fun autoBackups(context: Context): List<Pair<String, Uri>> {
         val tree = folder(context) ?: return emptyList()
         return try {
@@ -110,16 +138,21 @@ object Backups {
             val found = mutableListOf<Pair<String, Uri>>()
             context.contentResolver.query(
                 children,
-                arrayOf(DocumentsContract.Document.COLUMN_DOCUMENT_ID, DocumentsContract.Document.COLUMN_DISPLAY_NAME),
+                arrayOf(
+                    DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+                    DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+                    DocumentsContract.Document.COLUMN_SIZE,
+                ),
                 null, null, null,
             )?.use { c ->
                 while (c.moveToNext()) {
                     val id = c.getString(0) ?: continue
                     val name = c.getString(1) ?: continue
-                    if (NAME.matches(name)) found += name to DocumentsContract.buildDocumentUriUsingTree(tree, id)
+                    if (!c.isNull(2) && c.getLong(2) == 0L) continue
+                    if (AutoBackupFiles.isListed(name)) found += name to DocumentsContract.buildDocumentUriUsingTree(tree, id)
                 }
             }
-            found.sortedByDescending { it.first }
+            AutoBackupFiles.newestFirst(found) { it.first }
         } catch (e: Exception) {
             emptyList()
         }
@@ -138,10 +171,10 @@ object Backups {
             while (c.moveToNext()) {
                 val id = c.getString(0) ?: continue
                 val name = c.getString(1) ?: continue
-                if (NAME.matches(name)) ours += id to name
+                ours += id to name
             }
         }
-        ours.sortedByDescending { it.second }.drop(KEEP).forEach { (id, _) ->
+        AutoBackupFiles.toDelete(ours) { it.second }.forEach { (id, _) ->
             runCatching { DocumentsContract.deleteDocument(resolver, DocumentsContract.buildDocumentUriUsingTree(tree, id)) }
         }
     }

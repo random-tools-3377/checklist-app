@@ -42,4 +42,7 @@ object Snoozes {
     }
 
     fun next(context: Context): Long? = all(context).minOfOrNull { it.at }
+
+    /** Drops every snooze, after a restore, when a goal's id can mean another goal. */
+    fun clear(context: Context) = save(context, emptyList())
 }

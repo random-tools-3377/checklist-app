@@ -20,6 +20,7 @@ import io.github.randomtools3377.checklist.data.SharedParts
 import io.github.randomtools3377.checklist.reminders.Focus
 import io.github.randomtools3377.checklist.reminders.FocusState
 import io.github.randomtools3377.checklist.reminders.Reminders
+import io.github.randomtools3377.checklist.reminders.Snoozes
 import io.github.randomtools3377.checklist.ui.Phone
 import io.github.randomtools3377.checklist.ui.PickedFile
 import kotlinx.coroutines.CoroutineScope
@@ -72,6 +73,7 @@ class AndroidPhone(private val app: ChecklistApplication) : Phone {
     override fun resumeFocus() = Focus.resume(app)
     override fun stopFocus() = Focus.stop(app)
     override fun takeFocus(): FocusState? = Focus.take(app)
+    override fun forgetSnoozes() = Snoozes.clear(app)
 
     override val hasCalendar: Boolean = true
     override fun calendarAllowed(): Boolean = PhoneCalendar.allowed(app)

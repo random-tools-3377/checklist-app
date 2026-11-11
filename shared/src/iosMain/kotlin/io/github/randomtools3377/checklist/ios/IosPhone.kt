@@ -6,6 +6,7 @@ import io.github.randomtools3377.checklist.data.SharedParts
 import io.github.randomtools3377.checklist.data.nowMillis
 import io.github.randomtools3377.checklist.data.openDatabase
 import io.github.randomtools3377.checklist.reminders.FocusState
+import io.github.randomtools3377.checklist.ui.NotSavedException
 import io.github.randomtools3377.checklist.ui.Phone
 import io.github.randomtools3377.checklist.ui.PickedFile
 import kotlinx.cinterop.useContents
@@ -14,12 +15,14 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
 import platform.CoreGraphics.CGRectMake
 import platform.CoreGraphics.CGSizeMake
 import platform.Foundation.NSBundle
 import platform.Foundation.NSURL
 import platform.UIKit.UIApplication
 import platform.UIKit.UIApplicationOpenSettingsURLString
+import platform.UIKit.UIDocumentPickerDelegateProtocol
 import platform.UIKit.UIDocumentPickerViewController
 import platform.UIKit.UIGraphicsBeginImageContextWithOptions
 import platform.UIKit.UIGraphicsEndImageContext
@@ -27,8 +30,10 @@ import platform.UIKit.UIGraphicsGetImageFromCurrentImageContext
 import platform.UIKit.UIImage
 import platform.UIKit.UIImageJPEGRepresentation
 import platform.UIKit.UIViewController
+import platform.darwin.NSObject
 import platform.darwin.dispatch_async
 import platform.darwin.dispatch_get_main_queue
+import kotlin.coroutines.resume
 import kotlin.random.Random
 
 /** Runs [block] on the iPhone's main thread, where the screen is drawn. */
@@ -40,6 +45,15 @@ internal fun topViewController(): UIViewController? {
     var top = UIApplication.sharedApplication.keyWindow?.rootViewController
     while (top?.presentedViewController != null) top = top.presentedViewController
     return top
+}
+
+/** Says whether the "Save to" dialog saved the file somewhere or was cancelled. */
+private class SavePickerDelegate(private val onAnswer: (Boolean) -> Unit) : NSObject(), UIDocumentPickerDelegateProtocol {
+    override fun documentPicker(controller: UIDocumentPickerViewController, didPickDocumentsAtURLs: List<*>) {
+        onAnswer(true)
+    }
+
+    override fun documentPickerWasCancelled(controller: UIDocumentPickerViewController) = onAnswer(false)
 }
 
 /**
@@ -60,6 +74,9 @@ class IosPhone : Phone {
 
     /** A file the "Save to" dialog is waiting for: it opens once the file is written. */
     private var pendingExport: String? = null
+
+    /** The open "Save to" dialog's delegate, held here as the dialog only holds it weakly. */
+    private var saveDelegate: NSObject? = null
 
     init {
         // Reminders are set again whenever goals, ticks or settings change.
@@ -119,8 +136,9 @@ class IosPhone : Phone {
         listOf(FOCUS_GOAL, FOCUS_ENDS, FOCUS_PAUSED, FOCUS_TOTAL).forEach { Local.setString(it, null) }
     }
 
-    // Files. Saving works the iPhone's way round: the file is written in the app first, then
-    // the "Save to" dialog puts a copy where the user chooses.
+    // Files. Saving works the iPhone's way round: the file is written in the app's temporary
+    // folder first, then the "Save to" dialog puts a copy where the user chooses. The app's own
+    // copy goes once the dialog answers, so no copy stays behind.
 
     internal fun expectExport(path: String) {
         pendingExport = path
@@ -128,17 +146,38 @@ class IosPhone : Phone {
 
     override suspend fun writeText(file: PickedFile, text: String) {
         check(writeFile(file, text.encodeToByteArray())) { "Couldn't write the file." }
-        if (file == pendingExport) {
-            pendingExport = null
-            onMain {
-                val picker = UIDocumentPickerViewController(forExportingURLs = listOf(NSURL.fileURLWithPath(file)), asCopy = true)
-                topViewController()?.presentViewController(picker, animated = true, completion = null)
+        if (file != pendingExport) return
+        pendingExport = null
+        val saved = try {
+            suspendCancellableCoroutine<Boolean> { answer ->
+                onMain {
+                    val top = topViewController()
+                    if (top == null) {
+                        if (answer.isActive) answer.resume(false)
+                    } else {
+                        val picker = UIDocumentPickerViewController(forExportingURLs = listOf(NSURL.fileURLWithPath(file)), asCopy = true)
+                        val handler = SavePickerDelegate { picked ->
+                            saveDelegate = null
+                            if (answer.isActive) answer.resume(picked)
+                        }
+                        saveDelegate = handler
+                        picker.delegate = handler
+                        top.presentViewController(picker, animated = true, completion = null)
+                    }
+                }
             }
+        } finally {
+            removeFile(file)
         }
+        if (!saved) throw NotSavedException()
     }
 
-    override suspend fun readText(file: PickedFile): String =
-        requireNotNull(readFile(file)) { "Couldn't read the file." }.decodeToString()
+    /** Reads a file the file dialog copied in for the app (see rememberOpenFile), then deletes that copy. */
+    override suspend fun readText(file: PickedFile): String {
+        val bytes = readFile(file)
+        removeFile(file)
+        return requireNotNull(bytes) { "Couldn't read the file." }.decodeToString()
+    }
 
     override suspend fun addBackgroundPhoto(file: PickedFile): Boolean {
         val bytes = readFile(file) ?: return false

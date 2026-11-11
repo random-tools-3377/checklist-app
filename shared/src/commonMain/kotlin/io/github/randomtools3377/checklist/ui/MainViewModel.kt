@@ -925,9 +925,12 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
         val reminderOn: Boolean,
         /** Today's reminder: null when not due; otherwise days since the last backup, or -1 for never. */
         val due: Int?,
+        /** The folder was there, but today's automatic backup couldn't be saved; it tries again. */
+        val saveFailed: Boolean = false,
     )
 
     private val folderGone = MutableStateFlow(false)
+    private val autoBackupFailed = MutableStateFlow(false)
     val backupState = MutableStateFlow(BackupState(null, null, false, false, true, null))
 
     fun refreshBackup() {
@@ -943,7 +946,10 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
                 } else {
                     null
                 }
-                BackupState(last, phone.backupFolderName(), phone.backupFolder() != null, folderGone.value, phone.backupReminderOn(), due)
+                BackupState(
+                    last, phone.backupFolderName(), phone.backupFolder() != null, folderGone.value, phone.backupReminderOn(), due,
+                    saveFailed = autoBackupFailed.value,
+                )
             }
             backupState.value = state
         }
@@ -954,8 +960,18 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
             val result = runCatching {
                 phone.autoBackupIfDue(Days.dayOf(nowLocal(), settings.value.dayEndHour)) { repository.exportBackup() }
             }.getOrDefault(io.github.randomtools3377.checklist.data.AutoBackupResult.NotDue)
-            if (result == io.github.randomtools3377.checklist.data.AutoBackupResult.FolderGone) folderGone.value = true
-            if (result == io.github.randomtools3377.checklist.data.AutoBackupResult.Saved) folderGone.value = false
+            when (result) {
+                io.github.randomtools3377.checklist.data.AutoBackupResult.FolderGone -> {
+                    folderGone.value = true
+                    autoBackupFailed.value = false
+                }
+                io.github.randomtools3377.checklist.data.AutoBackupResult.Failed -> autoBackupFailed.value = true
+                io.github.randomtools3377.checklist.data.AutoBackupResult.Saved -> {
+                    folderGone.value = false
+                    autoBackupFailed.value = false
+                }
+                io.github.randomtools3377.checklist.data.AutoBackupResult.NotDue -> {}
+            }
             refreshBackup()
         }
     }
@@ -976,6 +992,7 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
         viewModelScope.launch {
             runCatching { phone.setBackupFolder(folder) }
             folderGone.value = false
+            autoBackupFailed.value = false
             autoBackup()
         }
     }
@@ -2310,6 +2327,8 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
                 phone.markBackedUp()
                 refreshBackup()
                 "Exported. Keep the file somewhere safe."
+            } catch (e: NotSavedException) {
+                "Not saved. Nothing was exported."
             } catch (e: Exception) {
                 "Couldn't write the file. Nothing was exported."
             }
@@ -2324,6 +2343,8 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
                 val text = repository.historySpreadsheet()
                 phone.writeText(file, text)
                 "Saved. Open it in any spreadsheet app."
+            } catch (e: NotSavedException) {
+                "Not saved."
             } catch (e: Exception) {
                 "Couldn't write the file."
             }
@@ -2357,6 +2378,9 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
         viewModelScope.launch {
             val message = try {
                 repository.restore(backup)
+                // What this phone keeps by goal id stops: after a restore, an id can mean another goal.
+                phone.forgetSnoozes()
+                stopFocus()
                 "Imported. Everything now matches the backup."
             } catch (e: Exception) {
                 "Couldn't import. Nothing was changed."

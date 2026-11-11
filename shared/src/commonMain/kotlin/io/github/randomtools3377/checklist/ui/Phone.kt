@@ -13,6 +13,9 @@ import kotlinx.datetime.LocalDate
 /** A file the user picked with the phone's own dialog, by the phone's own name for it. */
 typealias PickedFile = String
 
+/** The user closed the phone's "Save to" dialog without saving, so the file went nowhere. */
+class NotSavedException : Exception("Not saved.")
+
 /**
  * What the shared screens ask of the phone they run on: the parts every phone shares, and what
  * only a phone can do, each phone in its own way (Android in the app, the iPhone in iosMain, and
@@ -38,6 +41,9 @@ interface Phone {
 
     /** A goal is done: its reminders for now go. */
     fun afterDone(goalId: Long)
+
+    /** Drops snoozed reminders, after a restore, when a goal's id can mean another goal. */
+    fun forgetSnoozes() {}
 
     /** Whether the app may show notifications. */
     fun canNotify(): Boolean
@@ -76,7 +82,10 @@ interface Phone {
 
     // Files
 
-    /** Writes [text] to [file], replacing what was there. Throws if it can't. */
+    /**
+     * Writes [text] to [file], replacing what was there. Throws if it can't, and throws
+     * [NotSavedException] where the phone asks where to save only now and the user says nowhere.
+     */
     suspend fun writeText(file: PickedFile, text: String)
 
     /** Reads [file] as text. Throws if it can't. */

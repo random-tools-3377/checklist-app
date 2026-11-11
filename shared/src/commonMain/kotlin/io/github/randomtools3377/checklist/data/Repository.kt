@@ -95,6 +95,13 @@ const val SETTING_TREAT_BUDGET = "treat_budget"
 /** "1" when the phone's calendar is shown in the planner and on Today; which calendars, by id ("" for all). */
 const val SETTING_CALENDAR = "phone_calendar"
 const val SETTING_CALENDAR_IDS = "phone_calendar_ids"
+
+/**
+ * Settings that only make sense on the phone that set them, so they stay out of the backup file:
+ * the running Start and Stop timing, and which of the phone's calendars are shown (by its own ids).
+ */
+val PHONE_ONLY_SETTINGS = setOf(SETTING_STOPWATCH, SETTING_CALENDAR_IDS)
+
 /** "0" turns off the daily mood check-in; and the day it was put off ("Not today"). */
 const val SETTING_MOOD = "mood_checkin"
 const val SETTING_MOOD_SKIPPED = "mood_skipped"
@@ -779,7 +786,7 @@ class Repository(private val db: AppDatabase, private val celebrations: GifStore
                 entries = dao.allEntries().map { it.toCore() },
                 rewards = dao.allRewards().map { it.toCore() },
                 purchases = dao.allPurchases().map { it.toCore() },
-                settings = dao.allSettings().associate { it.name to it.value },
+                settings = dao.allSettings().filter { it.name !in PHONE_ONLY_SETTINGS }.associate { it.name to it.value },
                 lapses = dao.allLapses().map { it.toCore() },
                 penalties = dao.allPenalties().map { it.toCore() },
                 penaltyTasks = dao.allPenaltyTasks().map { it.toCore() },
@@ -822,6 +829,8 @@ class Repository(private val db: AppDatabase, private val celebrations: GifStore
     }
 
     private suspend fun restoreData(backup: Backup): Unit = db.withTransaction {
+        // This phone keeps its own calendar choice. A running timing stops: its goal may now be another one.
+        val calendarIds = dao.setting(SETTING_CALENDAR_IDS)
         dao.deleteTicks()
         dao.deleteEntries()
         dao.deletePurchases()
@@ -846,7 +855,10 @@ class Repository(private val db: AppDatabase, private val celebrations: GifStore
         dao.insertEntries(backup.entries.map { it.toEntity() })
         dao.insertRewards(backup.rewards.map { it.toEntity() })
         dao.insertPurchases(backup.purchases.map { it.toEntity() })
-        dao.insertSettings(backup.settings.map { (name, value) -> SettingEntity(name, value) })
+        dao.insertSettings(
+            backup.settings.filterKeys { it !in PHONE_ONLY_SETTINGS }.map { (name, value) -> SettingEntity(name, value) } +
+                listOfNotNull(calendarIds?.let { SettingEntity(SETTING_CALENDAR_IDS, it) }),
+        )
         dao.insertLapses(backup.lapses.map { it.toEntity() })
         dao.insertPenalties(backup.penalties.map { it.toEntity() })
         dao.insertPenaltyTasks(backup.penaltyTasks.map { it.toEntity() })

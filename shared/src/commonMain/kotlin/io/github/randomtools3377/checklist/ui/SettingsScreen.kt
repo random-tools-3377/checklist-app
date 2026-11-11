@@ -676,11 +676,13 @@ fun SettingsScreen(
                     Text(
                         when {
                             backups.folderGone -> "The folder can't be reached any more. Choose it again."
+                            backups.saveFailed -> "Today's backup couldn't be saved in ${backups.folderName ?: "your folder"}. " +
+                                "It tries again the next time you open the app."
                             backups.folderSet -> "On: each day you use the app, a dated backup is saved in ${backups.folderName ?: "your folder"}. The last ${AUTO_BACKUPS_KEPT} are kept."
                             else -> "Off. Choose a folder and each day you use the app, a dated backup is saved there. The last ${AUTO_BACKUPS_KEPT} are kept."
                         },
                         style = MaterialTheme.typography.bodySmall,
-                        color = if (backups.folderGone) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = if (backups.folderGone || backups.saveFailed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Row {
                         TextButton(onClick = { unlockFirst { folderLauncher() } }, modifier = Modifier.testTag("auto-backup-folder")) {

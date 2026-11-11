@@ -81,4 +81,23 @@ class SharedDataTest {
         assertEquals(5, dao.balance())
         assertEquals("Read", dao.activeGoals().single().name)
     }
+
+    @Test
+    fun whatBelongsToOnePhoneStaysOutOfTheBackup() = runTest {
+        val id = addRead()
+        repository.setSetting(SETTING_STOPWATCH, "$id|1000")
+        repository.setSetting(SETTING_CALENDAR_IDS, "3,4")
+        repository.setSetting(SETTING_WEEKLY, "0")
+        val backup = Backup.decode(repository.exportBackup())
+        assertEquals(null, backup.settings[SETTING_STOPWATCH])
+        assertEquals(null, backup.settings[SETTING_CALENDAR_IDS])
+        assertEquals("0", backup.settings[SETTING_WEEKLY])
+
+        // An older file that has them: this phone keeps its own calendars, and no timing comes back.
+        val older = backup.copy(settings = backup.settings + mapOf(SETTING_STOPWATCH to "$id|5", SETTING_CALENDAR_IDS to "9"))
+        repository.restore(older)
+        assertEquals(null, dao.setting(SETTING_STOPWATCH))
+        assertEquals("3,4", dao.setting(SETTING_CALENDAR_IDS))
+        assertEquals("0", dao.setting(SETTING_WEEKLY))
+    }
 }
