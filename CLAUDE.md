@@ -272,6 +272,15 @@ The app has no network access unless the owner decides otherwise for this app.
   the `.ipa` on the Releases, with a step-by-step guide to installing it. Not in the first iPhone
   version: widgets, the AI and voice, the phone's calendar, the quick settings tile and app icon
   choices; widgets come next, written in Swift.
+- **The first iPhone version (default):** the same screens; reminders handed to the iPhone ahead
+  of time (the next three days, at most 60) and set again on every change, without Done and Skip
+  buttons; no morning plan or weekly summary notifications yet; export through "Save to" (the
+  file is written first) and import through Files; the photo picker for the background and GIFs;
+  Face ID, Touch ID or the passcode for the privacy lock; misses looked for when the app comes
+  to the front. Its data sits in a folder left out of iCloud and computer backups, and a plain
+  cover hides the app switcher's preview. It needs iOS 15 or later. CI builds the unsigned
+  `.ipa` on GitHub's Macs and checks for networking in the code and in the built app; a broken
+  iPhone build doesn't hold back an Android release.
 - Each phone keeps its own data. The export file is the same on both, so data moves between them
   only by exporting on one and importing on the other. No sync.
 - The shared code holds the rules, repeats, pacing, the recommended order and the export format,
