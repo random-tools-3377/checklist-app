@@ -76,10 +76,10 @@ class Container(app: Application) {
     val dataChanges: kotlinx.coroutines.flow.SharedFlow<Unit> get() = changes
 
     init {
-        // Whenever goals, ticks or settings change, from the app, the widget or a notification,
-        // set the next reminder and redraw the widget.
+        // Whenever goals, ticks (a routine's items too) or settings change, from the app, a
+        // widget or a notification, set the next reminder and redraw the widgets.
         db.invalidationTracker.addObserver(
-            object : InvalidationTracker.Observer(arrayOf("goals", "ticks", "settings", "steps", "lapses", "entries")) {
+            object : InvalidationTracker.Observer(arrayOf("goals", "ticks", "settings", "steps", "lapses", "entries", "checks")) {
                 override fun onInvalidated(tables: Set<String>) {
                     changes.tryEmit(Unit)
                 }
