@@ -4,13 +4,13 @@ import android.content.Context
 import io.github.randomtools3377.checklist.ChecklistApplication
 import io.github.randomtools3377.checklist.core.Days
 import io.github.randomtools3377.checklist.core.Goal
-import io.github.randomtools3377.checklist.core.HabitRow
 import io.github.randomtools3377.checklist.core.Order
 import io.github.randomtools3377.checklist.core.Pace
 import io.github.randomtools3377.checklist.core.PaceSettings
 import io.github.randomtools3377.checklist.core.Planned
 import io.github.randomtools3377.checklist.core.Tick
 import io.github.randomtools3377.checklist.core.TodayList
+import io.github.randomtools3377.checklist.core.TodoRow
 import io.github.randomtools3377.checklist.core.TodayPace
 import io.github.randomtools3377.checklist.core.Usual
 import io.github.randomtools3377.checklist.core.minusDays
@@ -42,7 +42,7 @@ data class DayPlan(
     val day: LocalDate,
     val now: LocalDateTime,
     val planned: List<Planned>,
-    val todos: List<HabitRow>,
+    val todos: List<TodoRow>,
     val pace: TodayPace?,
     /** Goals shown on the home screen (private ones left out while locked), and recent ticks, for tomorrow's list. */
     val goals: List<Goal>,

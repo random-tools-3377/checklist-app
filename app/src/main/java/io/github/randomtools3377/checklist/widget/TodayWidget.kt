@@ -52,6 +52,7 @@ import io.github.randomtools3377.checklist.core.HabitRow
 import io.github.randomtools3377.checklist.core.Planned
 import io.github.randomtools3377.checklist.core.TickResult
 import io.github.randomtools3377.checklist.core.TodayPace
+import io.github.randomtools3377.checklist.core.TodoRow
 import io.github.randomtools3377.checklist.core.plusDays
 import io.github.randomtools3377.checklist.reminders.Reminders
 import io.github.randomtools3377.checklist.ui.timeText
@@ -119,7 +120,7 @@ class TodayWidget : GlanceAppWidget() {
             val dao = (context.applicationContext as ChecklistApplication).container.db.dao()
             val plan = DayPlans.load(context)
             val open = plan.planned.filter { !it.row.done }
-            val rows = open.map { row(it.row, it) } + plan.todos.map { row(it, null) }
+            val rows = open.map { row(it.row, it) } + plan.todos.map { todo(it) }
             val done = plan.planned.filter { it.row.done }.map { row(it.row, null) }
             val tomorrow = if (rows.isEmpty()) {
                 CalendarView.agenda(plan.day.plusDays(1), plan.goals, plan.ticks).take(5).map { item ->
@@ -159,6 +160,22 @@ class TodayWidget : GlanceAppWidget() {
                 button = button,
                 stepId = nextItem?.step?.id.takeIf { row.isRoutine && !row.done },
                 routine = row.isRoutine,
+            )
+        }
+
+        /** A to-do still open today, after the goals: its button ticks it, or its next step. */
+        fun todo(row: TodoRow): TimelineRow {
+            val next = row.items.firstOrNull { !it.done }
+            return TimelineRow(
+                goalId = row.goal.id,
+                title = "${row.goal.icon} ${row.goal.name}",
+                color = row.goal.color,
+                time = null,
+                late = false,
+                detail = if (row.items.isEmpty()) "To-do" else "${row.items.count { it.done }} of ${row.items.size} · next: ${next?.step?.name}",
+                button = next?.let { "✓ ${it.step.name.take(14)}" } ?: "Done",
+                stepId = next?.step?.id,
+                routine = false,
             )
         }
 
