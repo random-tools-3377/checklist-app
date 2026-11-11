@@ -58,12 +58,13 @@ object Bills {
     fun due(bill: Bill, from: LocalDate, to: LocalDate): List<LocalDate> {
         val end = bill.until?.let { minOf(it, to) } ?: to
         if (end < from || end < bill.first) return emptyList()
-        // Skip ahead roughly, then step.
-        val step = when (bill.every) {
-            BillEvery.WEEKS -> 7 * bill.count.coerceAtLeast(1)
-            BillEvery.MONTHS -> 28 * bill.count.coerceAtLeast(1)
+        // Skip ahead to just before [from], never past it, then step.
+        val count = bill.count.coerceAtLeast(1)
+        val ahead = when (bill.every) {
+            BillEvery.WEEKS -> (from.toEpochDays() - bill.first.toEpochDays()) / (7 * count)
+            BillEvery.MONTHS -> ((from.year * 12 + from.monthNumber) - (bill.first.year * 12 + bill.first.monthNumber)) / count
         }
-        var n = maxOf(0, (from.toEpochDays() - bill.first.toEpochDays()) / step - 1)
+        var n = maxOf(0, ahead - 1)
         val days = mutableListOf<LocalDate>()
         while (true) {
             val day = nth(bill, n)

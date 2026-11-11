@@ -22,6 +22,7 @@ import io.github.randomtools3377.checklist.core.CategoryRole
 import io.github.randomtools3377.checklist.core.MoneyCategory
 import io.github.randomtools3377.checklist.core.MoneyEntry
 import io.github.randomtools3377.checklist.core.MoneyKind
+import io.github.randomtools3377.checklist.core.Pay
 import io.github.randomtools3377.checklist.core.PayPlan
 import io.github.randomtools3377.checklist.core.WorkDay
 import io.github.randomtools3377.checklist.core.GoalKind
@@ -221,6 +222,9 @@ data class RewardDraft(
     /** Whether its price follows [value] (see MoneyPrices). */
     val followsMoney: Boolean = false,
 )
+
+/** Today in the budget game: today's share (null with nothing to share), spent today in cents, and good days in a row before today. */
+data class MoneyGameToday(val share: Double?, val spentCents: Long, val streakBefore: Int)
 
 /** Adding, editing, ordering and removing goals and rewards; settings; export and import. */
 /** Picked celebration GIFs, kept by the app in its own storage (see CelebrationFiles on Android). */
@@ -930,10 +934,29 @@ class Repository(private val db: AppDatabase, private val celebrations: GifStore
         Unit
     }
 
-    /** Removes a saving goal from the list; what went in and out stays in the history. */
-    suspend fun removeSavingGoal(id: Long) {
-        dao.allSavingGoals().firstOrNull { it.id == id }?.let { dao.updateSavingGoal(it.copy(archived = true)) }
+    /**
+     * Removes a saving goal from the list; what went in and out stays in the history. With
+     * [takeOutOn], what is still in it is taken out on that day first, so it isn't left counted
+     * as saved.
+     */
+    suspend fun removeSavingGoal(id: Long, takeOutOn: LocalDate? = null): Unit = db.withTransaction {
+        val goal = dao.allSavingGoals().firstOrNull { it.id == id } ?: return@withTransaction
+        if (takeOutOn != null) moveSaving(id, savedIn(id), out = true, day = takeOutOn, name = goal.name)
+        dao.updateSavingGoal(goal.copy(archived = true))
     }
+
+    /**
+     * What is in saving goal [id]: put in, less taken out, in cents. A plain query, not a Flow,
+     * as it is also read inside a transaction (removing a goal with what's in it taken out).
+     */
+    private suspend fun savedIn(id: Long): Long =
+        dao.allMoney().map { it.toCore() }.filter { it.savingId == id }.sumOf {
+            when (it.kind) {
+                MoneyKind.SAVED -> it.cents
+                MoneyKind.TAKEN_OUT -> -it.cents
+                else -> 0L
+            }
+        }
 
     /**
      * Pays what the budget game owes: each day from when it started up to yesterday, months that
@@ -943,12 +966,9 @@ class Repository(private val db: AppDatabase, private val celebrations: GifStore
         val from = dao.setting(MoneyGame.FROM)?.toLongOrNull()?.toDay()
             ?: today.also { dao.putSetting(SettingEntity(MoneyGame.FROM, it.toEpochDay().toString())) }
         val paidTo = dao.setting(MoneyGame.TO)?.toLongOrNull()?.toDay() ?: from.minusDays(1)
-        val plan = PayPlan.decode(dao.setting(PayPlan.SETTING))
         val entries = dao.allMoney().map { it.toCore() }
         val categories = dao.moneyCategories().map { it.toCore() }
-        val changes = dao.allWorkDays().map { it.toCore() }.associateBy { it.day }
-        val shares = mutableMapOf<LocalDate, Double?>()
-        val shareOf = { d: LocalDate -> shares.getOrPut(Budget.monthOf(d)) { MoneyGame.share(plan, Budget.monthOf(d), changes, entries) } }
+        val shareOf = moneyGameShares(entries)
         val yesterday = today.minusDays(1)
         val days = if (paidTo < yesterday) MoneyGame.settle(maxOf(paidTo.plusDays(1), from), yesterday, shareOf, entries, categories) else emptyList()
         val paidGoals = MoneyGame.decodeIds(dao.setting(MoneyGame.GOALS))
@@ -967,19 +987,51 @@ class Repository(private val db: AppDatabase, private val celebrations: GifStore
         payouts
     }
 
-    /** Money from the start of last month on, for the budget game's streak. */
-    suspend fun moneyThisAndLastMonth(today: LocalDate): List<MoneyEntry> =
-        dao.observeMoney(Budget.monthOf(Budget.monthOf(today).minusDays(1)).toEpochDay(), today.toEpochDay()).first().map { it.toCore() }
+    /**
+     * Each day's share in the budget game, worked out from [entries] (all the money), every
+     * changed work day and the bills, the same way for the days paid and for the streak shown.
+     */
+    private suspend fun moneyGameShares(entries: List<MoneyEntry>): (LocalDate) -> Double? {
+        val plan = PayPlan.decode(dao.setting(PayPlan.SETTING))
+        val changes = dao.allWorkDays().map { it.toCore() }.associateBy { it.day }
+        val bills = dao.allBills().map { it.toCore() }
+        val shares = mutableMapOf<LocalDate, Double?>()
+        return { d: LocalDate -> shares.getOrPut(Budget.monthOf(d)) { MoneyGame.share(plan, Budget.monthOf(d), changes, entries, bills) } }
+    }
 
-    /** The day the budget game started, if it has. */
-    suspend fun moneyGameFrom(): LocalDate? = dao.setting(MoneyGame.FROM)?.toLongOrNull()?.toDay()
+    /**
+     * Today in the budget game: today's share, what's spent today, and good money days in a row
+     * up to yesterday, from the day the game started.
+     */
+    suspend fun moneyGameToday(today: LocalDate): MoneyGameToday {
+        val from = dao.setting(MoneyGame.FROM)?.toLongOrNull()?.toDay() ?: today
+        val entries = dao.observeMoney(Budget.monthOf(minOf(from, today)).toEpochDay(), Pay.monthDays(today).last().toEpochDay())
+            .first().map { it.toCore() }
+        val shareOf = moneyGameShares(entries)
+        return MoneyGameToday(shareOf(today), MoneyGame.spent(today, entries), MoneyGame.streak(from, today.minusDays(1), shareOf, entries))
+    }
 
-    /** Puts [cents] into a saving goal, or takes it out when [out]. */
+    /**
+     * Starts the budget game again from [today] when it, or Budget, is turned back on after days
+     * it was off: those days aren't paid, and the money streak counts from today. Nothing changes
+     * when it never started or nothing was missed.
+     */
+    suspend fun restartMoneyGame(today: LocalDate): Unit = db.withTransaction {
+        val from = dao.setting(MoneyGame.FROM)?.toLongOrNull()?.toDay() ?: return@withTransaction
+        val paidTo = dao.setting(MoneyGame.TO)?.toLongOrNull()?.toDay() ?: from.minusDays(1)
+        val yesterday = today.minusDays(1)
+        if (paidTo >= yesterday) return@withTransaction
+        dao.putSetting(SettingEntity(MoneyGame.FROM, today.toEpochDay().toString()))
+        dao.putSetting(SettingEntity(MoneyGame.TO, yesterday.toEpochDay().toString()))
+    }
+
+    /** Puts [cents] into a saving goal, or takes it out when [out], never more than is in it. */
     suspend fun moveSaving(goalId: Long, cents: Long, out: Boolean, day: LocalDate, name: String) {
-        if (cents <= 0) return
+        val amount = if (out) minOf(cents, savedIn(goalId)) else cents
+        if (amount <= 0) return
         dao.insertMoney(
             MoneyEntry(
-                kind = if (out) MoneyKind.TAKEN_OUT else MoneyKind.SAVED, cents = cents, note = name, day = day,
+                kind = if (out) MoneyKind.TAKEN_OUT else MoneyKind.SAVED, cents = amount, note = name, day = day,
                 at = nowMillis(), savingId = goalId,
             ).toEntity(),
         )

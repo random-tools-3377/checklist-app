@@ -114,7 +114,8 @@ class BudgetWidget : GlanceAppWidget() {
             val next = billsComingUp(dao.allBills().map { it.toCore() }, now.date).firstOrNull()?.let { (bill, day) ->
                 "${bill.name} · ${if (day == now.date) "today" else shortDate(day)} · ${centsText(bill.cents)}"
             }
-            return BudgetWidgetData.Shown(look, now, Pay.day(plan, now.date, changes[now.date]), month, spentToday, next)
+            // A night shift from yesterday still going shows until it ends.
+            return BudgetWidgetData.Shown(look, now, Pay.current(plan, now, changes), month, spentToday, next)
         }
     }
 }

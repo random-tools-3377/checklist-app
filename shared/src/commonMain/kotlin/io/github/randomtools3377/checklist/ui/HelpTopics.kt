@@ -393,7 +393,7 @@ enum class HelpTopic(val title: String, val intro: String, val steps: List<Strin
             "Open it with \"Report for\" and the month's name on the Budget tab.",
             "See pay, other money in, spending, money put into savings, and what's left.",
             "It says what share of your pay went on spending.",
-            "\"Each day's spending\" charts every day of the month, and names the biggest.",
+            "\"Each day's spending\" charts every day of the month, bills aside, and names the biggest.",
             "\"Where it went\" shows each category's spending and its share.",
             "Use ◀ and ▶ at the top to see other months.",
         ),

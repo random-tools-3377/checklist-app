@@ -48,6 +48,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -87,6 +88,12 @@ private val MONTHS = listOf(
 )
 
 private fun monthName(first: LocalDate) = "${MONTHS[first.monthNumber - 1]} ${first.year}"
+
+/** The usual week, kept while the screen is rebuilt: start, stop and break for each day, -1 for a day off. */
+private val WeekSaver = listSaver<List<WorkHours?>, Int>(
+    save = { week -> week.flatMap { if (it == null) listOf(-1, 0, 0) else listOf(it.start, it.stop, it.breakMinutes) } },
+    restore = { flat -> flat.chunked(3).map { (start, stop, rest) -> if (start < 0) null else WorkHours(start, stop, rest) } },
+)
 
 private fun minuteTime(minute: Int) = LocalTime((minute / 60) % 24, minute % 60)
 
@@ -145,6 +152,7 @@ fun BudgetScreen(
     val savings by vm.savings.collectAsStateWithLifecycle()
     val game by vm.moneyGame.collectAsStateWithLifecycle()
     val paid by vm.moneyPaid.collectAsStateWithLifecycle()
+    val workDays by vm.workDays.collectAsStateWithLifecycle()
     paid?.let { payouts ->
         AlertDialog(
             onDismissRequest = vm::moneyPaidSeen,
@@ -195,7 +203,9 @@ fun BudgetScreen(
             }
         }
         if (plan != null && plan.complete && shown.thisMonth) {
-            item { TodayPayCard(Pay.day(plan, now.date, shown.changes[now.date]), now, onChange = { onChangeDay(now.date) }) }
+            // A night shift from yesterday still going shows until it ends.
+            val todayPay = Pay.current(plan, now, workDays ?: shown.changes)
+            item { TodayPayCard(todayPay, now, onChange = { onChangeDay(todayPay.day) }) }
         }
         game?.let { today -> item { MoneyGameCard(today) } }
         month.pay?.let { pay ->
@@ -278,7 +288,7 @@ private fun TodayPayCard(pay: DayPay, now: LocalDateTime, onChange: () -> Unit) 
         Column(Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("💼 Today", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
-                TextButton(onClick = onChange, modifier = Modifier.testTag("change-today")) { Text("Change today") }
+                TextButton(onClick = onChange, modifier = Modifier.testTag("change-today")) { Text(if (pay.day == now.date) "Change today" else "Change this shift") }
             }
             val hours = pay.hours
             when {
@@ -308,7 +318,7 @@ private fun TodayPayCard(pay: DayPay, now: LocalDateTime, onChange: () -> Unit) 
                             done <= 0.0 -> " · starts at ${timeText(minuteTime(hours.start))}"
                             done >= 1.0 -> " · done for the day"
                             else -> " · ${minutesText(pay.minutesLeft(now))} to go"
-                        } + if (pay.changed) " · changed today" else "",
+                        } + if (!pay.changed) "" else if (pay.day == now.date) " · changed today" else " · changed",
                         style = MaterialTheme.typography.bodySmall,
                     )
                 }
@@ -465,7 +475,7 @@ fun PayEditor(vm: MainViewModel, onClose: () -> Unit) {
     var amount by rememberSaveable { mutableStateOf("") }
     var unit by rememberSaveable { mutableStateOf(PayUnit.HOUR) }
     var takeHome by rememberSaveable { mutableStateOf("100") }
-    var week by remember { mutableStateOf(List<WorkHours?>(7) { if (it < 5) WorkHours(9 * 60, 17 * 60, 30) else null }) }
+    var week by rememberSaveable(stateSaver = WeekSaver) { mutableStateOf(List<WorkHours?>(7) { if (it < 5) WorkHours(9 * 60, 17 * 60, 30) else null }) }
     var showErrors by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(current) {
         val plan = current
@@ -546,7 +556,7 @@ fun PayEditor(vm: MainViewModel, onClose: () -> Unit) {
         val monday = week[0]
         if (monday != null) {
             TextButton(
-                onClick = { week = week.mapIndexed { i, h -> if (i in 1..4 && h != null) monday else h } },
+                onClick = { week = week.mapIndexed { i, h -> if (i > 0 && h != null) monday else h } },
                 modifier = Modifier.testTag("copy-monday"),
             ) { Text("Same hours as Monday on every work day") }
         }
@@ -563,13 +573,15 @@ fun PayEditor(vm: MainViewModel, onClose: () -> Unit) {
 @Composable
 fun WorkDayEditor(start: LocalDate, vm: MainViewModel, onClose: () -> Unit) {
     val plan by vm.payPlan.collectAsStateWithLifecycle()
-    val view by vm.budget.collectAsStateWithLifecycle()
+    // Every changed day, so a day in another month shows as it is, not "As usual".
+    val changes by vm.workDays.collectAsStateWithLifecycle()
     var day by rememberSaveable { mutableStateOf(start.toEpochDay()) }
     val date = day.toDay()
-    val current = view?.changes?.get(date)
+    val loaded = changes != null
+    val current = changes?.get(date)
     val usual = plan?.usual(date)
     // 0 usual, 1 other hours, 2 off with pay, 3 off without.
-    var choice by rememberSaveable(day, current != null) {
+    var choice by rememberSaveable(day, loaded, current) {
         mutableStateOf(
             when {
                 current == null -> 0
@@ -579,11 +591,13 @@ fun WorkDayEditor(start: LocalDate, vm: MainViewModel, onClose: () -> Unit) {
             },
         )
     }
-    var hours by remember(day) { mutableStateOf(current?.hours ?: usual ?: WorkHours(9 * 60, 17 * 60, 30)) }
+    var hours by remember(day, loaded, current) { mutableStateOf(current?.hours ?: usual ?: WorkHours(9 * 60, 17 * 60, 30)) }
     EditorScaffold(
         title = "Change a day",
         onBack = onClose,
-        onSave = {
+        onSave = save@{
+            // Not before the day's change is known, or saving would wipe it.
+            if (!loaded) return@save
             when (choice) {
                 0 -> vm.usualWorkDay(date)
                 1 -> vm.setWorkDay(WorkDay(date, hours))
@@ -593,6 +607,7 @@ fun WorkDayEditor(start: LocalDate, vm: MainViewModel, onClose: () -> Unit) {
             onClose()
         },
     ) {
+        if (!loaded) return@EditorScaffold
         DateSetting("Day", date, { it?.let { picked -> day = picked.toEpochDay() } }, tag = "field:work-day", canClear = false)
         Text(
             "Usually: " + (usual?.let { "${timeText(minuteTime(it.start))} – ${timeText(minuteTime(it.stop))}" } ?: "a day off"),
@@ -862,10 +877,11 @@ internal val MoneyIcon: androidx.compose.ui.graphics.vector.ImageVector by lazy 
 @Composable
 fun TodayMoneyCard(vm: MainViewModel, onOpen: () -> Unit) {
     val plan by vm.payPlan.collectAsStateWithLifecycle()
-    val view by vm.budget.collectAsStateWithLifecycle()
+    // Every changed day, whatever month the Budget tab was left on.
+    val changes by vm.workDays.collectAsStateWithLifecycle()
     val shown = plan?.takeIf { it.complete } ?: return
     val now by rememberNow(live = true)
-    val pay = Pay.day(shown, now.date, view?.changes?.get(now.date))
+    val pay = Pay.current(shown, now, changes.orEmpty())
     val hours = pay.hours
     Card(Modifier.fillMaxWidth().padding(vertical = 4.dp).clickable(onClick = onOpen).testTag("today-money")) {
         Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {

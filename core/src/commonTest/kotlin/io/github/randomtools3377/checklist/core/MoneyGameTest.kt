@@ -23,6 +23,23 @@ class MoneyGameTest {
     }
 
     @Test
+    fun billsStillToComeAreTakenOffTheShareFromTheStart() {
+        // Rent of 900 on the 28th. On the 10th it isn't counted yet; on the 28th it is.
+        val rent = Bill(id = 9, name = "Rent", icon = "🏠", cents = 90_000, first = LocalDate(2026, 10, 28), countedTo = LocalDate(2026, 11, 10))
+        val before = MoneyGame.share(plan, first, emptyMap(), emptyList(), listOf(rent))!!
+        val counted = MoneyGame.share(plan, first, emptyMap(), listOf(spend(28, 90_000, bill = 9)), listOf(rent.copy(countedTo = LocalDate(2026, 11, 28))))!!
+        // (3000 − 900) over 30 days, both times.
+        assertEquals(70.0, before, 0.0001)
+        assertEquals(70.0, counted, 0.0001)
+        // A stopped bill, or one already counted for the month, takes nothing more off.
+        assertEquals(100.0, MoneyGame.share(plan, first, emptyMap(), emptyList(), listOf(rent.copy(archived = true)))!!, 0.0001)
+        assertEquals(100.0, MoneyGame.share(plan, first, emptyMap(), emptyList(), listOf(rent.copy(countedTo = LocalDate(2026, 11, 30))))!!, 0.0001)
+        // A weekly bill still to come counts each time it falls in the month: 4 more Mondays from the 9th.
+        val paper = Bill(id = 8, name = "Paper", icon = "📰", cents = 750, every = BillEvery.WEEKS, first = LocalDate(2026, 11, 2), countedTo = LocalDate(2026, 11, 8))
+        assertEquals((3000.0 - 4 * 7.5) / 30, MoneyGame.share(plan, first, emptyMap(), emptyList(), listOf(paper))!!, 0.0001)
+    }
+
+    @Test
     fun goodDaysPayAndMakeAStreak() {
         val entries = listOf(spend(2, 5_000), spend(3, 15_000), spend(5, 9_999), spend(5, 1_000, bill = 9))
         val share = { _: LocalDate -> 100.0 }

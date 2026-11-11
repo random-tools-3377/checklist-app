@@ -25,6 +25,26 @@ class BillsTest {
     }
 
     @Test
+    fun aMonthlyBillWithAnOldFirstDateIsStillFound() {
+        // Two years on, this month's rent is still due, and the next one is this month's.
+        val old = rent.copy(first = LocalDate(2024, 11, 11))
+        assertEquals(listOf(LocalDate(2026, 11, 11)), Bills.due(old, LocalDate(2026, 11, 11), LocalDate(2026, 11, 11)))
+        assertEquals(LocalDate(2026, 11, 15), Bills.next(rent.copy(first = LocalDate(2020, 1, 15)), LocalDate(2026, 11, 11)))
+        // Any first date, any range: the same days as stepping one by one from the first.
+        val firsts = listOf(LocalDate(2019, 1, 31), LocalDate(2020, 2, 29), LocalDate(2021, 7, 15), LocalDate(2024, 12, 1))
+        for (first in firsts) for (count in listOf(1, 2, 3, 12)) for (every in BillEvery.entries) {
+            val bill = rent.copy(first = first, count = count, every = every)
+            var from = LocalDate(2026, 1, 1)
+            while (from < LocalDate(2027, 1, 1)) {
+                val to = from.plusDays(45)
+                val expected = generateSequence(0) { it + 1 }.map { Bills.nth(bill, it) }.takeWhile { it <= to }.filter { it >= from }.toList()
+                assertEquals(expected, Bills.due(bill, from, to), "$bill from $from")
+                from = from.plusDays(13)
+            }
+        }
+    }
+
+    @Test
     fun weeklyBillsAndEndings() {
         assertEquals(
             listOf(LocalDate(2026, 11, 16), LocalDate(2026, 11, 30)),

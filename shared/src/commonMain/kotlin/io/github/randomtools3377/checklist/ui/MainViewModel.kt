@@ -2000,6 +2000,12 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
     /** Turns a feature on or off. The phone calendar also needs its permission (see Settings). */
     fun setFeature(feature: Feature, on: Boolean) {
         viewModelScope.launch {
+            // The budget game, turned back on (it or Budget), starts again from today: the days
+            // it was off aren't paid. This goes first, before the game sees it's on.
+            if (on && (feature == Feature.BUDGET || feature == Feature.BUDGET_GAME)) {
+                val other = if (feature == Feature.BUDGET) Feature.BUDGET_GAME else Feature.BUDGET
+                if (!feature.isOn(dao.setting(feature.key)) && other.isOn(dao.setting(other.key))) repository.restartMoneyGame(nowLocal().date)
+            }
             repository.setSetting(feature.key, if (on) feature.onValue else "0")
             // Shields count from the day they are first turned on, never earlier.
             if (on && feature == Feature.SHIELDS && dao.setting(io.github.randomtools3377.checklist.core.Shields.FROM) == null) {
@@ -2139,6 +2145,10 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
             }
         }.state(null)
 
+    /** Every changed work day, whatever month the Budget tab shows; null while loading. */
+    val workDays: StateFlow<Map<LocalDate, WorkDay>?> = dao.observeWorkDays(Long.MIN_VALUE, Long.MAX_VALUE)
+        .map { rows -> rows.map { it.toCore() }.associateBy { it.day } }.state(null)
+
     /** Moves the Budget tab [by] months, never past this month. */
     fun showBudgetMonth(by: Int) {
         val now = Budget.monthOf(nowLocal().date)
@@ -2185,8 +2195,9 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
         viewModelScope.launch { repository.saveSavingGoal(goal) }
     }
 
-    fun removeSavingGoal(id: Long) {
-        viewModelScope.launch { repository.removeSavingGoal(id) }
+    /** Removes a saving goal, taking out what's still in it first when [takeOut]. */
+    fun removeSavingGoal(id: Long, takeOut: Boolean = false) {
+        viewModelScope.launch { repository.removeSavingGoal(id, if (takeOut) nowLocal().date else null) }
     }
 
     /** Puts money into a saving goal, or takes it out. With the budget game on, reaching it pays. */
@@ -2220,17 +2231,13 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
     }
 
     /** Today in the budget game: the day's share, what's spent, and the money streak; null while it's off. */
-    val moneyGame: StateFlow<MoneyGameView?> = combine(features, budget, savings) { on, view, _ ->
+    val moneyGame: StateFlow<MoneyGameView?> = combine(features, budget, savings, bills, workDays) { on, view, _, _, _ ->
         if (Feature.BUDGET !in on || Feature.BUDGET_GAME !in on || view == null || !view.thisMonth) return@combine null
-        val today = nowLocal().date
-        val entries = repository.moneyThisAndLastMonth(today)
-        val shares = mutableMapOf<LocalDate, Double?>()
-        val shareOf = { d: LocalDate -> shares.getOrPut(Budget.monthOf(d)) { MoneyGame.share(view.plan, Budget.monthOf(d), view.changes, entries) } }
-        val from = repository.moneyGameFrom() ?: today
-        val share = shareOf(today)
-        val spent = MoneyGame.spent(today, entries)
-        val before = MoneyGame.streak(from, today.minusDays(1), shareOf, entries)
-        MoneyGameView(share, spent, if (share != null && MoneyGame.day(spent, share) != MoneyGame.Day.OVER) before + 1 else before, before)
+        // From the same money, work days and bills as the days paid, back to the day the game started.
+        val game = repository.moneyGameToday(nowLocal().date)
+        val share = game.share
+        val before = game.streakBefore
+        MoneyGameView(share, game.spentCents, if (share != null && MoneyGame.day(game.spentCents, share) != MoneyGame.Day.OVER) before + 1 else before, before)
     }.state(null)
 
     /** Puts in the starting categories the first time the budget is opened. */

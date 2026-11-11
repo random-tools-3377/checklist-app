@@ -141,6 +141,17 @@ object Pay {
         }
     }
 
+    /**
+     * The work day going on at [now]: yesterday's while a night shift from yesterday is still
+     * going, otherwise today's. [changes] holds the changed days.
+     */
+    fun current(plan: PayPlan, now: LocalDateTime, changes: Map<LocalDate, WorkDay>): DayPay {
+        val yesterday = now.date.minusDays(1)
+        val earlier = day(plan, yesterday, changes[yesterday])
+        if (earlier.hours != null && earlier.done(now).let { it > 0.0 && it < 1.0 }) return earlier
+        return day(plan, now.date, changes[now.date])
+    }
+
     /** [day]'s month: what is earned by [now], of its whole pay. */
     fun month(plan: PayPlan, day: LocalDate, changes: Map<LocalDate, WorkDay>, now: LocalDateTime): MonthPay {
         val days = monthDays(day).map { day(plan, it, changes[it]) }
@@ -233,6 +244,13 @@ object Budget {
         "Health" to "💊", "Shopping" to "🛍️", "Rewards" to "🎁", "Other" to "📦",
     ).mapIndexed { i, (name, icon) ->
         MoneyCategory(name = name, icon = icon, position = i, role = if (name == "Rewards") CategoryRole.REWARDS else null)
+    }
+
+    /** The category a new bill goes under: Bills, or once it's renamed, the one with its 🧾 icon. */
+    fun billsCategory(categories: List<MoneyCategory>): MoneyCategory? {
+        val inUse = categories.filter { !it.archived }
+        val bills = STARTER.first { it.name == "Bills" }
+        return inUse.firstOrNull { it.name == bills.name } ?: inUse.firstOrNull { it.icon == bills.icon }
     }
 
     /** [amount] of money in cents, rounded to the nearest cent. */

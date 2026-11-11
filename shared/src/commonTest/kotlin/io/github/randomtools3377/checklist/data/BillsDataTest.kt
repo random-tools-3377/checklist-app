@@ -6,6 +6,7 @@ import io.github.randomtools3377.checklist.core.BillEvery
 import io.github.randomtools3377.checklist.core.MoneyKind
 import io.github.randomtools3377.checklist.core.SavingGoal
 import io.github.randomtools3377.checklist.core.SavingProgress
+import io.github.randomtools3377.checklist.core.minusDays
 import io.github.randomtools3377.checklist.core.plusDays
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
@@ -54,6 +55,37 @@ class BillsDataTest {
         repository.removeBill(dao.allBills().first { it.name == "Paper" }.id)
         repository.countBills(LocalDate(2026, 12, 31))
         assertEquals(3, dao.allMoney().count { it.note == "Paper" })
+    }
+
+    @Test
+    fun aMonthlyBillWithAnOldFirstDateIsCountedOnItsDay() = runTest {
+        repository.saveBill(Bill(name = "Rent", icon = "🏠", cents = 90_000, first = LocalDate(2024, 11, 11)), today.minusDays(1))
+        repository.countBills(today)
+        assertEquals(listOf(today), dao.allMoney().map { it.toCore().day })
+    }
+
+    @Test
+    fun noMoreComesOutOfASavingGoalThanIsInIt() = runTest {
+        repository.saveSavingGoal(SavingGoal(name = "Bike", icon = "🚲", targetCents = 30_000))
+        val bike = dao.allSavingGoals().single().toCore()
+        repository.moveSaving(bike.id, 5_000, out = false, day = today, name = bike.name)
+        repository.moveSaving(bike.id, 50_000, out = true, day = today, name = bike.name)
+        repository.moveSaving(bike.id, 1_000, out = true, day = today, name = bike.name)
+        val money = dao.allMoney().map { it.toCore() }
+        assertEquals(2, money.size)
+        assertEquals(setOf(MoneyKind.SAVED to 5_000L, MoneyKind.TAKEN_OUT to 5_000L), money.map { it.kind to it.cents }.toSet())
+
+        // Removed with what's in it taken out first, so it isn't left counted as saved.
+        repository.moveSaving(bike.id, 2_000, out = false, day = today, name = bike.name)
+        repository.removeSavingGoal(bike.id, takeOutOn = today)
+        assertTrue(dao.allSavingGoals().single().archived)
+        assertEquals(0L, dao.allMoney().map { it.toCore() }.sumOf { if (it.kind == MoneyKind.SAVED) it.cents else -it.cents })
+        // Removed as it is, what's in it stays saved.
+        repository.saveSavingGoal(SavingGoal(name = "Trip", icon = "✈️", targetCents = 30_000))
+        val trip = dao.allSavingGoals().first { it.name == "Trip" }.toCore()
+        repository.moveSaving(trip.id, 3_000, out = false, day = today, name = trip.name)
+        repository.removeSavingGoal(trip.id)
+        assertEquals(1, dao.allMoney().count { it.savingId == trip.id })
     }
 
     @Test

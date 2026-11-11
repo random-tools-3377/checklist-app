@@ -88,6 +88,39 @@ class BudgetTest {
     }
 
     @Test
+    fun afterMidnightTheNightShiftStillGoingIsShown() {
+        val night = WorkHours(22 * 60, 6 * 60)
+        val plan = PayPlan(10.0, PayUnit.HOUR, List(7) { if (it < 5) night else null })
+        val tuesday = monday.plusDays(1)
+        // Tuesday 2 am: Monday's shift, half done.
+        val shift = Pay.current(plan, at(tuesday, 2), emptyMap())
+        assertEquals(monday, shift.day)
+        assertEquals(0.5, shift.done(at(tuesday, 2)), 0.0001)
+        // Once it's over, Tuesday's own, which starts at 10 pm.
+        assertEquals(tuesday, Pay.current(plan, at(tuesday, 6), emptyMap()).day)
+        assertEquals(tuesday, Pay.current(plan, at(tuesday, 23), emptyMap()).day)
+        // Saturday 2 am: Friday's shift, though Saturday is a day off.
+        val saturday = monday.plusDays(5)
+        assertEquals(monday.plusDays(4), Pay.current(plan, at(saturday, 2), emptyMap()).day)
+        // A day shift is over by midnight; a changed day off yesterday has nothing still going.
+        val days = PayPlan(10.0, PayUnit.HOUR, weekdays)
+        assertEquals(tuesday, Pay.current(days, at(tuesday, 2), emptyMap()).day)
+        assertEquals(tuesday, Pay.current(plan, at(tuesday, 2), mapOf(monday to WorkDay(monday))).day)
+        // Yesterday's change counts: a later shift that runs to 8 am.
+        val late = mapOf(monday to WorkDay(monday, WorkHours(23 * 60, 8 * 60)))
+        assertEquals(monday, Pay.current(plan, at(tuesday, 7), late).day)
+    }
+
+    @Test
+    fun newBillsGoUnderBillsEvenOnceItIsRenamed() {
+        val categories = Budget.STARTER.mapIndexed { i, it -> it.copy(id = i + 1L) }
+        assertEquals("Bills", Budget.billsCategory(categories)?.name)
+        val renamed = categories.map { if (it.name == "Bills") it.copy(name = "Utilities") else it }
+        assertEquals("Utilities", Budget.billsCategory(renamed)?.name)
+        assertNull(Budget.billsCategory(renamed.map { if (it.name == "Utilities") it.copy(archived = true) else it }))
+    }
+
+    @Test
     fun thePayPlanIsStoredAsText() {
         val plan = PayPlan(18.5, PayUnit.HOUR, weekdays, takeHome = 85)
         assertEquals(plan, PayPlan.decode(PayPlan.encode(plan)))

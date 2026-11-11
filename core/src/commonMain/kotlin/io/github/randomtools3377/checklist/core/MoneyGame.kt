@@ -29,14 +29,29 @@ object MoneyGame {
     private fun inMonth(entries: List<MoneyEntry>, first: LocalDate) =
         entries.filter { it.day.year == first.year && it.day.month == first.month }
 
-    /** A day's share of [first]'s month, in money; null when there is nothing to share out. */
-    fun share(plan: PayPlan?, first: LocalDate, changes: Map<LocalDate, WorkDay>, entries: List<MoneyEntry>): Double? {
+    /**
+     * A day's share of [first]'s month, in money; null when there is nothing to share out. The
+     * month's bills come off: those already counted, and those of [bills] still to come in it, so
+     * the share stays the same when a bill falls due.
+     */
+    fun share(
+        plan: PayPlan?,
+        first: LocalDate,
+        changes: Map<LocalDate, WorkDay>,
+        entries: List<MoneyEntry>,
+        bills: List<Bill> = emptyList(),
+    ): Double? {
         val month = inMonth(entries, first)
-        val pay = plan?.takeIf { it.complete }?.let { p -> Pay.monthDays(first).sumOf { Pay.day(p, it, changes[it]).total } } ?: 0.0
+        val days = Pay.monthDays(first)
+        val pay = plan?.takeIf { it.complete }?.let { p -> days.sumOf { Pay.day(p, it, changes[it]).total } } ?: 0.0
         val received = month.filter { it.kind == MoneyKind.RECEIVED }.sumOf { it.cents } / 100.0
-        val bills = month.filter { it.kind == MoneyKind.SPENT && it.billId != null }.sumOf { it.cents } / 100.0
-        val pool = pay + received - bills
-        return if (pay + received <= 0.0) null else maxOf(0.0, pool) / Pay.monthDays(first).size
+        val counted = month.filter { it.kind == MoneyKind.SPENT && it.billId != null }.sumOf { it.cents } / 100.0
+        val toCome = bills.filter { !it.archived }.sumOf { bill ->
+            val from = maxOf(days.first(), bill.countedTo?.plusDays(1) ?: days.first())
+            bill.cents * Bills.due(bill, from, days.last()).size
+        } / 100.0
+        val pool = pay + received - counted - toCome
+        return if (pay + received <= 0.0) null else maxOf(0.0, pool) / days.size
     }
 
     /** What [day] spent, bills aside, in cents. */

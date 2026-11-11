@@ -109,6 +109,9 @@ fun BillsCard(bills: List<Bill>, onBills: () -> Unit) {
 fun SavingsCard(savings: List<SavingProgress>, hourly: Double?, vm: MainViewModel) {
     var editing by remember { mutableStateOf<SavingGoal?>(null) }
     var moving by remember { mutableStateOf<Pair<SavingGoal, Boolean>?>(null) }
+    var removing by remember { mutableStateOf<SavingGoal?>(null) }
+    // What is in a goal now, in cents.
+    fun savedIn(goal: SavingGoal): Long = savings.firstOrNull { it.goal.id == goal.id }?.savedCents ?: 0
     Card(Modifier.fillMaxWidth().testTag("savings-card")) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -170,7 +173,7 @@ fun SavingsCard(savings: List<SavingProgress>, hourly: Double?, vm: MainViewMode
                     )
                     MoneyAmountField(target, { target = it }, "How much it costs", "field:saving-target")
                     if (goal.id != 0L) {
-                        TextButton(onClick = { vm.removeSavingGoal(goal.id); editing = null }, modifier = Modifier.testTag("remove-saving")) {
+                        TextButton(onClick = { removing = goal; editing = null }, modifier = Modifier.testTag("remove-saving")) {
                             Text("Remove it", color = MaterialTheme.colorScheme.error)
                         }
                     }
@@ -189,20 +192,55 @@ fun SavingsCard(savings: List<SavingProgress>, hourly: Double?, vm: MainViewMode
             dismissButton = { TextButton(onClick = { editing = null }) { Text("Cancel") } },
         )
     }
+    // Removing asks first, and says what is still in it.
+    removing?.let { goal ->
+        val left = savedIn(goal)
+        AlertDialog(
+            onDismissRequest = { removing = null },
+            title = { Text("Remove ${goal.name}?") },
+            text = {
+                Text(
+                    if (left > 0) "It still has ${centsText(left)} in it. Take it out to put it back in this month's money, or remove it and keep it counted as saved."
+                    else "What went in and out stays in the history.",
+                )
+            },
+            confirmButton = {
+                if (left > 0) {
+                    Column(horizontalAlignment = Alignment.End) {
+                        TextButton(onClick = { vm.removeSavingGoal(goal.id, takeOut = true); removing = null }, modifier = Modifier.testTag("remove-saving-take-out")) {
+                            Text("Take it out and remove")
+                        }
+                        TextButton(onClick = { vm.removeSavingGoal(goal.id); removing = null }, modifier = Modifier.testTag("confirm-remove-saving")) {
+                            Text("Remove, keep it saved", color = MaterialTheme.colorScheme.error)
+                        }
+                        TextButton(onClick = { removing = null }) { Text("Cancel") }
+                    }
+                } else {
+                    TextButton(onClick = { vm.removeSavingGoal(goal.id); removing = null }, modifier = Modifier.testTag("confirm-remove-saving")) {
+                        Text("Remove", color = MaterialTheme.colorScheme.error)
+                    }
+                }
+            },
+            dismissButton = if (left > 0) null else ({ TextButton(onClick = { removing = null }) { Text("Cancel") } }),
+        )
+    }
     moving?.let { (goal, out) ->
         var amount by remember(goal, out) { mutableStateOf("") }
         val value = Amounts.parse(amount)?.takeIf { it > 0 }
+        // Never more out than is in it.
+        val inIt = savedIn(goal)
+        val tooMuch = out && value != null && Budget.cents(value) > inIt
         AlertDialog(
             onDismissRequest = { moving = null },
             title = { Text(if (out) "Take out of ${goal.name}" else "Put into ${goal.name}") },
-            text = { MoneyAmountField(amount, { amount = it }, "How much", "field:saving-amount") },
+            text = { MoneyAmountField(amount, { amount = it }, "How much", "field:saving-amount", error = if (tooMuch) "Only ${centsText(inIt)} in it" else null) },
             confirmButton = {
                 TextButton(
                     onClick = {
                         vm.moveSaving(goal, Budget.cents(value!!), out)
                         moving = null
                     },
-                    enabled = value != null,
+                    enabled = value != null && !tooMuch,
                     modifier = Modifier.testTag("confirm-saving"),
                 ) { Text(if (out) "Take out" else "Put in") }
             },
@@ -310,9 +348,9 @@ fun BillEditor(id: Long, vm: MainViewModel, onClose: () -> Unit) {
             loaded = true
         }
     }
-    // Bills go under Bills unless another category is picked.
+    // Bills go under Bills unless another category is picked, found by its icon once it's renamed.
     LaunchedEffect(categories) {
-        if (categoryId == null && id == 0L) categoryId = categories.firstOrNull { it.name == "Bills" && !it.archived }?.id
+        if (categoryId == null && id == 0L) categoryId = Budget.billsCategory(categories)?.id
     }
     val value = Amounts.parse(amount)?.takeIf { it > 0 }
     val times = count.toIntOrNull()?.takeIf { it in 1..99 }
@@ -426,7 +464,8 @@ fun BudgetReportScreen(vm: MainViewModel, onBack: () -> Unit) {
         if (shown == null) return@Scaffold
         val month = remember(shown) { Budget.month(shown.first, shown.plan, shown.changes, shown.entries, shown.categories, nowLocal()) }
         val days = Pay.monthDays(shown.first)
-        val spentByDay = days.map { day -> shown.entries.filter { it.day == day && it.kind == MoneyKind.SPENT }.sumOf { it.cents } }
+        // Bills aside, as in the budget game, so the day a big bill falls doesn't always come out top.
+        val spentByDay = days.map { day -> shown.entries.filter { it.day == day && it.kind == MoneyKind.SPENT && it.billId == null }.sumOf { it.cents } }
         LazyColumn(
             modifier = Modifier.fillMaxSize().testTag("report-list"),
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = padding.calculateTopPadding() + 8.dp, bottom = padding.calculateBottomPadding() + 24.dp),
@@ -458,12 +497,12 @@ fun BudgetReportScreen(vm: MainViewModel, onBack: () -> Unit) {
                     }
                 }
             }
-            item { Text("Each day's spending", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary) }
+            item { Text("Each day's spending, bills aside", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary) }
             item { DayBars(spentByDay, Modifier.fillMaxWidth().height(120.dp).testTag("report-chart")) }
             item {
                 val most = spentByDay.withIndex().maxByOrNull { it.value }?.takeIf { it.value > 0 }
                 Text(
-                    most?.let { "Most on ${shortDate(days[it.index])}: ${centsText(it.value)}." } ?: "Nothing spent yet.",
+                    most?.let { "Most on ${shortDate(days[it.index])}: ${centsText(it.value)}." } ?: "Nothing spent yet, bills aside.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
