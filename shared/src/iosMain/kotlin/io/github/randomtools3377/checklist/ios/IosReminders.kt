@@ -94,17 +94,19 @@ internal object IosReminders {
             val count = ticks.count { it.countsToward(goal, window.start) }
             val skipped = window.period == Period.DAILY && dao.lapses(goal.id, window.start.toEpochDay(), window.end.toEpochDay())
                 .any { it.kind == "SKIP" && it.periodStart == window.start.toEpochDay() }
-            count < (if (alert.number > 0) alert.number else goal.target) && !skipped
+            val needed = if (alert.number > 0) alert.number else goal.target
+            count < needed && !skipped
         }.take(MOST)
 
         center.removeAllPendingNotificationRequests()
         for (alert in waiting) {
             val goal = goals.find { it.id == alert.goalId } ?: continue
             val hidden = hidePrivate && goal.private
+            // The text is set through its setters: Kotlin sees the read-only parent's properties.
             val content = UNMutableNotificationContent()
-            content.title = if (hidden) "🔒 A private goal" else "${goal.icon} ${goal.name}"
-            content.body = if (hidden) "Due now" else words(alert)
-            content.sound = UNNotificationSound.defaultSound
+            content.setTitle(if (hidden) "🔒 A private goal" else "${goal.icon} ${goal.name}")
+            content.setBody(if (hidden) "Due now" else words(alert))
+            content.setSound(UNNotificationSound.defaultSound)
             val request = UNNotificationRequest.requestWithIdentifier(
                 "goal-${alert.goalId}-${alert.at}-${alert.kind}",
                 content,
