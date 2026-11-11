@@ -66,6 +66,13 @@ import io.github.randomtools3377.checklist.core.Mark
 import io.github.randomtools3377.checklist.core.Outfit
 import io.github.randomtools3377.checklist.core.QuestProgress
 import io.github.randomtools3377.checklist.core.BossView
+import io.github.randomtools3377.checklist.core.BetRefusal
+import io.github.randomtools3377.checklist.core.BetRow
+import io.github.randomtools3377.checklist.core.BetState
+import io.github.randomtools3377.checklist.core.Bets
+import io.github.randomtools3377.checklist.core.Goal
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
 import io.github.randomtools3377.checklist.core.Bosses
 import io.github.randomtools3377.checklist.core.Item
 import androidx.compose.material3.Button
@@ -452,4 +459,98 @@ fun attackText(dealt: Int, beaten: Boolean, paid: Int): String = when {
     beaten && paid > 0 -> "💥 $dealt damage, and it's beaten! +${pointsText(paid)}"
     beaten -> "💥 $dealt damage, and it's beaten!"
     else -> "💥 $dealt damage!"
+}
+
+/** On Today, with bets on: this week's bets and how far along each is, and a way to place one. */
+@Composable
+fun BetsCard(rows: List<BetRow>, habits: List<Goal>, balance: Int, onPlace: (Long, Int, Int, (BetRefusal?) -> Unit) -> Unit) {
+    var placing by remember { mutableStateOf(false) }
+    Card(Modifier.fillMaxWidth().testTag("bets")) {
+        Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("🎲 Bet on yourself", style = MaterialTheme.typography.titleSmall)
+            if (rows.isEmpty()) {
+                Text(
+                    "Stake points that you'll do a goal so many times this week. Do it and win twice the stake back; fall short and it's gone.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            rows.forEach { row ->
+                val bet = row.bet
+                Text(
+                    "${row.goal}: " + when (bet.state) {
+                        BetState.OPEN -> "${row.done} of ${bet.times} · ${pointsText(bet.stake)} at stake, wins ${pointsText(bet.prize)}"
+                        BetState.WON -> "won! +${pointsText(bet.prize)}"
+                        BetState.LOST -> "lost ${pointsText(bet.stake)}"
+                    },
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = if (bet.state == BetState.WON) goodColor() else MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.testTag("bet:${bet.goalId}"),
+                )
+            }
+            if (rows.count { it.bet.state == BetState.OPEN } < Bets.MOST_OPEN && habits.isNotEmpty()) {
+                TextButton(onClick = { placing = true }, modifier = Modifier.testTag("bet-place")) { Text("Place a bet") }
+            }
+        }
+    }
+    if (placing) {
+        PlaceBetDialog(habits.filter { h -> rows.none { it.bet.goalId == h.id } }, balance, onPlace, onClose = { placing = false })
+    }
+}
+
+@Composable
+private fun PlaceBetDialog(habits: List<Goal>, balance: Int, onPlace: (Long, Int, Int, (BetRefusal?) -> Unit) -> Unit, onClose: () -> Unit) {
+    var goalId by remember { mutableStateOf(habits.firstOrNull()?.id) }
+    var times by remember { mutableStateOf(3) }
+    var stake by remember { mutableStateOf(Bets.STAKES.first()) }
+    var problem by remember { mutableStateOf<String?>(null) }
+    AlertDialog(
+        onDismissRequest = onClose,
+        title = { Text("Bet on yourself") },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Which goal", style = MaterialTheme.typography.labelLarge)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    habits.forEach { goal ->
+                        FilterChip(selected = goalId == goal.id, onClick = { goalId = goal.id }, label = { Text("${goal.icon} ${goal.name}") }, modifier = Modifier.testTag("bet-goal:${goal.name}"))
+                    }
+                }
+                Text("How many times this week", style = MaterialTheme.typography.labelLarge)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    (1..7).forEach { n -> FilterChip(selected = times == n, onClick = { times = n }, label = { Text("$n") }, modifier = Modifier.testTag("bet-times:$n")) }
+                }
+                Text("Stake", style = MaterialTheme.typography.labelLarge)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Bets.STAKES.forEach { n ->
+                        FilterChip(selected = stake == n, onClick = { stake = n }, enabled = n <= balance, label = { Text(pointsText(n)) }, modifier = Modifier.testTag("bet-stake:$n"))
+                    }
+                }
+                Text(
+                    "${pointsText(stake)} comes off now. Do it and you get ${pointsText(stake * 2)} back.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                problem?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    val id = goalId ?: return@TextButton
+                    onPlace(id, times, stake) { refusal ->
+                        problem = when (refusal) {
+                            null -> { onClose(); null }
+                            BetRefusal.TOO_POOR -> "Not enough ${pointsWord()} for that stake."
+                            BetRefusal.ALREADY -> "There's already a bet on that goal this week."
+                            BetRefusal.TOO_MANY -> "Three bets at a time is the most."
+                            BetRefusal.NOT_A_HABIT -> "Only habits can be bet on."
+                        }
+                    }
+                },
+                enabled = goalId != null && stake <= balance,
+                modifier = Modifier.testTag("bet-ok"),
+            ) { Text("Bet ${pointsText(stake)}") }
+        },
+        dismissButton = { TextButton(onClick = onClose) { Text("Cancel") } },
+    )
 }

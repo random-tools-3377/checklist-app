@@ -127,6 +127,7 @@ fun TodayScreen(
     val quests by vm.quests.collectAsStateWithLifecycle()
     val race by vm.race.collectAsStateWithLifecycle()
     val boss by vm.boss.collectAsStateWithLifecycle()
+    val bets by vm.bets.collectAsStateWithLifecycle()
     val grid = look.layout == TodayLayout.GRID
     // In the grid, holding a tile opens its full card here.
     var details by remember { mutableStateOf<Long?>(null) }
@@ -433,6 +434,11 @@ fun TodayScreen(
                         RaceCard(standing)
                         Spacer(Modifier.height(12.dp))
                     }
+                    bets?.let { rows ->
+                        val habits = (view.dueToday + view.thisWeek).map { it.goal }.filter { it.kind == io.github.randomtools3377.checklist.core.GoalKind.HABIT }.distinctBy { it.id }
+                        BetsCard(rows, habits, view.balance) { goalId, times, stake, done -> vm.placeBet(goalId, times, stake, done) }
+                        Spacer(Modifier.height(12.dp))
+                    }
                     boss?.let { fight ->
                         BossCard(fight) { say ->
                             vm.attackBoss { attack -> say(attack?.let { attackText(it.dealt, it.beaten, it.paid) } ?: "Nothing to use.") }
@@ -450,6 +456,17 @@ fun TodayScreen(
                 TodaySection.STREAKS -> if (!(view.isEmpty && screen.streaks.done == 0 && screen.streaks.perfect == 0)) {
                     item(key = "streaks") {
                         StreakCard(screen.streaks, screen.streakSettings)
+                        // With streak shields on: those held, and the last day one saved.
+                        screen.shields?.let { shields ->
+                            Text(
+                                "🛡️ " + (if (shields.held == 1) "1 shield" else "${shields.held} shields") +
+                                    (shields.saved.lastOrNull()?.let { " · one saved your streak on ${shortDate(it)}" } ?: "") +
+                                    (if (shields.held < io.github.randomtools3377.checklist.core.Shields.MOST) " · next at ${(screen.streaks.done / io.github.randomtools3377.checklist.core.Shields.EVERY + 1) * io.github.randomtools3377.checklist.core.Shields.EVERY} days" else ""),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(top = 4.dp).testTag("shields"),
+                            )
+                        }
                         Spacer(Modifier.height(12.dp))
                     }
                 }

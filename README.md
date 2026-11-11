@@ -95,6 +95,7 @@ keeps the data.
 - 0.46.0: the character drawn, styled your way, with gear from its skills.
 - 0.47.0: daily quests, combos, and racing last week.
 - 0.48.0: items, a boss each week, and lucky ticks.
+- 0.49.0: bet on yourself, and streak shields.
 
 Every step in CLAUDE.md's build order is built. The iPhone app waits for a way to install it.
 

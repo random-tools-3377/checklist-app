@@ -525,6 +525,10 @@ Build order **(default)**, each step a Release the owner can try:
     Today, and beating it pays 25 points once. Lucky ticks: one tick in ten, in the app, pays its
     points again or opens a chest of 5 to 15; undoing the tick takes the extra back. Quest,
     combo, boss and lucky points are bonuses: they add to the balance, not to experience.
+    Bets: stakes of 10, 25 or 50 points, taken when placed and never more than the balance; one
+    bet per habit a week and three at a time; reaching the count wins twice the stake straight
+    away, and undoing the tick that won it takes the win back; a week ending short loses it.
+    Shields count from the day they are turned on; badges count streaks without them.
     Then, also chosen by the owner: paths and titles (at level 10 the user chooses a path, like
     Athlete, Scholar or Maker, which gives a title and a little more experience in its skill;
     more titles come from habits, like "Early bird"); and moods and moves, where the character

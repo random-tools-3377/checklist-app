@@ -29,6 +29,8 @@ enum class Feature(val key: String, val onValue: String, val title: String, val 
     RACE("feature_race", "1", "Beat last week", "Today shows this week's points against last week's by the same time, so you can race yourself.", "Game"),
     BOSSES("feature_bosses", "1", "Items and bosses", "Every tick earns an item from its goal's skill. Each week a boss arrives, weaker to two skills; use your items on it from Today to beat it for a bonus.", "Game"),
     LUCKY("feature_lucky", "1", "Lucky ticks", "Now and then a tick pays double or opens a small chest of points. It never takes anything away.", "Game"),
+    BETS("feature_bets", "1", "Bet on yourself", "Stake points that you'll do a goal so many times this week: do it and win twice the stake back, fall short and the stake is gone.", "Game"),
+    SHIELDS("feature_shields", "1", "Streak shields", "Every 30 days of main streak earns a shield (hold 2 at most). A day that would break the main streak uses one up and the streak goes on.", "Game"),
     AI("feature_ai", "1", "AI helper", "Help from an AI that runs on this phone, with no internet: a new habit from a sentence, steps for a project, a note on your week, and voice on Today. Needs the Checklist AI app and its AI file.", "AI"),
     ;
 

@@ -230,6 +230,8 @@ data class TodayState(
     val lastTicks: Map<Long, Tick> = emptyMap(),
     /** The goal missed most lately, which pays 50% more this week (see Boost). */
     val boostedGoalId: Long? = null,
+    /** With streak shields on: the shields held and the days they saved. */
+    val shields: io.github.randomtools3377.checklist.core.Shielded? = null,
     /** Today's events in the phone's calendar, when it is shown. */
     val events: List<Busy> = emptyList(),
     /** For goals to quit: days in a row avoided. */
@@ -439,7 +441,16 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             }
             val usual = raw.usual
             val records = StreakCounter.records(day.minusDays(STREAK_DAYS), day, raw.goals, raw.ticks.filter { it.stepId == null }, lapses)
-            val streaks = StreakCounter.count(records, day, s.streak)
+            // Streak shields, while on, can keep the main streak going.
+            val shieldsFrom = if (Feature.SHIELDS.isOn(dao.setting(Feature.SHIELDS.key))) {
+                dao.setting(io.github.randomtools3377.checklist.core.Shields.FROM)?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: day
+            } else {
+                null
+            }
+            val shielded = shieldsFrom?.let { io.github.randomtools3377.checklist.core.Shields.of(records, it, day, s.streak) }
+            fun mainStreak(on: LocalDate): Int = shieldsFrom?.let { io.github.randomtools3377.checklist.core.Shields.of(records, it, on, s.streak).main }
+                ?: StreakCounter.count(records, on, s.streak).done
+            val streaks = StreakCounter.count(records, day, s.streak).let { plain -> shielded?.let { plain.copy(done = it.main) } ?: plain }
             val paceSettings = PaceSettings(s.dayEndHour, s.defaultFinish, s.dayStart)
             val pace = Pace.today(moment, day, todayView.dueToday, paceSettings, busy)
             val recommended = s.order == ORDER_RECOMMENDED
@@ -466,7 +477,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 hasDayStart = s.dayStart != null,
                 boostedGoalId = if (boostOn) Boost.goalFor(day, raw.goals, lapses)?.id else null,
                 events = busy,
-                streakPercent = if (streakBonusOn) StreakBonus.percentFor(StreakCounter.count(records, day.minusDays(1), s.streak).done) else 100,
+                streakPercent = if (streakBonusOn) StreakBonus.percentFor(mainStreak(day.minusDays(1))) else 100,
+                shields = shielded,
                 quitDays = raw.goals.filter { it.quit && !it.archived }.associate { it.id to Quit.daysWithout(it, raw.ticks, day) },
                 challenges = raw.goals.filter { it.challenge != null && !it.archived }.mapNotNull { goal ->
                     Challenges.progress(goal, raw.ticks, lapses, emptyList(), day)?.let { goal.id to it }
@@ -1111,14 +1123,21 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         undoBar.tryEmit(Undoable(message) { viewModelScope.launch { undo() } })
     }
 
-    private suspend fun offerTickUndo(goalId: Long, result: TickResult, luck: io.github.randomtools3377.checklist.data.Repository.LuckPaid? = null, undo: suspend () -> Unit) {
+    private suspend fun offerTickUndo(
+        goalId: Long,
+        result: TickResult,
+        luck: io.github.randomtools3377.checklist.data.Repository.LuckPaid? = null,
+        wonBets: Int = 0,
+        undo: suspend () -> Unit,
+    ) {
         if (result !is TickResult.Ticked) return
         // A goal done: the next in its habit chain is reminded.
         if (result.finished) Reminders.afterDone(getApplication(), goalId)
         val name = repository.goal(goalId)?.name ?: return
         val paid = result.points + result.bonus
         val lucky = luck?.let { if (it.double) " · 🍀 lucky, twice the points: +${it.points}" else " · 🍀 lucky chest: +${it.points}" }.orEmpty()
-        offerUndo((if (paid > 0) "$name · +$paid" else "$name ticked") + lucky, undo)
+        val bet = if (wonBets > 0) " · 🎲 bet won: +$wonBets" else ""
+        offerUndo((if (paid > 0) "$name · +$paid" else "$name ticked") + lucky + bet, undo)
     }
 
     fun tickHabit(goalId: Long, onResult: (TickResult) -> Unit = {}) {
@@ -1131,9 +1150,13 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             } else {
                 null
             }
-            offerTickUndo(goalId, result, luck) {
+            // Bets on yourself: one reached by this tick is won straight away.
+            val betsOn = result is TickResult.Ticked && Feature.BETS in features.value
+            val won = if (betsOn) container.bets.settle().filter { it.state == io.github.randomtools3377.checklist.core.BetState.WON } else emptyList()
+            offerTickUndo(goalId, result, luck, wonBets = won.sumOf { it.prize }) {
                 book.undoHabitTick(goalId)
                 luck?.let { repository.removeEntry(it.entryId) }
+                if (won.isNotEmpty()) container.bets.takeBackWins()
             }
         }
     }
@@ -1498,6 +1521,27 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch { onDone(repository.attackBoss(currentDay())) }
     }
 
+    /** This week's bets, each with its goal and how far along it is, while bets are on; null when off. */
+    val bets: StateFlow<List<io.github.randomtools3377.checklist.core.BetRow>?> =
+        combine(features, today, dao.observeBalance(), dao.observeSetting(io.github.randomtools3377.checklist.core.Bets.SETTING), dao.observeGoals()) { on, day, _, text, goals ->
+            if (Feature.BETS in on) Triple(day, text, goals) else null
+        }.mapLatest { found ->
+            found?.let { (day, text, goals) ->
+                val monday = io.github.randomtools3377.checklist.core.Bosses.monday(day)
+                val ticks = dao.allTicks().map { it.toCore() }
+                io.github.randomtools3377.checklist.core.Bets.decode(text).filter { it.week == monday }.mapNotNull { bet ->
+                    goals.firstOrNull { it.id == bet.goalId }?.let { goal ->
+                        io.github.randomtools3377.checklist.core.BetRow(bet, "${goal.icon} ${goal.name}", io.github.randomtools3377.checklist.core.Bets.count(ticks, bet.goalId, monday))
+                    }
+                }
+            }
+        }.state(null)
+
+    /** Bets that [goalId] will be done [times] times this week, for [stake] points; [onDone] gets why not, or null. */
+    fun placeBet(goalId: Long, times: Int, stake: Int, onDone: (io.github.randomtools3377.checklist.core.BetRefusal?) -> Unit) {
+        viewModelScope.launch { onDone(container.bets.place(goalId, times, stake)) }
+    }
+
     /** How the user has styled the character: skin, hair and eyes. */
     val look: StateFlow<io.github.randomtools3377.checklist.core.Look> =
         dao.observeSetting(io.github.randomtools3377.checklist.core.Looks.SETTING)
@@ -1538,7 +1582,13 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Turns a feature on or off. The phone calendar also needs its permission (see Settings). */
     fun setFeature(feature: Feature, on: Boolean) {
-        viewModelScope.launch { repository.setSetting(feature.key, if (on) feature.onValue else "0") }
+        viewModelScope.launch {
+            repository.setSetting(feature.key, if (on) feature.onValue else "0")
+            // Shields count from the day they are first turned on, never earlier.
+            if (on && feature == Feature.SHIELDS && dao.setting(io.github.randomtools3377.checklist.core.Shields.FROM) == null) {
+                repository.setSetting(io.github.randomtools3377.checklist.core.Shields.FROM, currentDay().toString())
+            }
+        }
     }
 
     /** The welcome card on Today: for someone new, until it is answered or a goal is added. */

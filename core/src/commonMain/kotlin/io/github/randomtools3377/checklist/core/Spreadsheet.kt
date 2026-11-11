@@ -29,6 +29,7 @@ object Spreadsheet {
         EntryKind.INTEREST -> "Savings interest"
         EntryKind.PERFECT_DAY -> "Perfect day"
         EntryKind.CHALLENGE -> "Challenge finished"
+        EntryKind.BET -> "Bet"
     }
 
     /**
