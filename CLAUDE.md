@@ -811,6 +811,14 @@ Build order **(default)**, each step a Release the owner can try:
       notification types for the morning plan and weekly summary; a stricter build check of the
       no-cloud-backup rules; small accessibility tidying; and, in "Mood and your goals", a
       switch that highlights what shows up on days something was noted.
+    - Also chosen after the review: the user's own sound files for celebrations (a tick,
+      finishing a project, buying a reward, and a goal's own), picked through the system's file
+      dialog, copied into the app and kept in the backup like a picked GIF; and edge lighting,
+      the glow around the screen's edges, when a reminder comes and when a celebration happens.
+      **Details (default):** a reminder can light up the screen and set off the phone's own edge
+      lighting where the phone has it; celebrations glow around the edges inside the app, scaled
+      with the win, and on Android can also set off the phone's edge lighting with a short
+      notification that goes away by itself. Each is a switch, under Celebrations or Reminders.
     - Not chosen: a note when a money-priced reward's price moves, celebrations for game wins,
       and carrying money over into the next month.
     - **The 0.62.0 fixes settled these details (default):** a goal counts in streaks, records,
