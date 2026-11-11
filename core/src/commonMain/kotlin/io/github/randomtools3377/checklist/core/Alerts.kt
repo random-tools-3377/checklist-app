@@ -157,6 +157,42 @@ object Alerts {
 
     /** The goal id a morning plan carries: it is about the whole day, not one goal. */
     const val MORNING_GOAL = 0L
+
+    /**
+     * Whether an alert for [goal] in [window] is still to do, by the rule Today uses: times done,
+     * so an amount counts once the whole of it is entered, and skips, which cover a single-day
+     * goal's day or one of a "times per" goal's times. [ticks] and [lapses] may hold other goals'
+     * and windows'. For one of several a day with its own time ([number] above 0), it is to do
+     * until that one is done.
+     */
+    fun stillToDo(goal: Goal, window: Window, ticks: List<Tick>, lapses: List<Lapse>, number: Int = 0): Boolean {
+        val times = timesDone(goal, window, ticks)
+        if (number > 0 && times >= number) return false
+        val skips = lapses.count { it.goalId == goal.id && it.kind == LapseKind.SKIP && it.periodStart == window.start && !it.forgotten }
+        return !HabitRow(goal, times, window, skips).done
+    }
+
+    /**
+     * At most [most] of [alerts], for a phone that keeps only so many waiting: every first
+     * reminder, earliest first, before any "keep reminding" repeat, so one day's repeats never
+     * crowd out the next days' reminders. In time order.
+     */
+    fun keep(alerts: List<Alert>, most: Int): List<Alert> {
+        val (repeats, firsts) = alerts.sortedBy { it.at }.partition { it.kind == AlertKind.AGAIN }
+        val kept = firsts.take(most)
+        return (kept + repeats.take(most - kept.size)).sortedBy { it.at }
+    }
+
+    /** What a reminder for a locked private goal says: only when, nothing about the goal. */
+    fun lockedWords(alert: Alert): String = when (alert.kind) {
+        AlertKind.BEFORE -> "In ${alert.minutesBefore} min"
+        AlertKind.FOCUS_DONE -> "Time's up"
+        else -> "Due now"
+    }
+
+    /** How many of [goal]'s times are done in [window], for a reminder's "1 of 2". */
+    fun timesDone(goal: Goal, window: Window, ticks: List<Tick>): Int =
+        goal.timesDone(ticks.filter { it.countsToward(goal, window.start) })
 }
 
 /** What the morning plan says: what is due today, the first thing to do, and the pace. */

@@ -31,14 +31,18 @@ data class WeeklySummary(
         /** The weekly summary sent on Sunday evening. */
         val AT: kotlinx.datetime.LocalTime = kotlinx.datetime.LocalTime(18, 0)
 
-        fun of(review: ReviewSummary): WeeklySummary = WeeklySummary(
+        /**
+         * The summary of [review]. With [hidePrivate] (the privacy lock covers private goals),
+         * the best goal is picked from the others, so a private one is never named.
+         */
+        fun of(review: ReviewSummary, hidePrivate: Boolean = false): WeeklySummary = WeeklySummary(
             due = review.goals.sumOf { it.due },
             done = review.goals.sumOf { it.done },
             missed = review.goals.sumOf { it.missed },
             skipped = review.goals.sumOf { it.skipped },
             earned = review.earned,
             lost = review.lost,
-            best = review.mostConsistent,
+            best = if (hidePrivate) review.copy(goals = review.goals.filter { !it.goal.private }).mostConsistent else review.mostConsistent,
         )
     }
 }

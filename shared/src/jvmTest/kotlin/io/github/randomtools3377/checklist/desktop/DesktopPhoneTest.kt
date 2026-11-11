@@ -1,6 +1,9 @@
 package io.github.randomtools3377.checklist.desktop
 
+import io.github.randomtools3377.checklist.core.Period
+import io.github.randomtools3377.checklist.core.Reminder
 import io.github.randomtools3377.checklist.core.Repeat
+import io.github.randomtools3377.checklist.core.SkipResult
 import io.github.randomtools3377.checklist.core.TickResult
 import io.github.randomtools3377.checklist.data.HabitDraft
 import io.github.randomtools3377.checklist.data.LOCK_PRIVATE
@@ -75,6 +78,39 @@ class DesktopPhoneTest {
         val today = nowLocal().date
         assertEquals(1, DesktopReminders.due(phone.parts, at(today, 23, 58), at(today, 23, 59)).size)
         assertTrue(phone.parts.book.tickHabit(id) is TickResult.Ticked)
+        assertTrue(DesktopReminders.due(phone.parts, at(today, 23, 58), at(today, 23, 59)).isEmpty())
+    }
+
+    @Test
+    fun anAmountIsRemindedUntilAllOfItIsEntered() = runTest {
+        phone.parts.repository.saveHabit(
+            HabitDraft(
+                id = 0, name = "Pages", icon = "📖", points = 5, repeat = Repeat.everyDay(nowLocal().date.plus(DatePeriod(days = -7))),
+                target = 1, bonus = 0, minutes = null, at = LocalTime(23, 58), finishBy = null, finishDay = null, amount = 20.0, unit = "pages",
+            ),
+        )
+        val id = dao.activeGoals().single().id
+        val today = nowLocal().date
+        phone.parts.book.logAmount(id, 5.0)
+        assertEquals(1, DesktopReminders.due(phone.parts, at(today, 23, 58), at(today, 23, 59)).size)
+        phone.parts.book.logAmount(id, 15.0)
+        assertTrue(DesktopReminders.due(phone.parts, at(today, 23, 58), at(today, 23, 59)).isEmpty())
+    }
+
+    @Test
+    fun aTimesPerWeekGoalWithASkipForItsLastTimeIsNotReminded() = runTest {
+        phone.parts.repository.saveHabit(
+            HabitDraft(
+                id = 0, name = "Swim", icon = "🏊", points = 5, repeat = Repeat.timesPer(Period.WEEKLY, nowLocal().date.plus(DatePeriod(days = -7))),
+                target = 3, bonus = 0, minutes = null, at = null, finishBy = null, finishDay = null, reminder = Reminder(at = LocalTime(23, 58)),
+            ),
+        )
+        val id = dao.activeGoals().single().id
+        val today = nowLocal().date
+        phone.parts.book.tickHabit(id)
+        phone.parts.book.tickHabit(id)
+        assertEquals(1, DesktopReminders.due(phone.parts, at(today, 23, 58), at(today, 23, 59)).size)
+        assertTrue(phone.parts.lapses.skip(id, reason = null, note = null) is SkipResult.Skipped)
         assertTrue(DesktopReminders.due(phone.parts, at(today, 23, 58), at(today, 23, 59)).isEmpty())
     }
 

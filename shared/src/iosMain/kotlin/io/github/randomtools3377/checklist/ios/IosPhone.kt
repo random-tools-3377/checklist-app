@@ -67,17 +67,18 @@ class IosPhone : Phone {
             parts.db.invalidationTracker.createFlow("goals", "ticks", "settings", "steps", "lapses", "entries", "checks")
                 .conflate()
                 .collect {
-                    runCatching { IosReminders.reschedule(parts) }
+                    runCatching { IosReminders.reschedule(parts, focus()) }
                     delay(500)
                 }
         }
+        IosReminders.showWhileOpen()
         IosReminders.refreshAllowed()
     }
 
-    override suspend fun rescheduleReminders() = IosReminders.reschedule(parts)
+    override suspend fun rescheduleReminders() = IosReminders.reschedule(parts, focus())
 
     override fun afterDone(goalId: Long) {
-        scope.launch { runCatching { IosReminders.reschedule(parts) } }
+        scope.launch { runCatching { IosReminders.reschedule(parts, focus()) } }
     }
 
     override fun canNotify(): Boolean = IosReminders.allowed

@@ -8,21 +8,21 @@ import io.github.randomtools3377.checklist.core.Alerts
 import io.github.randomtools3377.checklist.core.Days
 import io.github.randomtools3377.checklist.core.Feature
 import io.github.randomtools3377.checklist.core.Pace
-import io.github.randomtools3377.checklist.core.Period
 import io.github.randomtools3377.checklist.core.UsualTimes
-import io.github.randomtools3377.checklist.core.countsToward
 import io.github.randomtools3377.checklist.core.minusDays
 import io.github.randomtools3377.checklist.data.LOCK_PRIVATE
 import io.github.randomtools3377.checklist.data.SETTING_DAY_END_HOUR
 import io.github.randomtools3377.checklist.data.SETTING_DEFAULT_FINISH
 import io.github.randomtools3377.checklist.data.SharedParts
 import io.github.randomtools3377.checklist.data.nowLocal
+import io.github.randomtools3377.checklist.data.nowMillis
 import io.github.randomtools3377.checklist.data.parseDayEndHour
 import io.github.randomtools3377.checklist.data.toCore
 import io.github.randomtools3377.checklist.data.toEpochDay
 import io.github.randomtools3377.checklist.data.toLocalDateTime
 import io.github.randomtools3377.checklist.data.toTime
 import io.github.randomtools3377.checklist.ui.timeText
+import io.github.randomtools3377.checklist.reminders.FocusState
 import kotlinx.datetime.LocalDateTime
 import platform.Foundation.NSDateComponents
 import platform.UserNotifications.UNAuthorizationOptionAlert
@@ -31,9 +31,17 @@ import platform.UserNotifications.UNAuthorizationStatusAuthorized
 import platform.UserNotifications.UNAuthorizationStatusProvisional
 import platform.UserNotifications.UNCalendarNotificationTrigger
 import platform.UserNotifications.UNMutableNotificationContent
+import platform.UserNotifications.UNNotification
+import platform.UserNotifications.UNNotificationPresentationOptionBanner
+import platform.UserNotifications.UNNotificationPresentationOptionList
+import platform.UserNotifications.UNNotificationPresentationOptionSound
+import platform.UserNotifications.UNNotificationPresentationOptions
 import platform.UserNotifications.UNNotificationRequest
 import platform.UserNotifications.UNNotificationSound
+import platform.UserNotifications.UNTimeIntervalNotificationTrigger
 import platform.UserNotifications.UNUserNotificationCenter
+import platform.UserNotifications.UNUserNotificationCenterDelegateProtocol
+import platform.darwin.NSObject
 
 /**
  * Reminders on the iPhone: the next ones are handed to the iPhone ahead of time, since an app
@@ -59,6 +67,14 @@ internal object IosReminders {
         }
     }
 
+    /** Kept here: the iPhone holds its notification delegate only weakly. */
+    private val whileOpen: UNUserNotificationCenterDelegateProtocol = ShowWhileOpen()
+
+    /** Reminders show while the app is open too; the iPhone keeps them quiet then otherwise. */
+    fun showWhileOpen() {
+        center.delegate = whileOpen
+    }
+
     fun ask(then: (Boolean) -> Unit) {
         center.requestAuthorizationWithOptions(UNAuthorizationOptionAlert or UNAuthorizationOptionSound) { granted, _ ->
             allowed = granted
@@ -66,12 +82,18 @@ internal object IosReminders {
         }
     }
 
-    suspend fun reschedule(parts: SharedParts) {
+    /**
+     * Hands over the reminders of the next few days, and "Time's up" for a running [focus]
+     * timer, in place of everything handed over before.
+     */
+    suspend fun reschedule(parts: SharedParts, focus: FocusState? = null) {
         val dao = parts.db.dao()
         val goals = dao.activeGoals().map { it.toCore() }
         val dayEnd = parseDayEndHour(dao.setting(SETTING_DAY_END_HOUR))
         val now = nowLocal()
-        val from = Pace.plusMinutes(now, 1)
+        // From now: everything waiting is taken back below, so one due within the minute is
+        // handed over again too.
+        val from = now
         val to = Pace.plusMinutes(now, LOOK_AHEAD_DAYS * 24 * 60L)
         val defaultFinish = dao.setting(SETTING_DEFAULT_FINISH)?.toIntOrNull()?.toTime()
         val usual = if (Feature.USUAL_REMINDERS.isOn(dao.setting(Feature.USUAL_REMINDERS.key))) {
@@ -88,15 +110,15 @@ internal object IosReminders {
         val earliest = alerts.minOfOrNull { it.day }?.minusDays(366)
         val ticks = earliest?.let { dao.habitTicksSince(it.toEpochDay()).map { tick -> tick.toCore() } }.orEmpty()
         val hidePrivate = dao.setting(LOCK_PRIVATE) == "1"
-        val waiting = alerts.filter { alert ->
+        val stillToDo = alerts.filter { alert ->
             val goal = goals.find { it.id == alert.goalId } ?: return@filter false
             val window = goal.repeat?.window(alert.day) ?: return@filter false
-            val count = ticks.count { it.countsToward(goal, window.start) }
-            val skipped = window.period == Period.DAILY && dao.lapses(goal.id, window.start.toEpochDay(), window.end.toEpochDay())
-                .any { it.kind == "SKIP" && it.periodStart == window.start.toEpochDay() }
-            val needed = if (alert.number > 0) alert.number else goal.target
-            count < needed && !skipped
-        }.take(MOST)
+            val lapses = dao.lapses(goal.id, window.start.toEpochDay(), window.end.toEpochDay()).map { it.toCore() }
+            Alerts.stillToDo(goal, window, ticks, lapses, alert.number)
+        }
+        // Every day's first reminders before "keep reminding" repeats, so one day's repeats
+        // don't take the places of the next days' reminders.
+        val waiting = Alerts.keep(stillToDo, MOST)
 
         center.removeAllPendingNotificationRequests()
         for (alert in waiting) {
@@ -105,12 +127,28 @@ internal object IosReminders {
             // The text is set through its setters: Kotlin sees the read-only parent's properties.
             val content = UNMutableNotificationContent()
             content.setTitle(if (hidden) "🔒 A private goal" else "${goal.icon} ${goal.name}")
-            content.setBody(if (hidden) "Due now" else words(alert))
+            content.setBody(if (hidden) Alerts.lockedWords(alert) else words(alert))
             content.setSound(UNNotificationSound.defaultSound)
             val request = UNNotificationRequest.requestWithIdentifier(
                 "goal-${alert.goalId}-${alert.at}-${alert.kind}",
                 content,
                 UNCalendarNotificationTrigger.triggerWithDateMatchingComponents(components(alert.at), repeats = false),
+            )
+            center.addNotificationRequest(request, withCompletionHandler = null)
+        }
+        // A focus timer running: "Time's up" when it runs out, as the app can't wake itself then.
+        focus?.takeIf { it.running }?.let { state ->
+            val seconds = (state.endsAt - nowMillis()) / 1000.0
+            if (seconds < 1.0) return@let
+            val goal = dao.goal(state.goalId)?.toCore()
+            val content = UNMutableNotificationContent()
+            content.setTitle(if (goal == null || (hidePrivate && goal.private)) "⏱ Focus" else "⏱ ${goal.icon} ${goal.name}")
+            content.setBody("Time's up")
+            content.setSound(UNNotificationSound.defaultSound)
+            val request = UNNotificationRequest.requestWithIdentifier(
+                "focus",
+                content,
+                UNTimeIntervalNotificationTrigger.triggerWithTimeInterval(seconds, repeats = false),
             )
             center.addNotificationRequest(request, withCompletionHandler = null)
         }
@@ -134,5 +172,16 @@ internal object IosReminders {
         day = at.dayOfMonth.toLong()
         hour = at.hour.toLong()
         minute = at.minute.toLong()
+    }
+}
+
+/** Lets a reminder show as a banner, with its sound, while the app is open. */
+private class ShowWhileOpen : NSObject(), UNUserNotificationCenterDelegateProtocol {
+    override fun userNotificationCenter(
+        center: UNUserNotificationCenter,
+        willPresentNotification: UNNotification,
+        withCompletionHandler: (UNNotificationPresentationOptions) -> Unit,
+    ) {
+        withCompletionHandler(UNNotificationPresentationOptionBanner or UNNotificationPresentationOptionList or UNNotificationPresentationOptionSound)
     }
 }

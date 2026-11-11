@@ -8,6 +8,10 @@ import io.github.randomtools3377.checklist.ChecklistApplication
 import io.github.randomtools3377.checklist.core.Alert
 import io.github.randomtools3377.checklist.core.AlertKind
 import io.github.randomtools3377.checklist.core.SkipCheck
+import io.github.randomtools3377.checklist.data.LOCK_PRIVATE
+import io.github.randomtools3377.checklist.data.SETTING_DAY_END_HOUR
+import io.github.randomtools3377.checklist.data.parseDayEndHour
+import io.github.randomtools3377.checklist.data.toEpochDay
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -33,11 +37,20 @@ class AlarmReceiver : BroadcastReceiver() {
     }
 }
 
-/** "Done" on a notification ticks the goal once. */
+/**
+ * Whether [intent] came from a reminder for a day that has ended. Its buttons would act on the
+ * new day; the day it was for is sorted out in the app (a miss, or "I forgot to tick it").
+ */
+private suspend fun forPastDay(context: Context, intent: Intent): Boolean {
+    val day = intent.getLongExtra(DoneReceiver.EXTRA_DAY, Long.MIN_VALUE)
+    return day != Long.MIN_VALUE && day != (context.applicationContext as ChecklistApplication).container.book.today().toEpochDay()
+}
+
+/** "Done" on a notification ticks the goal once, on the day it was for. */
 class DoneReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) = work {
         val goalId = intent.getLongExtra(EXTRA_GOAL, -1)
-        if (goalId >= 0) {
+        if (goalId >= 0 && !forPastDay(context, intent)) {
             val result = (context.applicationContext as ChecklistApplication).container.book.tickHabit(goalId)
             if (result is io.github.randomtools3377.checklist.core.TickResult.Ticked && result.finished) Reminders.afterDone(context, goalId)
         }
@@ -47,6 +60,9 @@ class DoneReceiver : BroadcastReceiver() {
     companion object {
         const val EXTRA_GOAL = "goal"
         const val EXTRA_NOTIFICATION = "notification"
+
+        /** The day the reminder was for, as an epoch day. */
+        const val EXTRA_DAY = "day"
     }
 }
 
@@ -78,16 +94,22 @@ class SkipReceiver : BroadcastReceiver() {
         val goalId = intent.getLongExtra(DoneReceiver.EXTRA_GOAL, -1)
         val notification = intent.getIntExtra(DoneReceiver.EXTRA_NOTIFICATION, 0)
         val container = (context.applicationContext as ChecklistApplication).container
+        if (forPastDay(context, intent)) {
+            NotificationManagerCompat.from(context).cancel(notification)
+            return@work
+        }
         val check = container.lapses.checkSkip(goalId)
         if (check is SkipCheck.Allowed && !check.overLimit) {
             container.lapses.skip(goalId, reason = null, note = null)
             NotificationManagerCompat.from(context).cancel(notification)
         } else if (check is SkipCheck.Allowed) {
             val goal = container.repository.goal(goalId) ?: return@work
+            val dao = container.db.dao()
             Reminders.show(
                 context, goal,
                 Alert(goalId, container.book.today(), io.github.randomtools3377.checklist.data.nowLocal(), AlertKind.REMINDER),
-                count = 0, hidden = false, skip = check,
+                count = 0, hidden = goal.private && dao.setting(LOCK_PRIVATE) == "1", skip = check,
+                dayEnd = parseDayEndHour(dao.setting(SETTING_DAY_END_HOUR)),
             )
         } else {
             NotificationManagerCompat.from(context).cancel(notification)

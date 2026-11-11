@@ -72,7 +72,10 @@ data class TimelineRow(
     val button: String,
     /** A routine's next item, which its button ticks. */
     val stepId: Long?,
+    /** A routine, or a to-do with steps: taking it back takes back its items too. */
     val routine: Boolean,
+    /** Done by a skip, so there's no tick to take back. */
+    val skipped: Boolean = false,
 )
 
 /** What the timeline widget shows. [rows] are still to do, in order; [done] are finished or skipped. */
@@ -121,7 +124,8 @@ class TodayWidget : GlanceAppWidget() {
             val plan = DayPlans.load(context)
             val open = plan.planned.filter { !it.row.done }
             val rows = open.map { row(it.row, it) } + plan.todos.map { todo(it) }
-            val done = plan.planned.filter { it.row.done }.map { row(it.row, null) }
+            // To-dos done today count as done, so the total stays the same.
+            val done = plan.planned.filter { it.row.done }.map { row(it.row, null) } + plan.doneTodos.map { todo(it) }
             val tomorrow = if (rows.isEmpty()) {
                 CalendarView.agenda(plan.day.plusDays(1), plan.goals, plan.ticks).take(5).map { item ->
                     (item.time?.let { timeText(it) + "  " } ?: "") + "${item.goal.icon} ${item.goal.name}"
@@ -160,10 +164,11 @@ class TodayWidget : GlanceAppWidget() {
                 button = button,
                 stepId = nextItem?.step?.id.takeIf { row.isRoutine && !row.done },
                 routine = row.isRoutine,
+                skipped = row.done && row.skipped,
             )
         }
 
-        /** A to-do still open today, after the goals: its button ticks it, or its next step. */
+        /** A to-do still open today, after the goals: its button ticks it, or its next step. Or one done today. */
         fun todo(row: TodoRow): TimelineRow {
             val next = row.items.firstOrNull { !it.done }
             return TimelineRow(
@@ -172,10 +177,10 @@ class TodayWidget : GlanceAppWidget() {
                 color = row.goal.color,
                 time = null,
                 late = false,
-                detail = if (row.items.isEmpty()) "To-do" else "${row.items.count { it.done }} of ${row.items.size} · next: ${next?.step?.name}",
+                detail = if (row.items.isEmpty() || row.done) "To-do" else "${row.items.count { it.done }} of ${row.items.size} · next: ${next?.step?.name}",
                 button = next?.let { "✓ ${it.step.name.take(14)}" } ?: "Done",
                 stepId = next?.step?.id,
-                routine = false,
+                routine = row.items.isNotEmpty(),
             )
         }
 
@@ -344,11 +349,12 @@ private fun Line(row: TimelineRow) {
     }
 }
 
-/** A finished goal, crossed off; tapping it takes it back. */
+/** A finished goal, crossed off; tapping it takes it back. A skipped one has no tick to take back. */
 @Composable
 private fun DoneLine(row: TimelineRow) {
     val colors = widgetColors()
-    Row(verticalAlignment = Alignment.CenterVertically, modifier = GlanceModifier.fillMaxWidth().padding(vertical = 2.dp).clickable(undo(row))) {
+    val line = GlanceModifier.fillMaxWidth().padding(vertical = 2.dp)
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = if (row.skipped) line else line.clickable(undo(row))) {
         Text("✓", style = TextStyle(color = colors.primary, fontSize = 13.sp, fontWeight = FontWeight.Bold), modifier = GlanceModifier.width(18.dp))
         Text(
             row.title + (row.detail?.let { " · $it" } ?: ""),

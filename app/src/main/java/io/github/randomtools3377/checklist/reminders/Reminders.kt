@@ -2,11 +2,13 @@ package io.github.randomtools3377.checklist.reminders
 
 import android.Manifest
 import android.app.AlarmManager
+import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
+import android.os.Bundle
 import androidx.core.app.NotificationChannelCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
@@ -26,7 +28,6 @@ import io.github.randomtools3377.checklist.core.Pace
 import io.github.randomtools3377.checklist.core.SkipCheck
 import io.github.randomtools3377.checklist.data.SETTING_WEEKLY_TARGET
 import io.github.randomtools3377.checklist.data.LOCK_PRIVATE
-import io.github.randomtools3377.checklist.core.countsToward
 import io.github.randomtools3377.checklist.core.plusDays
 import io.github.randomtools3377.checklist.core.MorningPlan
 import io.github.randomtools3377.checklist.core.Review
@@ -47,6 +48,7 @@ import io.github.randomtools3377.checklist.data.nowLocal
 import io.github.randomtools3377.checklist.data.toLocalDateTime
 import io.github.randomtools3377.checklist.data.parseDayEndHour
 import io.github.randomtools3377.checklist.data.toCore
+import io.github.randomtools3377.checklist.data.toDay
 import io.github.randomtools3377.checklist.data.toEpochDay
 import io.github.randomtools3377.checklist.ui.timeText
 import kotlinx.datetime.Instant
@@ -89,13 +91,21 @@ object Reminders {
         return Build.VERSION.SDK_INT < Build.VERSION_CODES.S || alarms.canScheduleExactAlarms()
     }
 
-    /** Sets the one alarm for the next notification or the end of the day. */
+    /**
+     * Sets the one alarm for the next notification or the end of the day. Takes away the
+     * reminders of goals done or skipped since they were shown (in the app, on a widget or the tile).
+     */
     suspend fun reschedule(context: Context) {
         val dao = (context.applicationContext as ChecklistApplication).container.db.dao()
         val goals = dao.activeGoals().map { it.toCore() }
+        runCatching { clearDone(context, dao, goals) }
         val dayEnd = parseDayEndHour(dao.setting(SETTING_DAY_END_HOUR))
-        val now = nowLocal()
-        val from = Pace.plusMinutes(now, 1)
+        val nowMillis = System.currentTimeMillis()
+        val now = nowMillis.local()
+        // From where the last alarm's notifications were shown up to (fire() saves it, at most
+        // 30 seconds ahead), so one due in the coming minute keeps its alarm.
+        val shownUntil = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getLong(LAST_FIRED, 0L)
+        val from = shownUntil.coerceIn(nowMillis, nowMillis + 30_000).local()
         val to = Pace.plusMinutes(now, LOOK_AHEAD_DAYS * 24 * 60L)
         val defaultFinish = dao.setting(SETTING_DEFAULT_FINISH)?.toIntOrNull()?.toTime()
         val nextAlert = (Alerts.between(goals, from, to, dayEnd, defaultFinish, usualTimes(dao)) + mornings(dao, from, to, dayEnd) + weeklies(dao, from, to, dayEnd))
@@ -154,7 +164,7 @@ object Reminders {
             Focus.stop(context)
             dao.goal(focus.goalId)?.toCore()?.let { goal ->
                 val at = nowLocal()
-                show(context, goal, Alert(goal.id, Days.dayOf(at, dayEnd), at, AlertKind.FOCUS_DONE), count = 0, hidden = dao.setting(LOCK_PRIVATE) == "1" && goal.private, skip = null)
+                show(context, goal, Alert(goal.id, Days.dayOf(at, dayEnd), at, AlertKind.FOCUS_DONE), count = 0, hidden = dao.setting(LOCK_PRIVATE) == "1" && goal.private, skip = null, dayEnd = dayEnd)
             }
         }
         if (due.isNotEmpty()) {
@@ -165,14 +175,11 @@ object Reminders {
             for (alert in due) {
                 val goal = goals.find { it.id == alert.goalId } ?: continue
                 val window = goal.repeat?.window(alert.day) ?: continue
-                val count = ticks.count { it.countsToward(goal, window.start) }
-                // One of several a day is reminded until that one is done.
-                if (count >= (if (alert.number > 0) alert.number else goal.target)) continue
-                val skips = dao.lapses(goal.id, window.start.toEpochDay(), window.end.toEpochDay())
-                    .count { it.kind == "SKIP" && it.periodStart == window.start.toEpochDay() }
-                if (window.period == io.github.randomtools3377.checklist.core.Period.DAILY && skips > 0) continue
+                // Done or skipped as Today counts it; one of several a day until that one is done.
+                val lapses = dao.lapses(goal.id, window.start.toEpochDay(), window.end.toEpochDay()).map { it.toCore() }
+                if (!Alerts.stillToDo(goal, window, ticks, lapses, alert.number)) continue
                 val skip = container.lapses.checkSkip(goal.id) as? SkipCheck.Allowed
-                show(context, goal, alert, count, hidden = hidePrivate && goal.private, skip = skip)
+                show(context, goal, alert, Alerts.timesDone(goal, window, ticks), hidden = hidePrivate && goal.private, skip = skip, dayEnd = dayEnd)
             }
         }
         prefs.edit().putLong(LAST_FIRED, until).apply()
@@ -211,7 +218,7 @@ object Reminders {
         val hidePrivate = dao.setting(LOCK_PRIVATE) == "1"
         for (row in Chains.next(goalId, view)) {
             val skip = container.lapses.checkSkip(row.goal.id) as? SkipCheck.Allowed
-            show(context, row.goal, Alert(row.goal.id, day, now, AlertKind.NEXT), row.count, hidden = hidePrivate && row.goal.private, skip = skip)
+            show(context, row.goal, Alert(row.goal.id, day, now, AlertKind.NEXT), row.count, hidden = hidePrivate && row.goal.private, skip = skip, dayEnd = dayEnd)
         }
     }
 
@@ -312,7 +319,9 @@ object Reminders {
             gaps = dao.allGaps().map { it.toCore() },
         )
         val locked = dao.setting(LOCK_REVIEW) == "1"
-        val text = if (locked) "Your weekly review is ready." else WeeklySummary.of(review).describe(dao.setting(SETTING_WEEKLY_TARGET)?.toIntOrNull() ?: 0)
+        // A private goal is never named while the lock covers private goals.
+        val hidePrivate = dao.setting(LOCK_PRIVATE) == "1"
+        val text = if (locked) "Your weekly review is ready." else WeeklySummary.of(review, hidePrivate).describe(dao.setting(SETTING_WEEKLY_TARGET)?.toIntOrNull() ?: 0)
         val open = PendingIntent.getActivity(
             context,
             WEEKLY_ID,
@@ -341,9 +350,37 @@ object Reminders {
 
     fun notificationId(goalId: Long): Int = (goalId % 1_000_000).toInt() + 1000
 
-    /** Shows a notification, or replaces it. [hidden] leaves the goal's name out (privacy lock). */
-    fun show(context: Context, goal: Goal, alert: Alert, count: Int, hidden: Boolean, skip: SkipCheck.Allowed?) {
+    /**
+     * Takes away the goal reminders showing whose goal is done or skipped for their day by now,
+     * or no longer there. Ones shown before they carried their goal and day are left alone.
+     */
+    private suspend fun clearDone(context: Context, dao: io.github.randomtools3377.checklist.data.ChecklistDao, goals: List<Goal>) {
+        val manager = context.getSystemService(NotificationManager::class.java) ?: return
+        val shown = manager.activeNotifications.filter { it.id >= 1000 && it.notification.extras.containsKey(DoneReceiver.EXTRA_DAY) }
+        if (shown.isEmpty()) return
+        val days = shown.map { it.notification.extras.getLong(DoneReceiver.EXTRA_DAY).toDay() }
+        val ticks = dao.habitTicksSince(days.min().startOfYear().toEpochDay()).map { it.toCore() }
+        shown.forEachIndexed { i, notice ->
+            val extras = notice.notification.extras
+            val goal = goals.find { it.id == extras.getLong(DoneReceiver.EXTRA_GOAL, -1) }
+            val window = goal?.repeat?.window(days[i])
+            val toDo = goal != null && window != null && Alerts.stillToDo(
+                goal, window, ticks,
+                dao.lapses(goal.id, window.start.toEpochDay(), window.end.toEpochDay()).map { it.toCore() },
+                extras.getInt(SnoozeReceiver.EXTRA_NUMBER, 0),
+            )
+            if (!toDo) manager.cancel(notice.id)
+        }
+    }
+
+    /**
+     * Shows a notification, or replaces it. [hidden] leaves the goal's name out (privacy lock).
+     * It goes when the alert's day ends at [dayEnd], as its buttons act on the day they're tapped.
+     */
+    fun show(context: Context, goal: Goal, alert: Alert, count: Int, hidden: Boolean, skip: SkipCheck.Allowed?, dayEnd: Int) {
         if (!canNotify(context)) return
+        val endsIn = LocalDateTime(alert.day.plusDays(1), LocalTime(dayEnd, 0)).millis() - System.currentTimeMillis()
+        if (endsIn <= 0) return
         val title = if (hidden) "🔒 A private goal" else "${goal.icon} ${goal.name}"
         val whenText = when (alert.kind) {
             AlertKind.ON_TIME -> "Now"
@@ -376,16 +413,26 @@ object Reminders {
             id,
             Intent(context, DoneReceiver::class.java)
                 .putExtra(DoneReceiver.EXTRA_GOAL, goal.id)
-                .putExtra(DoneReceiver.EXTRA_NOTIFICATION, id),
+                .putExtra(DoneReceiver.EXTRA_NOTIFICATION, id)
+                .putExtra(DoneReceiver.EXTRA_DAY, alert.day.toEpochDay()),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
         val builder = NotificationCompat.Builder(context, CHANNEL)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(title)
-            .setContentText(if (hidden) "Due now" else details)
+            .setContentText(if (hidden) Alerts.lockedWords(alert) else details)
             .setContentIntent(open)
-            .addAction(0, if (goal.target > 1) "+1" else "Done", done)
+            .addAction(0, if (goal.quit) "Avoided" else if (goal.target > 1) "+1" else "Done", done)
             .setAutoCancel(true)
+            .setTimeoutAfter(endsIn)
+            // Which goal, day and time it is for, to take it away once that is done (see clearDone).
+            .addExtras(
+                Bundle().apply {
+                    putLong(DoneReceiver.EXTRA_GOAL, goal.id)
+                    putLong(DoneReceiver.EXTRA_DAY, alert.day.toEpochDay())
+                    putInt(SnoozeReceiver.EXTRA_NUMBER, alert.number)
+                },
+            )
             .setCategory(NotificationCompat.CATEGORY_REMINDER)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
         if (skip != null) {
@@ -405,7 +452,8 @@ object Reminders {
                     id + 500_000,
                     Intent(context, SkipReceiver::class.java)
                         .putExtra(DoneReceiver.EXTRA_GOAL, goal.id)
-                        .putExtra(DoneReceiver.EXTRA_NOTIFICATION, id),
+                        .putExtra(DoneReceiver.EXTRA_NOTIFICATION, id)
+                        .putExtra(DoneReceiver.EXTRA_DAY, alert.day.toEpochDay()),
                     PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
                 )
             }

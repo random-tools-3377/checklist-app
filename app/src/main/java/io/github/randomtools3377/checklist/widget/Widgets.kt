@@ -10,5 +10,6 @@ object Widgets {
         runCatching { CalendarWidget.refresh(context) }
         runCatching { StatsWidget.refresh(context) }
         runCatching { BudgetWidget.refresh(context) }
+        runCatching { QuickAddWidget.refresh(context) }
     }
 }

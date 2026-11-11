@@ -2,6 +2,9 @@ package io.github.randomtools3377.checklist.widget
 
 import android.content.Context
 import android.content.Intent
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.glance.GlanceId
@@ -9,10 +12,12 @@ import androidx.glance.GlanceModifier
 import androidx.glance.GlanceTheme
 import androidx.glance.action.clickable
 import androidx.glance.appwidget.GlanceAppWidget
+import androidx.glance.appwidget.GlanceAppWidgetManager
 import androidx.glance.appwidget.GlanceAppWidgetReceiver
 import androidx.glance.appwidget.action.actionStartActivity
 import androidx.glance.appwidget.cornerRadius
 import androidx.glance.appwidget.provideContent
+import androidx.glance.appwidget.updateAll
 import androidx.glance.background
 import androidx.glance.layout.Alignment
 import androidx.glance.layout.Column
@@ -27,11 +32,14 @@ import io.github.randomtools3377.checklist.ui.OPEN_QUICK_TODO
 /** A small widget that adds a to-do in one tap: it opens the app with a box to type it in. */
 class QuickAddWidget : GlanceAppWidget() {
     override suspend fun provideGlance(context: Context, id: GlanceId) {
-        val look = widgetLook((context.applicationContext as ChecklistApplication).container.db.dao())
+        val dao = (context.applicationContext as ChecklistApplication).container.db.dao()
+        val first = widgetLook(dao)
         val open = Intent(context, MainActivity::class.java)
             .putExtra(MainActivity.EXTRA_OPEN, OPEN_QUICK_TODO)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
         provideContent {
+            // Read again on every change while awake, so a new style or colour shows straight away.
+            val look by remember { DayPlans.following(context) { widgetLook(dao) } }.collectAsState(first)
             GlanceTheme {
                 androidx.compose.runtime.CompositionLocalProvider(LocalWidgetLook provides look) {
                     val colors = widgetColors()
@@ -48,6 +56,15 @@ class QuickAddWidget : GlanceAppWidget() {
                         Text("To-do", style = TextStyle(color = colors.onSurface, fontSize = 13.sp))
                     }
                 }
+            }
+        }
+    }
+
+    companion object {
+        /** Redraws every quick-add widget, so it follows the widget style and colours. */
+        suspend fun refresh(context: Context) {
+            if (GlanceAppWidgetManager(context).getGlanceIds(QuickAddWidget::class.java).isNotEmpty()) {
+                QuickAddWidget().updateAll(context)
             }
         }
     }

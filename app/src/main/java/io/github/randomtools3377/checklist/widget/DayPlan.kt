@@ -36,7 +36,7 @@ import kotlinx.datetime.LocalDateTime
 /**
  * Today's goals in the order Today shows them: the recommended order, or the user's own. For
  * the widgets and the quick settings tile, read straight from the database. [planned] holds the
- * habits, done ones last; [todos] the to-dos still open today.
+ * habits, done ones last; [todos] the to-dos still open today, and [doneTodos] the ones done today.
  */
 data class DayPlan(
     val day: LocalDate,
@@ -47,6 +47,7 @@ data class DayPlan(
     /** Goals shown on the home screen (private ones left out while locked), and recent ticks, for tomorrow's list. */
     val goals: List<Goal>,
     val ticks: List<Tick>,
+    val doneTodos: List<TodoRow> = emptyList(),
 )
 
 object DayPlans {
@@ -85,7 +86,7 @@ object DayPlans {
                 .toMap()
             Order.recommend(now, day, view.dueToday, settings, usual, pace)
         }
-        return DayPlan(day, now, planned, view.todos.filter { !it.done }, pace, goals, ticks)
+        return DayPlan(day, now, planned, view.todos.filter { !it.done }, pace, goals, ticks, doneTodos = view.todos.filter { it.done })
     }
 
     /**

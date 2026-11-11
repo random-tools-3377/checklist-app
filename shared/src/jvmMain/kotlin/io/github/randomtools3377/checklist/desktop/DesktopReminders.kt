@@ -5,9 +5,7 @@ import io.github.randomtools3377.checklist.core.AlertKind
 import io.github.randomtools3377.checklist.core.Alerts
 import io.github.randomtools3377.checklist.core.Feature
 import io.github.randomtools3377.checklist.core.Pace
-import io.github.randomtools3377.checklist.core.Period
 import io.github.randomtools3377.checklist.core.UsualTimes
-import io.github.randomtools3377.checklist.core.countsToward
 import io.github.randomtools3377.checklist.core.minusDays
 import io.github.randomtools3377.checklist.data.LOCK_PRIVATE
 import io.github.randomtools3377.checklist.data.SETTING_DAY_END_HOUR
@@ -155,16 +153,13 @@ class DesktopReminders(private val phone: DesktopPhone) {
             return alerts.mapNotNull { alert ->
                 val goal = goals.find { it.id == alert.goalId } ?: return@mapNotNull null
                 val window = goal.repeat?.window(alert.day) ?: return@mapNotNull null
-                val count = ticks.count { it.countsToward(goal, window.start) }
-                val skipped = window.period == Period.DAILY && dao.lapses(goal.id, window.start.toEpochDay(), window.end.toEpochDay())
-                    .any { it.kind == "SKIP" && it.periodStart == window.start.toEpochDay() }
-                val needed = if (alert.number > 0) alert.number else goal.target
-                if (count >= needed || skipped) return@mapNotNull null
+                val lapses = dao.lapses(goal.id, window.start.toEpochDay(), window.end.toEpochDay()).map { it.toCore() }
+                if (!Alerts.stillToDo(goal, window, ticks, lapses, alert.number)) return@mapNotNull null
                 val hidden = hidePrivate && goal.private
                 DueReminder(
                     goalId = goal.id,
                     title = if (hidden) "🔒 A private goal" else "${goal.icon} ${goal.name}",
-                    text = if (hidden) "Due now" else words(alert),
+                    text = if (hidden) Alerts.lockedWords(alert) else words(alert),
                 )
             }.distinctBy { it.goalId to it.text }
         }
