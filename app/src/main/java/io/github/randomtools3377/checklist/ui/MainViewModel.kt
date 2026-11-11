@@ -217,6 +217,13 @@ data class CharacterTitles(
 )
 
 /** Everything the Today screen shows. */
+/** What the character shows on Today: what it says, whether it talks (check-ins on), and the row it suggests. */
+data class CompanionView(
+    val say: io.github.randomtools3377.checklist.core.CompanionSay,
+    val talks: Boolean,
+    val suggestion: HabitRow?,
+)
+
 data class TodayState(
     val view: TodayView,
     val now: LocalDateTime,
@@ -248,6 +255,9 @@ data class TodayState(
     val streakPercent: Int = 100,
     /** For goals with a challenge: how far it has got. */
     val challenges: Map<Long, ChallengeProgress> = emptyMap(),
+    /** For the character's check-ins: what was left undone yesterday, and days in a row with nothing done. */
+    val leftYesterday: Int = 0,
+    val daysAway: Int = 0,
 )
 
 /** What Today needs besides goals and ticks. */
@@ -478,6 +488,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 todayView.projects.forEach { project -> Pace.forProject(project, day)?.let { put(project.goal.id, it) } }
             }
             val nextSlots = todayView.dueToday.mapNotNull { row -> Pace.nextSlot(row, day, paceSettings)?.let { row.goal.id to it } }.toMap()
+            // Slips only count from the day tracking began, so a new user isn't told off.
+            val tracked = dao.setting(io.github.randomtools3377.checklist.core.Lapses.TRACKING_SINCE)
+                ?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+                ?.let { from -> records.filter { it.day >= from } }
+                .orEmpty()
             TodayState(
                 todayView, moment, pace, plan, recommended, longPaces, s.defaultFinish != null,
                 streaks, s.streak, hiddenPrivate = raw.goals.count { it.private && !it.archived } - shownGoals.count { it.private && !it.archived },
@@ -494,6 +509,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 lastTicks = (todayView.dueToday + todayView.thisWeek + todayView.thisMonth + todayView.thisYear).mapNotNull { row ->
                     raw.ticks.filter { it.stepId == null && it.countsToward(row.goal, row.window.start) }.maxByOrNull { it.at }?.let { row.goal.id to it }
                 }.toMap(),
+                leftYesterday = io.github.randomtools3377.checklist.core.Checkins.leftYesterday(tracked, day),
+                daysAway = io.github.randomtools3377.checklist.core.Checkins.daysAway(tracked, day),
             )
         }
     }.state(null)
@@ -1589,6 +1606,54 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun setLook(look: io.github.randomtools3377.checklist.core.Look) {
         viewModelScope.launch { repository.setSetting(io.github.randomtools3377.checklist.core.Looks.SETTING, io.github.randomtools3377.checklist.core.Looks.encode(look)) }
+    }
+
+    /**
+     * What the character says on Today, and its face: while the character is on. The words and
+     * the suggestion are shown only with check-ins on; the face follows how things are going
+     * either way. A new level is cheered until it is seen.
+     */
+    val companion: StateFlow<CompanionView?> =
+        combine(
+            combine(character, features) { sheet, on -> sheet to (Feature.CHECKINS in on) },
+            todayState,
+            todayMood,
+            askMood,
+            dao.observeSetting(io.github.randomtools3377.checklist.core.Checkins.LEVEL_SEEN),
+        ) { (sheet, talks), state, mood, ask, seen ->
+            if (sheet == null || state == null) return@combine null
+            val level = sheet.level.level
+            val seenLevel = seen?.toIntOrNull()
+            if (seenLevel == null) {
+                // The first look: start from here, no cheer.
+                repository.setSetting(io.github.randomtools3377.checklist.core.Checkins.LEVEL_SEEN, level.toString())
+            }
+            // A goal skipped today counts neither as done nor as left.
+            val rows = state.view.dueToday.filter { it.done || it.skips == 0 }
+            val left = rows.filter { !it.done && !it.goal.quit && !it.goal.hasAmount }
+            val say = io.github.randomtools3377.checklist.core.Checkins.say(
+                io.github.randomtools3377.checklist.core.CompanionFacts(
+                    day = state.view.day,
+                    now = state.now.time,
+                    left = left.map { it.goal },
+                    doneToday = rows.count { it.done },
+                    dueToday = rows.size,
+                    missedYesterday = state.leftYesterday,
+                    mainStreak = state.streaks.done,
+                    mood = mood?.score,
+                    askMood = ask && talks,
+                    daysAway = state.daysAway,
+                    newLevel = level.takeIf { seenLevel != null && it > seenLevel },
+                ),
+            )
+            CompanionView(say, talks, say.suggestion?.let { goal -> left.firstOrNull { it.goal.id == goal.id } })
+        }.state(null)
+
+    /** The new level has been cheered. */
+    fun levelSeen() {
+        viewModelScope.launch {
+            character.value?.let { repository.setSetting(io.github.randomtools3377.checklist.core.Checkins.LEVEL_SEEN, it.level.level.toString()) }
+        }
     }
 
     /** The weekly planning card on Today: from Monday, until this week is planned or put off. */

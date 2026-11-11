@@ -125,6 +125,7 @@ fun TodayScreen(
     val character by vm.character.collectAsStateWithLifecycle()
     val characterLook by vm.look.collectAsStateWithLifecycle()
     val characterTitles by vm.characterTitles.collectAsStateWithLifecycle()
+    val companion by vm.companion.collectAsStateWithLifecycle()
     val quests by vm.quests.collectAsStateWithLifecycle()
     val race by vm.race.collectAsStateWithLifecycle()
     val boss by vm.boss.collectAsStateWithLifecycle()
@@ -338,7 +339,10 @@ fun TodayScreen(
                 WeekPlanCard(onPlan = onPlanWeek, onLater = vm::weekPlanned)
                 Spacer(Modifier.height(12.dp))
             }
-            if (askMood && !welcome) {
+            // With check-ins on, the character asks instead, on its card under the balance.
+            val characterAsks = companion?.say?.askMood == true &&
+                look.sections.any { it.section == TodaySection.BALANCE && it.shown }
+            if (askMood && !welcome && !characterAsks) {
                 MoodCheckIn(onMood = { vm.setMood(it) }, onLater = vm::skipMood)
                 Spacer(Modifier.height(12.dp))
             }
@@ -423,7 +427,20 @@ fun TodayScreen(
                     Spacer(Modifier.height(12.dp))
                     // With the character on: its level, under the balance.
                     character?.let { sheet ->
-                        LevelCard(sheet, characterLook, onOpen = onCharacter, title = characterTitles?.shown)
+                        LevelCard(
+                            sheet,
+                            characterLook,
+                            onOpen = {
+                                if (companion?.say?.levelUp == true) vm.levelSeen()
+                                onCharacter()
+                            },
+                            title = characterTitles?.shown,
+                            companion = companion,
+                            onMood = { vm.setMood(it) },
+                            onMoodLater = vm::skipMood,
+                            onSuggestion = { row, at -> tick(row, Spot().apply { center = at }) },
+                            onCheered = vm::levelSeen,
+                        )
                         Spacer(Modifier.height(12.dp))
                     }
                     // With quests and the race on: the day's quests, and this week against last.

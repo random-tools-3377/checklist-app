@@ -535,6 +535,15 @@ Build order **(default)**, each step a Release the owner can try:
     warrior (everything due on 8 weekend days), Unstoppable (a 50-day main streak), All-rounder
     (every skill at level 5), Boss slayer (4 bosses), Quest hunter (30 quests) and Lucky star
     (10 lucky ticks). The user picks the title shown: the path's, an earned one, or none.
+    **Details (default):** moods and moves are their own switch, "Character check-ins", on the
+    character's card on Today. Its face is calm, happy, proud, tired or worried. In order, it
+    cheers a new level (and jumps) until the user taps it or opens the character; asks the mood
+    there instead of the separate card; on a mood of 1 or 2 is gentle and offers the quickest
+    goal left; when everything is done is proud (and jumps); after 2 or more days with something
+    due and nothing done welcomes the user back; after something left undone yesterday, with
+    nothing done yet today, suggests the quickest goal left; from 6 pm with under half done,
+    suggests one more. A suggestion can be ticked from the card. Slips count only from the day
+    tracking began, and goals with an amount or to quit are never suggested.
     Then, also chosen by the owner: paths and titles (at level 10 the user chooses a path, like
     Athlete, Scholar or Maker, which gives a title and a little more experience in its skill;
     more titles come from habits, like "Early bird"); and moods and moves, where the character

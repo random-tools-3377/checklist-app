@@ -110,8 +110,8 @@ object Figure {
     private val WHITE = 0xFFFFFFFF.toInt()
     private val GOLD = 0xFFF2C14E.toInt()
 
-    /** The shapes for [look] wearing [outfit], back to front. */
-    fun marks(look: Look, outfit: Outfit): List<Mark> {
+    /** The shapes for [look] wearing [outfit], with the face for [expression], back to front. */
+    fun marks(look: Look, outfit: Outfit, expression: Expression = Expression.CALM): List<Mark> {
         val skin = Looks.SKINS[look.skin]
         val hair = Looks.HAIR[look.hairColour]
         val shirt = outfit.shirt?.let(::colour) ?: 0xFF8AA8A1.toInt()
@@ -218,23 +218,54 @@ object Figure {
         m += Mark.Circle(34f, 46f, 5f, skin)
         m += Mark.Circle(86f, 46f, 5f, skin)
         m += Mark.Circle(60f, 44f, 26f, skin)
-        when (look.eyes) {
-            Eyes.DOTS -> {
+        // Proud: eyes closed in a smile; tired: eyes half shut. Otherwise the eyes picked.
+        when {
+            expression == Expression.PROUD -> m += Mark.Path("M47,47 Q51,42 55,47 M65,47 Q69,42 73,47", null, INK, 2.2f)
+            expression == Expression.TIRED -> {
+                m += Mark.Path("M47,46 Q51,50 55,46 M65,46 Q69,50 73,46", null, INK, 2.2f)
+                m += Mark.Path("M47,46 L55,46 M65,46 L73,46", null, INK, 1.4f)
+            }
+            look.eyes == Eyes.DOTS -> {
                 m += Mark.Circle(51f, 46f, 3f, INK)
                 m += Mark.Circle(69f, 46f, 3f, INK)
             }
-            Eyes.HAPPY -> m += Mark.Path("M47,47 Q51,42 55,47 M65,47 Q69,42 73,47", null, INK, 2.2f)
-            Eyes.WINK -> {
+            look.eyes == Eyes.HAPPY -> m += Mark.Path("M47,47 Q51,42 55,47 M65,47 Q69,42 73,47", null, INK, 2.2f)
+            else -> {
                 m += Mark.Circle(51f, 46f, 3f, INK)
                 m += Mark.Path("M65,47 Q69,42 73,47", null, INK, 2.2f)
             }
         }
-        if (look.hair != HairStyle.NONE) m += Mark.Path("M47,39 Q51,37 55,39 M65,39 Q69,37 73,39", null, hair, 1.8f)
+        // Eyebrows, in the hair's colour (ink with no hair): raised in the middle when worried,
+        // higher when happy or proud, lower when tired.
+        val brows = when (expression) {
+            Expression.WORRIED -> "M47,39 Q51,38 55,35 M65,35 Q69,38 73,39"
+            Expression.HAPPY, Expression.PROUD -> "M47,37 Q51,34 55,37 M65,37 Q69,34 73,37"
+            Expression.TIRED -> "M47,41 Q51,40 55,41 M65,41 Q69,40 73,41"
+            Expression.CALM -> "M47,39 Q51,37 55,39 M65,39 Q69,37 73,39"
+        }
+        if (look.hair != HairStyle.NONE) {
+            m += Mark.Path(brows, null, hair, 1.8f)
+        } else if (expression != Expression.CALM) {
+            m += Mark.Path(brows, null, INK, 1.4f)
+        }
         if (worn[GearSlot.CHEEKS] == Gear.GLOW) {
             m += Mark.Circle(45f, 54f, 4.5f, 0x66F06A7A)
             m += Mark.Circle(75f, 54f, 4.5f, 0x66F06A7A)
         }
-        m += Mark.Path("M54,56 Q60,62 66,56", null, INK, 2f)
+        when (expression) {
+            Expression.CALM -> m += Mark.Path("M54,56 Q60,62 66,56", null, INK, 2f)
+            // An open smile.
+            Expression.HAPPY, Expression.PROUD -> {
+                m += Mark.Path("M52,55 Q60,66 68,55 Z", 0xFF8C2F39.toInt(), INK, 1.6f)
+                m += Mark.Path("M55,61 Q60,64 65,61", null, 0xFFE8707A.toInt(), 2f)
+            }
+            Expression.TIRED -> m += Mark.Path("M55,58 Q60,60 65,58", null, INK, 2f)
+            // A little frown, and a drop of sweat.
+            Expression.WORRIED -> {
+                m += Mark.Path("M54,59 Q60,55 66,59", null, INK, 2f)
+                m += Mark.Path("M81,34 Q84,40 81,42 Q78,40 81,34 Z", 0xFF9AD4F0.toInt())
+            }
+        }
         if (worn[GearSlot.FACE] == Gear.GLASSES) {
             m += Mark.Circle(51f, 46f, 6.5f, null, INK, 1.8f)
             m += Mark.Circle(69f, 46f, 6.5f, null, INK, 1.8f)

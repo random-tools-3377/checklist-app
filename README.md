@@ -97,6 +97,7 @@ keeps the data.
 - 0.48.0: items, a boss each week, and lucky ticks.
 - 0.49.0: bet on yourself, and streak shields.
 - 0.50.0: paths and titles for the character.
+- 0.51.0: the character checks in, answers your mood, and jumps for joy.
 
 Every step in CLAUDE.md's build order is built. The iPhone app waits for a way to install it.
 

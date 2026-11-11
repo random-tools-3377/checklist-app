@@ -47,7 +47,10 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.scale
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.PathParser
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.Alignment
@@ -125,16 +128,34 @@ fun SkillField(skill: String?, onSkill: (String?) -> Unit, name: String, categor
 
 /** The character, drawn: [look] as the user styled it, wearing [outfit]. */
 @Composable
-fun CharacterFigure(look: Look, outfit: Outfit, modifier: Modifier = Modifier) {
-    val marks = remember(look, outfit) { Figure.marks(look, outfit) }
+fun CharacterFigure(
+    look: Look,
+    outfit: Outfit,
+    modifier: Modifier = Modifier,
+    expression: io.github.randomtools3377.checklist.core.Expression = io.github.randomtools3377.checklist.core.Expression.CALM,
+    jump: Boolean = false,
+) {
+    val marks = remember(look, outfit, expression) { Figure.marks(look, outfit, expression) }
     val paths = remember(marks) {
         marks.filterIsInstance<Mark.Path>().associateWith { PathParser().parsePathString(it.d).toPath() }
     }
     val wearing = outfit.gear.joinToString { it.label }.ifEmpty { "everyday clothes" }
+    // Jumping for joy: three little hops, each time it starts.
+    val lift = remember { androidx.compose.animation.core.Animatable(0f) }
+    androidx.compose.runtime.LaunchedEffect(jump) {
+        if (jump) {
+            repeat(3) {
+                lift.animateTo(-0.14f, androidx.compose.animation.core.tween(160))
+                lift.animateTo(0f, androidx.compose.animation.core.tween(220, easing = androidx.compose.animation.core.FastOutSlowInEasing))
+            }
+        }
+    }
+    val feeling = expression.name.lowercase()
     Canvas(
         modifier
             .aspectRatio(Figure.WIDTH / Figure.HEIGHT)
-            .semantics { contentDescription = "Your character, wearing $wearing" },
+            .graphicsLayer { translationY = lift.value * size.height }
+            .semantics { contentDescription = "Your character, looking $feeling, wearing $wearing" },
     ) {
         val s = size.width / Figure.WIDTH
         scale(scale = s, pivot = Offset.Zero) {
@@ -159,13 +180,31 @@ fun CharacterFigure(look: Look, outfit: Outfit, modifier: Modifier = Modifier) {
 
 /** On Today, with the character on: its level and how far to the next. Tap for the character page. */
 @Composable
-fun LevelCard(sheet: CharacterSheet, look: Look, onOpen: () -> Unit, title: String? = null) {
+fun LevelCard(
+    sheet: CharacterSheet,
+    look: Look,
+    onOpen: () -> Unit,
+    title: String? = null,
+    companion: CompanionView? = null,
+    onMood: (Int) -> Unit = {},
+    onMoodLater: () -> Unit = {},
+    onSuggestion: (io.github.randomtools3377.checklist.core.HabitRow, Offset) -> Unit = { _, _ -> },
+    onCheered: () -> Unit = {},
+) {
+    val say = companion?.say
     Card(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onOpen).testTag("level-card"),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 8.dp)) {
-        CharacterFigure(look, remember(sheet) { Outfit.of(sheet) }, Modifier.height(56.dp))
+        Column {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 8.dp, top = 4.dp)) {
+        CharacterFigure(
+            look,
+            remember(sheet) { Outfit.of(sheet) },
+            Modifier.height(56.dp).testTag("companion-face:${(say?.expression ?: io.github.randomtools3377.checklist.core.Expression.CALM).name}"),
+            expression = say?.expression ?: io.github.randomtools3377.checklist.core.Expression.CALM,
+            jump = say?.jumps == true,
+        )
         Column(Modifier.padding(horizontal = 10.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
@@ -181,6 +220,55 @@ fun LevelCard(sheet: CharacterSheet, look: Look, onOpen: () -> Unit, title: Stri
                 )
             }
             LinearProgressIndicator(progress = { sheet.level.share }, modifier = Modifier.fillMaxWidth())
+        }
+        }
+        // With check-ins on: what the character says, and what it suggests.
+        if (companion != null && say != null && companion.talks) {
+            Column(Modifier.padding(start = 12.dp, end = 12.dp, bottom = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                androidx.compose.material3.Surface(
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.surface,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(say.line, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(10.dp).testTag("companion-line"))
+                }
+                if (say.askMood) {
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                        io.github.randomtools3377.checklist.core.Moods.FACES.forEachIndexed { index, face ->
+                            Text(
+                                face,
+                                fontSize = 26.sp,
+                                modifier = Modifier
+                                    .clickable { onMood(index + 1) }
+                                    .semantics { contentDescription = "Mood ${index + 1} of 5" }
+                                    .padding(4.dp)
+                                    .testTag("companion-mood:${index + 1}"),
+                            )
+                        }
+                        androidx.compose.foundation.layout.Spacer(Modifier.weight(1f))
+                        androidx.compose.material3.TextButton(onClick = onMoodLater, modifier = Modifier.testTag("companion-mood-later")) { Text("Not today") }
+                    }
+                }
+                companion.suggestion?.let { row ->
+                    var spot by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(Offset.Zero) }
+                    val counted = row.goal.target > 1 && !row.isRoutine
+                    androidx.compose.material3.FilledTonalButton(
+                        onClick = { onSuggestion(row, spot) },
+                        modifier = Modifier
+                            .onGloballyPositioned { spot = it.boundsInRoot().center }
+                            .testTag("companion-do"),
+                    ) {
+                        Text(
+                            (if (counted) "+1  " else "✓ Done:  ") + "${row.goal.icon} ${row.goal.name}",
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+                if (say.levelUp) {
+                    androidx.compose.material3.TextButton(onClick = onCheered, modifier = Modifier.testTag("companion-cheered")) { Text("🎉 Yay!") }
+                }
+            }
         }
         }
     }
