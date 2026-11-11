@@ -301,6 +301,10 @@ fun ChecklistApp(vm: MainViewModel = viewModel()) {
                     events = day?.let { io.github.randomtools3377.checklist.core.BusyTime.on(calendarEvents, it.day, settings.dayEndHour) }.orEmpty(),
                 )
             }
+            "character" -> {
+                val sheet by vm.character.collectAsStateWithLifecycle()
+                CharacterScreen(sheet, onBack = ::pop)
+            }
             "plan-week" -> WeekPlanScreen(vm, onOpenPlan = { goTo(AppTab.PLAN) }, onBack = ::pop)
             "done" -> DoneListScreen(doneList, onOpen = { goal -> push(editRoute(goal)) }, onBack = ::pop)
             "removed" -> RemovedGoalsScreen(removedGoals, onRestore = { vm.restoreGoal(it.id) }, onBack = ::pop)
@@ -319,7 +323,7 @@ fun ChecklistApp(vm: MainViewModel = viewModel()) {
             "badges" -> if (settings.locks.review && !unlocked) {
                 LockedPanel("The badges page", unlock, Modifier)
             } else {
-                BadgesScreen(badges, onSeen = vm::badgesSeen, onBack = ::pop)
+                BadgesScreen(badges, onSeen = vm::badgesSeen, onBack = ::pop, character = io.github.randomtools3377.checklist.core.Feature.CHARACTER in features)
             }
             "history" -> HistoryScreen(
                 history,
@@ -387,6 +391,7 @@ fun ChecklistApp(vm: MainViewModel = viewModel()) {
                                 onGuide = { push("guide") },
                                 onTimeline = { push("timeline/0") },
                                 onPlanWeek = { push("plan-week") },
+                                onCharacter = { push("character") },
                                 skipRequest = skipRequest,
                                 onSkipRequestHandled = vm::clearSkipRequest,
                                 padding = padding,
@@ -418,11 +423,12 @@ fun ChecklistApp(vm: MainViewModel = viewModel()) {
                                 hideGapNotes = settings.locks.gaps && !unlocked,
                                 onPeriod = { vm.reviewPeriod.value = it; vm.reviewDay.value = null },
                                 onStep = vm::reviewStep,
-                                badges = badges.size,
+                                badges = badges.keys.count { io.github.randomtools3377.checklist.core.Feature.CHARACTER in features || !it.forCharacter },
                                 onBadges = { push("badges") },
                                 padding = padding,
                                 moods = moods,
                                 coachCard = { week -> AiCoachCard(vm, week, hideReasons = settings.locks.reasons && !unlocked) },
+                                character = io.github.randomtools3377.checklist.core.Feature.CHARACTER in features,
                             )
                         }
                         AppTab.SHOP -> if (settings.locks.shop && !unlocked) {

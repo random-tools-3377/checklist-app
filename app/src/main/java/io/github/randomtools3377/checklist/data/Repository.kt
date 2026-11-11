@@ -133,6 +133,8 @@ data class HabitDraft(
     val challenge: Challenge? = null,
     /** The goal it comes after, in a habit chain. */
     val after: Long? = null,
+    /** Its skill area for the character; null to guess it. */
+    val skill: io.github.randomtools3377.checklist.core.SkillArea? = null,
 )
 
 /** One step in the project editor. [id] is 0 for a new step. */
@@ -155,6 +157,8 @@ data class ProjectDraft(
     val color: Int? = null,
     /** How hard its steps are, which suggests their points. */
     val effort: Effort? = null,
+    /** Its skill area for the character; null to guess it. */
+    val skill: io.github.randomtools3377.checklist.core.SkillArea? = null,
 )
 
 /** What the to-do editor and the quick add on Today save. [id] is 0 for a new to-do. */
@@ -249,6 +253,7 @@ class Repository(private val db: AppDatabase, private val celebrations: Celebrat
             challengeBonus = draft.challenge?.bonus,
             challengeFrom = draft.challenge?.from?.toEpochDay(),
             afterGoal = draft.after?.takeIf { it != draft.id },
+            skill = draft.skill?.name,
         )
         val goalId = if (existing == null) dao.insertGoal(row) else row.id.also { dao.updateGoal(row) }
         // A routine's checklist: removed items are archived, so their past ticks still make sense.
@@ -293,11 +298,13 @@ class Repository(private val db: AppDatabase, private val celebrations: Celebrat
                     category = category(draft.category, 0),
                     color = draft.color,
                     effort = draft.effort?.name,
+                    skill = draft.skill?.name,
                 ),
             )
         } else {
             dao.updateGoal(
                 existing.copy(
+                    skill = draft.skill?.name,
                     name = draft.name,
                     icon = draft.icon,
                     bonus = draft.bonus,

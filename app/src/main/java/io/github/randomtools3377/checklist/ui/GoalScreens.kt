@@ -568,6 +568,8 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Long)
     var challengeFrom by rememberSaveable { mutableStateOf<Long?>(null) }
     // The goal this one comes after, in a habit chain.
     var after by rememberSaveable { mutableStateOf<Long?>(null) }
+    // Its skill area for the character; null to guess it.
+    var skill by rememberSaveable { mutableStateOf<String?>(null) }
     var showErrors by rememberSaveable { mutableStateOf(false) }
     var choosingRepeat by remember { mutableStateOf(false) }
     val context = LocalContext.current
@@ -605,6 +607,7 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Long)
                 effort = goal.effort?.name
                 quit = goal.quit
                 after = goal.after
+                skill = goal.skill?.name
                 goal.challenge?.let { c ->
                     challengeOn = true
                     challengeDays = c.days.toString()
@@ -719,6 +722,7 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Long)
                         effort = effort?.let { Effort.valueOf(it) },
                         quit = quit,
                         after = after,
+                        skill = skill?.let { io.github.randomtools3377.checklist.core.SkillArea.valueOf(it) },
                         challenge = challengeDays.toIntOrNull()?.takeIf { challengeOn && it in 2..3650 }?.let { days ->
                             Challenge(days, challengeBonus.toIntOrNull() ?: 0, challengeFrom?.toDay() ?: vm.currentDay())
                         },
@@ -804,6 +808,7 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Long)
             vm = vm,
         )
         CategoryField(category, { category = it }, vm)
+        SkillField(skill, { skill = it }, name, category, vm)
         GoalColourField(color, { color = it }, vm)
 
         // How often
@@ -1298,6 +1303,7 @@ fun ProjectEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Lon
     var allowance by rememberSaveable { mutableStateOf(Goal.DEFAULT_ALLOWANCE.toString()) }
     var isPrivate by rememberSaveable { mutableStateOf(false) }
     var celebration by rememberSaveable { mutableStateOf<String?>(null) }
+    var skill by rememberSaveable { mutableStateOf<String?>(null) }
     var category by rememberSaveable { mutableStateOf("") }
     var color by rememberSaveable { mutableStateOf<Int?>(null) }
     var effort by rememberSaveable { mutableStateOf<String?>(null) }
@@ -1319,6 +1325,7 @@ fun ProjectEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Lon
                 category = goal.category.orEmpty()
                 color = goal.color
                 effort = goal.effort?.name
+                skill = goal.skill?.name
                 steps.clear()
                 existingSteps.forEach { steps += StepField(nextKey++, it.id, it.name, it.points.toString()) }
                 if (steps.isEmpty()) steps += StepField(nextKey++, 0L, "", "")
@@ -1357,6 +1364,7 @@ fun ProjectEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Lon
                         category = category,
                         color = color,
                         effort = effort?.let { Effort.valueOf(it) },
+                        skill = skill?.let { io.github.randomtools3377.checklist.core.SkillArea.valueOf(it) },
                     ),
                     onDone = onClose,
                 )
@@ -1375,6 +1383,7 @@ fun ProjectEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Lon
             modifier = Modifier.fillMaxWidth().testTag("field:name"),
         )
         CategoryField(category, { category = it }, vm)
+        SkillField(skill, { skill = it }, name, category, vm)
         GoalColourField(color, { color = it }, vm)
         Text("Steps", style = MaterialTheme.typography.titleSmall)
         steps.forEachIndexed { index, step ->

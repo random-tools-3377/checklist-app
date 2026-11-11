@@ -91,6 +91,8 @@ data class Goal(
     val challenge: Challenge? = null,
     /** The goal this one comes after, in a habit chain (see [Chains]). */
     val after: Long? = null,
+    /** The skill area it belongs to, for the character (see [SkillArea]); null to guess it. */
+    val skill: SkillArea? = null,
     val archived: Boolean = false,
     val position: Int = 0,
     val createdAt: Long = 0,

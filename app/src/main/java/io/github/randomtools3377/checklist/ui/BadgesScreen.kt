@@ -37,7 +37,7 @@ import kotlinx.datetime.LocalDate
 
 /** Every badge: the ones earned, with the day, and the ones still to earn, with how. */
 @Composable
-fun BadgesScreen(earned: Map<Badge, LocalDate>, onSeen: () -> Unit, onBack: () -> Unit) {
+fun BadgesScreen(earned: Map<Badge, LocalDate>, onSeen: () -> Unit, onBack: () -> Unit, character: Boolean = false) {
     LaunchedEffect(earned.size) { onSeen() }
     Scaffold(
         topBar = {
@@ -56,12 +56,12 @@ fun BadgesScreen(earned: Map<Badge, LocalDate>, onSeen: () -> Unit, onBack: () -
         ) {
             item {
                 Text(
-                    "${earned.size} of ${Badge.entries.size} earned. Once earned, a badge is yours to keep.",
+                    "${earned.size} of ${Badge.shown(character).size} earned. Once earned, a badge is yours to keep. Badges in a series go bronze, silver, then gold.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            val (got, toGo) = Badge.entries.partition { it in earned }
+            val (got, toGo) = Badge.shown(character).partition { it in earned }
             items(got.sortedByDescending { earned[it] }, key = { it.name }) { badge -> BadgeRow(badge, earned[badge]) }
             items(toGo, key = { it.name }) { badge -> BadgeRow(badge, null) }
         }
@@ -77,7 +77,11 @@ private fun BadgeRow(badge: Badge, on: LocalDate?) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(12.dp)) {
             Text(badge.icon, fontSize = 32.sp, modifier = Modifier.width(52.dp).alpha(if (on != null) 1f else 0.35f))
             Column(Modifier.weight(1f)) {
-                Text(badge.title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                Text(
+                    (badge.tier?.let { "${it.medal} " } ?: "") + badge.title,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                )
                 Text(
                     if (on != null) "Earned ${shortDate(on)}" else badge.how,
                     style = MaterialTheme.typography.bodyMedium,

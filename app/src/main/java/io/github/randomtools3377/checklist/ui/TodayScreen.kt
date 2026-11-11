@@ -112,6 +112,7 @@ fun TodayScreen(
     onGuide: () -> Unit,
     onTimeline: () -> Unit = {},
     onPlanWeek: () -> Unit = {},
+    onCharacter: () -> Unit = {},
     skipRequest: Long?,
     onSkipRequestHandled: () -> Unit,
     padding: PaddingValues,
@@ -121,6 +122,7 @@ fun TodayScreen(
     val backup by vm.backupState.collectAsStateWithLifecycle()
     val week by vm.weekProgress.collectAsStateWithLifecycle()
     val look by vm.appearance.collectAsStateWithLifecycle()
+    val character by vm.character.collectAsStateWithLifecycle()
     val grid = look.layout == TodayLayout.GRID
     // In the grid, holding a tile opens its full card here.
     var details by remember { mutableStateOf<Long?>(null) }
@@ -413,6 +415,11 @@ fun TodayScreen(
                 TodaySection.BALANCE -> item(key = "balance") {
                     BalanceCard(view.balance, modifier = Modifier.clickable(onClick = onHistory), note = "Tap for your ${pointsWord()} history")
                     Spacer(Modifier.height(12.dp))
+                    // With the character on: its level, under the balance.
+                    character?.let { sheet ->
+                        LevelCard(sheet, onOpen = onCharacter)
+                        Spacer(Modifier.height(12.dp))
+                    }
                 }
                 TodaySection.WEEKLY_TARGET -> week?.let { progress ->
                     item(key = "weekly-target") {

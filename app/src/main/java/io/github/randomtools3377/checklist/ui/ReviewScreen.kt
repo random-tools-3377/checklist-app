@@ -81,6 +81,8 @@ fun ReviewScreen(
     moods: List<io.github.randomtools3377.checklist.core.Mood> = emptyList(),
     /** A note on the week from the optional AI, shown in the week view. */
     coachCard: @Composable (ReviewSummary) -> Unit = {},
+    /** Whether the character is on, which adds the level badges. */
+    character: Boolean = false,
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize().testTag("review"),
@@ -104,7 +106,7 @@ fun ReviewScreen(
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
                     Text("🏅", fontSize = 24.sp, modifier = Modifier.width(40.dp))
                     Text("Badges", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
-                    Text("$badges of ${Badge.entries.size} · See all", color = MaterialTheme.colorScheme.primary)
+                    Text("$badges of ${Badge.shown(character).size} · See all", color = MaterialTheme.colorScheme.primary)
                 }
             }
         }

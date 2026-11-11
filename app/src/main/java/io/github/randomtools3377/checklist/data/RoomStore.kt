@@ -144,6 +144,7 @@ fun GoalEntity.toCore() = Goal(
     quit = quit,
     challenge = if (challengeDays != null && challengeDays > 0 && challengeFrom != null) Challenge(challengeDays, challengeBonus ?: 0, challengeFrom.toDay()) else null,
     after = afterGoal,
+    skill = io.github.randomtools3377.checklist.core.SkillArea.entries.firstOrNull { it.name == skill },
     archived = archived,
     position = position,
     createdAt = createdAt,
@@ -183,6 +184,7 @@ fun Goal.toEntity() = GoalEntity(
     challengeBonus = challenge?.bonus,
     challengeFrom = challenge?.from?.toEpochDay(),
     afterGoal = after,
+    skill = skill?.name,
 )
 
 fun MoodEntity.toCore() = Mood(day = day.toDay(), score = score, note = note, at = at)

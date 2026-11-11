@@ -731,7 +731,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         val earned = withContext(Dispatchers.Default) {
             val from = maxOf(ticks.minOf { it.day }, day.minusDays(STREAK_DAYS))
             val records = StreakCounter.records(from, day, goals.filter { !it.archived }, ticks.filter { it.stepId == null }, lapses)
-            Badges.earned(day, records, streak, goals, steps, ticks, entries, target)
+            Badges.earned(day, records, streak, goals, steps, ticks, entries, target, character = Feature.CHARACTER in features.value)
         }
         val kept = Badges.decode(dao.setting(SETTING_BADGES))
         val merged = Badges.merge(kept, earned)
@@ -1425,6 +1425,15 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     val features: StateFlow<Set<Feature>> = combine(Feature.entries.map { dao.observeSetting(it.key) }) { values ->
         Feature.entries.filterIndexed { i, feature -> feature.isOn(values[i]) }.toSet()
     }.state(emptySet())
+
+    /** The character's level and skills, while the character is on; null when it is off. */
+    val character: StateFlow<io.github.randomtools3377.checklist.core.CharacterSheet?> =
+        combine(features, dao.observeBalance(), dao.observeGoals()) { on, _, _ -> Feature.CHARACTER in on }
+            .mapLatest { on ->
+                if (!on) null else withContext(Dispatchers.Default) {
+                    io.github.randomtools3377.checklist.core.Experience.of(dao.allEntries().map { it.toCore() }, dao.allGoals().map { it.toCore() })
+                }
+            }.state(null)
 
     /** The weekly planning card on Today: from Monday, until this week is planned or put off. */
     val showWeekPlan: StateFlow<Boolean> = combine(today, features, dao.observeSetting(SETTING_WEEK_PLANNED)) { day, on, planned ->

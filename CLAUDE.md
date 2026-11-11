@@ -487,6 +487,27 @@ Build order **(default)**, each step a Release the owner can try:
     checksum before using it. They are kept in the app's own storage, left out of the backup
     file, and can be removed in Settings to free the space.
 
+17. Then a game layer, chosen by the owner, every part an extra that starts off.
+
+    Decided: a drawn character that levels up, with six skill areas (Fitness, Health, Mind,
+    Home, Work, Creative) that each level up from their own goals, and whose look (clothes,
+    gear) changes to match as they do; the user picks skin, hair and face. Each goal belongs to
+    one area, guessed from its name and category and changeable. Levels for the character and
+    each skill; badge tiers. Daily quests, combos, and racing last week. A boss of the week,
+    weaker to some areas than others; ticks earn items that help beat bosses, and items from the
+    area a boss is weak to hit it harder. A boss not beaten by Sunday just leaves: nothing is
+    lost, a new one comes on Monday, and items are kept. Lucky ticks, which never take points
+    away. Bet on yourself: stake points on doing a goal so many times in a week, win double or
+    lose the stake. Streak shields: one is earned every 30 days of main streak, at most 2 are
+    held, and one saves only the main streak, once.
+
+    **Details (default):** everything is original to this app, its names and art included.
+    Experience is every point a goal has ever paid (ticks and their bonuses), worked out from the
+    points history, so past ticks count from the start; spending and penalties don't lower it.
+    Build order: skill areas, levels and badge tiers (0.45.0); the drawn character (0.46.0);
+    quests, combos and racing last week (0.47.0); items, lucky ticks and bosses (0.48.0); bets
+    and streak shields (0.49.0).
+
 ## Talking to the owner
 
 - Short and plain. The owner is not an Android developer. Say what changed, what to try, and what

@@ -91,6 +91,7 @@ keeps the data.
 - 0.42.0: the optional AI, in a separate app (Checklist AI), and a new habit from a sentence.
 - 0.43.0: AI-suggested steps for a project, and a note on your week.
 - 0.44.0: voice on Today, through Checklist AI.
+- 0.45.0: a character with levels and six skills, and badge tiers.
 
 Every step in CLAUDE.md's build order is built. The iPhone app waits for a way to install it.
 
