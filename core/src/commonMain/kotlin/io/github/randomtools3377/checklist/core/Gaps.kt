@@ -39,13 +39,16 @@ class Gaps(private val store: Store, private val book: Book) {
      * Days from [from] to [to] when at least one habit was due or a project deadline fell. A goal
      * due so many times a week, month or year counts on the days it was ticked, and on the last
      * day of its window when that ended with times still to do. On its other days nothing of it
-     * is due, so a week already done doesn't make a quiet weekend look like a gap.
+     * is due, so a week already done doesn't make a quiet weekend look like a gap. A habit counts
+     * only from the day it was added or brought back, like in the streaks.
      */
     private fun dueDays(from: LocalDate, to: LocalDate, goals: List<Goal>, ticks: List<Tick>): Set<LocalDate> {
         val days = mutableSetOf<LocalDate>()
         val byWindow = ticks.filter { it.stepId == null }.groupBy { Triple(it.goalId, it.period, it.periodStart) }
+        val firstDays = goals.associate { it.id to it.addedOn() }
         fun due(goal: Goal, day: LocalDate): Boolean {
             if (!goal.isHabitLike) return goal.deadline == day
+            if (firstDays[goal.id]?.let { day < it } == true) return false
             val repeat = goal.repeat ?: return false
             if (repeat.kind != RepeatKind.TIMES_PER) return repeat.isDueOn(day)
             val window = repeat.window(day) ?: return false

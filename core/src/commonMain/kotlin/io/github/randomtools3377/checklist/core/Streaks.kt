@@ -1,6 +1,9 @@
 package io.github.randomtools3377.checklist.core
 
+import kotlinx.datetime.Instant
 import kotlinx.datetime.LocalDate
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
 import kotlinx.serialization.Serializable
 
 /** What a day needs for the main streak: a number of goals done, or a percentage of those due. */
@@ -34,14 +37,31 @@ data class Streaks(
     val allRunning: Boolean get() = listOf(done, noMisses, noSkips, withinLimit, perfect).all { it > 0 }
 }
 
+/**
+ * The day [Goal.createdAt] falls on in [zone]: the day the goal was added, or brought back. Null
+ * when it isn't known. Streaks and records count a goal from this day on, never before it.
+ */
+fun Goal.addedOn(zone: TimeZone = TimeZone.currentSystemDefault()): LocalDate? =
+    if (createdAt <= 0) null else Instant.fromEpochMilliseconds(createdAt).toLocalDateTime(zone).date
+
 object StreakCounter {
     /**
      * Each day's record from [from] to [to]. A single-day habit counts on its day; one due so
      * many times per week, month or year counts on the day its window ends. A skipped goal counts
-     * as done for the day, but still breaks the no-skip streak.
+     * as done for the day, but still breaks the no-skip streak. A goal counts only from the day
+     * [countsFrom] gives it (the day it was added, or brought back), so a new, copied or returned
+     * goal doesn't turn earlier days into days not done.
      */
-    fun records(from: LocalDate, to: LocalDate, goals: List<Goal>, ticks: List<Tick>, lapses: List<Lapse>): List<DayRecord> {
+    fun records(
+        from: LocalDate,
+        to: LocalDate,
+        goals: List<Goal>,
+        ticks: List<Tick>,
+        lapses: List<Lapse>,
+        countsFrom: (Goal) -> LocalDate? = { it.addedOn() },
+    ): List<DayRecord> {
         val habits = goals.filter { it.isHabitLike && it.repeat != null }
+        val firstDays = habits.associate { it.id to countsFrom(it) }
         val lapsesByDay = lapses.filter { !it.forgotten }.groupBy { it.day }
         // Counted once up front, so a long stretch of history stays quick to go through.
         val ticksByWindow = HashMap<Triple<Long, Period?, LocalDate>, MutableList<Tick>>()
@@ -61,12 +81,17 @@ object StreakCounter {
             var due = 0
             var done = 0
             for (goal in habits) {
-                val window = goal.repeat!!.window(day) ?: continue
+                val first = firstDays[goal.id]
+                if (first != null && day < first) continue
+                val repeat = goal.repeat!!
+                val window = repeat.window(day) ?: continue
                 if (window.end != day) continue
-                due++
                 val count = goal.timesDone(ticksByWindow[Triple(goal.id, goal.period, window.start)].orEmpty())
                 val skips = skipCounts[goal.id to window.start] ?: 0
                 val finished = if (window.period == Period.DAILY) count >= goal.target || skips > 0 else count + skips >= goal.target
+                // A week, month or year only partly in the goal's dates counts once it is done.
+                if (!finished && repeat.isPartial(window)) continue
+                due++
                 if (finished) done++
             }
             val onDay = lapsesByDay[day].orEmpty()

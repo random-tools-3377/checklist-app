@@ -122,7 +122,8 @@ fun GoalsScreen(
     view: GoalsView?,
     reordering: Boolean,
     onEdit: (Goal) -> Unit,
-    onMove: (Goal, Int) -> Unit,
+    /** Moves a goal to the place of the one shown next to it (the second goal). */
+    onMove: (Goal, Goal) -> Unit,
     onUnlock: () -> Unit,
     padding: PaddingValues,
     removed: Int = 0,
@@ -377,7 +378,7 @@ private fun LazyListScope.goalSection(
     view: GoalsView,
     reordering: Boolean,
     onEdit: (Goal) -> Unit,
-    onMove: (Goal, Int) -> Unit,
+    onMove: (Goal, Goal) -> Unit,
     onPick: ((Goal) -> Unit)? = null,
     picked: List<Long> = emptyList(),
 ) {
@@ -406,10 +407,11 @@ private fun LazyListScope.goalSection(
                     )
                 }
                 if (reordering) {
-                    IconButton(onClick = { onMove(goal, -1) }, enabled = index > 0, modifier = Modifier.testTag("up:${goal.name}")) {
+                    // Past to-dos and locked private goals aren't shown, so a goal swaps places with the one shown next to it.
+                    IconButton(onClick = { goals.getOrNull(index - 1)?.let { onMove(goal, it) } }, enabled = index > 0, modifier = Modifier.testTag("up:${goal.name}")) {
                         Icon(Icons.Filled.KeyboardArrowUp, contentDescription = "Move ${goal.name} up")
                     }
-                    IconButton(onClick = { onMove(goal, 1) }, enabled = index < goals.lastIndex, modifier = Modifier.testTag("down:${goal.name}")) {
+                    IconButton(onClick = { goals.getOrNull(index + 1)?.let { onMove(goal, it) } }, enabled = index < goals.lastIndex, modifier = Modifier.testTag("down:${goal.name}")) {
                         Icon(Icons.Filled.KeyboardArrowDown, contentDescription = "Move ${goal.name} down")
                     }
                 }
@@ -570,6 +572,8 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Long)
     var choosingRepeat by remember { mutableStateOf(false) }
     val phone = LocalPhone.current
     val askPermission = rememberAsk(Ask.NOTIFICATIONS) { onClose() }
+    // The user's day, after the day-end setting: a "since last done" goal's next day can't be before it.
+    val firstDay = remember { vm.currentDay().toEpochDay() }
 
     LaunchedEffect(id) {
         if (!loaded) {
@@ -726,9 +730,14 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Long)
     val end = endDay
     val repeatError = when {
         repeat == null -> "Finish choosing how often"
+        // A day already gone would never come round, so the goal would never show.
+        choice == RepeatChoice.AFTER_DONE && startDay < firstDay -> "Next due can't be before today"
         end != null && end < startDay -> "The end date is before the start"
         else -> null
     }
+    // A challenge is only on habits not counted per week, month or year.
+    val hasChallenge = challengeOn && choice != RepeatChoice.TIMES_PER
+    val challengeError = if (hasChallenge && challengeDays.toIntOrNull()?.takeIf { it in 2..3650 } == null) "From 2 to 3650 days" else null
     val minutesValue = minutes.toIntOrNull()?.takeIf { it > 0 }
     val counted = !routine && (targetValue ?: 1) > 1
     // Done several times on each day it's due: it can have a time for each one.
@@ -739,7 +748,7 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Long)
         title = if (id == 0L) "New habit" else "Edit habit",
         onBack = onClose,
         onSave = {
-            if (nameError != null || pointsError != null || targetError != null || repeatError != null || amountError != null || repeat == null) {
+            if (nameError != null || pointsError != null || targetError != null || repeatError != null || amountError != null || challengeError != null || repeat == null) {
                 showErrors = true
             } else {
                 vm.saveHabit(
@@ -761,7 +770,7 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Long)
                         quit = quit,
                         after = after,
                         skill = skill?.let { io.github.randomtools3377.checklist.core.SkillArea.valueOf(it) },
-                        challenge = challengeDays.toIntOrNull()?.takeIf { challengeOn && it in 2..3650 }?.let { days ->
+                        challenge = challengeDays.toIntOrNull()?.takeIf { hasChallenge && it in 2..3650 }?.let { days ->
                             Challenge(days, challengeBonus.toIntOrNull() ?: 0, challengeFrom?.toDay() ?: vm.currentDay())
                         },
                         finishBy = finishByMinute?.toTime(),
@@ -1132,7 +1141,10 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Long)
             }
             if (challengeOn) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    NumberField("Days in a row", challengeDays, { challengeDays = it.take(4) }, "field:challenge-days", modifier = Modifier.weight(1f))
+                    NumberField(
+                        "Days in a row", challengeDays, { challengeDays = it.take(4) }, "field:challenge-days", modifier = Modifier.weight(1f),
+                        error = if (showErrors) challengeError else null,
+                    )
                     NumberField("Bonus", challengeBonus, { challengeBonus = it }, "field:challenge-bonus", modifier = Modifier.weight(1f))
                 }
                 challengeFrom?.let { from ->
@@ -1181,6 +1193,11 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Long)
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable {
+                                    // "Next due" or "On" is the one day it is due: one carried over from another
+                                    // kind may have gone already, so it starts today instead.
+                                    if (option != choice && (option == RepeatChoice.AFTER_DONE || option == RepeatChoice.ONCE)) {
+                                        startDay = maxOf(startDay, firstDay)
+                                    }
                                     choice = option
                                     if (option == RepeatChoice.MONTH_WEEKDAY) weekdays = listOf(weekdays.firstOrNull() ?: 1)
                                     choosingRepeat = false

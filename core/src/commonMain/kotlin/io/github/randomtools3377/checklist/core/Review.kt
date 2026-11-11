@@ -78,8 +78,9 @@ object Review {
      * Sums up [from] to [to]. A habit counts each time its window ends inside the stretch:
      * done if ticked enough (or, for a single day, skipped), skipped if a skip covered it, missed
      * if a miss was recorded. Points come from the ledger: earned (ticks, bonuses, refunds),
-     * spent (rewards, less returns) and lost (penalties). With [hidePrivate], for while the
-     * privacy lock is on for private goals, those goals are left out with their ticks, skips,
+     * spent (rewards, less returns) and lost (penalties). A habit counts only from the day
+     * [countsFrom] gives it, the day it was added or brought back. With [hidePrivate], for while
+     * the privacy lock is on for private goals, those goals are left out with their ticks, skips,
      * misses and points, as on Today.
      */
     fun summarize(
@@ -92,6 +93,7 @@ object Review {
         entries: List<Entry>,
         gaps: List<Gap>,
         hidePrivate: Boolean = false,
+        countsFrom: (Goal) -> LocalDate? = { it.addedOn() },
     ): ReviewSummary {
         val hidden = if (hidePrivate) PrivateGoals.ids(goals) else emptySet()
         if (hidden.isNotEmpty()) {
@@ -102,6 +104,7 @@ object Review {
                 lapses = lapses.filter { it.goalId !in hidden },
                 entries = entries.filter { entry -> entry.goalId?.let { it in hidden } != true },
                 gaps = gaps,
+                countsFrom = countsFrom,
             )
         }
         val live = lapses.filter { !it.forgotten }
@@ -116,24 +119,27 @@ object Review {
             var missed = 0
             var run = 0
             var longest = 0
-            var day = from
+            var day = countsFrom(goal)?.let { maxOf(from, it) } ?: from
             while (day <= to) {
-                val window = goal.repeat!!.window(day)
-                if (window != null && window.end == day) {
-                    due++
+                val window = goal.repeat!!.window(day)?.takeIf { it.end == day }
+                if (window != null) {
                     val count = goal.timesDone(ticks.filter { it.countsToward(goal, window.start) })
                     val skips = live.count { it.goalId == goal.id && it.kind == LapseKind.SKIP && it.periodStart == window.start }
                     val finished = if (window.period == Period.DAILY) count >= goal.target || skips > 0 else count + skips >= goal.target
-                    if (skips > 0 && count < goal.target) skipped++
-                    if (live.any { it.goalId == goal.id && it.kind == LapseKind.MISS && it.periodStart == window.start }) missed++
-                    weekdayDue[day.dayOfWeek.isoDayNumber]++
-                    if (finished) {
-                        done++
-                        weekdayDone[day.dayOfWeek.isoDayNumber]++
-                        run++
-                        longest = maxOf(longest, run)
-                    } else if (day < today) {
-                        run = 0
+                    // A week, month or year only partly in the goal's dates counts once it is done.
+                    if (finished || !goal.repeat!!.isPartial(window)) {
+                        due++
+                        if (skips > 0 && count < goal.target) skipped++
+                        if (live.any { it.goalId == goal.id && it.kind == LapseKind.MISS && it.periodStart == window.start }) missed++
+                        weekdayDue[day.dayOfWeek.isoDayNumber]++
+                        if (finished) {
+                            done++
+                            weekdayDone[day.dayOfWeek.isoDayNumber]++
+                            run++
+                            longest = maxOf(longest, run)
+                        } else if (day < today) {
+                            run = 0
+                        }
                     }
                 }
                 day = day.plusDays(1)
@@ -156,7 +162,7 @@ object Review {
             earned = sum(EntryKind.TICK, EntryKind.BONUS, EntryKind.REFUND, EntryKind.PERFECT_DAY, EntryKind.CHALLENGE),
             spent = -sum(EntryKind.PURCHASE, EntryKind.RETURN),
             lost = -sum(EntryKind.PENALTY),
-            days = StreakCounter.records(from, to, goals, ticks, lapses),
+            days = StreakCounter.records(from, to, goals, ticks, lapses, countsFrom),
             gaps = gaps.filter { it.to >= from && it.from <= to },
             weekdays = (1..7).associateWith { weekdayDue[it] to weekdayDone[it] },
             earnedByDay = earnedByDay,

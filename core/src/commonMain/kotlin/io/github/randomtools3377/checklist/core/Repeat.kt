@@ -118,6 +118,14 @@ data class Repeat(
         return Window(from, to, period)
     }
 
+    /**
+     * Whether [window], a week, month or year of a [RepeatKind.TIMES_PER] goal, is only partly
+     * inside its start and end dates, like the week a goal was started on a Saturday. Such a
+     * window isn't missed when it falls short; it counts toward streaks only once it is done.
+     */
+    fun isPartial(window: Window): Boolean =
+        window.period != Period.DAILY && (window.start < start || (end != null && window.end > end))
+
     /** The first day on or after [from] when it is due, looking ahead up to [limitDays] days. */
     fun nextDue(from: LocalDate, limitDays: Int = 800): LocalDate? {
         if (kind == RepeatKind.TIMES_PER) return window(from)?.let { from } ?: if (from < start) start else null

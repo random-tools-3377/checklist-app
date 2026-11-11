@@ -16,10 +16,13 @@ data class ChallengeProgress(val done: Int, val days: Int, val startedOn: LocalD
  * once, and the goal carries on as a habit.
  */
 object Challenges {
-    /** Where [goal]'s challenge has got by [today], from its ticks, misses and bonus entries. */
+    /**
+     * Where [goal]'s challenge has got by [today], from its ticks, misses and bonus entries. None
+     * for a habit counted per week, month or year, which challenges aren't offered on.
+     */
     fun progress(goal: Goal, ticks: List<Tick>, lapses: List<Lapse>, bonuses: List<Entry>, today: LocalDate): ChallengeProgress? {
         val challenge = goal.challenge ?: return null
-        val repeat = goal.repeat ?: return null
+        val repeat = goal.repeat?.takeIf { it.kind != RepeatKind.TIMES_PER } ?: return null
         val mine = lapses.filter { it.goalId == goal.id && !it.forgotten && it.day >= challenge.from }
         val lastMiss = mine.filter { it.kind == LapseKind.MISS }.maxOfOrNull { it.day }
         val start = if (lastMiss == null) challenge.from else maxOf(challenge.from, lastMiss.plusDays(1))

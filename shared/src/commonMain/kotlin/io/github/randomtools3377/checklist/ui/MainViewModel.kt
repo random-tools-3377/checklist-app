@@ -1315,7 +1315,9 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
         combine(
             dao.observeGoals(),
             dao.observeSteps(),
-            dao.observeHabitTicksSince(since.toEpochDay()),
+            // Step ticks too, so projects and to-dos show the steps already done, and a finished
+            // project isn't listed as if nothing was done.
+            combine(dao.observeHabitTicksSince(since.toEpochDay()), dao.observeStepTicks()) { habitTicks, stepTicks -> habitTicks + stepTicks },
             dao.observeLapsesSince(since.toEpochDay()),
             combine(settings, unlocked) { s, isUnlocked -> s.locks.privateGoals && !isUnlocked },
         ) { goals, steps, ticks, lapses, hidePrivate ->
@@ -1448,7 +1450,7 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
 
     fun saveHabit(draft: HabitDraft, onDone: () -> Unit) {
         viewModelScope.launch {
-            repository.saveHabit(draft)
+            repository.saveHabit(draft, currentDay())
             onDone()
         }
     }
@@ -2105,11 +2107,11 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
     val categories: StateFlow<List<String>> = dao.observeGoals().map { rows -> Categories.of(rows.map { it.toCore() }) }.state(emptyList())
 
     fun duplicateGoal(id: Long, onDone: (Long) -> Unit) {
-        viewModelScope.launch { repository.duplicateGoal(id)?.let(onDone) }
+        viewModelScope.launch { repository.duplicateGoal(id, currentDay())?.let(onDone) }
     }
 
     fun restoreGoal(id: Long) {
-        viewModelScope.launch { repository.restoreGoal(id) }
+        viewModelScope.launch { repository.restoreGoal(id, currentDay()) }
     }
 
     /** Several goals at once: a category for them all ("" for none). */
@@ -2126,7 +2128,7 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
     fun removeGoals(ids: List<Long>) {
         viewModelScope.launch {
             ids.forEach { repository.removeGoal(it) }
-            offerUndo(if (ids.size == 1) "Removed 1 goal" else "Removed ${ids.size} goals") { ids.forEach { repository.restoreGoal(it) } }
+            offerUndo(if (ids.size == 1) "Removed 1 goal" else "Removed ${ids.size} goals") { ids.forEach { repository.restoreGoal(it, currentDay(), freshStart = false) } }
         }
     }
 
@@ -2135,12 +2137,13 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
             val name = repository.goal(id)?.name
             repository.removeGoal(id)
             onDone()
-            if (name != null) offerUndo("Removed $name") { repository.restoreGoal(id) }
+            if (name != null) offerUndo("Removed $name") { repository.restoreGoal(id, currentDay(), freshStart = false) }
         }
     }
 
-    fun moveGoal(id: Long, by: Int) {
-        viewModelScope.launch { repository.moveGoal(id, by) }
+    /** Moves a goal to the place of [besideId], the goal shown next to it in the list. */
+    fun moveGoalTo(id: Long, besideId: Long) {
+        viewModelScope.launch { repository.moveGoalTo(id, besideId) }
     }
 
     fun saveReward(draft: RewardDraft, onDone: () -> Unit) {

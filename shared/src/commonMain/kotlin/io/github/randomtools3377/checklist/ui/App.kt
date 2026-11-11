@@ -465,7 +465,7 @@ fun ChecklistApp(vm: MainViewModel) {
                             goals,
                             reordering = reorderGoals,
                             onEdit = { goal -> push(editRoute(goal)) },
-                            onMove = { goal, by -> vm.moveGoal(goal.id, by) },
+                            onMove = { goal, beside -> vm.moveGoalTo(goal.id, beside.id) },
                             onUnlock = unlock,
                             padding = padding,
                             removed = removedGoals.size,

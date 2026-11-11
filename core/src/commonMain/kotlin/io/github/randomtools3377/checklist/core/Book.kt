@@ -68,7 +68,10 @@ class Book(
         val settings = StreakBonus.settingsOf(store.setting(StreakBonus.TARGET), store.setting(StreakBonus.VALUE))
         val yesterday = day.minusDays(1)
         val from = day.minusDays(120)
-        val records = StreakCounter.records(from, yesterday, store.activeGoals(), store.habitTicksSince(Days.earliestOpenDay(from)), store.allLapses(from, yesterday))
+        val zone = timeZone()
+        val records = StreakCounter.records(
+            from, yesterday, store.activeGoals(), store.habitTicksSince(Days.earliestOpenDay(from)), store.allLapses(from, yesterday),
+        ) { it.addedOn(zone) }
         // With streak shields on, a shield can keep the main streak, and its bonus, going.
         val shieldsFrom = if (Feature.isOn(store, Feature.SHIELDS)) store.setting(Shields.FROM)?.let { runCatching { LocalDate.parse(it) }.getOrNull() } else null
         val main = shieldsFrom?.let { Shields.of(records, it, yesterday, settings).main } ?: StreakCounter.count(records, yesterday, settings).done

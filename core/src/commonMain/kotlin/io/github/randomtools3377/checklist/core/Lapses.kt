@@ -167,6 +167,14 @@ class Lapses(
 
         // "Since last done" goals move on day by day while they are late, so keep their latest repeat.
         val repeats = goals.associate { it.id to it.repeat }.toMutableMap()
+        // One whose day is before the days looked at here would never come round again (its date
+        // was set in the past): it is due today instead, with no miss.
+        for (goal in goals) {
+            val stuck = repeats[goal.id]?.takeIf { it.kind == RepeatKind.AFTER_DONE && it.start < from } ?: continue
+            val moved = stuck.copy(start = today)
+            repeats[goal.id] = moved
+            store.setRepeat(goal.id, moved)
+        }
         var day = from
         while (day <= yesterday) {
             for (goal in goals) {
@@ -177,7 +185,14 @@ class Lapses(
                     val dueOn = if (afterDone.start < from && afterDone.start > checked) from else afterDone.start
                     if (day != dueOn) continue
                     val start = afterDone.start
-                    if (goal.timesDone(ticks.filter { it.countsToward(goal, start) }) >= goal.target) continue
+                    if (goal.timesDone(ticks.filter { it.countsToward(goal, start) }) >= goal.target) {
+                        // Already done on its day, like a goal switched to this in the editor after
+                        // being ticked (a tick usually moves it on at once): the next counts from then.
+                        val next = afterDone.copy(start = day.plusDays(afterDone.interval.coerceAtLeast(1)), lateSince = null)
+                        repeats[goal.id] = next
+                        store.setRepeat(goal.id, next)
+                        continue
+                    }
                     val skipped = store.lapses(goal.id, start, day).any { it.kind == LapseKind.SKIP && it.periodStart == start && !it.forgotten }
                     // One miss on the day it was due; after that it stays on Today with no more.
                     if (!skipped && afterDone.lateSince == null && day >= missesFrom) {
@@ -206,6 +221,8 @@ class Lapses(
                     val skips = windowLapses.count { it.kind == LapseKind.SKIP && it.periodStart == window.start }
                     val done = if (window.period == Period.DAILY) count >= goal.target || skips > 0 else count + skips >= goal.target
                     if (done) continue
+                    // A first or last week, month or year only partly in the goal's dates isn't missed.
+                    if (repeat.isPartial(window)) continue
                     val over = used(goal, day) >= book.difficulty(day).allowed(goal.allowed)
                     found += record(goal, LapseKind.MISS, day, window.period, window.start, over, null, null).lapse
                 } else if (goal.deadline == day) {

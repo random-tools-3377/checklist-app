@@ -37,6 +37,9 @@ import io.github.randomtools3377.checklist.core.Moods
 import io.github.randomtools3377.checklist.core.Challenge
 import io.github.randomtools3377.checklist.core.RepeatText
 import io.github.randomtools3377.checklist.core.RepeatKind
+import io.github.randomtools3377.checklist.core.Days
+import io.github.randomtools3377.checklist.core.LapseKind
+import io.github.randomtools3377.checklist.core.Window
 import io.github.randomtools3377.checklist.core.Reward
 import io.github.randomtools3377.checklist.core.Step
 import kotlinx.datetime.LocalDate
@@ -262,8 +265,9 @@ class Repository(private val db: AppDatabase, private val celebrations: GifStore
 
     suspend fun reward(id: Long): Reward? = dao.reward(id)?.toCore()
 
-    suspend fun saveHabit(draft: HabitDraft): Unit = db.withTransaction {
+    suspend fun saveHabit(draft: HabitDraft, today: LocalDate = nowLocal().date): Unit = db.withTransaction {
         val existing = if (draft.id != 0L) dao.goal(draft.id) else null
+        val challenge = draft.challenge?.takeIf { draft.repeat.kind != RepeatKind.TIMES_PER }
         val base = existing ?: GoalEntity(
             kind = GoalKind.HABIT.name, name = "", icon = "", points = 0, period = null, target = 1, bonus = 0,
             deadline = null, archived = false, position = dao.nextGoalPosition(), createdAt = nowMillis(),
@@ -302,16 +306,37 @@ class Repository(private val db: AppDatabase, private val celebrations: GifStore
             unit = draft.unit?.trim()?.take(Amounts.UNIT_LENGTH)?.takeIf { it.isNotEmpty() && draft.amount != null },
             effort = draft.effort?.name,
             quit = draft.quit,
-            challengeDays = draft.challenge?.days,
-            challengeBonus = draft.challenge?.bonus,
-            challengeFrom = draft.challenge?.from?.toEpochDay(),
+            // A challenge is only on habits not counted per week, month or year.
+            challengeDays = challenge?.days,
+            challengeBonus = challenge?.bonus,
+            challengeFrom = challenge?.from?.toEpochDay(),
             afterGoal = draft.after?.takeIf { it != draft.id },
             skill = draft.skill?.name,
         )
         val goalId = if (existing == null) dao.insertGoal(row) else row.id.also { dao.updateGoal(row) }
+        // Switched between single days and "so many times a week, month or year": what was
+        // already ticked or skipped in the window open today moves over to it, so it still counts.
+        if (existing?.period != null && existing.period != row.period) {
+            row.repeat?.let { RepeatText.decode(it) }?.window(today)?.let { window ->
+                moveIntoWindow(goalId, window)
+            }
+        }
         // A routine's checklist: removed items are archived, so their past ticks still make sense.
         if (draft.items.isNotEmpty() || dao.activeSteps(goalId).isNotEmpty()) saveSteps(goalId, draft.items)
         pruneCelebrations()
+    }
+
+    /** Gives [goalId]'s ticks and skips made on the days of [window] that window's period, so they count toward it. */
+    private suspend fun moveIntoWindow(goalId: Long, window: Window) {
+        val from = window.start.toEpochDay()
+        val to = window.end.toEpochDay()
+        val period = window.period.name
+        dao.habitTicksSince(Days.earliestOpenDay(window.start).toEpochDay())
+            .filter { it.goalId == goalId && it.day in from..to && (it.period != period || it.periodStart != from) }
+            .forEach { dao.updateTick(it.copy(period = period, periodStart = from)) }
+        dao.lapses(goalId, from, to)
+            .filter { it.kind == LapseKind.SKIP.name && (it.period != period || it.periodStart != from) }
+            .forEach { dao.updateLapse(it.copy(period = period, periodStart = from)) }
     }
 
     /** Saves a goal's steps in order: new ones added, changed ones updated, left-out ones archived. */
@@ -555,11 +580,25 @@ class Repository(private val db: AppDatabase, private val celebrations: GifStore
         true
     }
 
-    /** A copy of a goal, with its steps or checklist, named "… (copy)", at the end of the list. Returns its id. */
-    suspend fun duplicateGoal(id: Long): Long? = db.withTransaction {
+    /**
+     * A copy of a goal, with its steps or checklist, named "… (copy)", at the end of the list.
+     * The copy is a new goal from [today]: its repeat starts today at the earliest, on the same
+     * days as the original (a copy of an "every 2nd day" goal falls on the original's days),
+     * without the original's moved or retimed days, lateness or challenge. Returns its id.
+     */
+    suspend fun duplicateGoal(id: Long, today: LocalDate = nowLocal().date): Long? = db.withTransaction {
         val goal = dao.goal(id) ?: return@withTransaction null
+        val repeat = goal.repeat?.let { RepeatText.decode(it) }?.let { decoded ->
+            val r = decoded.copy(moves = emptyList(), retimes = emptyList(), lateSince = null)
+            // The first day from today it would be due, so an interval keeps its days; today if none.
+            val start = if (r.start >= today) r.start else r.nextDue(today) ?: today
+            RepeatText.encode(r.copy(start = start, end = r.end?.takeIf { it >= start }))
+        }
         val copyId = dao.insertGoal(
-            goal.copy(id = 0, name = (goal.name.take(53) + " (copy)"), archived = false, position = dao.nextGoalPosition(), createdAt = nowMillis()),
+            goal.copy(
+                id = 0, name = (goal.name.take(53) + " (copy)"), archived = false, position = dao.nextGoalPosition(), createdAt = nowMillis(),
+                repeat = repeat, challengeDays = null, challengeBonus = null, challengeFrom = null,
+            ),
         )
         dao.activeSteps(id).forEach { step -> dao.insertStep(step.copy(id = 0, goalId = copyId)) }
         copyId
@@ -577,9 +616,25 @@ class Repository(private val db: AppDatabase, private val celebrations: GifStore
         ids.forEach { id -> dao.goal(id)?.let { dao.updateGoal(it.copy(effort = effort?.name)) } }
     }
 
-    /** Brings a removed goal back, at the end of the list. Its past stays as it was. */
-    suspend fun restoreGoal(id: Long) = db.withTransaction {
-        dao.goal(id)?.let { dao.updateGoal(it.copy(archived = false, position = dao.nextGoalPosition())) }
+    /**
+     * Brings a removed goal back, at the end of the list. Its past stays as it was: with
+     * [freshStart], it counts in streaks and records from now, so the days it was away aren't
+     * days not done. The Undo bar puts it back as it was, with [freshStart] false. A "since last
+     * done" goal whose next day passed while it was away is due [today].
+     */
+    suspend fun restoreGoal(id: Long, today: LocalDate = nowLocal().date, freshStart: Boolean = true) = db.withTransaction {
+        dao.goal(id)?.let { row ->
+            val repeat = row.repeat?.let { RepeatText.decode(it) }
+                ?.takeIf { it.kind == RepeatKind.AFTER_DONE && it.start < today }
+                ?.let { RepeatText.encode(it.copy(start = today)) }
+                ?: row.repeat
+            dao.updateGoal(
+                row.copy(
+                    archived = false, position = dao.nextGoalPosition(), repeat = repeat,
+                    createdAt = if (freshStart) nowMillis() else row.createdAt,
+                ),
+            )
+        }
     }
 
     /** Removes a goal from the lists. Points it already paid stay in the balance. */
@@ -590,11 +645,26 @@ class Repository(private val db: AppDatabase, private val celebrations: GifStore
     /** Moves a goal one place up ([by] = -1) or down (+1) among the goals of the same kind. */
     suspend fun moveGoal(id: Long, by: Int): Unit = db.withTransaction {
         val goal = dao.goal(id) ?: return@withTransaction
+        val sameKind = dao.activeGoals().filter { it.kind == goal.kind }
+        val from = sameKind.indexOfFirst { it.id == id }
+        sameKind.getOrNull(from + by)?.takeIf { from >= 0 }?.let { placeGoal(goal, it.id) }
+    }
+
+    /**
+     * Moves a goal to the place of [besideId], a goal of the same kind: the one shown next to it.
+     * The list leaves some goals out (past to-dos, locked private goals), so a move by one place
+     * among all of them could swap with one the user can't see and look like nothing happened.
+     */
+    suspend fun moveGoalTo(id: Long, besideId: Long): Unit = db.withTransaction {
+        dao.goal(id)?.let { placeGoal(it, besideId) }
+    }
+
+    private suspend fun placeGoal(goal: GoalEntity, besideId: Long) {
         val all = dao.activeGoals()
         val sameKind = all.filter { it.kind == goal.kind }.toMutableList()
-        val from = sameKind.indexOfFirst { it.id == id }
-        val to = from + by
-        if (from < 0 || to !in sameKind.indices) return@withTransaction
+        val from = sameKind.indexOfFirst { it.id == goal.id }
+        val to = sameKind.indexOfFirst { it.id == besideId }
+        if (from < 0 || to < 0 || from == to) return
         sameKind.add(to, sameKind.removeAt(from))
         // Put the reordered kind back into the same slots, then number everything in order.
         val reordered = sameKind.iterator()

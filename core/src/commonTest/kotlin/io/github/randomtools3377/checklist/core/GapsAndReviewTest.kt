@@ -3,6 +3,7 @@ package io.github.randomtools3377.checklist.core
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
+import kotlinx.datetime.toInstant
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -231,6 +232,25 @@ class GapsTest {
         assertEquals(GapKind.POINT_LOSS, second.kind)
         assertEquals(LocalDate(2026, 11, 14) to LocalDate(2026, 11, 17), second.from to second.to)
     }
+
+    @Test
+    fun aGoalBroughtBackDoesNotMakeAGapOfTheDaysBeforeIt() = runTest {
+        // A weekday goal, done Monday to Friday; nothing is due at the weekend.
+        val work = store.addGoal(
+            Goal(kind = GoalKind.HABIT, name = "Study", icon = "📚", points = 5, repeat = Repeat(RepeatKind.WEEKDAYS, start, weekdays = setOf(1, 2, 3, 4, 5))),
+        )
+        lapses.closeDays()
+        for (d in 9..13) {
+            at(d)
+            book.tickHabit(work.id)
+        }
+        at(16)
+        lapses.closeDays()
+        // On Monday a daily goal with an old start is brought back: the weekend before isn't a gap.
+        val noon = LocalDateTime(2026, 11, 16, 12, 0).toInstant(kotlinx.datetime.TimeZone.currentSystemDefault()).toEpochMilliseconds()
+        store.addGoal(Goal(kind = GoalKind.HABIT, name = "Stretch", icon = "🧘", points = 3, repeat = Repeat.everyDay(start), createdAt = noon))
+        assertTrue(gaps.find().isEmpty())
+    }
 }
 
 class ReviewTest {
@@ -273,6 +293,18 @@ class ReviewTest {
         assertEquals("Read", summary.mostConsistent?.goal?.name)
         assertEquals(4, summary.worstWeekday) // Thursday: the miss
         assertNull(Review.summarize(monday, monday, monday, emptyList(), emptyList(), emptyList(), emptyList(), emptyList()).mostTicked)
+    }
+
+    @Test
+    fun aGoalAddedMidWeekCountsInTheReviewFromThatDay() {
+        val run = Goal(id = 1, kind = GoalKind.HABIT, name = "Run", icon = "🏃", points = 10, repeat = Repeat.everyDay(start))
+        val days = (0..6).map { monday.plusDays(it) }
+        val thursday = days[3]
+        val ticks = days.drop(3).map { tick(1, it) }
+        val summary = Review.summarize(monday, days.last(), today = days.last(), goals = listOf(run), ticks = ticks, lapses = emptyList(), entries = emptyList(), gaps = emptyList()) { thursday }
+        val runSummary = summary.goals.single()
+        assertEquals(listOf(4, 4), listOf(runSummary.due, runSummary.done))
+        assertEquals(listOf(0, 0, 0, 1, 1, 1, 1), summary.days.map { it.due })
     }
 
     @Test

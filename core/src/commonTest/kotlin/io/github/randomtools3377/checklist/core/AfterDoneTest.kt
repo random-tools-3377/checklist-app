@@ -36,6 +36,31 @@ class AfterDoneTest {
     }
 
     @Test
+    fun aNextDayAlreadyGoneMovesToTodayWithoutAMiss() = runTest {
+        // Its "Next due" was left on a day before the days looked at, so it would never come round.
+        val plants = store.addGoal(Goal(kind = GoalKind.HABIT, name = "Water plants", icon = "🪴", points = 3, repeat = Repeat(RepeatKind.AFTER_DONE, LocalDate(2026, 10, 1), interval = 3)))
+        lapses.closeDays()
+        on(10)
+        assertTrue(lapses.closeDays().isEmpty())
+        assertEquals(LocalDate(2026, 11, 10), repeatOf(plants.id).start)
+        assertNull(repeatOf(plants.id).lateSince)
+        assertTrue(TodayList.build(LocalDate(2026, 11, 10), store.goals, emptyList(), store.ticks, 0).dueToday.isNotEmpty())
+    }
+
+    @Test
+    fun doneOnTheDayItWasSwitchedToThisTheNextCountsFromThatDay() = runTest {
+        // Ticked on Monday, then switched to "5 days after it's done" with Monday as its day.
+        val plants = store.addGoal(Goal(kind = GoalKind.HABIT, name = "Water plants", icon = "🪴", points = 3, repeat = Repeat(RepeatKind.AFTER_DONE, monday, interval = 5)))
+        lapses.closeDays()
+        store.addTick(Tick(goalId = plants.id, stepId = null, at = 0, day = monday, period = Period.DAILY, periodStart = monday))
+        assertTrue(TodayList.build(monday, store.goals, emptyList(), store.ticks, 0).dueToday.single().done)
+        on(10)
+        assertTrue(lapses.closeDays().isEmpty())
+        assertEquals(monday.plusDays(5), repeatOf(plants.id).start)
+        assertNull(repeatOf(plants.id).lateSince)
+    }
+
+    @Test
     fun notDoneOnItsDayIsOneMissThenItWaitsOnToday() = runTest {
         val plants = store.addGoal(Goal(kind = GoalKind.HABIT, name = "Water plants", icon = "🪴", points = 3, repeat = Repeat(RepeatKind.AFTER_DONE, monday, interval = 5)))
         lapses.closeDays()

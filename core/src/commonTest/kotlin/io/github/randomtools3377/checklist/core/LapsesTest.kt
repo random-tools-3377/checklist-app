@@ -3,6 +3,8 @@ package io.github.randomtools3377.checklist.core
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
+import kotlinx.datetime.asTimeZone
+import kotlinx.datetime.toInstant
 import kotlin.random.Random
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -111,6 +113,37 @@ class LapsesTest {
         val found = lapses.closeDays()
 
         assertEquals(listOf(LocalDate(2026, 11, 15)), found.map { it.day })
+    }
+
+    @Test
+    fun aTimesPerWeekHabitStartedLateInTheWeekIsNotMissedThatWeek() = runTest {
+        // Started on Saturday 14 November: that week is only partly its own, so falling short isn't a miss.
+        at(14)
+        val saturday = LocalDate(2026, 11, 14)
+        val gym = habit(repeat = Repeat.timesPer(Period.WEEKLY, saturday), target = 3)
+        lapses.closeDays()
+        book.tickHabit(gym.id)
+        at(16)
+        assertTrue(lapses.closeDays().isEmpty())
+
+        // The next full week is judged as usual.
+        at(24)
+        assertEquals(listOf(LocalDate(2026, 11, 22)), lapses.closeDays().map { it.day })
+
+        // In the streaks, the short first week neither counts nor breaks; once done, it counts.
+        val records = StreakCounter.records(LocalDate(2026, 11, 15), LocalDate(2026, 11, 15), store.goals, store.ticks, emptyList()) { null }
+        assertEquals(0, records.single().due)
+        val ticks = store.ticks + List(2) { Tick(goalId = gym.id, stepId = null, at = 0, day = saturday, period = Period.WEEKLY, periodStart = LocalDate(2026, 11, 9)) }
+        val done = StreakCounter.records(LocalDate(2026, 11, 15), LocalDate(2026, 11, 15), store.goals, ticks, emptyList()) { null }
+        assertEquals(1 to 1, done.single().let { it.due to it.done })
+    }
+
+    @Test
+    fun aTimesPerWeekHabitEndingMidWeekIsNotMissedThatWeek() = runTest {
+        val gym = habit(repeat = Repeat(RepeatKind.TIMES_PER, start, end = LocalDate(2026, 11, 11), per = Period.WEEKLY), target = 3)
+        lapses.closeDays()
+        at(17)
+        assertTrue(lapses.closeDays().none { it.goalId == gym.id })
     }
 
     @Test
@@ -285,6 +318,25 @@ class StreaksTest {
         // A day with only a skip on it still counts, as a skipped goal counts as done.
         val skipped = listOf(record(2, 2, 2), record(1, 0, 0, skips = 1))
         assertEquals(2, StreakCounter.count(skipped, today, StreakSettings()).done)
+    }
+
+    @Test
+    fun aGoalCountsInTheRecordsOnlyFromTheDayItWasAdded() {
+        val start = LocalDate(2026, 1, 1)
+        val old = Goal(id = 1, kind = GoalKind.HABIT, name = "Old", icon = "⭐", points = 1, repeat = Repeat.everyDay(start))
+        // A copy keeping the old start, added on 11 November, with nothing ticked before then.
+        val copy = old.copy(id = 2, name = "Old (copy)")
+        val added = LocalDate(2026, 11, 11)
+        val ticks = (1..11).map { d -> LocalDate(2026, 11, d) }.map { day -> Tick(goalId = 1, stepId = null, at = 0, day = day, period = Period.DAILY, periodStart = day) }
+        val records = StreakCounter.records(LocalDate(2026, 11, 1), added, listOf(old, copy), ticks, emptyList()) { goal -> if (goal.id == 2L) added else null }
+        assertEquals(List(10) { 1 to 1 } + listOf(2 to 1), records.map { it.due to it.done })
+        assertEquals(10, StreakCounter.count(records, added, StreakSettings()).perfect)
+
+        // The day it was added comes from when it was made, in the phone's time zone.
+        val made = copy.copy(createdAt = kotlinx.datetime.LocalDateTime(2026, 11, 11, 23, 30).toInstant(kotlinx.datetime.TimeZone.UTC).toEpochMilliseconds())
+        assertEquals(added, made.addedOn(kotlinx.datetime.TimeZone.UTC))
+        assertEquals(LocalDate(2026, 11, 12), made.addedOn(kotlinx.datetime.UtcOffset(hours = 9).asTimeZone()))
+        assertNull(old.addedOn(kotlinx.datetime.TimeZone.UTC))
     }
 
     @Test

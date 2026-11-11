@@ -66,4 +66,14 @@ class QuitAndChallengeTest {
         on(14); lapses.closeDays()
         assertEquals(0, (book.tickHabit(walk.id) as TickResult.Ticked).bonus)
     }
+
+    @Test
+    fun aGoalCountedPerWeekHasNoChallenge() = runTest {
+        val gym = store.addGoal(
+            Goal(kind = GoalKind.HABIT, name = "Gym", icon = "🏋️", points = 2, target = 3, repeat = Repeat.timesPer(Period.WEEKLY, monday), challenge = Challenge(days = 30, bonus = 50, from = monday)),
+        )
+        book.tickHabit(gym.id)
+        assertNull(Challenges.progress(gym, store.ticks, store.lapses, store.entries, monday))
+        assertEquals(0, (book.tickHabit(gym.id) as TickResult.Ticked).bonus)
+    }
 }
