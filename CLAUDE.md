@@ -776,7 +776,12 @@ Build order **(default)**, each step a Release the owner can try:
       skipped.
     - Money: with Budget on, any reward can have a money value, and its points price follows
       the money only when the user links them. What is left at the end of a month can be moved
-      into savings; nothing carries over into the next month's budget. Pay changes apply from a
+      into a saving goal, or, with none chosen, into a plain savings account, so the money can be
+      seen growing while it isn't spent; nothing carries over into the next month's budget. A
+      reward can be paid from savings: the money comes out of a saving goal instead of counting
+      as that month's spending, so it isn't counted twice and doesn't spoil the budget game or a
+      category's limit. The Buy box says what a reward costs in money and how much is left of
+      the Rewards category's monthly limit, warning before going over. Pay changes apply from a
       date the user picks, so past months stay as they were. Bill reminders and regular money
       in; quick "Spent" from the app icon, the budget widget and Today.
     - Positive things are worded positively everywhere: finished habits and projects are
@@ -806,8 +811,7 @@ Build order **(default)**, each step a Release the owner can try:
       no-cloud-backup rules; small accessibility tidying; and, in "Mood and your goals", a
       switch that highlights what shows up on days something was noted.
     - Not chosen: a note when a money-priced reward's price moves, celebrations for game wins,
-      and carrying money over into the next month. Still to be decided: the money line on Buy
-      (spending limit left) and paying a reward from savings.
+      and carrying money over into the next month.
 
 ## Talking to the owner
 
