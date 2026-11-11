@@ -4,7 +4,6 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
-    alias(libs.plugins.ksp)
 }
 
 val appVersionName: String = providers.gradleProperty("appVersionName").get()
@@ -55,7 +54,7 @@ android {
 
     sourceSets {
         // The emulator tests open each committed database layout to check the migrations.
-        getByName("androidTest").assets.srcDir("$projectDir/schemas")
+        getByName("androidTest").assets.srcDir("$rootDir/shared/schemas")
     }
 
     packaging {
@@ -71,15 +70,8 @@ kotlin {
     }
 }
 
-ksp {
-    // The database layout of every version is kept in app/schemas, so later versions can move
-    // the owner's data forward instead of losing it. CI fails if it is not committed.
-    arg("room.schemaLocation", "$projectDir/schemas")
-    arg("room.generateKotlin", "true")
-}
-
 dependencies {
-    implementation(project(":core"))
+    implementation(project(":shared"))
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)
@@ -90,9 +82,7 @@ dependencies {
     implementation(libs.compose.foundation)
     implementation(libs.compose.material3)
     implementation(libs.compose.material.icons.core)
-    implementation(libs.room.runtime)
     implementation(libs.room.ktx)
-    ksp(libs.room.compiler)
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.glance.appwidget)
     implementation(libs.androidx.biometric)

@@ -1,7 +1,7 @@
 package io.github.randomtools3377.checklist.data
 
-import android.content.Context
 import androidx.room.AutoMigration
+import androidx.room.ConstructedBy
 import androidx.room.ColumnInfo
 import androidx.room.Dao
 import androidx.room.Database
@@ -11,14 +11,14 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.PrimaryKey
 import androidx.room.Query
-import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.RoomDatabaseConstructor
 import androidx.room.Update
 import kotlinx.coroutines.flow.Flow
 
 // Dates are stored as epoch days, moments as epoch milliseconds, and kinds and periods by name.
 //
-// Every version's layout is exported to app/schemas. A later version that changes a table must
+// Every version's layout is exported to shared/schemas. A later version that changes a table must
 // add a migration; the owner's data is never dropped.
 
 @Entity(tableName = "goals")
@@ -584,15 +584,20 @@ interface ChecklistDao {
     // Versions 4 to 8 only add tables and columns, so Room works the migrations out from the layouts.
     autoMigrations = [AutoMigration(from = 3, to = 4), AutoMigration(from = 4, to = 5), AutoMigration(from = 5, to = 6), AutoMigration(from = 6, to = 7), AutoMigration(from = 7, to = 8), AutoMigration(from = 8, to = 9), AutoMigration(from = 9, to = 10), AutoMigration(from = 10, to = 11), AutoMigration(from = 11, to = 12), AutoMigration(from = 12, to = 13), AutoMigration(from = 13, to = 14), AutoMigration(from = 14, to = 15), AutoMigration(from = 15, to = 16), AutoMigration(from = 16, to = 17), AutoMigration(from = 17, to = 18)],
 )
+@ConstructedBy(AppDatabaseConstructor::class)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun dao(): ChecklistDao
 
     companion object {
         const val FILE_NAME = "checklist.db"
-
-        fun open(context: Context): AppDatabase =
-            Room.databaseBuilder(context, AppDatabase::class.java, FILE_NAME)
-                .addMigrations(*MIGRATIONS)
-                .build()
     }
 }
+
+/** Made by Room for each phone; how the database is opened is up to each (see openDatabase). */
+@Suppress("KotlinNoActualForExpect")
+expect object AppDatabaseConstructor : RoomDatabaseConstructor<AppDatabase> {
+    override fun initialize(): AppDatabase
+}
+
+/** Runs [block] as one transaction: all of it is saved, or none of it. */
+expect suspend fun <R> AppDatabase.withTransaction(block: suspend () -> R): R

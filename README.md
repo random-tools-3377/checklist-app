@@ -122,5 +122,5 @@ Hyperlegible and Lora are under the SIL Open Font License; their notices ship in
   code. Its certificate must match the one in CLAUDE.md, or the build fails.
 - A push to `main` publishes a Release when `appVersionName` in `gradle.properties` has no
   Release yet. The notes come from `release-notes/<version>.md`.
-- The database layout of each version is committed in `app/schemas`. A version that changes
+- The database layout of each version is committed in `shared/schemas`. A version that changes
   it must add a migration, so updates never lose data.

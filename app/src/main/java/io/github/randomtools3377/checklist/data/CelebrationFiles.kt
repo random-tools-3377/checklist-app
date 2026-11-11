@@ -9,22 +9,22 @@ import kotlin.random.Random
  * The celebration GIFs the user picked, copied into the app's own storage. The Photo Picker
  * only lends a file for a moment, so a copy is kept. Nothing else can read this folder.
  */
-class CelebrationFiles(filesDir: File) {
+class CelebrationFiles(filesDir: File) : GifStore {
     private val dir = File(filesDir, "celebrations")
 
     /** The file for [name], or null if [name] isn't a plain GIF file name. */
     fun file(name: String): File? = if (Celebration.isSafeName(name)) File(dir, name) else null
 
-    fun read(name: String): ByteArray? = file(name)?.takeIf { it.isFile }?.readBytes()
+    override fun read(name: String): ByteArray? = file(name)?.takeIf { it.isFile }?.readBytes()
 
-    fun write(name: String, bytes: ByteArray) {
+    override fun write(name: String, bytes: ByteArray) {
         val file = file(name) ?: return
         dir.mkdirs()
         file.writeBytes(bytes)
     }
 
     /** Deletes the files no goal uses any more. */
-    fun keepOnly(names: Set<String>) {
+    override fun keepOnly(names: Set<String>) {
         dir.listFiles()?.forEach { if (it.name !in names) it.delete() }
     }
 

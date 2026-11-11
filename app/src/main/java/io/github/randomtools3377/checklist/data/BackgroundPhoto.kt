@@ -12,19 +12,19 @@ import java.io.File
  * The user's own photo behind Today, copied into the app's own storage and made smaller. The
  * Photo Picker only lends the photo for a moment, so a copy is kept; it goes in the backup file.
  */
-class BackgroundPhoto(filesDir: File) {
+class BackgroundPhoto(filesDir: File) : PhotoStore {
     val file = File(filesDir, "background.jpg")
 
     fun exists(): Boolean = file.isFile
 
-    fun read(): ByteArray? = file.takeIf { it.isFile }?.readBytes()
+    override fun read(): ByteArray? = file.takeIf { it.isFile }?.readBytes()
 
-    fun write(bytes: ByteArray) {
+    override fun write(bytes: ByteArray) {
         file.parentFile?.mkdirs()
         file.writeBytes(bytes)
     }
 
-    fun delete() {
+    override fun delete() {
         file.delete()
     }
 

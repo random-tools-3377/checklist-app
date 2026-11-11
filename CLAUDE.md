@@ -260,8 +260,18 @@ The app has no network access unless the owner decides otherwise for this app.
 
 - The app is planned for iPhone too. The code is restructured now, before 0.2.0, so Android and
   iPhone share it through Kotlin Multiplatform and each feature is built once.
-- The iPhone app itself is built once there is a way to install it: a paid Apple Developer account
-  (TestFlight) or a Mac. Until then, Android releases continue.
+- The iPhone app is installed with SideStore or AltStore, using the owner's free Apple ID and
+  refreshed every week. There is no Mac and no paid Apple account: GitHub's Macs build the app
+  and every Release carries an unsigned `.ipa` beside the APKs, for SideStore or AltStore to sign
+  on the phone. Android releases carry on as before.
+- **How it gets there (default):** in stages, Android unchanged for the user at each one. First
+  the database and its code move to a shared module (Room, which runs on iPhone too); then the
+  screens and their logic move there too (Compose Multiplatform), with what only a phone can do
+  (reminders, files, the lock, buzz, widgets, the AI, the calendar) behind a small interface each
+  phone fills in; then the iPhone app itself: reminders, the Face ID lock, export and import, and
+  the `.ipa` on the Releases, with a step-by-step guide to installing it. Not in the first iPhone
+  version: widgets, the AI and voice, the phone's calendar, the quick settings tile and app icon
+  choices; widgets come next, written in Swift.
 - Each phone keeps its own data. The export file is the same on both, so data moves between them
   only by exporting on one and importing on the other. No sync.
 - The shared code holds the rules, repeats, pacing, the recommended order and the export format,
@@ -290,8 +300,8 @@ The app has no network access unless the owner decides otherwise for this app.
 - CI on every push: the network-permission check, the signature check, and the tests.
 
 The owner tries the app once the calendar and the later features are built. Until then, each
-step goes on without waiting for feedback, and still ends in a Release. Questions about the
-iPhone version are on hold.
+step goes on without waiting for feedback, and still ends in a Release. The iPhone version is
+under way (see iPhone).
 
 Build order **(default)**, each step a Release the owner can try:
 

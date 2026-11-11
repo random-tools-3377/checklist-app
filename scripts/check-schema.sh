@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# The database layout of every version is kept in app/schemas, so a later version can move the
+# The database layout of every version is kept in shared/schemas, so a later version can move the
 # user's data forward instead of losing it. Fails if the build produced a layout that is not
 # committed, or one that differs from the committed file, and prints it so it can be added.
 # Formatting differences alone (spacing, a final newline) don't count. On a branch it only warns,
 # so a version that changes the database doesn't fail its first run; main always fails, so
 # nothing is released without its layout.
 set -euo pipefail
-status="$(git status --porcelain --untracked-files=all -- app/schemas)"
+status="$(git status --porcelain --untracked-files=all -- shared/schemas)"
 level=warning
 if [ "${GITHUB_REF:-}" = "refs/heads/main" ]; then level=error; fi
 failed=0

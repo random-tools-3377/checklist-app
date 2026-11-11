@@ -40,8 +40,8 @@ jobs:
           java-version: "17"
           cache: gradle
 
-      - name: Unit tests (the shared rules, on the JVM)
-        run: ./gradlew --no-daemon :core:jvmTest :app:testDebugUnitTest
+      - name: Unit tests (the shared rules and the shared database code, on the JVM)
+        run: ./gradlew --no-daemon :core:jvmTest :shared:jvmTest :app:testDebugUnitTest
 
       - name: Build the release APKs, unsigned (the checklist app and Checklist AI)
         run: ./gradlew --no-daemon :app:assembleRelease :ai:assembleRelease
@@ -75,6 +75,7 @@ jobs:
           name: build-reports
           path: |
             core/build/reports
+            shared/build/reports
             app/build/reports
             ai/build/reports
           if-no-files-found: ignore
@@ -153,22 +154,25 @@ jobs:
           if [ -n "$xcode" ]; then sudo xcode-select -s "$xcode"; fi
           xcodebuild -version
 
-      - name: Shared tests on an iPhone simulator
-        run: ./gradlew --no-daemon :core:iosSimulatorArm64Test
+      - name: Shared tests on an iPhone simulator (the rules, and the database with SQLite that comes with the app)
+        run: ./gradlew --no-daemon :core:iosSimulatorArm64Test :shared:iosSimulatorArm64Test :shared:compileKotlinIosArm64
 
       - name: Check the iPhone tests really ran
         run: |
-          results=$(ls core/build/test-results/iosSimulatorArm64Test/*.xml 2>/dev/null | wc -l | tr -d ' ')
-          tests=$(cat core/build/test-results/iosSimulatorArm64Test/*.xml 2>/dev/null | grep -o 'tests="[0-9]*"' | grep -o '[0-9]*' | paste -sd+ - | bc)
-          echo "Test files: $results, tests: ${tests:-0}"
-          if [ "${tests:-0}" -lt 1 ]; then echo "::error::No iPhone tests ran."; exit 1; fi
+          for module in core shared; do
+            tests=$(cat $module/build/test-results/iosSimulatorArm64Test/*.xml 2>/dev/null | grep -o 'tests="[0-9]*"' | grep -o '[0-9]*' | paste -sd+ - | bc)
+            echo "$module: ${tests:-0} tests"
+            if [ "${tests:-0}" -lt 1 ]; then echo "::error::No iPhone tests ran for $module."; exit 1; fi
+          done
 
       - name: Keep the test reports
         if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: iphone-reports
-          path: core/build/reports
+          path: |
+            core/build/reports
+            shared/build/reports
           if-no-files-found: ignore
           retention-days: 7
 

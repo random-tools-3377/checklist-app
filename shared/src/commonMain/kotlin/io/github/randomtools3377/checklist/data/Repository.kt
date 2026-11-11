@@ -1,6 +1,5 @@
 package io.github.randomtools3377.checklist.data
 
-import androidx.room.withTransaction
 import io.github.randomtools3377.checklist.core.Amounts
 import io.github.randomtools3377.checklist.core.Backup
 import io.github.randomtools3377.checklist.core.Categories
@@ -25,7 +24,8 @@ import io.github.randomtools3377.checklist.core.Reward
 import io.github.randomtools3377.checklist.core.Step
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalTime
-import java.util.Base64
+import kotlin.io.encoding.Base64
+import kotlin.io.encoding.ExperimentalEncodingApi
 
 const val SETTING_DEFAULT_FINISH = "default_finish_minute"
 const val SETTING_DAY_START = "day_start_minute"
@@ -191,7 +191,24 @@ data class RewardDraft(
 )
 
 /** Adding, editing, ordering and removing goals and rewards; settings; export and import. */
-class Repository(private val db: AppDatabase, private val celebrations: CelebrationFiles, private val background: BackgroundPhoto? = null) {
+/** Picked celebration GIFs, kept by the app in its own storage (see CelebrationFiles on Android). */
+interface GifStore {
+    fun read(name: String): ByteArray?
+    fun write(name: String, bytes: ByteArray)
+
+    /** Deletes every GIF not named in [names]. */
+    fun keepOnly(names: Set<String>)
+}
+
+/** The photo behind Today, kept by the app in its own storage (see BackgroundPhoto on Android). */
+interface PhotoStore {
+    fun read(): ByteArray?
+    fun write(bytes: ByteArray)
+    fun delete()
+}
+
+@OptIn(ExperimentalEncodingApi::class)
+class Repository(private val db: AppDatabase, private val celebrations: GifStore, private val background: PhotoStore? = null) {
     private val dao = db.dao()
 
     /** Deletes picked GIFs that no goal uses any more. */
@@ -647,9 +664,9 @@ class Repository(private val db: AppDatabase, private val celebrations: Celebrat
         }
         // The GIFs the user picked go in the file too, so a restore brings them back.
         val files = backup.goals.mapNotNull { Celebration.ownFile(it.celebration) }.toSet()
-            .mapNotNull { name -> celebrations.read(name)?.let { name to Base64.getEncoder().encodeToString(it) } }
+            .mapNotNull { name -> celebrations.read(name)?.let { name to Base64.Default.encode(it) } }
             .toMap()
-        val photo = background?.read()?.let { Base64.getEncoder().encodeToString(it) }
+        val photo = background?.read()?.let { Base64.Default.encode(it) }
         return Backup.encode(backup.copy(files = files, background = photo))
     }
 
@@ -661,14 +678,14 @@ class Repository(private val db: AppDatabase, private val celebrations: Celebrat
         for ((name, data) in backup.files) {
             if (name !in used) continue
             val bytes = try {
-                Base64.getDecoder().decode(data)
+                Base64.Default.decode(data)
             } catch (e: IllegalArgumentException) {
                 continue
             }
             celebrations.write(name, bytes)
         }
         background?.let { photo ->
-            val bytes = backup.background?.let { data -> runCatching { Base64.getDecoder().decode(data) }.getOrNull() }
+            val bytes = backup.background?.let { data -> runCatching { Base64.Default.decode(data) }.getOrNull() }
             if (bytes != null) photo.write(bytes) else photo.delete()
         }
     }

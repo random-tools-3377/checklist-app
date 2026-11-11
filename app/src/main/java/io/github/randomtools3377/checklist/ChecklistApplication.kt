@@ -18,6 +18,7 @@ import io.github.randomtools3377.checklist.data.SETTING_APP_ICON
 import io.github.randomtools3377.checklist.data.SETTING_POINTS_NAME
 import io.github.randomtools3377.checklist.data.BackgroundPhoto
 import io.github.randomtools3377.checklist.data.AppDatabase
+import io.github.randomtools3377.checklist.data.open
 import io.github.randomtools3377.checklist.data.CelebrationFiles
 import io.github.randomtools3377.checklist.data.Repository
 import io.github.randomtools3377.checklist.data.RoomStore

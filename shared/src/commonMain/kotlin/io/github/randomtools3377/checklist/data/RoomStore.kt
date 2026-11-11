@@ -1,6 +1,5 @@
 package io.github.randomtools3377.checklist.data
 
-import androidx.room.withTransaction
 import io.github.randomtools3377.checklist.core.Repeat
 import io.github.randomtools3377.checklist.core.RewardSize
 import io.github.randomtools3377.checklist.core.Effort
