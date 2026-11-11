@@ -566,6 +566,7 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
             SETTING_TODAY_SECTIONS, SETTING_HIDDEN_TABS, SETTING_FIRST_TAB,
             SETTING_FONT, SETTING_CELEBRATE_SOUND, SETTING_CELEBRATE_BUZZ, SETTING_CONFETTI, SETTING_DEFAULT_GIF,
             SETTING_APP_ICON, SETTING_WIDGET_STYLE, io.github.randomtools3377.checklist.core.ColourBlind.SETTING,
+            io.github.randomtools3377.checklist.data.SETTING_TAB_ORDER,
         ).map { dao.observeSetting(it) },
     ) { v ->
         Appearance(
@@ -579,7 +580,7 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
             dim = v[7]?.toIntOrNull()?.coerceIn(Appearance.MIN_DIM, Appearance.MAX_DIM) ?: Appearance.DEFAULT_DIM,
             photoStamp = v[8].orEmpty(),
             sections = Sections.decode(v[9]),
-            tabs = TabChoice.decode(v[10], v[11]),
+            tabs = TabChoice.decode(v[10], v[11], v[20]),
             font = FontChoice.entries.firstOrNull { it.name == v[12] } ?: FontChoice.PHONE,
             celebrate = CelebrationStyle(
                 sound = v[13] == "1",
@@ -687,6 +688,14 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
         viewModelScope.launch {
             val now = TabChoice.decode(dao.setting(SETTING_HIDDEN_TABS), null).hidden
             repository.setSetting(SETTING_HIDDEN_TABS, TabChoice.encodeHidden(if (hidden) now + tab else now - tab))
+        }
+    }
+
+    /** Moves a tab one place earlier (-1) or later (+1) along the bottom. */
+    fun moveTab(tab: AppTabKind, by: Int) {
+        viewModelScope.launch {
+            val now = TabChoice.decode(null, null, dao.setting(io.github.randomtools3377.checklist.data.SETTING_TAB_ORDER))
+            repository.setSetting(io.github.randomtools3377.checklist.data.SETTING_TAB_ORDER, TabChoice.encodeOrder(now.moved(tab, by)))
         }
     }
 

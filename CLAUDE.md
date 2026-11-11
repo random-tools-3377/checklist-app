@@ -318,6 +318,15 @@ The app has no network access unless the owner decides otherwise for this app.
     never further back; points go in the points history as bonuses. What was paid shows in a
     note on the Budget tab.
 
+## Order
+
+- The user can rearrange the order of things as they see fit. **Details (default):** every card
+  on Today is its own section (the mood check-in, the balance, the character, daily quests, the
+  race, bets, the boss, Today's pay and the rest), moved and hidden in Settings → Appearance; the
+  tabs along the bottom can be moved there too. Goals, rewards, budget categories and Today's
+  sections were already in the user's order. A section a newer version adds goes where it
+  usually sits, so nothing moves until the user moves it.
+
 ## Points and rules
 
 - Every number that decides points, penalties, bonuses, the game and prices can be changed by

@@ -198,9 +198,9 @@ fun ChecklistApp(vm: MainViewModel) {
             if (first != AppTab.TODAY && stack.size == 1 && stack[0] == AppTab.TODAY.route) stack[0] = first.route
         }
     }
-    val shownTabs = AppTab.entries.filter { tab ->
-        appearance.tabs.shown.any { it.ordinal == tab.ordinal } &&
-            (tab != AppTab.BUDGET || io.github.randomtools3377.checklist.core.Feature.BUDGET in features)
+    // In the user's order.
+    val shownTabs = appearance.tabs.shown.map { kind -> AppTab.entries[kind.ordinal] }.filter { tab ->
+        tab != AppTab.BUDGET || io.github.randomtools3377.checklist.core.Feature.BUDGET in features
     }
     val tickNotes by vm.tickNotes.collectAsStateWithLifecycle()
     val review by vm.review.collectAsStateWithLifecycle()

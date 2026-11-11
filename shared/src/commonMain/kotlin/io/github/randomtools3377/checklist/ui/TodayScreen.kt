@@ -352,74 +352,6 @@ fun TodayScreen(
                 WeekPlanCard(onPlan = onPlanWeek, onLater = vm::weekPlanned)
                 Spacer(Modifier.height(12.dp))
             }
-            // With check-ins on, the character asks instead, on its card under the balance.
-            val characterAsks = companion?.say?.askMood == true &&
-                look.sections.any { it.section == TodaySection.BALANCE && it.shown }
-            if (askMood && !welcome && !characterAsks) {
-                MoodCheckIn(onMood = { vm.setMood(it) }, onLater = vm::skipMood)
-                Spacer(Modifier.height(12.dp))
-            }
-            todayMood?.let { mood ->
-                if (moodMore) {
-                    // Just picked: what's behind it, and a note.
-                    MoodMoreCard(
-                        mood = mood,
-                        list = moodFactorList,
-                        locked = moodsLocked,
-                        onToggle = { vm.toggleMoodFactor(it) },
-                        onAdd = { vm.addMoodFactor(it) },
-                        onNote = { vm.setMoodNote(it, after = false) },
-                        onUnlock = onUnlock,
-                        onDone = vm::closeMoodMore,
-                    )
-                    Spacer(Modifier.height(12.dp))
-                } else {
-                    Text(
-                        "Today: " + moodFaces(mood) + (if (mood.note != null || mood.afterNote != null) " · note added" else " · Add a note"),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        // Notes sit behind the lock with reasons and notes: unlock first.
-                        modifier = Modifier.clickable { if (moodsLocked) onUnlock() else moodNote = mood.note.orEmpty() }.padding(bottom = 8.dp).testTag("mood-today"),
-                    )
-                }
-            }
-            // A morning that started low: a goal still to do that usually lifts the user, to start with.
-            if (!moodsLocked) {
-                moodStart?.let { goal ->
-                    Text(
-                        "💡 " + io.github.randomtools3377.checklist.core.MoodInsights.startWithLine(goal),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(bottom = 8.dp).testTag("mood-start-with"),
-                    )
-                }
-            }
-            // Everything due today is done: how does the user feel now?
-            moodAfter?.let { after ->
-                val answered = after.after
-                if (answered == null) {
-                    MoodAfterCheckIn(after.morning, onMood = vm::setMoodAfter, onLater = vm::closeMoodAfter)
-                } else {
-                    MoodAfterAnswer(
-                        morning = after.morning,
-                        after = answered,
-                        mood = todayMood,
-                        list = moodFactorList,
-                        locked = moodsLocked,
-                        lifts = if (moodsLocked) null else io.github.randomtools3377.checklist.core.MoodInsights.liftsLine(moodFindings),
-                        onToggle = { vm.toggleMoodFactor(it) },
-                        onAdd = { vm.addMoodFactor(it) },
-                        onNote = { vm.setMoodNote(it, after = true) },
-                        onUnlock = onUnlock,
-                        onMoodGoals = onMoodGoals,
-                        onJournal = onMoodJournal,
-                        onClose = vm::closeMoodAfter,
-                    )
-                }
-                Spacer(Modifier.height(12.dp))
-            }
             if (screen.streakPercent > 100) {
                 Text(
                     "🔥 Streak bonus: goals pay ${screen.streakPercent - 100}% more today",
@@ -486,9 +418,83 @@ fun TodayScreen(
         for (choice in look.sections) {
             if (!choice.shown) continue
             when (choice.section) {
+                TodaySection.MOOD -> item(key = "mood") {
+                    Column {
+                    // With check-ins on, the character asks instead, on its own card.
+                    val characterAsks = companion?.say?.askMood == true &&
+                        look.sections.any { it.section == TodaySection.CHARACTER && it.shown }
+                    if (askMood && !welcome && !characterAsks) {
+                        MoodCheckIn(onMood = { vm.setMood(it) }, onLater = vm::skipMood)
+                        Spacer(Modifier.height(12.dp))
+                    }
+                    todayMood?.let { mood ->
+                        if (moodMore) {
+                            // Just picked: what's behind it, and a note.
+                            MoodMoreCard(
+                                mood = mood,
+                                list = moodFactorList,
+                                locked = moodsLocked,
+                                onToggle = { vm.toggleMoodFactor(it) },
+                                onAdd = { vm.addMoodFactor(it) },
+                                onNote = { vm.setMoodNote(it, after = false) },
+                                onUnlock = onUnlock,
+                                onDone = vm::closeMoodMore,
+                            )
+                            Spacer(Modifier.height(12.dp))
+                        } else {
+                            Text(
+                                "Today: " + moodFaces(mood) + (if (mood.note != null || mood.afterNote != null) " · note added" else " · Add a note"),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                // Notes sit behind the lock with reasons and notes: unlock first.
+                                modifier = Modifier.clickable { if (moodsLocked) onUnlock() else moodNote = mood.note.orEmpty() }.padding(bottom = 8.dp).testTag("mood-today"),
+                            )
+                        }
+                    }
+                    // A morning that started low: a goal still to do that usually lifts the user, to start with.
+                    if (!moodsLocked) {
+                        moodStart?.let { goal ->
+                            Text(
+                                "💡 " + io.github.randomtools3377.checklist.core.MoodInsights.startWithLine(goal),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(bottom = 8.dp).testTag("mood-start-with"),
+                            )
+                        }
+                    }
+                    // Everything due today is done: how does the user feel now?
+                    moodAfter?.let { after ->
+                        val answered = after.after
+                        if (answered == null) {
+                            MoodAfterCheckIn(after.morning, onMood = vm::setMoodAfter, onLater = vm::closeMoodAfter)
+                        } else {
+                            MoodAfterAnswer(
+                                morning = after.morning,
+                                after = answered,
+                                mood = todayMood,
+                                list = moodFactorList,
+                                locked = moodsLocked,
+                                lifts = if (moodsLocked) null else io.github.randomtools3377.checklist.core.MoodInsights.liftsLine(moodFindings),
+                                onToggle = { vm.toggleMoodFactor(it) },
+                                onAdd = { vm.addMoodFactor(it) },
+                                onNote = { vm.setMoodNote(it, after = true) },
+                                onUnlock = onUnlock,
+                                onMoodGoals = onMoodGoals,
+                                onJournal = onMoodJournal,
+                                onClose = vm::closeMoodAfter,
+                            )
+                        }
+                        Spacer(Modifier.height(12.dp))
+                    }
+                    }
+                }
                 TodaySection.BALANCE -> item(key = "balance") {
                     BalanceCard(view.balance, modifier = Modifier.clickable(onClick = onHistory), note = "Tap for your ${pointsWord()} history")
                     Spacer(Modifier.height(12.dp))
+                }
+                TodaySection.CHARACTER -> if (character != null) item(key = "character") {
                     // With the character on: its level, under the balance.
                     character?.let { sheet ->
                         LevelCard(
@@ -508,20 +514,27 @@ fun TodayScreen(
                         )
                         Spacer(Modifier.height(12.dp))
                     }
-                    // With quests and the race on: the day's quests, and this week against last.
+                }
+                TodaySection.QUESTS -> if (quests?.list?.isNotEmpty() == true) item(key = "quests") {
                     quests?.list?.takeIf { it.isNotEmpty() }?.let { list ->
                         QuestsCard(list)
                         Spacer(Modifier.height(12.dp))
                     }
+                }
+                TodaySection.RACE -> if (race != null) item(key = "race") {
                     race?.let { standing ->
                         RaceCard(standing)
                         Spacer(Modifier.height(12.dp))
                     }
+                }
+                TodaySection.BETS -> if (bets != null) item(key = "bets") {
                     bets?.let { rows ->
                         val habits = (view.dueToday + view.thisWeek).map { it.goal }.filter { it.kind == io.github.randomtools3377.checklist.core.GoalKind.HABIT }.distinctBy { it.id }
                         BetsCard(rows, habits, view.balance) { goalId, times, stake, done -> vm.placeBet(goalId, times, stake, done) }
                         Spacer(Modifier.height(12.dp))
                     }
+                }
+                TodaySection.BOSS -> if (boss != null) item(key = "boss") {
                     boss?.let { fight ->
                         BossCard(fight) { say ->
                             vm.attackBoss { attack -> say(attack?.let { attackText(it.dealt, it.beaten, it.paid) } ?: "Nothing to use.") }

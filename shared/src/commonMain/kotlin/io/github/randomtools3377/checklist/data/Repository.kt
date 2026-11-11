@@ -74,6 +74,7 @@ const val SETTING_PHOTO_STAMP = "photo_stamp"
 const val SETTING_TODAY_SECTIONS = "today_sections"
 /** The tabs hidden from the bottom bar, and the one the app opens on. */
 const val SETTING_HIDDEN_TABS = "hidden_tabs"
+const val SETTING_TAB_ORDER = "tab_order"
 const val SETTING_FIRST_TAB = "first_tab"
 /** What points are called, as "coin|coins|🪙" (see PointsName in the shared code). */
 const val SETTING_POINTS_NAME = "points_name"

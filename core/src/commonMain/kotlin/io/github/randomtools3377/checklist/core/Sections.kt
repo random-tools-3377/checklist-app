@@ -2,7 +2,16 @@ package io.github.randomtools3377.checklist.core
 
 /** The parts of Today the user can show, hide and put in their own order. */
 enum class TodaySection(val label: String) {
+    /** The mood check-ins: in the morning, what's behind it, and once the day's done. */
+    MOOD("Mood check-in"),
     BALANCE("Balance"),
+
+    /** The character's card, with its check-ins, and the game's cards after it. */
+    CHARACTER("Your character"),
+    QUESTS("Daily quests"),
+    RACE("Race with last week"),
+    BETS("Bets"),
+    BOSS("Boss of the week"),
 
     /** Today's pay filling up, while Budget is on and pay is set. */
     MONEY("Today's pay"),
@@ -58,19 +67,39 @@ object Sections {
 /** The tabs along the bottom. Today is always there; the others can be hidden. */
 enum class AppTabKind(val label: String) { TODAY("Today"), PLAN("Plan"), GOALS("Goals"), SHOP("Shop"), REVIEW("Review"), BUDGET("Budget") }
 
-/** Which tabs show and which one the app opens on. Stored as "SHOP,REVIEW" for hidden ones, and a tab name. */
-data class TabChoice(val hidden: Set<AppTabKind> = emptySet(), val first: AppTabKind = AppTabKind.TODAY) {
-    val shown: List<AppTabKind> get() = AppTabKind.entries.filter { it !in hidden }
+/**
+ * Which tabs show, in the user's order, and which one the app opens on. Stored as "SHOP,REVIEW"
+ * for hidden ones, a tab name, and the order as names ("GOALS,TODAY,…"); tabs a newer version
+ * adds go at the end.
+ */
+data class TabChoice(
+    val hidden: Set<AppTabKind> = emptySet(),
+    val first: AppTabKind = AppTabKind.TODAY,
+    val order: List<AppTabKind> = AppTabKind.entries,
+) {
+    val shown: List<AppTabKind> get() = order.filter { it !in hidden }
+
+    /** Moves [tab] one place earlier (-1) or later (+1) in the order. */
+    fun moved(tab: AppTabKind, by: Int): List<AppTabKind> {
+        val from = order.indexOf(tab)
+        val to = from + by
+        if (from < 0 || to !in order.indices) return order
+        return order.toMutableList().also { it.add(to, it.removeAt(from)) }
+    }
 
     /** The first tab, or Today if the first one is hidden. */
     val opensOn: AppTabKind get() = if (first in hidden) AppTabKind.TODAY else first
 
     companion object {
-        fun decode(hidden: String?, first: String?): TabChoice = TabChoice(
+        fun decode(hidden: String?, first: String?, order: String? = null): TabChoice = TabChoice(
             hidden = hidden.orEmpty().split(",").mapNotNull { name -> AppTabKind.entries.firstOrNull { it.name == name } }
                 .filter { it != AppTabKind.TODAY }.toSet(),
             first = AppTabKind.entries.firstOrNull { it.name == first } ?: AppTabKind.TODAY,
+            order = order.orEmpty().split(",").mapNotNull { name -> AppTabKind.entries.firstOrNull { it.name == name } }.distinct()
+                .let { stored -> stored + AppTabKind.entries.filter { it !in stored } },
         )
+
+        fun encodeOrder(order: List<AppTabKind>): String = order.joinToString(",") { it.name }
 
         fun encodeHidden(hidden: Set<AppTabKind>): String = hidden.filter { it != AppTabKind.TODAY }.sortedBy { it.ordinal }.joinToString(",") { it.name }
     }

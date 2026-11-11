@@ -337,14 +337,23 @@ private fun TabsEditor(tabs: TabChoice, vm: MainViewModel) {
     val features by vm.features.collectAsState()
     // The Budget tab is there only while Budget is on.
     fun offered(tab: AppTabKind) = tab != AppTabKind.BUDGET || io.github.randomtools3377.checklist.core.Feature.BUDGET in features
-    AppTabKind.entries.filter { it != AppTabKind.TODAY && offered(it) }.forEach { tab ->
+    // Every tab in the user's order: shown or hidden (Today always shows), and moved up or down.
+    val listed = tabs.order.filter { offered(it) }
+    listed.forEachIndexed { index, tab ->
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
             androidx.compose.material3.Checkbox(
                 checked = tab !in tabs.hidden,
                 onCheckedChange = { shown -> vm.setTabHidden(tab, hidden = !shown) },
+                enabled = tab != AppTabKind.TODAY,
                 modifier = Modifier.testTag("tab:${tab.name}"),
             )
-            Text(tab.label)
+            Text(tab.label, modifier = Modifier.weight(1f))
+            IconButton(onClick = { vm.moveTab(tab, -1) }, enabled = index > 0, modifier = Modifier.testTag("tab-up:${tab.name}")) {
+                Icon(Icons.Filled.KeyboardArrowUp, contentDescription = "Move ${tab.label} earlier")
+            }
+            IconButton(onClick = { vm.moveTab(tab, 1) }, enabled = index < listed.lastIndex, modifier = Modifier.testTag("tab-down:${tab.name}")) {
+                Icon(Icons.Filled.KeyboardArrowDown, contentDescription = "Move ${tab.label} later")
+            }
         }
     }
     Text(

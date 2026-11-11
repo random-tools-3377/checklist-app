@@ -6,10 +6,10 @@ import kotlin.test.assertEquals
 class SectionsTest {
     @Test
     fun sectionsKeepTheirOrderAndWhichAreHidden() {
-        val stored = "STREAKS,-BALANCE,MONEY,WEEKLY_TARGET,PACE,DUE_TODAY,TODOS,THIS_WEEK,THIS_MONTH,THIS_YEAR,PROJECTS"
+        val stored = "MOOD,STREAKS,-BALANCE,CHARACTER,QUESTS,RACE,BETS,BOSS,MONEY,WEEKLY_TARGET,PACE,DUE_TODAY,TODOS,THIS_WEEK,THIS_MONTH,THIS_YEAR,PROJECTS"
         val choices = Sections.decode(stored)
-        assertEquals(listOf(TodaySection.STREAKS, TodaySection.BALANCE, TodaySection.MONEY), choices.take(3).map { it.section })
-        assertEquals(false, choices[1].shown)
+        assertEquals(listOf(TodaySection.MOOD, TodaySection.STREAKS, TodaySection.BALANCE, TodaySection.CHARACTER), choices.take(4).map { it.section })
+        assertEquals(false, choices[2].shown)
         assertEquals(TodaySection.entries.size, choices.size)
         assertEquals(stored, Sections.encode(choices))
         assertEquals(choices, Sections.decode(Sections.encode(choices)))
@@ -19,24 +19,38 @@ class SectionsTest {
 
     @Test
     fun aSectionANewerVersionAddsGoesWhereItUsuallyIs() {
-        // Stored before Today's pay was added: it comes in just after the balance, shown.
+        // Stored before the mood, the character's cards and Today's pay had sections of their own:
+        // the mood goes first, as it was, and the rest just after the balance, shown.
         val older = Sections.decode("STREAKS,-BALANCE,WEEKLY_TARGET,PACE,DUE_TODAY,TODOS,THIS_WEEK,THIS_MONTH,THIS_YEAR,PROJECTS")
         assertEquals(
-            listOf(TodaySection.STREAKS, TodaySection.BALANCE, TodaySection.MONEY, TodaySection.WEEKLY_TARGET),
-            older.take(4).map { it.section },
+            listOf(
+                TodaySection.MOOD, TodaySection.STREAKS, TodaySection.BALANCE, TodaySection.CHARACTER, TodaySection.QUESTS,
+                TodaySection.RACE, TodaySection.BETS, TodaySection.BOSS, TodaySection.MONEY, TodaySection.WEEKLY_TARGET,
+            ),
+            older.take(10).map { it.section },
         )
-        assertEquals(true, older[2].shown)
+        assertEquals(true, older[3].shown)
         // With nothing before it stored, it goes first.
-        assertEquals(TodaySection.BALANCE, Sections.decode("DUE_TODAY").first().section)
+        assertEquals(TodaySection.MOOD, Sections.decode("DUE_TODAY").first().section)
     }
 
     @Test
     fun sectionsMoveAndHide() {
-        val moved = Sections.move(Sections.DEFAULT, 3, -1)
-        assertEquals(listOf(TodaySection.BALANCE, TodaySection.MONEY, TodaySection.STREAKS, TodaySection.WEEKLY_TARGET), moved.take(4).map { it.section })
+        val moved = Sections.move(Sections.DEFAULT, 1, -1)
+        assertEquals(listOf(TodaySection.BALANCE, TodaySection.MOOD, TodaySection.CHARACTER), moved.take(3).map { it.section })
         assertEquals(Sections.DEFAULT, Sections.move(Sections.DEFAULT, 0, -1)) // already at the top
         val hidden = Sections.toggle(Sections.DEFAULT, TodaySection.PACE)
-        assertEquals("BALANCE,MONEY,WEEKLY_TARGET,STREAKS,-PACE,DUE_TODAY,TODOS,THIS_WEEK,THIS_MONTH,THIS_YEAR,PROJECTS", Sections.encode(hidden))
+        assertEquals("MOOD,BALANCE,CHARACTER,QUESTS,RACE,BETS,BOSS,MONEY,WEEKLY_TARGET,STREAKS,-PACE,DUE_TODAY,TODOS,THIS_WEEK,THIS_MONTH,THIS_YEAR,PROJECTS", Sections.encode(hidden))
+    }
+
+    @Test
+    fun tabsKeepTheUsersOrder() {
+        val tabs = TabChoice.decode("SHOP", null, "GOALS,TODAY,REVIEW")
+        assertEquals(listOf(AppTabKind.GOALS, AppTabKind.TODAY, AppTabKind.REVIEW, AppTabKind.PLAN, AppTabKind.BUDGET), tabs.shown)
+        assertEquals(listOf(AppTabKind.TODAY, AppTabKind.GOALS), tabs.moved(AppTabKind.TODAY, -1).take(2))
+        assertEquals(tabs.order, tabs.moved(AppTabKind.GOALS, -1))
+        assertEquals(tabs.order, TabChoice.decode(null, null, TabChoice.encodeOrder(tabs.order)).order)
+        assertEquals(AppTabKind.entries, TabChoice.decode(null, null, null).order)
     }
 
     @Test
