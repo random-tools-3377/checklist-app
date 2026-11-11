@@ -53,9 +53,12 @@ fun WeekPlanCard(onPlan: () -> Unit, onLater: () -> Unit) {
     }
 }
 
-/** Weekly planning: last week summed up, this week's target, and the days left in the week. */
+/**
+ * Weekly planning: last week summed up, this week's target, and the days left in the week. Last
+ * week shows the lock instead while [lastWeekLocked] (the review is locked).
+ */
 @Composable
-fun WeekPlanScreen(vm: MainViewModel, onOpenPlan: () -> Unit, onBack: () -> Unit) {
+fun WeekPlanScreen(vm: MainViewModel, onOpenPlan: () -> Unit, onBack: () -> Unit, lastWeekLocked: Boolean = false, onUnlock: () -> Unit = {}) {
     val last by vm.lastWeek.collectAsStateWithLifecycle()
     val target by vm.weeklyTarget.collectAsStateWithLifecycle()
     val days by vm.planDays.collectAsStateWithLifecycle()
@@ -74,7 +77,9 @@ fun WeekPlanScreen(vm: MainViewModel, onOpenPlan: () -> Unit, onBack: () -> Unit
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             SectionTitle("Last week")
-            last?.let { summary ->
+            if (lastWeekLocked) {
+                TextButton(onClick = onUnlock, modifier = Modifier.testTag("week-plan-unlock")) { Text("🔒 The review is locked · Unlock") }
+            } else last?.let { summary ->
                 val due = summary.days.sumOf { it.due }
                 val done = summary.days.sumOf { it.done }
                 Text(

@@ -379,6 +379,31 @@ fun SettingsScreen(
         if (file != null) vm.exportSpreadsheet(file) { toast(it) }
     }
     var autoBackups by remember { mutableStateOf<List<Pair<String, PickedFile>>?>(null) }
+    // While anything is locked, turning a lock off or exporting asks for the phone's own lock
+    // first, then goes ahead.
+    val unlocked by vm.unlocked.collectAsState()
+    val unlock = rememberUnlock(vm)
+    var afterUnlock by remember { mutableStateOf<(() -> Unit)?>(null) }
+    LaunchedEffect(unlocked) {
+        val waiting = afterUnlock
+        if (unlocked && waiting != null) {
+            afterUnlock = null
+            waiting()
+        }
+    }
+    fun unlockFirst(action: () -> Unit) {
+        if (!settings.locks.anyOn || vm.unlocked.value) {
+            action()
+            return
+        }
+        afterUnlock = action
+        unlock()
+        // Where there is no lock to ask for, it opens straight away.
+        if (vm.unlocked.value) {
+            afterUnlock = null
+            action()
+        }
+    }
     val importLauncher = rememberOpenFile(listOf("application/json", "text/plain", "application/octet-stream")) { file ->
         if (file != null) {
             vm.readBackup(file) { backup, error ->
@@ -628,7 +653,7 @@ fun SettingsScreen(
                     Spacer(Modifier.height(8.dp))
                     Row {
                         FilledTonalButton(
-                            onClick = { exportLauncher("checklist-backup-${nowLocal().date}.json") },
+                            onClick = { unlockFirst { exportLauncher("checklist-backup-${nowLocal().date}.json") } },
                             modifier = Modifier.testTag("export"),
                         ) { Text("Export everything") }
                         Spacer(Modifier.padding(4.dp))
@@ -658,7 +683,7 @@ fun SettingsScreen(
                         color = if (backups.folderGone) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Row {
-                        TextButton(onClick = { folderLauncher() }, modifier = Modifier.testTag("auto-backup-folder")) {
+                        TextButton(onClick = { unlockFirst { folderLauncher() } }, modifier = Modifier.testTag("auto-backup-folder")) {
                             Text(if (backups.folderSet) "Change folder" else "Choose a folder")
                         }
                         if (backups.folderSet) {
@@ -683,7 +708,7 @@ fun SettingsScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     TextButton(
-                        onClick = { spreadsheetLauncher("checklist-history-${nowLocal().date}.csv") },
+                        onClick = { unlockFirst { spreadsheetLauncher("checklist-history-${nowLocal().date}.csv") } },
                         modifier = Modifier.testTag("export-spreadsheet"),
                     ) { Text("Export history as a spreadsheet") }
     
@@ -710,14 +735,16 @@ fun SettingsScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
                 )
-                LockSwitch("Points history", settings.locks.history, "lock:history") { vm.setLock(LOCK_HISTORY, it) }
-                LockSwitch("The shop and bought rewards", settings.locks.shop, "lock:shop") { vm.setLock(LOCK_SHOP, it) }
-                LockSwitch("Goals marked private", settings.locks.privateGoals, "lock:private") { vm.setLock(LOCK_PRIVATE, it) }
-                LockSwitch("Reasons and notes for skips and misses", settings.locks.reasons, "lock:reasons") { vm.setLock(LOCK_REASONS, it) }
-                LockSwitch("Gap check-ins", settings.locks.gaps, "lock:gaps") { vm.setLock(LOCK_GAPS, it) }
-                LockSwitch("The review and stats", settings.locks.review, "lock:review") { vm.setLock(LOCK_REVIEW, it) }
+                // Turning a lock on hides more, so it needs no unlock; turning one off asks first.
+                fun setLock(name: String, on: Boolean) = if (on) vm.setLock(name, true) else unlockFirst { vm.setLock(name, false) }
+                LockSwitch("Points history", settings.locks.history, "lock:history") { setLock(LOCK_HISTORY, it) }
+                LockSwitch("The shop and bought rewards", settings.locks.shop, "lock:shop") { setLock(LOCK_SHOP, it) }
+                LockSwitch("Goals marked private", settings.locks.privateGoals, "lock:private") { setLock(LOCK_PRIVATE, it) }
+                LockSwitch("Reasons and notes for skips and misses", settings.locks.reasons, "lock:reasons") { setLock(LOCK_REASONS, it) }
+                LockSwitch("Gap check-ins", settings.locks.gaps, "lock:gaps") { setLock(LOCK_GAPS, it) }
+                LockSwitch("The review and stats", settings.locks.review, "lock:review") { setLock(LOCK_REVIEW, it) }
                 if (io.github.randomtools3377.checklist.core.Feature.BUDGET in vm.features.collectAsState().value || settings.locks.budget) {
-                    LockSwitch("The budget", settings.locks.budget, "lock:budget") { vm.setLock(io.github.randomtools3377.checklist.data.LOCK_BUDGET, it) }
+                    LockSwitch("The budget", settings.locks.budget, "lock:budget") { setLock(io.github.randomtools3377.checklist.data.LOCK_BUDGET, it) }
                 }
                 if (settings.locks.privateGoals) {
                     Text(

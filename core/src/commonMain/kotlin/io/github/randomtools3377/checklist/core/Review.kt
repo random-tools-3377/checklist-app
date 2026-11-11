@@ -78,7 +78,9 @@ object Review {
      * Sums up [from] to [to]. A habit counts each time its window ends inside the stretch:
      * done if ticked enough (or, for a single day, skipped), skipped if a skip covered it, missed
      * if a miss was recorded. Points come from the ledger: earned (ticks, bonuses, refunds),
-     * spent (rewards, less returns) and lost (penalties).
+     * spent (rewards, less returns) and lost (penalties). With [hidePrivate], for while the
+     * privacy lock is on for private goals, those goals are left out with their ticks, skips,
+     * misses and points, as on Today.
      */
     fun summarize(
         from: LocalDate,
@@ -89,7 +91,19 @@ object Review {
         lapses: List<Lapse>,
         entries: List<Entry>,
         gaps: List<Gap>,
+        hidePrivate: Boolean = false,
     ): ReviewSummary {
+        val hidden = if (hidePrivate) PrivateGoals.ids(goals) else emptySet()
+        if (hidden.isNotEmpty()) {
+            return summarize(
+                from, to, today,
+                goals = goals.filter { it.id !in hidden },
+                ticks = ticks.filter { it.goalId !in hidden },
+                lapses = lapses.filter { it.goalId !in hidden },
+                entries = entries.filter { entry -> entry.goalId?.let { it in hidden } != true },
+                gaps = gaps,
+            )
+        }
         val live = lapses.filter { !it.forgotten }
         val inRange = entries.filter { it.day >= from && it.day <= to }
         val habits = goals.filter { it.isHabitLike && it.repeat != null }

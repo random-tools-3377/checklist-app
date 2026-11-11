@@ -319,7 +319,10 @@ data class Locks(
     val gaps: Boolean = false,
     val review: Boolean = false,
     val budget: Boolean = false,
-)
+) {
+    /** Whether anything at all is behind the lock. */
+    val anyOn: Boolean get() = history || shop || privateGoals || reasons || gaps || review || budget
+}
 
 data class Settings(
     val dayEndHour: Int,
@@ -405,6 +408,15 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
     fun lockAgain() {
         unlocked.value = false
     }
+
+    /** True while the lock is on for goals marked private and they aren't unlocked. */
+    private val hidingPrivate: Flow<Boolean> = combine(settings, unlocked) { s, open -> s.locks.privateGoals && !open }.distinctUntilChanged()
+
+    /** The goals marked private, removed ones too, to leave out or unname while they are locked. */
+    private val privateIds: Flow<Set<Long>> = combine(dao.observeGoals(), dao.observeRemovedGoals()) { shown, removed ->
+        io.github.randomtools3377.checklist.core.PrivateGoals.ids((shown + removed).map { it.toCore() })
+    }
+    val privateGoalIds: StateFlow<Set<Long>> = privateIds.state(emptySet())
 
     /** The phone's time, checked every half minute, so pace and the day turn over on their own. */
     private val now: Flow<LocalDateTime> = flow {
@@ -1019,12 +1031,12 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
         val (from, to) = Review.range(day, period)
         val windowsFrom = Days.earliestOpenDay(from).minusDays(7)
         combine(
-            dao.observeGoals(),
+            combine(dao.observeGoals(), hidingPrivate) { goals, hide -> goals to hide },
             dao.observeHabitTicksSince(windowsFrom.toEpochDay()),
             dao.observeLapsesSince(windowsFrom.toEpochDay()),
             dao.observeEntries(from.toEpochDay(), to.toEpochDay()),
             dao.observeGaps(),
-        ) { goals, ticks, lapsesRows, entries, gapRows ->
+        ) { (goals, hide), ticks, lapsesRows, entries, gapRows ->
             Review.summarize(
                 from = from,
                 to = to,
@@ -1034,6 +1046,7 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
                 lapses = lapsesRows.map { it.toCore() },
                 entries = entries.map { it.toCore() },
                 gaps = gapRows.map { it.toCore() },
+                hidePrivate = hide,
             )
         }
     }.state(null)
@@ -1178,8 +1191,10 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
         }
     }.state(null)
 
-    /** Every change to the balance, newest first. */
-    val history: StateFlow<List<Entry>?> = dao.observeEntries().map { rows -> rows.map { it.toCore() } }.state(null)
+    /** Every change to the balance, newest first. Private goals' entries aren't named while they are locked. */
+    val history: StateFlow<List<Entry>?> = combine(dao.observeEntries(), privateIds, hidingPrivate) { rows, ids, hide ->
+        rows.map { it.toCore() }.let { entries -> if (hide) io.github.randomtools3377.checklist.core.PrivateGoals.unnamed(entries, ids) else entries }
+    }.state(null)
 
     // Ticking and the shop. Results come back on the main thread.
 
@@ -1945,15 +1960,16 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
         val (from, to) = Review.range(day.minusDays(7), Period.WEEKLY)
         val windowsFrom = Days.earliestOpenDay(from).minusDays(7)
         combine(
-            dao.observeGoals(),
+            combine(dao.observeGoals(), hidingPrivate) { goals, hide -> goals to hide },
             dao.observeHabitTicksSince(windowsFrom.toEpochDay()),
             dao.observeLapsesSince(windowsFrom.toEpochDay()),
             dao.observeEntries(from.toEpochDay(), to.toEpochDay()),
             dao.observeGaps(),
-        ) { goals, ticks, lapsesRows, entries, gapRows ->
+        ) { (goals, hide), ticks, lapsesRows, entries, gapRows ->
             Review.summarize(
                 from = from, to = to, today = day, goals = goals.map { it.toCore() }, ticks = ticks.map { it.toCore() },
                 lapses = lapsesRows.map { it.toCore() }, entries = entries.map { it.toCore() }, gaps = gapRows.map { it.toCore() },
+                hidePrivate = hide,
             )
         }
     }.state(null)
@@ -2002,8 +2018,10 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
         }
     }
 
-    /** Goals the user removed, to bring back. */
-    val removedGoals: StateFlow<List<Goal>> = dao.observeRemovedGoals().map { rows -> rows.map { it.toCore() } }.state(emptyList())
+    /** Goals the user removed, to bring back. Private ones are left out while they are locked. */
+    val removedGoals: StateFlow<List<Goal>> = combine(dao.observeRemovedGoals(), hidingPrivate) { rows, hide ->
+        rows.map { it.toCore() }.filter { !hide || !it.private }
+    }.state(emptyList())
 
     /** The categories the goals use, offered in the goal editor. */
     val categories: StateFlow<List<String>> = dao.observeGoals().map { rows -> Categories.of(rows.map { it.toCore() }) }.state(emptyList())

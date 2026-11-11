@@ -95,6 +95,10 @@ fun ShopScreen(
         val features by vm.features.collectAsStateWithLifecycle()
         val payPlan by vm.payPlan.collectAsStateWithLifecycle()
         val budgetOn = io.github.randomtools3377.checklist.core.Feature.BUDGET in features
+        // The time a reward takes to earn comes from the pay, so it stays hidden while the budget is locked.
+        val lockSettings by vm.settings.collectAsStateWithLifecycle()
+        val isUnlocked by vm.unlocked.collectAsStateWithLifecycle()
+        val budgetShown = budgetOn && !(lockSettings.locks.budget && !isUnlocked)
         if (io.github.randomtools3377.checklist.core.Feature.BALANCE_CHECK in features) {
             TextButton(onClick = onBalanceCheck, modifier = Modifier.padding(start = 8.dp).testTag("balance-check")) {
                 Text("Balance check: are prices and ${pointsWord()} right?")
@@ -133,7 +137,7 @@ fun ShopScreen(
                         onMove = { vm.moveReward(row.reward.id, it) },
                         onBuy = { buying = row.reward },
                         onEdit = { onEdit(row.reward) },
-                        work = if (budgetOn) rewardWorkText(row.reward.value, payPlan) else null,
+                        work = if (budgetShown) rewardWorkText(row.reward.value, payPlan) else null,
                     )
                     Spacer(Modifier.height(10.dp))
                 }

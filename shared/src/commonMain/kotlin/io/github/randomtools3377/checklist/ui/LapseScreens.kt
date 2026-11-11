@@ -92,10 +92,10 @@ private fun ReasonChips(selected: ReasonChoice?, tagPrefix: String, own: List<St
 
 /**
  * Misses waiting for a reason. It fills the screen until each one has a reason, or turns out to
- * have been a forgotten tick.
+ * have been a forgotten tick. Goals in [hiddenGoals], private ones while locked, aren't named.
  */
 @Composable
-fun MissesScreen(misses: List<Lapse>, vm: MainViewModel) {
+fun MissesScreen(misses: List<Lapse>, vm: MainViewModel, hiddenGoals: Set<Long> = emptySet(), onUnlock: () -> Unit = {}) {
     BackButton {} // can't be skipped
     val reasons = remember { mutableStateMapOf<Long, ReasonChoice>() }
     val own by vm.ownReasons.collectAsStateWithLifecycle()
@@ -117,7 +117,14 @@ fun MissesScreen(misses: List<Lapse>, vm: MainViewModel) {
             items(misses, key = { it.id }) { miss ->
                 Card(Modifier.fillMaxWidth().testTag("miss:${miss.label}")) {
                     Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(miss.label, style = MaterialTheme.typography.titleMedium)
+                        if (miss.goalId in hiddenGoals) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text("🔒 ${io.github.randomtools3377.checklist.core.PrivateGoals.NAME}", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                                TextButton(onClick = onUnlock) { Text("Unlock") }
+                            }
+                        } else {
+                            Text(miss.label, style = MaterialTheme.typography.titleMedium)
+                        }
                         Text(
                             buildString {
                                 append("Missed ${shortDate(miss.day)}")
@@ -153,9 +160,17 @@ fun MissesScreen(misses: List<Lapse>, vm: MainViewModel) {
 /**
  * The penalty task, owed for going over the limit. It fills the screen until it is done: first
  * the user picks to make up a missed goal or to draw one of their penalty tasks, then does it.
+ * Goals in [hiddenGoals], private ones while locked, aren't named or offered until unlocked.
  */
 @Composable
-fun PenaltyScreen(penalty: Penalty, makeUp: List<Goal>, tasks: List<PenaltyTask>, vm: MainViewModel) {
+fun PenaltyScreen(
+    penalty: Penalty,
+    makeUp: List<Goal>,
+    tasks: List<PenaltyTask>,
+    vm: MainViewModel,
+    hiddenGoals: Set<Long> = emptySet(),
+    onUnlock: () -> Unit = {},
+) {
     BackButton {} // no putting it off
     var newTask by remember { mutableStateOf("") }
     Column(
@@ -174,7 +189,8 @@ fun PenaltyScreen(penalty: Penalty, makeUp: List<Goal>, tasks: List<PenaltyTask>
             else "You went over the limit, so there's a penalty task to do now. It pays nothing.",
             style = MaterialTheme.typography.bodyMedium,
         )
-        val label = penalty.label
+        val hiddenGoal = penalty.goalId?.let { it in hiddenGoals } == true
+        val label = if (hiddenGoal) "🔒 ${io.github.randomtools3377.checklist.core.PrivateGoals.NAME}" else penalty.label
         if (penalty.choice != null && label != null) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -193,6 +209,7 @@ fun PenaltyScreen(penalty: Penalty, makeUp: List<Goal>, tasks: List<PenaltyTask>
                         color = MaterialTheme.colorScheme.onErrorContainer,
                         modifier = Modifier.testTag("penalty-task"),
                     )
+                    if (hiddenGoal) TextButton(onClick = onUnlock) { Text("Unlock", color = MaterialTheme.colorScheme.onErrorContainer) }
                 }
             }
             Button(onClick = { vm.finishPenalty(penalty.id) }, modifier = Modifier.fillMaxWidth().testTag("penalty-done")) { Text("Done") }
@@ -206,9 +223,15 @@ fun PenaltyScreen(penalty: Penalty, makeUp: List<Goal>, tasks: List<PenaltyTask>
                 if (makeUp.isEmpty()) {
                     Text("Nothing was skipped or missed recently to make up.", style = MaterialTheme.typography.bodySmall)
                 }
-                makeUp.forEach { goal ->
+                makeUp.filter { it.id !in hiddenGoals }.forEach { goal ->
                     OutlinedButton(onClick = { vm.makeUp(penalty.id, goal.id) }, modifier = Modifier.fillMaxWidth().testTag("makeup:${goal.name}")) {
                         Text("${goal.icon} ${goal.name}")
+                    }
+                }
+                val hiddenCount = makeUp.count { it.id in hiddenGoals }
+                if (hiddenCount > 0) {
+                    TextButton(onClick = onUnlock) {
+                        Text(if (hiddenCount == 1) "🔒 1 private goal · Unlock" else "🔒 $hiddenCount private goals · Unlock")
                     }
                 }
             }

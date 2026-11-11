@@ -317,6 +317,8 @@ object Reminders {
             lapses = dao.lapsesSince(since.toEpochDay()).map { it.toCore() },
             entries = dao.entries(from.toEpochDay(), to.toEpochDay()).map { it.toCore() },
             gaps = dao.allGaps().map { it.toCore() },
+            // A notification can't be unlocked, so private goals stay out while they are locked.
+            hidePrivate = dao.setting(LOCK_PRIVATE) == "1",
         )
         val locked = dao.setting(LOCK_REVIEW) == "1"
         // A private goal is never named while the lock covers private goals.

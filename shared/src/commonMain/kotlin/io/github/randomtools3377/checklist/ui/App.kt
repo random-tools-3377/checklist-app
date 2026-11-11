@@ -33,6 +33,8 @@ import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.ui.Alignment
 import androidx.compose.material3.NavigationRail
 import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.MaterialTheme
@@ -163,6 +165,16 @@ fun ChecklistApp(vm: MainViewModel) {
     val unlocked by vm.unlocked.collectAsStateWithLifecycle()
     val skipRequest by vm.skipRequest.collectAsStateWithLifecycle()
     val unlock = rememberUnlock(vm)
+    val privateIds by vm.privateGoalIds.collectAsStateWithLifecycle()
+    // Goals marked private, while the lock is on for them: left out or not named.
+    val hiddenGoals = if (settings.locks.privateGoals && !unlocked) privateIds else emptySet()
+    // Leaving the app closes the lock, and the pages behind it close with it. The private goals
+    // are a key too, as they can load after the settings when the phone restores the app.
+    LaunchedEffect(unlocked, settings.locks, privateIds) {
+        if (!unlocked && stack.removeAll { lockedPage(it, settings.locks, privateIds) != null } && stack.isEmpty()) {
+            stack.add(AppTab.TODAY.route)
+        }
+    }
     val gap by vm.unansweredGap.collectAsStateWithLifecycle()
     val removedGoals by vm.removedGoals.collectAsStateWithLifecycle()
     val doneList by vm.doneList.collectAsStateWithLifecycle()
@@ -219,14 +231,14 @@ fun ChecklistApp(vm: MainViewModel) {
     }
     if (!misses.isNullOrEmpty()) {
         Box(Modifier.fillMaxSize()) {
-            Page { MissesScreen(misses, vm) }
+            Page { MissesScreen(misses, vm, hiddenGoals = hiddenGoals, onUnlock = unlock) }
             celebrations.Overlay()
         }
         return
     }
     if (owed != null) {
         Box(Modifier.fillMaxSize()) {
-            Page { PenaltyScreen(owed, makeUp, penaltyTasks, vm) }
+            Page { PenaltyScreen(owed, makeUp, penaltyTasks, vm, hiddenGoals = hiddenGoals, onUnlock = unlock) }
             celebrations.Overlay()
         }
         return
@@ -290,6 +302,12 @@ fun ChecklistApp(vm: MainViewModel) {
         // the tabs handle their own width.
         val onTab = AppTab.entries.any { it.route == route }
         Box(if (onTab) Modifier.fillMaxSize() else Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).readable()) {
+        // A page behind the lock shows the lock until unlocked, with a way back where the phone has no back button.
+        val pageLock = if (unlocked) null else lockedPage(route, settings.locks, privateIds)
+        if (pageLock != null) Column(Modifier.fillMaxSize().safeDrawingPadding(), horizontalAlignment = Alignment.CenterHorizontally) {
+            LockedPanel(pageLock, unlock, Modifier)
+            TextButton(onClick = ::pop, modifier = Modifier.testTag("locked-back")) { Text("Back") }
+        } else
         when (parts[0]) {
             // Each editor screen keeps its own fields, so opening a copy doesn't carry the last one's over.
             "habit" -> androidx.compose.runtime.key(route) {
@@ -304,11 +322,7 @@ fun ChecklistApp(vm: MainViewModel) {
                 onScratch = { vm.closeWelcome(); goTo(AppTab.TODAY) },
                 onBack = ::pop,
             )
-            "balance-check" -> if (settings.locks.shop && !unlocked) {
-                LockedPanel("The shop", unlock, Modifier)
-            } else {
-                BalanceCheckScreen(balanceCheck, vm, onBack = ::pop)
-            }
+            "balance-check" -> BalanceCheckScreen(balanceCheck, vm, onBack = ::pop)
             "timeline" -> {
                 val day = planDays.getOrNull(id.toInt())
                 TimelineScreen(
@@ -339,19 +353,13 @@ fun ChecklistApp(vm: MainViewModel) {
                 },
                 onBack = ::pop,
             )
-            "plan-week" -> WeekPlanScreen(vm, onOpenPlan = { goTo(AppTab.PLAN) }, onBack = ::pop)
-            // Moods sit behind the lock with reasons and notes, and this is part of the review.
-            "mood-goals" -> if ((settings.locks.reasons || settings.locks.review) && !unlocked) {
-                LockedPanel("Mood and your goals", unlock, Modifier)
-            } else {
-                MoodGoalsScreen(vm, onEdit = { goalId -> push("habit/$goalId") }, onBack = ::pop, onJournal = { push("mood-journal") })
-            }
-            // The journal holds the notes, so it is locked the same way.
-            "mood-journal" -> if ((settings.locks.reasons || settings.locks.review) && !unlocked) {
-                LockedPanel("The mood journal", unlock, Modifier)
-            } else {
-                MoodJournalScreen(vm, onBack = ::pop)
-            }
+            // Last week's figures are part of the review, so they sit behind its lock.
+            "plan-week" -> WeekPlanScreen(
+                vm, onOpenPlan = { goTo(AppTab.PLAN) }, onBack = ::pop,
+                lastWeekLocked = settings.locks.review && !unlocked, onUnlock = unlock,
+            )
+            "mood-goals" -> MoodGoalsScreen(vm, onEdit = { goalId -> push("habit/$goalId") }, onBack = ::pop, onJournal = { push("mood-journal") })
+            "mood-journal" -> MoodJournalScreen(vm, onBack = ::pop)
             "done" -> DoneListScreen(doneList, onOpen = { goal -> push(editRoute(goal)) }, onBack = ::pop)
             "removed" -> RemovedGoalsScreen(removedGoals, onRestore = { vm.restoreGoal(it.id) }, onBack = ::pop)
             "reward" -> androidx.compose.runtime.key(route) { RewardEditor(id, vm, onClose = ::pop) }
@@ -377,11 +385,7 @@ fun ChecklistApp(vm: MainViewModel) {
             "features" -> FeaturesScreen(vm, onAppearance = { push("appearance") }, onBack = ::pop)
             "appearance" -> AppearanceScreen(appearance, vm, onAnyColour = { push("colour") }, onBack = ::pop)
             "colour" -> AppColourScreen(appearance, onUse = { vm.setColor(it); pop() }, onBack = ::pop)
-            "badges" -> if (settings.locks.review && !unlocked) {
-                LockedPanel("The badges page", unlock, Modifier)
-            } else {
-                BadgesScreen(badges, onSeen = vm::badgesSeen, onBack = ::pop, character = io.github.randomtools3377.checklist.core.Feature.CHARACTER in features)
-            }
+            "badges" -> BadgesScreen(badges, onSeen = vm::badgesSeen, onBack = ::pop, character = io.github.randomtools3377.checklist.core.Feature.CHARACTER in features)
             "history" -> HistoryScreen(
                 history,
                 gaps = if (settings.locks.gaps && !unlocked) emptyList() else allGaps,
@@ -417,7 +421,7 @@ fun ChecklistApp(vm: MainViewModel) {
                                 Text(if (reorderGoals) "Done" else "Reorder")
                             }
                         }
-                        if (tab == AppTab.SHOP && !showBought && shop?.rewards?.isNotEmpty() == true) {
+                        if (tab == AppTab.SHOP && !showBought && shop?.rewards?.isNotEmpty() == true && !(settings.locks.shop && !unlocked)) {
                             TextButton(onClick = { reorderRewards = !reorderRewards }, modifier = Modifier.testTag("reorder")) {
                                 Text(if (reorderRewards) "Done" else "Reorder")
                             }
@@ -425,7 +429,7 @@ fun ChecklistApp(vm: MainViewModel) {
                     },
                     fab = {
                         if (tab == AppTab.GOALS && !reorderGoals && !selectGoals) AddButton("New goal", "add-goal") { newGoal = true }
-                        if (tab == AppTab.SHOP && !showBought && !reorderRewards) AddButton("New reward", "add-reward") { push("reward/0") }
+                        if (tab == AppTab.SHOP && !showBought && !reorderRewards && !(settings.locks.shop && !unlocked)) AddButton("New reward", "add-reward") { push("reward/0") }
                         if (tab == AppTab.BUDGET && !(settings.locks.budget && !unlocked)) AddButton("Spent", "add-money") { push("money/0") }
                     },
                 ) { padding ->
@@ -649,6 +653,26 @@ private fun editRoute(goal: io.github.randomtools3377.checklist.core.Goal): Stri
     GoalKind.HABIT -> "habit/${goal.id}"
     GoalKind.PROJECT -> "project/${goal.id}"
     GoalKind.TODO -> "todo/${goal.id}"
+}
+
+/**
+ * What a page holds behind the privacy lock, named for its lock panel, or null when none of its
+ * locks is on. The tabs and the history show their own lock in place. [privateGoals] are the ids
+ * of the goals marked private.
+ */
+internal fun lockedPage(route: String, locks: Locks, privateGoals: Set<Long>): String? {
+    val parts = route.split("/")
+    return when (parts[0]) {
+        "budget-pay", "money", "budget-categories", "work-day", "budget-bills", "bill", "budget-report" -> "The budget".takeIf { locks.budget }
+        "reward", "balance-check" -> "The shop".takeIf { locks.shop }
+        "habit", "project", "todo" -> "This private goal".takeIf { locks.privateGoals && parts.getOrNull(1)?.toLongOrNull()?.let { it in privateGoals } == true }
+        // Moods sit behind the lock with reasons and notes, and they are part of the review.
+        "mood-goals" -> "Mood and your goals".takeIf { locks.reasons || locks.review }
+        // The journal holds the notes, so it is locked the same way.
+        "mood-journal" -> "The mood journal".takeIf { locks.reasons || locks.review }
+        "badges" -> "The badges page".takeIf { locks.review }
+        else -> null
+    }
 }
 
 /** How long the Undo bar stays. */
