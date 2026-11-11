@@ -108,6 +108,12 @@ data class Rules(
     val rewardMediumDays: Int = 3,
     val rewardBigDays: Int = 14,
     val rewardHugeDays: Int = 42,
+
+    // Mood and your goals (see MoodInsights)
+    /** Days with a mood needed each way, done and not done, before a goal is compared. */
+    val moodMinDays: Int = 3,
+    /** A difference in mood counts from this many tenths of a point (5 is half a point). */
+    val moodNotableTenths: Int = 5,
 ) {
     /** Every value brought into its range (see [FIELDS]), and a lucky chest's least no more than its most. */
     fun sane(): Rules {
@@ -163,6 +169,7 @@ data class Rules(
         private const val PRICES = "Prices"
         private const val BALANCE = "Balance check"
         private const val SUGGESTIONS = "Suggestions"
+        private const val MOOD = "Mood and your goals"
 
         private const val PERCENT = "percent"
         private const val POINTS = "points"
@@ -242,6 +249,9 @@ data class Rules(
             field("rewardMediumDays", SUGGESTIONS, "A medium reward costs this many days of earning", DAYS, 1, 3650, { it.rewardMediumDays }) { r, v -> r.copy(rewardMediumDays = v) },
             field("rewardBigDays", SUGGESTIONS, "A big reward costs this many days of earning", DAYS, 1, 3650, { it.rewardBigDays }) { r, v -> r.copy(rewardBigDays = v) },
             field("rewardHugeDays", SUGGESTIONS, "A huge reward costs this many days of earning", DAYS, 1, 3650, { it.rewardHugeDays }) { r, v -> r.copy(rewardHugeDays = v) },
+
+            field("moodMinDays", MOOD, "Days with a mood needed with a goal done, and without, before it is compared", DAYS, 1, 90, { it.moodMinDays }) { r, v -> r.copy(moodMinDays = v) },
+            field("moodNotableTenths", MOOD, "A goal lifts or weighs on your mood from a difference of this many tenths (out of 5)", "tenths", 1, 40, { it.moodNotableTenths }) { r, v -> r.copy(moodNotableTenths = v) },
         )
     }
 }

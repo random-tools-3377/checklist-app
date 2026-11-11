@@ -64,6 +64,7 @@ fun helpTopicFor(route: String): HelpTopic? = when (route.substringBefore("/")) 
     "character" -> HelpTopic.CHARACTER
     "ideas" -> HelpTopic.IDEAS
     "badges" -> HelpTopic.BADGES
+    "mood-goals" -> HelpTopic.MOOD_GOALS
     "timeline" -> HelpTopic.TIMELINE
     "plan-week" -> HelpTopic.WEEK_PLAN
     "done" -> HelpTopic.DONE_LIST

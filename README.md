@@ -117,6 +117,7 @@ on one and import the file on the other. Reminders show only while the app is op
 - 0.57.0: a budget: pay that fills up as you work, spending in categories with limits, and rewards bought.
 - 0.58.0: bills, saving goals, a report for each month, today's pay on Today, and a budget game.
 - 0.59.0: a budget widget, every number for points changeable, and help and tips on every screen.
+- 0.60.0: the app on Windows, and a mood check-in once the day's done, with what lifts your mood.
 
 Every step in CLAUDE.md's build order is built. The iPhone app is installed with SideStore or
 AltStore (see the 0.55.0 release notes).

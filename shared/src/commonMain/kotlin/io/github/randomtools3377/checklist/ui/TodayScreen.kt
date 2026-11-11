@@ -114,6 +114,7 @@ fun TodayScreen(
     onCharacter: () -> Unit = {},
     onIdeas: (io.github.randomtools3377.checklist.core.SkillArea) -> Unit = {},
     onBudget: () -> Unit = {},
+    onMoodGoals: () -> Unit = {},
     skipRequest: Long?,
     onSkipRequestHandled: () -> Unit,
     padding: PaddingValues,
@@ -160,6 +161,14 @@ fun TodayScreen(
     val askMood by vm.askMood.collectAsStateWithLifecycle()
     val showWeekPlan by vm.showWeekPlan.collectAsStateWithLifecycle()
     val todayMood by vm.todayMood.collectAsStateWithLifecycle()
+    // The check-in once everything is done, and what the moods show about the goals.
+    val moodAfter by vm.moodAfter.collectAsStateWithLifecycle()
+    val moodStart by vm.moodStart.collectAsStateWithLifecycle()
+    val moodFindings by vm.moodFindings.collectAsStateWithLifecycle()
+    val lockSettings by vm.settings.collectAsStateWithLifecycle()
+    val isUnlocked by vm.unlocked.collectAsStateWithLifecycle()
+    // Moods sit behind the lock with reasons and notes, so what they show about goals does too.
+    val moodsLocked = lockSettings.locks.reasons && !isUnlocked
     // A note for today's mood, while it is being written.
     var moodNote by remember { mutableStateOf<String?>(null) }
     moodNote?.let { text ->
@@ -349,13 +358,42 @@ fun TodayScreen(
             }
             todayMood?.let { mood ->
                 Text(
-                    "Today: ${io.github.randomtools3377.checklist.core.Moods.face(mood.score)}" + (if (mood.note != null) " · note added" else " · Add a note"),
+                    "Today: ${io.github.randomtools3377.checklist.core.Moods.face(mood.score)}" +
+                        (mood.after?.let { " → ${io.github.randomtools3377.checklist.core.Moods.face(it)}" } ?: "") +
+                        (if (mood.note != null) " · note added" else " · Add a note"),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.clickable { moodNote = mood.note.orEmpty() }.padding(bottom = 8.dp).testTag("mood-today"),
                 )
+            }
+            // A morning that started low: a goal still to do that usually lifts the user, to start with.
+            if (!moodsLocked) {
+                moodStart?.let { goal ->
+                    Text(
+                        "💡 " + io.github.randomtools3377.checklist.core.MoodInsights.startWithLine(goal),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(bottom = 8.dp).testTag("mood-start-with"),
+                    )
+                }
+            }
+            // Everything due today is done: how does the user feel now?
+            moodAfter?.let { after ->
+                val answered = after.after
+                if (answered == null) {
+                    MoodAfterCheckIn(after.morning, onMood = vm::setMoodAfter, onLater = vm::closeMoodAfter)
+                } else {
+                    MoodAfterAnswer(
+                        morning = after.morning,
+                        after = answered,
+                        lifts = if (moodsLocked) null else io.github.randomtools3377.checklist.core.MoodInsights.liftsLine(moodFindings),
+                        onMoodGoals = onMoodGoals,
+                        onClose = vm::closeMoodAfter,
+                    )
+                }
+                Spacer(Modifier.height(12.dp))
             }
             if (screen.streakPercent > 100) {
                 Text(
@@ -748,6 +786,65 @@ private fun MoodCheckIn(onMood: (Int) -> Unit, onLater: () -> Unit) {
                 }
             }
             TextButton(onClick = onLater, modifier = Modifier.testTag("mood-later")) { Text("Not today") }
+        }
+    }
+}
+
+/**
+ * The second mood check-in, once everything due today is done: the same five faces, gentler after
+ * a morning that started low. "Not now" puts it off until tomorrow.
+ */
+@Composable
+private fun MoodAfterCheckIn(morning: Int, onMood: (Int) -> Unit, onLater: () -> Unit) {
+    Card(Modifier.fillMaxWidth().testTag("mood-after")) {
+        Column(Modifier.padding(12.dp)) {
+            Text(
+                io.github.randomtools3377.checklist.core.MoodInsights.question(morning),
+                style = MaterialTheme.typography.titleSmall,
+                modifier = Modifier.testTag("mood-after-question"),
+            )
+            Row(horizontalArrangement = Arrangement.SpaceEvenly, modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+                io.github.randomtools3377.checklist.core.Moods.FACES.forEachIndexed { index, face ->
+                    Text(
+                        face,
+                        fontSize = 30.sp,
+                        modifier = Modifier
+                            .clickable { onMood(index + 1) }
+                            .semantics { contentDescription = "Mood now ${index + 1} of 5" }
+                            .padding(6.dp)
+                            .testTag("mood-after:${index + 1}"),
+                    )
+                }
+            }
+            TextButton(onClick = onLater, modifier = Modifier.testTag("mood-after-later")) { Text("Not now") }
+        }
+    }
+}
+
+/**
+ * The answer to the check-in once everything is done: how the mood moved, a line for tomorrow,
+ * the goals that usually lift the user (left out behind the lock), and "Mood and your goals".
+ */
+@Composable
+private fun MoodAfterAnswer(morning: Int, after: Int, lifts: String?, onMoodGoals: () -> Unit, onClose: () -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth().testTag("mood-after-answer"),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+    ) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(
+                io.github.randomtools3377.checklist.core.MoodInsights.answer(morning, after),
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.testTag("mood-after-line"),
+            )
+            Text(io.github.randomtools3377.checklist.core.MoodInsights.encouragement(morning, after), style = MaterialTheme.typography.bodyMedium)
+            lifts?.let { Text(it, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("mood-after-lifts")) }
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                TextButton(onClick = onMoodGoals, modifier = Modifier.testTag("mood-goals-open")) { Text("Mood and your goals") }
+                Spacer(Modifier.weight(1f))
+                TextButton(onClick = onClose, modifier = Modifier.testTag("mood-after-close")) { Text("Close") }
+            }
         }
     }
 }

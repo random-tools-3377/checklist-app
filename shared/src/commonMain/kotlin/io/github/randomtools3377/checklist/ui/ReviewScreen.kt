@@ -83,6 +83,8 @@ fun ReviewScreen(
     coachCard: @Composable (ReviewSummary) -> Unit = {},
     /** Whether the character is on, which adds the level badges. */
     character: Boolean = false,
+    /** Opens "Mood and your goals", from the mood part. */
+    onMoodGoals: () -> Unit = {},
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize().testTag("review"),
@@ -136,7 +138,7 @@ fun ReviewScreen(
         if (summary.categories.isNotEmpty()) item { CategoriesCard(summary) }
         item { ReasonsCard(summary, hideReasons) }
         val shownMoods = moods.filter { it.day >= summary.from && it.day <= summary.to }
-        if (shownMoods.isNotEmpty() && !hideReasons) item { MoodCard(shownMoods, summary) }
+        if (shownMoods.isNotEmpty() && !hideReasons) item { MoodCard(shownMoods, summary, onMoodGoals) }
         if (summary.gaps.isNotEmpty()) item { GapsCard(summary.gaps, hideGapNotes) }
         item { StatsCard(summary, streaks) }
     }
@@ -232,13 +234,20 @@ private fun YearCard(summary: ReviewSummary, moods: List<io.github.randomtools33
 
 /** How the user felt each day, beside how much of what was due got done. */
 @Composable
-private fun MoodCard(moods: List<io.github.randomtools3377.checklist.core.Mood>, summary: ReviewSummary) {
+private fun MoodCard(moods: List<io.github.randomtools3377.checklist.core.Mood>, summary: ReviewSummary, onMoodGoals: () -> Unit) {
     ReviewCard("Mood") {
+        val wide = moods.any { it.after != null }
         Column(Modifier.testTag("review-moods")) {
             moods.sortedBy { it.day }.forEach { mood ->
                 val record = summary.days.firstOrNull { it.day == mood.day }
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
-                    Text(io.github.randomtools3377.checklist.core.Moods.face(mood.score), fontSize = 20.sp, modifier = Modifier.width(36.dp))
+                    // The morning's mood, and how it felt once everything was done, if asked.
+                    Text(
+                        io.github.randomtools3377.checklist.core.Moods.face(mood.score) +
+                            (mood.after?.let { "→" + io.github.randomtools3377.checklist.core.Moods.face(it) } ?: ""),
+                        fontSize = 20.sp,
+                        modifier = Modifier.width(if (wide) 72.dp else 36.dp),
+                    )
                     Column(Modifier.weight(1f)) {
                         Text(shortDate(mood.day), style = MaterialTheme.typography.bodyMedium)
                         mood.note?.let { Text("“$it”", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
@@ -251,6 +260,7 @@ private fun MoodCard(moods: List<io.github.randomtools3377.checklist.core.Mood>,
                 }
             }
         }
+        androidx.compose.material3.TextButton(onClick = onMoodGoals, modifier = Modifier.testTag("review-mood-goals")) { Text("Mood and your goals") }
     }
 }
 

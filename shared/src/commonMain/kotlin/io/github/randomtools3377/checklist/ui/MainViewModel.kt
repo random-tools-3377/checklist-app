@@ -15,6 +15,8 @@ import io.github.randomtools3377.checklist.core.Effort
 import io.github.randomtools3377.checklist.core.Feature
 import io.github.randomtools3377.checklist.core.StreakBonus
 import io.github.randomtools3377.checklist.core.Mood
+import io.github.randomtools3377.checklist.core.MoodFindings
+import io.github.randomtools3377.checklist.core.MoodInsights
 import io.github.randomtools3377.checklist.core.ChallengeProgress
 import io.github.randomtools3377.checklist.core.Challenges
 import io.github.randomtools3377.checklist.core.Quit
@@ -132,6 +134,7 @@ import io.github.randomtools3377.checklist.data.TodoDraft
 import io.github.randomtools3377.checklist.data.SETTING_GUIDE
 import io.github.randomtools3377.checklist.data.SETTING_WEEK_PLANNED
 import io.github.randomtools3377.checklist.data.SETTING_MOOD_SKIPPED
+import io.github.randomtools3377.checklist.data.SETTING_MOOD_AFTER_CLOSED
 import io.github.randomtools3377.checklist.data.SETTING_MOOD
 import io.github.randomtools3377.checklist.data.SETTING_TREAT_BUDGET
 import io.github.randomtools3377.checklist.core.MoneyPrices
@@ -231,6 +234,12 @@ data class CompanionView(
     /** An area to offer ideas for, on a day with everything done or nothing due. */
     val ideaArea: io.github.randomtools3377.checklist.core.SkillArea? = null,
 )
+
+/**
+ * The mood check-in once everything due today is done: the morning's mood, and the answer once
+ * given (null while it is still asked).
+ */
+data class MoodAfterView(val morning: Int, val after: Int?)
 
 data class TodayState(
     val view: TodayView,
@@ -1733,6 +1742,59 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
                 ideaArea = if (restful) io.github.randomtools3377.checklist.core.Ideas.weakest(sheet) else null,
             )
         }.state(null)
+
+    // Mood and your goals
+
+    /**
+     * Which habits go with a better mood and which with a worse one, over the last 90 days (see
+     * MoodInsights). Private goals are left out while they are locked.
+     */
+    val moodFindings: StateFlow<MoodFindings> = today.flatMapLatest { day ->
+        val from = day.minusDays(MoodInsights.DAYS)
+        combine(
+            dao.observeGoals(),
+            // Back to the start of every window those days fall in, for goals counted over a week or more.
+            dao.observeHabitTicksSince(Days.earliestOpenDay(from).toEpochDay()),
+            dao.observeMoodsSince(from.toEpochDay()),
+            rules,
+            combine(settings, unlocked) { s, open -> s.locks.privateGoals && !open },
+        ) { goals, ticks, moods, rules, hidePrivate ->
+            val shown = goals.map { it.toCore() }.filter { !it.archived && !(hidePrivate && it.private) }
+            MoodInsights.find(shown, ticks.map { it.toCore() }, moods.map { it.toCore() }, day, rules)
+        }
+    }.state(MoodFindings.NONE)
+
+    /**
+     * The check-in once everything due today is done, with the mood check-in on and the morning's
+     * mood given: asked until answered or put off, then its answer until closed. Null otherwise.
+     */
+    val moodAfter: StateFlow<MoodAfterView?> =
+        combine(today, todayState, todayMood, features, dao.observeSetting(SETTING_MOOD_AFTER_CLOSED)) { day, state, mood, on, closed ->
+            if (Feature.MOOD !in on || mood == null || closed == day.toString()) return@combine null
+            if (mood.after == null && (state == null || state.view.day != day || !MoodInsights.allDone(state.view.dueToday))) return@combine null
+            MoodAfterView(mood.score, mood.after)
+        }.state(null)
+
+    fun setMoodAfter(score: Int) {
+        viewModelScope.launch { repository.setMoodAfter(currentDay(), score) }
+    }
+
+    /** "Not now" before answering, or closing the answer: either way it is gone until tomorrow. */
+    fun closeMoodAfter() {
+        viewModelScope.launch { repository.setSetting(SETTING_MOOD_AFTER_CLOSED, currentDay().toString()) }
+    }
+
+    /** On a morning that started low (1 or 2): a goal still to do today that usually lifts the user. */
+    val moodStart: StateFlow<Goal?> = combine(todayState, todayMood, moodFindings) { state, mood, findings ->
+        if (state == null || mood == null || mood.after != null || mood.score > 2) return@combine null
+        val view = state.view
+        MoodInsights.startWith(findings, view.dueToday + view.thisWeek + view.thisMonth + view.thisYear)
+    }.state(null)
+
+    /** Puts a goal right after another in a habit chain, from "Mood and your goals". */
+    fun setGoalAfter(id: Long, after: Long) {
+        viewModelScope.launch { repository.setGoalAfter(id, after) }
+    }
 
     // Ideas to level up a skill area
 

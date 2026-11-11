@@ -186,9 +186,9 @@ fun Goal.toEntity() = GoalEntity(
     skill = skill?.name,
 )
 
-fun MoodEntity.toCore() = Mood(day = day.toDay(), score = score, note = note, at = at)
+fun MoodEntity.toCore() = Mood(day = day.toDay(), score = score, note = note, at = at, after = afterScore?.coerceIn(1, 5), afterAt = afterAt)
 
-fun Mood.toEntity() = MoodEntity(day = day.toEpochDay(), score = score.coerceIn(1, 5), note = note, at = at)
+fun Mood.toEntity() = MoodEntity(day = day.toEpochDay(), score = score.coerceIn(1, 5), note = note, at = at, afterScore = after?.coerceIn(1, 5), afterAt = afterAt)
 
 fun MoneyEntity.toCore() = io.github.randomtools3377.checklist.core.MoneyEntry(
     id = id,

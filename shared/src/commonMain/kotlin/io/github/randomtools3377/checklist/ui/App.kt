@@ -340,6 +340,12 @@ fun ChecklistApp(vm: MainViewModel) {
                 onBack = ::pop,
             )
             "plan-week" -> WeekPlanScreen(vm, onOpenPlan = { goTo(AppTab.PLAN) }, onBack = ::pop)
+            // Moods sit behind the lock with reasons and notes, and this is part of the review.
+            "mood-goals" -> if ((settings.locks.reasons || settings.locks.review) && !unlocked) {
+                LockedPanel("Mood and your goals", unlock, Modifier)
+            } else {
+                MoodGoalsScreen(vm, onEdit = { goalId -> push("habit/$goalId") }, onBack = ::pop)
+            }
             "done" -> DoneListScreen(doneList, onOpen = { goal -> push(editRoute(goal)) }, onBack = ::pop)
             "removed" -> RemovedGoalsScreen(removedGoals, onRestore = { vm.restoreGoal(it.id) }, onBack = ::pop)
             "reward" -> androidx.compose.runtime.key(route) { RewardEditor(id, vm, onClose = ::pop) }
@@ -437,6 +443,7 @@ fun ChecklistApp(vm: MainViewModel) {
                                 onCharacter = { push("character") },
                                 onIdeas = { area -> push("ideas/${area.name}") },
                                 onBudget = { goTo(AppTab.BUDGET) },
+                                onMoodGoals = { push("mood-goals") },
                                 skipRequest = skipRequest,
                                 onSkipRequestHandled = vm::clearSkipRequest,
                                 padding = padding,
@@ -474,6 +481,7 @@ fun ChecklistApp(vm: MainViewModel) {
                                 moods = moods,
                                 coachCard = { week -> AiCoachCard(vm, week, hideReasons = settings.locks.reasons && !unlocked) },
                                 character = io.github.randomtools3377.checklist.core.Feature.CHARACTER in features,
+                                onMoodGoals = { push("mood-goals") },
                             )
                         }
                         AppTab.BUDGET -> if (settings.locks.budget && !unlocked) {

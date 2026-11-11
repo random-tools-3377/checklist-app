@@ -96,6 +96,8 @@ const val SETTING_CALENDAR_IDS = "phone_calendar_ids"
 /** "0" turns off the daily mood check-in; and the day it was put off ("Not today"). */
 const val SETTING_MOOD = "mood_checkin"
 const val SETTING_MOOD_SKIPPED = "mood_skipped"
+/** The day the check-in once everything is done was put off ("Not now"), or its answer closed. */
+const val SETTING_MOOD_AFTER_CLOSED = "mood_after_closed"
 /** The Monday of the last week planned, or put off, from the weekly planning card. */
 const val SETTING_WEEK_PLANNED = "week_planned"
 /** "done" once the welcome card on Today was answered (see GuideScreen). */
@@ -431,10 +433,37 @@ class Repository(private val db: AppDatabase, private val celebrations: GifStore
         dao.putSetting(SettingEntity(SETTING_GUIDE, "done"))
     }
 
-    /** How the user feels today, from the check-in on Today. */
+    /** How the user feels today, from the check-in on Today. A mood given once everything was done stays. */
     suspend fun setMood(day: LocalDate, score: Int, note: String?) {
         val old = dao.allMoods().firstOrNull { it.day == day.toEpochDay() }
-        dao.putMood(MoodEntity(day.toEpochDay(), score.coerceIn(1, 5), note?.trim()?.take(Moods.NOTE_LENGTH)?.takeIf { it.isNotEmpty() } ?: old?.note?.takeIf { note == null }, nowMillis()))
+        dao.putMood(
+            MoodEntity(
+                day.toEpochDay(), score.coerceIn(1, 5),
+                note?.trim()?.take(Moods.NOTE_LENGTH)?.takeIf { it.isNotEmpty() } ?: old?.note?.takeIf { note == null },
+                nowMillis(),
+                afterScore = old?.afterScore,
+                afterAt = old?.afterAt,
+            ),
+        )
+    }
+
+    /**
+     * How the user feels once everything due on [day] is done, from the second check-in. It goes
+     * beside the morning's mood, so it needs one; false when there is none.
+     */
+    suspend fun setMoodAfter(day: LocalDate, score: Int): Boolean {
+        val old = dao.allMoods().firstOrNull { it.day == day.toEpochDay() } ?: return false
+        dao.putMood(old.copy(afterScore = score.coerceIn(1, 5), afterAt = nowMillis()))
+        return true
+    }
+
+    /** Puts a habit right after another in a habit chain, unless that would make a loop. False if it can't. */
+    suspend fun setGoalAfter(id: Long, after: Long): Boolean = db.withTransaction {
+        val row = dao.goal(id) ?: return@withTransaction false
+        val goals = dao.allGoals().map { it.toCore() }
+        if (io.github.randomtools3377.checklist.core.Chains.choices(row.toCore(), goals).none { it.id == after }) return@withTransaction false
+        dao.updateGoal(row.copy(afterGoal = after))
+        true
     }
 
     /** Gives a goal a clock time for [day] only (from the timeline), or back to its usual time with null. */

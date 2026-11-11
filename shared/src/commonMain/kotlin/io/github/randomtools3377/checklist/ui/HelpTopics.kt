@@ -244,6 +244,19 @@ enum class HelpTopic(val title: String, val intro: String, val steps: List<Strin
             "With \"Character and skills\" on, there are badges for your character's levels too.",
         ),
     ),
+    MOOD_GOALS(
+        "Mood and your goals",
+        "Which of your habits go with feeling better, and which with feeling worse, from your mood check-ins over the last 90 days. It needs the \"Mood check-in\" extra in Settings → Features.",
+        listOf(
+            "Answer the mood check-in on Today in the morning. Once everything due today is done, Today asks again: \"How do you feel now?\"",
+            "After a couple of weeks of moods, \"What lifts you\" lists the goals you feel better on days you do, and by how much.",
+            "\"What weighs on you\" lists goals that go with a lower mood, each with a few ways to make it lighter.",
+            "Tap \"Make it come after\" to put it right after a goal that lifts you (needs \"Habit chains\" on), \"Edit it\" to make it smaller, or \"Pay\" to make it pay more.",
+            "On a morning that starts low, Today suggests a goal that usually lifts you to start with.",
+            "Open it from the card once everything is done, or from \"Mood\" in the Review.",
+            "It shows what goes together, not what causes what. Lock it with reasons and notes, or with the review, in Settings → Privacy.",
+        ),
+    ),
     TIMELINE(
         "Timeline",
         "Your day by the hour, to see when things happen and move them around. It's an extra: turn on \"Timeline\" in Settings → Features.",

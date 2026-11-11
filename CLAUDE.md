@@ -336,7 +336,16 @@ The app has no network access unless the owner decides otherwise for this app.
 
 ## Windows
 
-- A Windows version, decided after 0.59.0. Its details aren't decided yet.
+- A Windows version, decided after 0.59.0, as an installer on every Release from 0.60.0.
+- **Details (default):** the same screens in a window (Compose Multiplatform desktop, the
+  `:desktop` module, with the computer's side in `shared/src/jvmMain` as DesktopPhone). Data is
+  kept in `%LOCALAPPDATA%\Checklist`, never the roaming folder, so it isn't copied to a server.
+  Reminders show from the notification area only while the app is open; there are no widgets,
+  phone calendar, AI, voice, icon choice or automatic backup folder; the privacy lock opens with a
+  note, as on a phone without a screen lock. The installer is an unsigned per-user `.msi` with its
+  own Java; Windows warns about it the first time. CI builds it on a Windows runner, checks the
+  desktop code has no networking, and opens the app to check it keeps running before a Release
+  gets it. Data moves to and from a phone by export and import.
 
 ## iPhone
 
@@ -683,10 +692,41 @@ Build order **(default)**, each step a Release the owner can try:
     and streak shields (0.49.0); paths and titles (0.50.0); moods and moves (0.51.0); ideas to level up
     each area (0.52.0).
 
+    Then, chosen by the owner after 0.59.0 (0.60.0), part of the mood check-in rather than the
+    game. Decided: a second mood check-in once all of the day's goals are done, mattering most
+    after a low start. It encourages carrying on, shows which goals go with feeling better, works
+    out which go with feeling worse, and looks for ways to make those easier to get done.
+    **Details (default):** with the Mood check-in on, once every goal due
+    today is done (at least one, skipped ones left out) and the morning's mood was given, Today
+    asks "How do you feel now?" with the same five faces; after a morning of 1 or 2 it says the
+    day started low first. It is a second mood for the day (in the backup file from format 26),
+    asked once a day; "Not now" puts it off until the next day, and without a morning mood the
+    usual card asks instead. The answer says how the mood moved ("Up from 🙁 to 🙂 — getting it
+    all done helped"; gentle when it is still 1 or 2: you did everything anyway, and that
+    counts), one line for tomorrow, the goals that usually lift the user, and opens "Mood and
+    your goals". That page, also opened from the review's mood part, looks at each active habit
+    over the 90 days before today, using the mood once everything was done where given and the
+    morning's otherwise: the mood on days it was done against days it was due and not done (a
+    goal counted per week, month or year: days ticked against days it was still to do), and the
+    change from the morning on days it was done with both moods. It needs at least 3 days each
+    way, and half a point or more counts; both are in "Points and rules" under "Mood and your
+    goals". A goal done on better days lifts; one done on worse days, or whose days fall from the
+    morning by half a point or more, weighs; biggest first, each with its numbers in plain words.
+    Each one that weighs gets up to three ways in: doing it right after the goal that lifts most
+    (with Habit chains on, a button sets the chain), making it smaller (its editor), paying half
+    as much again (one tap, rounded, at least 1 more) and getting it out of the way early. On a
+    morning of 1 or 2, Today suggests starting with a goal due that usually lifts the user. The
+    words are kind, never blaming, and say what goes together, not what causes what. The page is
+    behind the lock with reasons and notes, or with the review; the lifts on Today and the
+    morning suggestion hide with reasons and notes; private goals are left out while locked.
+
 18. Then, chosen by the owner, a budget (see "Budget"): the budget itself (0.57.0), then bills,
     savings goals, reports and the budget game (0.58.0).
 19. Then, chosen by the owner: a budget widget, every number changeable ("Points and rules"),
     and help and tips everywhere (0.59.0); then a Windows version.
+20. Also chosen by the owner after 0.59.0: a mood check-in once everything is done, with the
+    goals that lift the mood and ways into those that weigh on it, and the Windows version
+    (0.60.0; see the end of 17, and "Windows").
 
 ## Talking to the owner
 
