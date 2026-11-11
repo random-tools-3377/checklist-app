@@ -58,6 +58,8 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.randomtools3377.checklist.core.GoalKind
+import io.github.randomtools3377.checklist.data.toDay
+import io.github.randomtools3377.checklist.data.toEpochDay
 
 private enum class AppTab(val route: String, val label: String, val icon: ImageVector) {
     TODAY("today", "Today", Icons.Filled.CheckCircle),
@@ -65,6 +67,7 @@ private enum class AppTab(val route: String, val label: String, val icon: ImageV
     GOALS("goals", "Goals", Icons.AutoMirrored.Filled.List),
     SHOP("shop", "Shop", Icons.Filled.ShoppingCart),
     REVIEW("review", "Review", Icons.Filled.Star),
+    BUDGET("budget", "Budget", MoneyIcon),
 }
 
 private val RoutesSaver = listSaver<SnapshotStateList<String>, String>(
@@ -195,7 +198,10 @@ fun ChecklistApp(vm: MainViewModel) {
             if (first != AppTab.TODAY && stack.size == 1 && stack[0] == AppTab.TODAY.route) stack[0] = first.route
         }
     }
-    val shownTabs = AppTab.entries.filter { tab -> appearance.tabs.shown.any { it.ordinal == tab.ordinal } }
+    val shownTabs = AppTab.entries.filter { tab ->
+        appearance.tabs.shown.any { it.ordinal == tab.ordinal } &&
+            (tab != AppTab.BUDGET || io.github.randomtools3377.checklist.core.Feature.BUDGET in features)
+    }
     val tickNotes by vm.tickNotes.collectAsStateWithLifecycle()
     val review by vm.review.collectAsStateWithLifecycle()
     val reviewPeriod by vm.reviewPeriod.collectAsStateWithLifecycle()
@@ -335,6 +341,10 @@ fun ChecklistApp(vm: MainViewModel) {
             "done" -> DoneListScreen(doneList, onOpen = { goal -> push(editRoute(goal)) }, onBack = ::pop)
             "removed" -> RemovedGoalsScreen(removedGoals, onRestore = { vm.restoreGoal(it.id) }, onBack = ::pop)
             "reward" -> androidx.compose.runtime.key(route) { RewardEditor(id, vm, onClose = ::pop) }
+            "budget-pay" -> PayEditor(vm, onClose = ::pop)
+            "money" -> androidx.compose.runtime.key(route) { MoneyEditor(id, received = parts.getOrNull(2) == "in", vm = vm, onClose = ::pop) }
+            "budget-categories" -> CategoriesScreen(vm, onBack = ::pop)
+            "work-day" -> androidx.compose.runtime.key(route) { WorkDayEditor(id.toDay(), vm, onClose = ::pop) }
             "settings" -> SettingsScreen(
                 settings, vm,
                 onAppearance = { push("appearance") },
@@ -395,6 +405,7 @@ fun ChecklistApp(vm: MainViewModel) {
                     fab = {
                         if (tab == AppTab.GOALS && !reorderGoals && !selectGoals) AddButton("New goal", "add-goal") { newGoal = true }
                         if (tab == AppTab.SHOP && !showBought && !reorderRewards) AddButton("New reward", "add-reward") { push("reward/0") }
+                        if (tab == AppTab.BUDGET && !(settings.locks.budget && !unlocked)) AddButton("Spent", "add-money") { push("money/0") }
                     },
                 ) { padding ->
                     when (tab) {
@@ -455,6 +466,16 @@ fun ChecklistApp(vm: MainViewModel) {
                                 character = io.github.randomtools3377.checklist.core.Feature.CHARACTER in features,
                             )
                         }
+                        AppTab.BUDGET -> if (settings.locks.budget && !unlocked) {
+                            LockedPanel("The budget", unlock, Modifier.padding(padding))
+                        } else BudgetScreen(
+                            vm, padding,
+                            onPay = { push("budget-pay") },
+                            onEntry = { id -> push("money/$id") },
+                            onReceived = { push("money/0/in") },
+                            onCategories = { push("budget-categories") },
+                            onChangeDay = { day -> push("work-day/${day.toEpochDay()}") },
+                        )
                         AppTab.SHOP -> if (settings.locks.shop && !unlocked) {
                             LockedPanel("The shop", unlock, Modifier.padding(padding))
                         } else ShopScreen(

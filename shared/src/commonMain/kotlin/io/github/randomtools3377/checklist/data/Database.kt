@@ -194,6 +194,48 @@ data class MoodEntity(
     val at: Long,
 )
 
+/** Money spent or received, in cents (MoneyEntry in the shared code). Added in version 20. */
+@Entity(tableName = "money", indices = [Index("day"), Index("purchaseId")])
+data class MoneyEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    /** MoneyKind: SPENT or RECEIVED. */
+    val kind: String,
+    val cents: Long,
+    val categoryId: Long?,
+    val note: String,
+    /** Epoch day. */
+    val day: Long,
+    val at: Long,
+    /** The purchase, for a reward bought in the shop. */
+    val purchaseId: Long?,
+)
+
+/** The budget's categories of spending (MoneyCategory in the shared code). Added in version 20. */
+@Entity(tableName = "money_categories")
+data class MoneyCategoryEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val name: String,
+    val icon: String,
+    val limitCents: Long?,
+    val position: Int,
+    val archived: Boolean,
+    /** CategoryRole, for one the app files things in itself. */
+    val role: String?,
+)
+
+/** Work days that weren't the usual ones (WorkDay in the shared code). Added in version 20. */
+@Entity(tableName = "work_days")
+data class WorkDayEntity(
+    /** Epoch day. */
+    @PrimaryKey val day: Long,
+    /** Other hours, in minutes after midnight; null for a day off. */
+    val start: Int?,
+    val stop: Int?,
+    val breakMinutes: Int,
+    /** For a day off: whether it is paid. */
+    val paid: Boolean,
+)
+
 /** Stretches when it looks like the user stopped for a while. Added in version 5. */
 @Entity(tableName = "gaps")
 data class GapEntity(
@@ -513,6 +555,30 @@ interface ChecklistDao {
     @Query("DELETE FROM moods") suspend fun deleteMoods()
     @Insert suspend fun insertMoods(rows: List<MoodEntity>)
 
+    // The budget.
+    @Query("SELECT * FROM money WHERE day BETWEEN :from AND :to ORDER BY day DESC, at DESC")
+    fun observeMoney(from: Long, to: Long): Flow<List<MoneyEntity>>
+    @Query("SELECT * FROM money ORDER BY day, at") suspend fun allMoney(): List<MoneyEntity>
+    @Query("SELECT * FROM money WHERE id = :id") suspend fun money(id: Long): MoneyEntity?
+    @Insert suspend fun insertMoney(row: MoneyEntity): Long
+    @Update suspend fun updateMoney(row: MoneyEntity)
+    @Query("DELETE FROM money WHERE id = :id") suspend fun deleteMoney(id: Long)
+    @Query("DELETE FROM money WHERE purchaseId = :purchaseId") suspend fun deleteMoneyForPurchase(purchaseId: Long)
+    @Query("DELETE FROM money") suspend fun deleteAllMoney()
+    @Insert suspend fun insertMoneyRows(rows: List<MoneyEntity>)
+    @Query("SELECT * FROM money_categories ORDER BY position") fun observeMoneyCategories(): Flow<List<MoneyCategoryEntity>>
+    @Query("SELECT * FROM money_categories ORDER BY position") suspend fun moneyCategories(): List<MoneyCategoryEntity>
+    @Insert suspend fun insertMoneyCategory(row: MoneyCategoryEntity): Long
+    @Update suspend fun updateMoneyCategory(row: MoneyCategoryEntity)
+    @Query("DELETE FROM money_categories") suspend fun deleteMoneyCategories()
+    @Insert suspend fun insertMoneyCategories(rows: List<MoneyCategoryEntity>)
+    @Query("SELECT * FROM work_days WHERE day BETWEEN :from AND :to") fun observeWorkDays(from: Long, to: Long): Flow<List<WorkDayEntity>>
+    @Query("SELECT * FROM work_days ORDER BY day") suspend fun allWorkDays(): List<WorkDayEntity>
+    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun putWorkDay(row: WorkDayEntity)
+    @Query("DELETE FROM work_days WHERE day = :day") suspend fun deleteWorkDay(day: Long)
+    @Query("DELETE FROM work_days") suspend fun deleteWorkDays()
+    @Insert suspend fun insertWorkDays(rows: List<WorkDayEntity>)
+
     @Query("SELECT * FROM checks") suspend fun allChecks(): List<CheckEntity>
     @Query("DELETE FROM checks") suspend fun deleteChecks()
     @Insert suspend fun insertChecks(rows: List<CheckEntity>)
@@ -580,11 +646,14 @@ interface ChecklistDao {
         GapEntity::class,
         CheckEntity::class,
         MoodEntity::class,
+        MoneyEntity::class,
+        MoneyCategoryEntity::class,
+        WorkDayEntity::class,
     ],
-    version = 19,
+    version = 20,
     exportSchema = true,
     // Versions 4 to 8 only add tables and columns, so Room works the migrations out from the layouts.
-    autoMigrations = [AutoMigration(from = 3, to = 4), AutoMigration(from = 4, to = 5), AutoMigration(from = 5, to = 6), AutoMigration(from = 6, to = 7), AutoMigration(from = 7, to = 8), AutoMigration(from = 8, to = 9), AutoMigration(from = 9, to = 10), AutoMigration(from = 10, to = 11), AutoMigration(from = 11, to = 12), AutoMigration(from = 12, to = 13), AutoMigration(from = 13, to = 14), AutoMigration(from = 14, to = 15), AutoMigration(from = 15, to = 16), AutoMigration(from = 16, to = 17), AutoMigration(from = 17, to = 18), AutoMigration(from = 18, to = 19)],
+    autoMigrations = [AutoMigration(from = 3, to = 4), AutoMigration(from = 4, to = 5), AutoMigration(from = 5, to = 6), AutoMigration(from = 6, to = 7), AutoMigration(from = 7, to = 8), AutoMigration(from = 8, to = 9), AutoMigration(from = 9, to = 10), AutoMigration(from = 10, to = 11), AutoMigration(from = 11, to = 12), AutoMigration(from = 12, to = 13), AutoMigration(from = 13, to = 14), AutoMigration(from = 14, to = 15), AutoMigration(from = 15, to = 16), AutoMigration(from = 16, to = 17), AutoMigration(from = 17, to = 18), AutoMigration(from = 18, to = 19), AutoMigration(from = 19, to = 20)],
 )
 @ConstructedBy(AppDatabaseConstructor::class)
 abstract class AppDatabase : RoomDatabase() {

@@ -190,6 +190,35 @@ fun MoodEntity.toCore() = Mood(day = day.toDay(), score = score, note = note, at
 
 fun Mood.toEntity() = MoodEntity(day = day.toEpochDay(), score = score.coerceIn(1, 5), note = note, at = at)
 
+fun MoneyEntity.toCore() = io.github.randomtools3377.checklist.core.MoneyEntry(
+    id = id,
+    kind = io.github.randomtools3377.checklist.core.MoneyKind.entries.firstOrNull { it.name == kind } ?: io.github.randomtools3377.checklist.core.MoneyKind.SPENT,
+    cents = cents, categoryId = categoryId, note = note, day = day.toDay(), at = at, purchaseId = purchaseId,
+)
+
+fun io.github.randomtools3377.checklist.core.MoneyEntry.toEntity() = MoneyEntity(
+    id = id, kind = kind.name, cents = cents, categoryId = categoryId, note = note, day = day.toEpochDay(), at = at, purchaseId = purchaseId,
+)
+
+fun MoneyCategoryEntity.toCore() = io.github.randomtools3377.checklist.core.MoneyCategory(
+    id = id, name = name, icon = icon, limitCents = limitCents, position = position, archived = archived,
+    role = io.github.randomtools3377.checklist.core.CategoryRole.entries.firstOrNull { it.name == role },
+)
+
+fun io.github.randomtools3377.checklist.core.MoneyCategory.toEntity() = MoneyCategoryEntity(
+    id = id, name = name, icon = icon, limitCents = limitCents, position = position, archived = archived, role = role?.name,
+)
+
+fun WorkDayEntity.toCore() = io.github.randomtools3377.checklist.core.WorkDay(
+    day = day.toDay(),
+    hours = if (start != null && stop != null) io.github.randomtools3377.checklist.core.WorkHours(start, stop, breakMinutes) else null,
+    paid = paid,
+)
+
+fun io.github.randomtools3377.checklist.core.WorkDay.toEntity() = WorkDayEntity(
+    day = day.toEpochDay(), start = hours?.start, stop = hours?.stop, breakMinutes = hours?.breakMinutes ?: 0, paid = hours == null && paid,
+)
+
 fun StepEntity.toCore() = Step(id = id, goalId = goalId, name = name, points = points, position = position, archived = archived)
 
 fun Step.toEntity() = StepEntity(id = id, goalId = goalId, name = name, points = points, position = position, archived = archived)

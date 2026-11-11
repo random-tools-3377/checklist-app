@@ -10,6 +10,13 @@ import io.github.randomtools3377.checklist.core.Retimes
 import io.github.randomtools3377.checklist.core.Todos
 import io.github.randomtools3377.checklist.core.Mystery
 import io.github.randomtools3377.checklist.core.MoneyPrices
+import io.github.randomtools3377.checklist.core.Budget
+import io.github.randomtools3377.checklist.core.CategoryRole
+import io.github.randomtools3377.checklist.core.MoneyCategory
+import io.github.randomtools3377.checklist.core.MoneyEntry
+import io.github.randomtools3377.checklist.core.MoneyKind
+import io.github.randomtools3377.checklist.core.PayPlan
+import io.github.randomtools3377.checklist.core.WorkDay
 import io.github.randomtools3377.checklist.core.GoalKind
 import io.github.randomtools3377.checklist.core.Period
 import io.github.randomtools3377.checklist.core.Reminder
@@ -97,6 +104,7 @@ const val LOCK_PRIVATE = "lock_private"
 const val LOCK_REASONS = "lock_reasons"
 const val LOCK_GAPS = "lock_gaps"
 const val LOCK_REVIEW = "lock_review"
+const val LOCK_BUDGET = "lock_budget"
 
 /** What the habit editor saves. */
 data class HabitDraft(
@@ -681,6 +689,9 @@ class Repository(private val db: AppDatabase, private val celebrations: GifStore
                 gaps = dao.allGaps().map { it.toCore() },
                 checks = dao.allChecks().map { it.toCore() },
                 moods = dao.allMoods().map { it.toCore() },
+                money = dao.allMoney().map { it.toCore() },
+                moneyCategories = dao.moneyCategories().map { it.toCore() },
+                workDays = dao.allWorkDays().map { it.toCore() },
             )
         }
         // The GIFs the user picked go in the file too, so a restore brings them back.
@@ -725,6 +736,9 @@ class Repository(private val db: AppDatabase, private val celebrations: GifStore
         dao.deleteGaps()
         dao.deleteChecks()
         dao.deleteMoods()
+        dao.deleteAllMoney()
+        dao.deleteMoneyCategories()
+        dao.deleteWorkDays()
         dao.insertGoals(backup.goals.map { it.toEntity() })
         dao.insertSteps(backup.steps.map { it.toEntity() })
         dao.insertTicks(backup.ticks.map { it.toEntity() })
@@ -738,5 +752,77 @@ class Repository(private val db: AppDatabase, private val celebrations: GifStore
         dao.insertGaps(backup.gaps.map { it.toEntity() })
         dao.insertChecks(backup.checks.map { it.toEntity() })
         dao.insertMoods(backup.moods.map { it.toEntity() })
+        dao.insertMoneyRows(backup.money.map { it.toEntity() })
+        dao.insertMoneyCategories(backup.moneyCategories.map { it.toEntity() })
+        dao.insertWorkDays(backup.workDays.map { it.toEntity() })
     }
+
+    // The budget.
+
+    /** Puts in the starting categories, the first time the budget is used. */
+    suspend fun startBudget(): Unit = db.withTransaction {
+        if (dao.moneyCategories().isEmpty()) dao.insertMoneyCategories(Budget.STARTER.map { it.toEntity() })
+    }
+
+    suspend fun savePay(plan: PayPlan) = setSetting(PayPlan.SETTING, PayPlan.encode(plan))
+
+    /** Saves money spent or received: a new entry when [entry]'s id is 0. */
+    suspend fun saveMoney(entry: MoneyEntry) {
+        val row = entry.copy(cents = entry.cents.coerceAtLeast(0), note = entry.note.trim().take(80), at = entry.at.takeIf { it > 0 } ?: nowMillis()).toEntity()
+        if (entry.id == 0L) dao.insertMoney(row) else dao.updateMoney(row)
+    }
+
+    suspend fun removeMoney(id: Long) = dao.deleteMoney(id)
+
+    suspend fun moneyEntry(id: Long): MoneyEntry? = dao.money(id)?.toCore()
+
+    /** Saves a category: a new one at the end when [category]'s id is 0. */
+    suspend fun saveMoneyCategory(category: MoneyCategory): Unit = db.withTransaction {
+        val name = category.name.trim().take(30).ifEmpty { "Category" }
+        if (category.id == 0L) {
+            dao.insertMoneyCategory(category.copy(name = name, position = dao.moneyCategories().size, archived = false, role = null).toEntity())
+        } else {
+            dao.updateMoneyCategory(category.copy(name = name).toEntity())
+        }
+        Unit
+    }
+
+    /** Moves a category one place up ([by] = -1) or down (+1) among those in use. */
+    suspend fun moveMoneyCategory(id: Long, by: Int): Unit = db.withTransaction {
+        val list = dao.moneyCategories().filter { !it.archived }.toMutableList()
+        val from = list.indexOfFirst { it.id == id }
+        val to = from + by
+        if (from < 0 || to !in list.indices) return@withTransaction
+        list.add(to, list.removeAt(from))
+        list.forEachIndexed { i, row -> if (row.position != i) dao.updateMoneyCategory(row.copy(position = i)) }
+    }
+
+    /** Removes a category from the list; what was spent in it stays in the history. Rewards stays. */
+    suspend fun removeMoneyCategory(id: Long) {
+        dao.moneyCategories().firstOrNull { it.id == id && it.role == null }?.let { dao.updateMoneyCategory(it.copy(archived = true)) }
+    }
+
+    /** Changes one work day: other hours, or a day off with or without pay. */
+    suspend fun setWorkDay(change: WorkDay) = dao.putWorkDay(change.toEntity())
+
+    suspend fun usualWorkDay(day: LocalDate) = dao.deleteWorkDay(day.toEpochDay())
+
+    /**
+     * A reward bought in the shop with a money value counts as spent, under Rewards, on the day
+     * it was bought. Returning it takes it off again (see [rewardReturned]).
+     */
+    suspend fun rewardBought(purchaseId: Long, name: String, value: Double, day: LocalDate): Unit = db.withTransaction {
+        startBudget()
+        val rewards = dao.moneyCategories().firstOrNull { it.role == CategoryRole.REWARDS.name }
+        dao.deleteMoneyForPurchase(purchaseId)
+        dao.insertMoney(
+            MoneyEntry(
+                kind = MoneyKind.SPENT, cents = Budget.cents(value), categoryId = rewards?.id, note = name, day = day,
+                at = nowMillis(), purchaseId = purchaseId,
+            ).toEntity(),
+        )
+        Unit
+    }
+
+    suspend fun rewardReturned(purchaseId: Long) = dao.deleteMoneyForPurchase(purchaseId)
 }

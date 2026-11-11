@@ -445,9 +445,11 @@ fun SettingsScreen(
             }
             // Tabs hidden from the bottom bar are still here.
             val look by vm.appearance.collectAsState()
-            if (look.tabs.hidden.isNotEmpty()) {
+            val budgetOn = io.github.randomtools3377.checklist.core.Feature.BUDGET in vm.features.collectAsState().value
+            val hiddenTabs = look.tabs.hidden.filter { it != io.github.randomtools3377.checklist.core.AppTabKind.BUDGET || budgetOn }
+            if (hiddenTabs.isNotEmpty()) {
                 Row(Modifier.padding(horizontal = 8.dp)) {
-                    look.tabs.hidden.sortedBy { it.ordinal }.forEach { tab ->
+                    hiddenTabs.sortedBy { it.ordinal }.forEach { tab ->
                         TextButton(onClick = { onOpenTab(tab) }, modifier = Modifier.testTag("open-tab:${tab.name}")) { Text("Open ${tab.label}") }
                     }
                 }
@@ -677,6 +679,9 @@ fun SettingsScreen(
                 LockSwitch("Reasons and notes for skips and misses", settings.locks.reasons, "lock:reasons") { vm.setLock(LOCK_REASONS, it) }
                 LockSwitch("Gap check-ins", settings.locks.gaps, "lock:gaps") { vm.setLock(LOCK_GAPS, it) }
                 LockSwitch("The review and stats", settings.locks.review, "lock:review") { vm.setLock(LOCK_REVIEW, it) }
+                if (io.github.randomtools3377.checklist.core.Feature.BUDGET in vm.features.collectAsState().value || settings.locks.budget) {
+                    LockSwitch("The budget", settings.locks.budget, "lock:budget") { vm.setLock(io.github.randomtools3377.checklist.data.LOCK_BUDGET, it) }
+                }
                 if (settings.locks.privateGoals) {
                     Text(
                         "While locked, private goals are left off the widget, and their notifications don't name them.",

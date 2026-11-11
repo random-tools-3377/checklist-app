@@ -32,6 +32,7 @@ enum class Feature(val key: String, val onValue: String, val title: String, val 
     BETS("feature_bets", "1", "Bet on yourself", "Stake points that you'll do a goal so many times this week: do it and win twice the stake back, fall short and the stake is gone.", "Game"),
     SHIELDS("feature_shields", "1", "Streak shields", "Every 30 days of main streak earns a shield (hold 2 at most). A day that would break the main streak uses one up and the streak goes on.", "Game"),
     CHECKINS("feature_checkins", "1", "Character check-ins", "Your character talks to you on Today: after a slip it suggests one small goal to get going again, it answers how you feel, gentle on a hard day, and it jumps for joy at a new level. Works with Character and skills.", "Game"),
+    BUDGET("feature_budget", "1", "Budget", "A Budget tab: your pay filling up as you work, what you spend in categories with monthly limits, and rewards you buy that cost money.", "Money"),
     AI("feature_ai", "1", "AI helper", "Help from an AI that runs on this phone, with no internet: a new habit from a sentence, steps for a project, a note on your week, and voice on Today. Needs the Checklist AI app and its AI file.", "AI"),
     ;
 

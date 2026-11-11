@@ -48,6 +48,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -332,7 +333,10 @@ private fun SectionsEditor(sections: List<SectionChoice>, onChange: ((List<Secti
 /** Which tabs show along the bottom, and the one the app opens on. Today always shows. */
 @Composable
 private fun TabsEditor(tabs: TabChoice, vm: MainViewModel) {
-    AppTabKind.entries.filter { it != AppTabKind.TODAY }.forEach { tab ->
+    val features by vm.features.collectAsState()
+    // The Budget tab is there only while Budget is on.
+    fun offered(tab: AppTabKind) = tab != AppTabKind.BUDGET || io.github.randomtools3377.checklist.core.Feature.BUDGET in features
+    AppTabKind.entries.filter { it != AppTabKind.TODAY && offered(it) }.forEach { tab ->
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
             androidx.compose.material3.Checkbox(
                 checked = tab !in tabs.hidden,
@@ -349,7 +353,7 @@ private fun TabsEditor(tabs: TabChoice, vm: MainViewModel) {
     )
     Text("Opens on", style = MaterialTheme.typography.bodyLarge)
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        tabs.shown.forEach { tab ->
+        tabs.shown.filter { offered(it) }.forEach { tab ->
             androidx.compose.material3.FilterChip(
                 selected = tabs.opensOn == tab,
                 onClick = { vm.setFirstTab(tab) },

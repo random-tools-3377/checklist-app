@@ -31,7 +31,8 @@ class SectionsTest {
     fun todayIsAlwaysATabAndTheFirstTabFallsBackToIt() {
         val tabs = TabChoice.decode("GOALS,TODAY,SHOP", "SHOP")
         assertEquals(setOf(AppTabKind.GOALS, AppTabKind.SHOP), tabs.hidden)
-        assertEquals(listOf(AppTabKind.TODAY, AppTabKind.PLAN, AppTabKind.REVIEW), tabs.shown)
+        // Budget is in the list too; the app leaves it out while Budget is off.
+        assertEquals(listOf(AppTabKind.TODAY, AppTabKind.PLAN, AppTabKind.REVIEW, AppTabKind.BUDGET), tabs.shown)
         assertEquals(AppTabKind.TODAY, tabs.opensOn) // Shop is hidden
         assertEquals(AppTabKind.REVIEW, TabChoice.decode("GOALS", "REVIEW").opensOn)
         assertEquals("GOALS,SHOP", TabChoice.encodeHidden(setOf(AppTabKind.SHOP, AppTabKind.GOALS, AppTabKind.TODAY)))

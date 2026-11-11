@@ -118,6 +118,7 @@ import io.github.randomtools3377.checklist.data.LOCK_GAPS
 import io.github.randomtools3377.checklist.data.LOCK_HISTORY
 import io.github.randomtools3377.checklist.data.LOCK_REASONS
 import io.github.randomtools3377.checklist.data.LOCK_REVIEW
+import io.github.randomtools3377.checklist.data.LOCK_BUDGET
 import io.github.randomtools3377.checklist.data.LOCK_PRIVATE
 import io.github.randomtools3377.checklist.data.LOCK_SHOP
 import io.github.randomtools3377.checklist.data.SETTING_STREAK_TARGET
@@ -134,6 +135,12 @@ import io.github.randomtools3377.checklist.data.SETTING_MOOD_SKIPPED
 import io.github.randomtools3377.checklist.data.SETTING_MOOD
 import io.github.randomtools3377.checklist.data.SETTING_TREAT_BUDGET
 import io.github.randomtools3377.checklist.core.MoneyPrices
+import io.github.randomtools3377.checklist.core.Budget
+import io.github.randomtools3377.checklist.core.MoneyCategory
+import io.github.randomtools3377.checklist.core.MoneyEntry
+import io.github.randomtools3377.checklist.core.Pay
+import io.github.randomtools3377.checklist.core.PayPlan
+import io.github.randomtools3377.checklist.core.WorkDay
 import io.github.randomtools3377.checklist.data.RewardDraft
 import io.github.randomtools3377.checklist.data.SETTING_DAY_END_HOUR
 import io.github.randomtools3377.checklist.data.DEFAULT_SNOOZE_MINUTES
@@ -273,6 +280,16 @@ data class BalanceCheckView(val perDay: Double?, val rate: Difficulty, val rewar
 data class Stopwatch(val goalId: Long, val startedAt: Long)
 
 /** What the privacy lock covers, as chosen in Settings. */
+/** The Budget tab's month: [first] is its first day. */
+data class BudgetView(
+    val first: LocalDate,
+    val thisMonth: Boolean,
+    val plan: PayPlan?,
+    val changes: Map<LocalDate, WorkDay>,
+    val entries: List<MoneyEntry>,
+    val categories: List<MoneyCategory>,
+)
+
 data class Locks(
     val history: Boolean = false,
     val shop: Boolean = false,
@@ -280,6 +297,7 @@ data class Locks(
     val reasons: Boolean = false,
     val gaps: Boolean = false,
     val review: Boolean = false,
+    val budget: Boolean = false,
 )
 
 data class Settings(
@@ -333,9 +351,9 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
             dao.observeSetting(LOCK_SHOP),
             dao.observeSetting(LOCK_PRIVATE),
             dao.observeSetting(LOCK_REASONS),
-            combine(dao.observeSetting(LOCK_GAPS), dao.observeSetting(LOCK_REVIEW)) { g, r -> g to r },
-        ) { h, sh, p, r, (g, rv) ->
-            Locks(history = h == "1", shop = sh == "1", privateGoals = p == "1", reasons = r == "1", gaps = g == "1", review = rv == "1")
+            combine(dao.observeSetting(LOCK_GAPS), dao.observeSetting(LOCK_REVIEW), dao.observeSetting(LOCK_BUDGET)) { g, r, b -> Triple(g, r, b) },
+        ) { h, sh, p, r, (g, rv, b) ->
+            Locks(history = h == "1", shop = sh == "1", privateGoals = p == "1", reasons = r == "1", gaps = g == "1", review = rv == "1", budget = b == "1")
         },
         combine(dao.observeSetting(Gaps.SETTING_DAYS), dao.observeSetting(Gaps.SETTING_POINTS)) { days, points ->
             val defaults = GapSettings()
@@ -1307,7 +1325,8 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
             onResult(result)
             if (result is BuyResult.Bought) {
                 val name = result.prize ?: repository.reward(rewardId)?.name ?: return@launch
-                offerUndo("Bought $name · −${result.price}") { book.returnPurchase(result.purchaseId) }
+                countRewardSpending(result.purchaseId, rewardId, name)
+                offerUndo("Bought $name · −${result.price}") { returnAndUncount(result.purchaseId) }
             }
         }
     }
@@ -1317,7 +1336,7 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
     }
 
     fun returnPurchase(purchaseId: Long) {
-        viewModelScope.launch { book.returnPurchase(purchaseId) }
+        viewModelScope.launch { returnAndUncount(purchaseId) }
     }
 
     // Editing
@@ -1864,6 +1883,112 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
 
     fun moveReward(id: Long, by: Int) {
         viewModelScope.launch { repository.moveReward(id, by) }
+    }
+
+    // The budget.
+
+    /** The user's pay and usual week, once set. */
+    val payPlan: StateFlow<PayPlan?> = dao.observeSetting(PayPlan.SETTING).map { PayPlan.decode(it) }.state(null)
+
+    /** The budget's categories, in the user's order, removed ones included (for the history). */
+    val moneyCategories: StateFlow<List<MoneyCategory>> =
+        dao.observeMoneyCategories().map { rows -> rows.map { it.toCore() } }.state(emptyList())
+
+    /** The month the Budget tab shows, by its first day; null for this month. */
+    private val budgetMonth = MutableStateFlow<LocalDate?>(null)
+
+    /** The Budget tab's month: its money, its changed work days, and the pay to work out its bars from. */
+    val budget: StateFlow<BudgetView?> = combine(budgetMonth, today) { shown, _ -> shown ?: Budget.monthOf(nowLocal().date) }
+        .flatMapLatest { first ->
+            val days = Pay.monthDays(first)
+            combine(
+                payPlan,
+                dao.observeWorkDays(first.toEpochDay(), days.last().toEpochDay()),
+                dao.observeMoney(first.toEpochDay(), days.last().toEpochDay()),
+                moneyCategories,
+            ) { plan, changed, money, categories ->
+                BudgetView(
+                    first = first,
+                    thisMonth = first == Budget.monthOf(nowLocal().date),
+                    plan = plan,
+                    changes = changed.map { it.toCore() }.associateBy { it.day },
+                    entries = money.map { it.toCore() },
+                    categories = categories,
+                )
+            }
+        }.state(null)
+
+    /** Moves the Budget tab [by] months, never past this month. */
+    fun showBudgetMonth(by: Int) {
+        val now = Budget.monthOf(nowLocal().date)
+        var shown = budgetMonth.value ?: now
+        repeat(kotlin.math.abs(by)) {
+            shown = if (by < 0) Budget.monthOf(shown.minusDays(1)) else Pay.monthDays(shown).last().plusDays(1)
+        }
+        budgetMonth.value = if (shown >= now) null else shown
+    }
+
+    /** Puts in the starting categories the first time the budget is opened. */
+    fun startBudget() {
+        viewModelScope.launch { repository.startBudget() }
+    }
+
+    fun savePay(plan: PayPlan, onDone: () -> Unit) {
+        viewModelScope.launch {
+            repository.savePay(plan)
+            onDone()
+        }
+    }
+
+    suspend fun loadMoney(id: Long): MoneyEntry? = repository.moneyEntry(id)
+
+    fun saveMoney(entry: MoneyEntry, onDone: () -> Unit) {
+        viewModelScope.launch {
+            repository.saveMoney(entry)
+            onDone()
+        }
+    }
+
+    fun removeMoney(id: Long, onDone: () -> Unit) {
+        viewModelScope.launch {
+            repository.removeMoney(id)
+            onDone()
+        }
+    }
+
+    fun saveMoneyCategory(category: MoneyCategory) {
+        viewModelScope.launch { repository.saveMoneyCategory(category) }
+    }
+
+    fun moveMoneyCategory(id: Long, by: Int) {
+        viewModelScope.launch { repository.moveMoneyCategory(id, by) }
+    }
+
+    fun removeMoneyCategory(id: Long) {
+        viewModelScope.launch { repository.removeMoneyCategory(id) }
+    }
+
+    /** Changes [WorkDay.day]: other hours, or a day off with or without pay. */
+    fun setWorkDay(change: WorkDay) {
+        viewModelScope.launch { repository.setWorkDay(change) }
+    }
+
+    /** Puts [day] back to the usual week. */
+    fun usualWorkDay(day: LocalDate) {
+        viewModelScope.launch { repository.usualWorkDay(day) }
+    }
+
+    /** A reward bought with a money value counts as spent while Budget is on. */
+    private suspend fun countRewardSpending(purchaseId: Long, rewardId: Long, name: String) {
+        if (Feature.BUDGET !in features.value) return
+        val value = repository.reward(rewardId)?.value?.takeIf { it > 0 } ?: return
+        repository.rewardBought(purchaseId, name, value, nowLocal().date)
+    }
+
+    private suspend fun returnAndUncount(purchaseId: Long): Boolean {
+        val returned = book.returnPurchase(purchaseId)
+        if (returned) repository.rewardReturned(purchaseId)
+        return returned
     }
 
     fun setDayEndHour(hour: Int) {

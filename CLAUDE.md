@@ -264,6 +264,46 @@ The app has no network access unless the owner decides otherwise for this app.
   there once a day the app is used and keeps the last 7.
 - Apart from that folder, the app makes no copy of its own anywhere else.
 
+## Budget
+
+- A budget part of the app, for the user's own money, typed in by hand. There are no bank links
+  (see "No internet").
+- The user enters their pay, per hour or per any other unit, and their work start and stop
+  times. A progress bar fills with money as they work through the day and the month, to see
+  whenever they check.
+- Work hours are a set weekly schedule. When one day is different (a late start, a day off),
+  just that day is changed.
+- A shop reward with a money value counts as spent in the budget when it is bought. Returning it
+  takes it back off.
+- A full suite of budget features. The budget can be gamified too, with a setting.
+- **Details (default), built in three Releases:**
+  - **0.57.0, the budget itself.** Budget is an extra on the Features page that adds a Budget
+    tab. Pay is an amount per hour, day, week, month or year, with an optional take-home
+    percentage for tax. Each weekday has a start and stop time and an unpaid break, or is a day
+    off; a shift that stops before it starts ends the next day. A changed day has other times,
+    or is a day off with or without pay. Pay by the hour pays its rate for each minute worked;
+    pay by the day pays its amount for each day worked; pay by the week, month or year is spread
+    over the usual work minutes of that week or month (a year is 12 months), so a usual month
+    pays exactly the monthly amount, and a changed day pays for its own minutes. A paid day off
+    pays what the usual day would. The today bar fills smoothly from start to stop, and the
+    month bar shows what is earned so far of the month's pay. Spending and other income are
+    typed in with an amount, a category, a note and a date. Categories start as Food, Home,
+    Bills, Transport, Fun, Health, Shopping, Rewards and Other, and can be renamed, added,
+    reordered, removed (except Rewards) and given a monthly limit, shown as a bar. The month adds
+    up pay earned so far, other income, spending and what's left, and earlier months can be
+    looked back at. Spending and shop rewards with a money value show how long they take to
+    earn, like "≈ 2 h 15 min of work". Rewards are only counted while Budget is on. The budget
+    can be put behind the privacy lock, and is in the backup file.
+  - **0.58.0, more of it.** Bills and subscriptions (an amount every so many weeks or months
+    from a first date, counted as spent on the day, with what's coming up), savings goals (a
+    target, money put in and taken out, a bar, and how long it takes at the user's pay), a
+    report for each month (earned, other income, spent and saved, each category, and a chart of
+    each day), and the today bar as a card on Today.
+  - **0.59.0, the budget game,** turned on with its own setting: points for days within the
+    day's share of what's left, a budget streak, bonuses for a month within every category's
+    limit and for reaching a savings goal, budget badges, and celebrations for a full workday and
+    a reached savings goal.
+
 ## iPhone
 
 - The app is planned for iPhone too. The code is restructured now, before 0.2.0, so Android and
@@ -608,6 +648,9 @@ Build order **(default)**, each step a Release the owner can try:
     quests, combos and racing last week (0.47.0); items, lucky ticks and bosses (0.48.0); bets
     and streak shields (0.49.0); paths and titles (0.50.0); moods and moves (0.51.0); ideas to level up
     each area (0.52.0).
+
+18. Then, chosen by the owner, a budget (see "Budget"): the budget itself (0.57.0), bills,
+    savings goals and reports (0.58.0), and the budget game (0.59.0).
 
 ## Talking to the owner
 

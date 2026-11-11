@@ -93,6 +93,8 @@ fun ShopScreen(
             note = if (view.balance < 0) "The shop opens again once you are back above zero." else null,
         )
         val features by vm.features.collectAsStateWithLifecycle()
+        val payPlan by vm.payPlan.collectAsStateWithLifecycle()
+        val budgetOn = io.github.randomtools3377.checklist.core.Feature.BUDGET in features
         if (io.github.randomtools3377.checklist.core.Feature.BALANCE_CHECK in features) {
             TextButton(onClick = onBalanceCheck, modifier = Modifier.padding(start = 8.dp).testTag("balance-check")) {
                 Text("Balance check: are prices and ${pointsWord()} right?")
@@ -131,6 +133,7 @@ fun ShopScreen(
                         onMove = { vm.moveReward(row.reward.id, it) },
                         onBuy = { buying = row.reward },
                         onEdit = { onEdit(row.reward) },
+                        work = if (budgetOn) rewardWorkText(row.reward.value, payPlan) else null,
                     )
                     Spacer(Modifier.height(10.dp))
                 }
@@ -217,6 +220,7 @@ private fun RewardCard(
     onMove: (Int) -> Unit,
     onBuy: () -> Unit,
     onEdit: () -> Unit,
+    work: String? = null,
 ) {
     val reward = row.reward
     val affordable = reward.price <= balance
@@ -250,6 +254,9 @@ private fun RewardCard(
                     }
                     row.usual?.let {
                         Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    work?.let {
+                        Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("work:${reward.name}"))
                     }
                 }
                 Spacer(Modifier.width(8.dp))
@@ -302,13 +309,17 @@ private fun BoughtCard(purchase: Purchase, onUse: () -> Unit, onReturn: () -> Un
     }
 }
 
-/** [value] in the phone's own currency, like "$25" or "$3.50". */
-internal fun moneyText(value: Double): String {
-    val cents = kotlin.math.round(value * 100).toLong()
-    val whole = cents / 100
+/** [value] in the phone's own currency, like "$25", "$3.50" or "−$1,240.50". */
+internal fun moneyText(value: Double, alwaysCents: Boolean = false): String {
+    val cents = kotlin.math.round(kotlin.math.abs(value) * 100).toLong()
+    val whole = (cents / 100).toString().reversed().chunked(3).joinToString(",").reversed()
     val rest = cents % 100
-    return moneySymbol() + if (rest == 0L) "$whole" else "$whole." + rest.toString().padStart(2, '0')
+    val sign = if (value < 0 && cents > 0) "−" else ""
+    return sign + moneySymbol() + if (rest == 0L && !alwaysCents) whole else "$whole." + rest.toString().padStart(2, '0')
 }
+
+/** [cents] in the phone's own currency, with cents always shown. */
+internal fun centsText(cents: Long): String = moneyText(cents / 100.0, alwaysCents = true)
 
 /**
  * What a reward costs in money, and whether its price follows it. Following, the price in points
