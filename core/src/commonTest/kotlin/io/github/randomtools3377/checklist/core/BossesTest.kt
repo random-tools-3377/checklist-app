@@ -40,6 +40,26 @@ class BossesTest {
     }
 
     @Test
+    fun aMonthsTimesAreSpreadOverItsWeeks() {
+        // 31 times in December: one a day, so the week holding the 1st asks for 7, not 31.
+        val december = Goal(id = 1, kind = GoalKind.HABIT, name = "Stretch", icon = "🧘", points = 5, repeat = Repeat.timesPer(Period.MONTHLY, LocalDate(2026, 11, 1)), target = 31)
+        assertEquals(7, Bosses.expectedTicks(listOf(december), LocalDate(2026, 11, 30)))
+        assertEquals(7, Bosses.expectedTicks(listOf(december), LocalDate(2026, 12, 7)))
+        val weekly = december.copy(id = 2, repeat = Repeat.timesPer(Period.WEEKLY, monday), target = 3)
+        assertEquals(3, Bosses.expectedTicks(listOf(weekly), monday))
+    }
+
+    @Test
+    fun theHealthIsKeptWithTheFight() {
+        val kept = Bosses.encodeFight(monday, 40, 147)
+        assertEquals(40, Bosses.damageIn(kept, monday))
+        assertEquals(147, Bosses.healthIn(kept, monday))
+        assertEquals(null, Bosses.healthIn(kept, monday.plusDays(7)), "another week")
+        assertEquals(null, Bosses.healthIn("2026-11-09:40", monday), "kept before health was")
+        assertEquals(0, Bosses.damageIn(kept, monday.plusDays(7)))
+    }
+
+    @Test
     fun everyTickEarnsAnItemFromItsSkill() {
         val run = Goal(id = 1, kind = GoalKind.HABIT, name = "Morning run", icon = "🏃", points = 5, repeat = null)
         val read = Goal(id = 2, kind = GoalKind.HABIT, name = "Read", icon = "📖", points = 5, repeat = null)

@@ -544,9 +544,13 @@ class Book(
         true
     }
 
+    /**
+     * The finishing bonuses paid on [ticks]. A lucky tick's extra is linked to its tick too, but
+     * has no goal (it isn't experience), so it is left out here: it goes only with its own tick.
+     */
     private suspend fun bonusesOn(ticks: List<Tick>): List<Entry> =
         if (ticks.isEmpty()) emptyList()
-        else store.entriesForTicks(ticks.map { it.id }).filter { it.kind == EntryKind.BONUS }
+        else store.entriesForTicks(ticks.map { it.id }).filter { it.kind == EntryKind.BONUS && it.goalId != null }
 
     private suspend fun removeTickAndItsEntries(tickId: Long) {
         store.entriesForTicks(listOf(tickId)).forEach { store.removeEntry(it.id) }

@@ -52,6 +52,53 @@ class PlayTest {
     }
 
     @Test
+    fun theDaysQuestsAreKeptAndReadBack() {
+        val today = Quests.of(monday, goals)
+        val text = Quests.encodeDay(monday, today)
+        assertEquals(today, Quests.decodeDay(text, monday))
+        assertEquals(null, Quests.decodeDay(text, monday.plusDays(1)), "kept for their own day only")
+        assertEquals(null, Quests.decodeDay(null, monday))
+        val named = Quest(0, QuestKind.GOAL, "Do 🏃 Run | fast", 1, 5, goalId = 7)
+        assertEquals(listOf(named), Quests.decodeDay(Quests.encodeDay(monday, listOf(named)), monday))
+    }
+
+    @Test
+    fun aQuestForAGoalNoLongerDueIsLeftOut() {
+        val rows = listOf(row(goals[0], false), row(goals[1], false))
+        val quests = listOf(
+            Quest(0, QuestKind.GOAL, "Do Gym", 1, 5, goalId = 2),
+            Quest(1, QuestKind.GOAL, "Do Read", 1, 5, goalId = 3),
+            Quest(2, QuestKind.POINTS, "Earn 10 points from goals", 10, 5),
+        )
+        assertEquals(listOf(0, 2), Quests.shown(quests, rows).map { it.id }, "the slots stay as they were")
+    }
+
+    @Test
+    fun theAreaAndEverythingQuestsFollowTodaysList() {
+        // "Do all 2 Fitness goals", then one of them is taken off today: the other done is all of them.
+        val area = Quest(1, QuestKind.AREA, "Do all 2 Fitness goals", 2, 5, area = SkillArea.FITNESS)
+        assertTrue(Quests.progress(area, listOf(row(goals[0], true), row(goals[2], false)), emptyList(), timeOf, 0).complete)
+        val allBy = Quest(2, QuestKind.ALL_BY, "Finish everything due by 8 pm", 2, 10, by = LocalTime(20, 0))
+        val three = listOf(row(goals[0], true), row(goals[1], false), row(goals[2], false))
+        assertEquals(3, Quests.progress(allBy, three, emptyList(), timeOf, 0).quest.target, "however many are due now")
+    }
+
+    @Test
+    fun ticksAfterMidnightAreLateOnTheUsersDay() {
+        // The day ends at 4 am: ticks at 1 am still belong to it, at its very end.
+        val early = Quest(0, QuestKind.EARLY, "Tick 2 goals before noon", 2, 5, by = LocalTime(12, 0))
+        val night = listOf(tick(1, 60L), tick(2, 90L))
+        assertFalse(Quests.progress(early, emptyList(), night, timeOf, 0, dayEndHour = 4).complete)
+        assertTrue(Quests.progress(early, emptyList(), night, timeOf, 0).complete, "with the day ending at midnight, 1 am is early")
+        val allBy = Quest(2, QuestKind.ALL_BY, "Finish everything due by 8 pm", 2, 10, by = LocalTime(20, 0))
+        val allDone = listOf(row(goals[0], true), row(goals[1], true))
+        val evening = listOf(tick(1, 19 * 60L), tick(2, 30L))
+        assertFalse(Quests.progress(allBy, allDone, evening, timeOf, 0, dayEndHour = 4).complete, "finished at 0:30, after 8 pm")
+        assertEquals(25 * 60 * 60 + 30 * 60, Days.secondOfDay(LocalTime(1, 30), 4))
+        assertEquals(60 * 60 + 30 * 60, Days.secondOfDay(LocalTime(1, 30), 0))
+    }
+
+    @Test
     fun paidQuestsAreRememberedForTheirDayOnly() {
         val text = Quests.encodePaid(monday, setOf(2, 0))
         assertEquals("2026-11-09:0,2", text)
@@ -83,6 +130,49 @@ class PlayTest {
         clock.set(LocalDateTime(2026, 11, 13, 10, 0))
         assertEquals(listOf("Combo ×1" to 2), combos.pay().map { it.label to it.amount })
         assertEquals(20, Combos.pay(25), "it stops growing at 10")
+    }
+
+    @Test
+    fun aComboStartsAgainAfterDaysWithCombosOff() = runTest {
+        val store = MemoryStore()
+        val clock = TestClock(LocalDateTime(2026, 11, 9, 10, 0))
+        val book = Book(store, clock) { kotlinx.datetime.TimeZone.UTC }
+        val combos = Combos(store, book)
+        store.putSetting(Feature.COMBOS.key, Feature.COMBOS.onValue)
+        val read = store.addGoal(goal(0, "Read").copy(id = 0))
+        combos.pay()
+        book.tickHabit(read.id) // Monday perfect
+        clock.set(LocalDateTime(2026, 11, 10, 10, 0))
+        assertEquals(listOf("Combo ×1"), combos.pay().map { it.label })
+
+        // Off on Tuesday, which is left undone, and on again on Wednesday.
+        store.putSetting(Feature.COMBOS.key, "")
+        clock.set(LocalDateTime(2026, 11, 11, 10, 0))
+        combos.pay()
+        store.putSetting(Feature.COMBOS.key, Feature.COMBOS.onValue)
+        book.tickHabit(read.id) // Wednesday perfect
+        clock.set(LocalDateTime(2026, 11, 12, 10, 0))
+        assertEquals(listOf("Combo ×1" to 2), combos.pay().map { it.label to it.amount }, "the old combo ended while off")
+    }
+
+    @Test
+    fun turningCombosOffAndOnWithinADayKeepsTheCombo() = runTest {
+        val store = MemoryStore()
+        val clock = TestClock(LocalDateTime(2026, 11, 9, 10, 0))
+        val book = Book(store, clock) { kotlinx.datetime.TimeZone.UTC }
+        val combos = Combos(store, book)
+        store.putSetting(Feature.COMBOS.key, Feature.COMBOS.onValue)
+        val read = store.addGoal(goal(0, "Read").copy(id = 0))
+        combos.pay()
+        book.tickHabit(read.id)
+        clock.set(LocalDateTime(2026, 11, 10, 10, 0))
+        combos.pay()
+        store.putSetting(Feature.COMBOS.key, "")
+        combos.pay() // the app opened again the same day, with combos off
+        store.putSetting(Feature.COMBOS.key, Feature.COMBOS.onValue)
+        book.tickHabit(read.id)
+        clock.set(LocalDateTime(2026, 11, 11, 10, 0))
+        assertEquals(listOf("Combo ×2"), combos.pay().map { it.label })
     }
 
     @Test

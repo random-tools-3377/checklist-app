@@ -38,6 +38,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -617,7 +618,13 @@ fun attackText(dealt: Int, beaten: Boolean, paid: Int): String = when {
 
 /** On Today, with bets on: this week's bets and how far along each is, and a way to place one. */
 @Composable
-fun BetsCard(rows: List<BetRow>, habits: List<Goal>, balance: Int, onPlace: (Long, Int, Int, (BetRefusal?) -> Unit) -> Unit) {
+fun BetsCard(
+    rows: List<BetRow>,
+    habits: List<Goal>,
+    balance: Int,
+    rooms: suspend (List<Long>) -> Map<Long, IntRange>,
+    onPlace: (Long, Int, Int, (BetRefusal?) -> Unit) -> Unit,
+) {
     var placing by remember { mutableStateOf(false) }
     Card(Modifier.fillMaxWidth().testTag("bets")) {
         Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -648,14 +655,29 @@ fun BetsCard(rows: List<BetRow>, habits: List<Goal>, balance: Int, onPlace: (Lon
         }
     }
     if (placing) {
-        PlaceBetDialog(habits.filter { h -> rows.none { it.bet.goalId == h.id } }, balance, onPlace, onClose = { placing = false })
+        PlaceBetDialog(habits.filter { h -> rows.none { it.bet.goalId == h.id } }, balance, rooms, onPlace, onClose = { placing = false })
     }
 }
 
+/** At most this many counts are offered for a bet, starting from one more than is done. */
+private const val BET_CHOICES = 7
+
 @Composable
-private fun PlaceBetDialog(habits: List<Goal>, balance: Int, onPlace: (Long, Int, Int, (BetRefusal?) -> Unit) -> Unit, onClose: () -> Unit) {
-    var goalId by remember { mutableStateOf(habits.firstOrNull()?.id) }
-    var times by remember { mutableStateOf(3) }
+private fun PlaceBetDialog(
+    offered: List<Goal>,
+    balance: Int,
+    rooms: suspend (List<Long>) -> Map<Long, IntRange>,
+    onPlace: (Long, Int, Int, (BetRefusal?) -> Unit) -> Unit,
+    onClose: () -> Unit,
+) {
+    // Only goals that can still be done more times this week, and only counts the week can hold.
+    val room by produceState<Map<Long, IntRange>?>(null, offered) { value = rooms(offered.map { it.id }) }
+    val habits = room?.let { found -> offered.filter { it.id in found } }.orEmpty()
+    var picked by remember { mutableStateOf<Long?>(null) }
+    val goalId = picked?.takeIf { id -> habits.any { it.id == id } } ?: habits.firstOrNull()?.id
+    val choices = goalId?.let { room?.get(it) }?.let { it.first..minOf(it.last, it.first + BET_CHOICES - 1) }
+    var chosen by remember { mutableStateOf(3) }
+    val times = choices?.let { chosen.coerceIn(it.first, it.last) } ?: chosen
     var stake by remember { mutableStateOf(Bets.STAKES.first()) }
     var problem by remember { mutableStateOf<String?>(null) }
     AlertDialog(
@@ -664,14 +686,35 @@ private fun PlaceBetDialog(habits: List<Goal>, balance: Int, onPlace: (Long, Int
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("Which goal", style = MaterialTheme.typography.labelLarge)
+                if (room != null && habits.isEmpty()) {
+                    Text(
+                        "No goal can be done more times this week.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     habits.forEach { goal ->
-                        FilterChip(selected = goalId == goal.id, onClick = { goalId = goal.id }, label = { Text("${goal.icon} ${goal.name}") }, modifier = Modifier.testTag("bet-goal:${goal.name}"))
+                        FilterChip(selected = goalId == goal.id, onClick = { picked = goal.id }, label = { Text("${goal.icon} ${goal.name}") }, modifier = Modifier.testTag("bet-goal:${goal.name}"))
                     }
                 }
-                Text("How many times this week", style = MaterialTheme.typography.labelLarge)
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    (1..7).forEach { n -> FilterChip(selected = times == n, onClick = { times = n }, label = { Text("$n") }, modifier = Modifier.testTag("bet-times:$n")) }
+                val goal = habits.firstOrNull { it.id == goalId }
+                if (goal != null && choices != null) {
+                    // Done several times a day: a time is a day with all of them done.
+                    Text(
+                        if (goal.severalADay) "How many days this week with all ${goal.target} done" else "How many times this week",
+                        style = MaterialTheme.typography.labelLarge,
+                    )
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        choices.forEach { n -> FilterChip(selected = times == n, onClick = { chosen = n }, label = { Text("$n") }, modifier = Modifier.testTag("bet-times:$n")) }
+                    }
+                    if (choices.first > 1) {
+                        Text(
+                            "Done ${choices.first - 1} so far this week, so a bet is on more than that.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
                 Text("Stake", style = MaterialTheme.typography.labelLarge)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -698,10 +741,12 @@ private fun PlaceBetDialog(habits: List<Goal>, balance: Int, onPlace: (Long, Int
                             BetRefusal.ALREADY -> "There's already a bet on that goal this week."
                             BetRefusal.TOO_MANY -> "Three bets at a time is the most."
                             BetRefusal.NOT_A_HABIT -> "Only habits can be bet on."
+                            BetRefusal.DONE_ALREADY -> "That many is done already this week. Pick more."
+                            BetRefusal.OUT_OF_REACH -> "What's left of this week can't hold that many."
                         }
                     }
                 },
-                enabled = goalId != null && stake <= balance,
+                enabled = goalId != null && choices != null && stake <= balance,
                 modifier = Modifier.testTag("bet-ok"),
             ) { Text("Bet ${pointsText(stake)}") }
         },

@@ -39,6 +39,19 @@ import io.github.randomtools3377.checklist.core.EntryKind
 import io.github.randomtools3377.checklist.core.Gap
 import io.github.randomtools3377.checklist.data.toLocalDateTime
 
+/** What an entry was for. Game and budget-game payouts are bonuses with no goal, told apart by their label. */
+private fun kindText(entry: Entry): String = when {
+    entry.kind == EntryKind.BONUS && entry.goalId == null -> when {
+        entry.label.startsWith("Quest:") -> "Daily quest"
+        entry.label.startsWith("Boss beaten:") -> "Boss beaten"
+        entry.label.startsWith("Lucky") -> "Lucky tick"
+        entry.label.startsWith("Money:") -> "Budget game"
+        else -> "Bonus"
+    }
+    entry.kind == EntryKind.PERFECT_DAY && entry.label.startsWith("Combo") -> "Combo of perfect days"
+    else -> kindText(entry.kind)
+}
+
 private fun kindText(kind: EntryKind): String = when (kind) {
     EntryKind.TICK -> "Ticked"
     EntryKind.BONUS -> "Bonus for finishing"
@@ -94,7 +107,8 @@ fun HistoryScreen(
                     )
                 }
             }
-            entries.groupBy { it.day }.forEach { (day, onDay) ->
+            // Newest day first: a bonus paid later for an earlier day goes with that day.
+            entries.groupBy { it.day }.entries.sortedByDescending { it.key }.forEach { (day, onDay) ->
                 // A gap is marked where it ends, with what the user wrote at the check-in.
                 gaps.filter { it.to == day }.forEach { gap ->
                     item(key = "gap-${gap.id}") { GapMark(gap) }
@@ -124,7 +138,7 @@ fun HistoryScreen(
                                 Text("“$note”", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
                             }
                             Text(
-                                "${kindText(entry.kind)} · ${timeText(entry.at.toLocalDateTime().time)}",
+                                "${kindText(entry)} · ${timeText(entry.at.toLocalDateTime().time)}",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )

@@ -699,7 +699,11 @@ class Repository(private val db: AppDatabase, private val celebrations: GifStore
 
     suspend fun removePenaltyTask(id: Long) = dao.removePenaltyTask(id)
 
-    /** This week's boss and the items in hand. Items count from the first time this is asked. */
+    /**
+     * This week's boss and the items in hand. Items count from the first time this is asked.
+     * The boss's health is worked out the first time the week is seen and kept for the week,
+     * so changing goals or rules mid-week doesn't move it.
+     */
     suspend fun bossView(day: LocalDate): io.github.randomtools3377.checklist.core.BossView {
         val B = io.github.randomtools3377.checklist.core.Bosses
         val since = dao.setting(B.ITEMS_FROM)?.toLongOrNull()
@@ -707,9 +711,28 @@ class Repository(private val db: AppDatabase, private val celebrations: GifStore
         val goals = dao.allGoals().map { it.toCore() }
         val monday = B.monday(day)
         val boss = B.of(monday)
-        val fight = io.github.randomtools3377.checklist.core.BossFight(monday, boss, B.health(B.expectedTicks(goals, monday)), B.damageIn(dao.setting(B.FIGHT), monday))
+        val kept = dao.setting(B.FIGHT)
+        val damage = B.damageIn(kept, monday)
+        val health = B.healthIn(kept, monday)
+            ?: B.health(B.expectedTicks(goals, monday)).also { dao.putSetting(SettingEntity(B.FIGHT, B.encodeFight(monday, damage, it))) }
+        val fight = io.github.randomtools3377.checklist.core.BossFight(monday, boss, health, damage)
+        // Beaten before its health was kept (it used to move with the goals), but never paid: it pays now.
+        if (fight.beaten && fight.damage > 0) payBoss(fight, day)
         val items = B.inventory(dao.allTicks().map { it.toCore() }, goals, since, B.decodeUsed(dao.setting(B.USED)))
         return io.github.randomtools3377.checklist.core.BossView(fight, items)
+    }
+
+    /** Pays for beating this week's boss, once a week. What it paid. */
+    private suspend fun payBoss(fight: io.github.randomtools3377.checklist.core.BossFight, day: LocalDate): Int = db.withTransaction {
+        val B = io.github.randomtools3377.checklist.core.Bosses
+        if (dao.setting(B.PAID) == fight.week.toString()) return@withTransaction 0
+        val entry = io.github.randomtools3377.checklist.core.Entry(
+            at = nowMillis(), day = day, kind = io.github.randomtools3377.checklist.core.EntryKind.BONUS,
+            amount = B.REWARD, label = "Boss beaten: ${fight.boss.title}",
+        )
+        dao.insertEntry(entry.toEntity())
+        dao.putSetting(SettingEntity(B.PAID, fight.week.toString()))
+        B.REWARD
     }
 
     /** Uses every item in hand on this week's boss. A boss beaten pays its bonus once. Null when there is nothing to do. */
@@ -722,19 +745,10 @@ class Repository(private val db: AppDatabase, private val celebrations: GifStore
         view.items.forEach { (item, count) -> used[item] = (used[item] ?: 0) + count }
         dao.putSetting(SettingEntity(B.USED, B.encodeUsed(used)))
         val damage = view.fight.damage + dealt
-        dao.putSetting(SettingEntity(B.FIGHT, "${view.fight.week}:$damage"))
-        val beaten = damage >= view.fight.health
-        var paid = 0
-        if (beaten && dao.setting(B.PAID) != view.fight.week.toString()) {
-            val entry = io.github.randomtools3377.checklist.core.Entry(
-                at = nowMillis(), day = day, kind = io.github.randomtools3377.checklist.core.EntryKind.BONUS,
-                amount = B.REWARD, label = "Boss beaten: ${view.fight.boss.title}",
-            )
-            dao.insertEntry(entry.toEntity())
-            dao.putSetting(SettingEntity(B.PAID, view.fight.week.toString()))
-            paid = B.REWARD
-        }
-        io.github.randomtools3377.checklist.core.Attack(dealt, beaten, paid)
+        dao.putSetting(SettingEntity(B.FIGHT, B.encodeFight(view.fight.week, damage, view.fight.health)))
+        val after = view.fight.copy(damage = damage)
+        val paid = if (after.beaten) payBoss(after, day) else 0
+        io.github.randomtools3377.checklist.core.Attack(dealt, after.beaten, paid)
     }
 
     /** What a lucky tick paid, so undoing the tick can take it back. */
@@ -743,20 +757,35 @@ class Repository(private val db: AppDatabase, private val celebrations: GifStore
     /**
      * If the tick of [goalId] just made on [day] is lucky, pays its luck and says what; null if
      * it isn't. The same tick (the goal, the day, which tick of the day) is always as lucky.
+     * The extra is linked to its tick, so taking the tick back in any way takes the extra too;
+     * it has no goal, so it isn't experience.
      */
     suspend fun luckyTick(goalId: Long, day: LocalDate, points: Int): LuckPaid? = db.withTransaction {
-        val nth = dao.allTicks().count { it.goalId == goalId && it.day == day.toEpochDay() } - 1
+        val todays = dao.allTicks().filter { it.goalId == goalId && it.day == day.toEpochDay() }
+        val nth = todays.size - 1
         val luck = io.github.randomtools3377.checklist.core.Lucky.of(io.github.randomtools3377.checklist.core.luckSeed(goalId, day, nth), points)
             ?: return@withTransaction null
         val (amount, label, double) = when (luck) {
             is io.github.randomtools3377.checklist.core.Lucky.Luck.Double -> Triple(luck.points, "Lucky tick: the points again", true)
             is io.github.randomtools3377.checklist.core.Lucky.Luck.Chest -> Triple(luck.points, "Lucky chest", false)
         }
-        val entry = io.github.randomtools3377.checklist.core.Entry(at = nowMillis(), day = day, kind = io.github.randomtools3377.checklist.core.EntryKind.BONUS, amount = amount, label = label)
+        val tickId = todays.filter { it.stepId == null }.maxByOrNull { it.id }?.id
+        val entry = io.github.randomtools3377.checklist.core.Entry(at = nowMillis(), day = day, kind = io.github.randomtools3377.checklist.core.EntryKind.BONUS, amount = amount, tickId = tickId, label = label)
         LuckPaid(dao.insertEntry(entry.toEntity()), amount, double)
     }
 
     suspend fun removeEntry(id: Long) = dao.deleteEntry(id)
+
+    /**
+     * The day's quests: made from [due] the first time they are asked for on [day], then kept
+     * for the rest of the day, so adding, moving or reordering goals doesn't change them.
+     */
+    suspend fun questsOf(day: LocalDate, due: List<Goal>): List<io.github.randomtools3377.checklist.core.Quest> = db.withTransaction {
+        val Q = io.github.randomtools3377.checklist.core.Quests
+        Q.decodeDay(dao.setting(Q.SETTING_DAY), day) ?: Q.of(day, due).also { made ->
+            if (made.isNotEmpty()) dao.putSetting(SettingEntity(Q.SETTING_DAY, Q.encodeDay(day, made)))
+        }
+    }
 
     /** Pays a finished quest once: its bonus, and a note that it is paid. False if it already was. */
     suspend fun payQuest(day: LocalDate, quest: io.github.randomtools3377.checklist.core.Quest): Boolean = db.withTransaction {

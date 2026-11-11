@@ -1,6 +1,7 @@
 package io.github.randomtools3377.checklist.core
 
 import kotlinx.datetime.DayOfWeek
+import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalTime
 
 /*
@@ -49,7 +50,14 @@ object Titles {
     const val SETTING = "character_title"
     const val FROM_PATH = "PATH"
 
-    /** Every title the history shows. [timeOf] gives a tick's time of day. */
+    /** The titles earned so far, kept once earned like badges: "EARLY_BIRD=2026-11-09,UNSTOPPABLE=2027-01-03". */
+    const val EARNED = "character_titles_earned"
+
+    /**
+     * Every title the history shows. [timeOf] gives a tick's time of day, on the user's day that
+     * ends at [dayEndHour]: a tick after midnight that still belongs to the day counts as late
+     * (toward Night owl), not early.
+     */
     fun earned(
         ticks: List<Tick>,
         entries: List<Entry>,
@@ -57,22 +65,39 @@ object Titles {
         sheet: CharacterSheet,
         streak: StreakSettings,
         timeOf: (Long) -> LocalTime,
+        dayEndHour: Int = 0,
     ): Set<Title> {
         val found = mutableSetOf<Title>()
-        val times = ticks.map { timeOf(it.at) }
-        if (times.count { it < LocalTime(8, 0) } >= 20) found += Title.EARLY_BIRD
-        if (times.count { it >= LocalTime(22, 0) } >= 20) found += Title.NIGHT_OWL
+        val times = ticks.map { Days.secondOfDay(timeOf(it.at), dayEndHour) }
+        if (times.count { it < 8 * 60 * 60 } >= 20) found += Title.EARLY_BIRD
+        if (times.count { it >= 22 * 60 * 60 } >= 20) found += Title.NIGHT_OWL
         val weekendDays = records.count { r ->
             (r.day.dayOfWeek == DayOfWeek.SATURDAY || r.day.dayOfWeek == DayOfWeek.SUNDAY) && r.due > 0 && r.done >= r.due
         }
         if (weekendDays >= 8) found += Title.WEEKEND_WARRIOR
         if (longestMainStreak(records, streak) >= 50) found += Title.UNSTOPPABLE
         if (SkillArea.entries.all { sheet.skillLevel(it).level >= 5 }) found += Title.ALL_ROUNDER
-        if (entries.count { it.label.startsWith("Boss beaten:") } >= 4) found += Title.BOSS_SLAYER
-        if (entries.count { it.label.startsWith("Quest:") } >= 30) found += Title.QUEST_HUNTER
-        if (entries.count { it.label.startsWith("Lucky") } >= 10) found += Title.LUCKY_STAR
+        // Game payouts are bonuses with no goal; a goal's own entries carry its name, which could start the same way.
+        val payouts = entries.filter { it.kind == EntryKind.BONUS && it.goalId == null }
+        if (payouts.count { it.label.startsWith("Boss beaten:") } >= 4) found += Title.BOSS_SLAYER
+        if (payouts.count { it.label.startsWith("Quest:") } >= 30) found += Title.QUEST_HUNTER
+        if (payouts.count { it.label.startsWith("Lucky") } >= 10) found += Title.LUCKY_STAR
         return found
     }
+
+    /** Titles once earned stay, from the day they were first earned; new ones join them. */
+    fun keep(kept: Map<Title, LocalDate>, now: Set<Title>, day: LocalDate): Map<Title, LocalDate> =
+        kept + now.filter { it !in kept }.associateWith { day }
+
+    fun encodeKept(titles: Map<Title, LocalDate>): String =
+        titles.entries.sortedBy { it.key.ordinal }.joinToString(",") { "${it.key.name}=${it.value}" }
+
+    fun decodeKept(text: String?): Map<Title, LocalDate> = text.orEmpty().split(",").mapNotNull { part ->
+        val (name, day) = part.split("=").takeIf { it.size == 2 } ?: return@mapNotNull null
+        val title = Title.entries.firstOrNull { it.name == name } ?: return@mapNotNull null
+        val date = runCatching { LocalDate.parse(day) }.getOrNull() ?: return@mapNotNull null
+        title to date
+    }.toMap()
 
     /** The longest main streak in [records]: days with nothing due neither count nor break it. */
     fun longestMainStreak(records: List<DayRecord>, streak: StreakSettings): Int {

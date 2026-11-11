@@ -17,13 +17,18 @@ data class Bet(val goalId: Long, val week: LocalDate, val times: Int, val stake:
 /** A bet this week with its goal's name and how many times it has been done. */
 data class BetRow(val bet: Bet, val goal: String, val done: Int)
 
-/** Why a bet can't be placed. */
-enum class BetRefusal { TOO_POOR, ALREADY, TOO_MANY, NOT_A_HABIT }
+/**
+ * Why a bet can't be placed. [DONE_ALREADY]: the goal has already been done that many times this
+ * week; [OUT_OF_REACH]: what is left of the week can't hold that many.
+ */
+enum class BetRefusal { TOO_POOR, ALREADY, TOO_MANY, NOT_A_HABIT, DONE_ALREADY, OUT_OF_REACH }
 
 /**
- * Betting on yourself: the stake is taken when the bet is placed. Ticking the goal the number of
- * times in the week wins twice the stake straight away; a week that ends short loses it. One
- * bet per goal a week, three at a time. The numbers are the user's to change (see [Rules]).
+ * Betting on yourself: the stake is taken when the bet is placed. Doing the goal the number of
+ * times in the week (whole times, see [count]) wins twice the stake straight away; a week that
+ * ends short loses it. A bet is for more times than are done already, and no more than the rest
+ * of the week can hold. One bet per goal a week, three at a time. The numbers are the user's to
+ * change (see [Rules]).
  */
 class Bets(private val store: Store, private val book: Book) {
     companion object {
@@ -45,9 +50,54 @@ class Bets(private val store: Store, private val book: Book) {
 
         fun encode(bets: List<Bet>): String = bets.joinToString("\n") { "${it.goalId}|${it.week}|${it.times}|${it.stake}|${it.state.name}" }
 
-        /** How many times [goalId] was ticked in the week starting [monday]. */
-        fun count(ticks: List<Tick>, goalId: Long, monday: LocalDate): Int =
-            ticks.count { it.goalId == goalId && it.stepId == null && it.day >= monday && it.day <= monday.plusDays(6) }
+        /**
+         * How many times [goal] was done in the week starting [monday], in whole times: an amount
+         * counts once it is reached, not for each entry, and a goal done several times a day
+         * counts a day once all of them are done.
+         */
+        fun count(ticks: List<Tick>, goal: Goal, monday: LocalDate): Int =
+            ticks.filter { it.goalId == goal.id && it.stepId == null && it.day >= monday && it.day <= monday.plusDays(6) }
+                .groupBy { it.period to it.periodStart }.values
+                .sumOf { window -> timesIn(goal, window) }
+
+        /** Whole times done in one window's [ticks]: a day once all are done, for a goal done several times a day. */
+        private fun timesIn(goal: Goal, ticks: List<Tick>): Int {
+            val target = goal.target.coerceAtLeast(1)
+            val done = goal.timesDone(ticks).coerceAtMost(target)
+            return if (goal.severalADay) (if (done >= target) 1 else 0) else done
+        }
+
+        /**
+         * The most times [goal] can be done in the week starting [monday]: what is done, and what
+         * is still open from [today] to Sunday.
+         */
+        fun reachable(ticks: List<Tick>, goal: Goal, monday: LocalDate, today: LocalDate): Int {
+            val done = count(ticks, goal, monday)
+            val repeat = goal.repeat ?: return done
+            val sunday = monday.plusDays(6)
+            val days = generateSequence(maxOf(today, monday)) { it.plusDays(1) }.takeWhile { it <= sunday }.toList()
+            if (repeat.kind == RepeatKind.AFTER_DONE) {
+                // Due again so many days after each time it is done.
+                val first = days.firstOrNull { it >= repeat.start } ?: return done
+                return done + days.filter { it >= first }.withIndex().count { (n, _) -> n % repeat.interval.coerceAtLeast(1) == 0 }
+            }
+            val more = days.mapNotNull { repeat.window(it) }.distinctBy { it.start }.sumOf { window ->
+                val inWindow = ticks.filter { it.goalId == goal.id && it.stepId == null && it.period == window.period && it.periodStart == window.start }
+                val target = goal.target.coerceAtLeast(1)
+                val doneThere = goal.timesDone(inWindow).coerceAtMost(target)
+                if (goal.severalADay) (if (doneThere >= target) 0 else 1) else target - doneThere
+            }
+            return done + more
+        }
+
+        /**
+         * The counts a bet on [goal] can be placed for on [today]: more times than are done so
+         * far this week, and no more than the rest of the week can hold. Empty when none.
+         */
+        fun room(ticks: List<Tick>, goal: Goal, today: LocalDate): IntRange {
+            val monday = Bosses.monday(today)
+            return (count(ticks, goal, monday) + 1)..reachable(ticks, goal, monday, today)
+        }
     }
 
     /** Places a bet for this week, taking the stake. Null when placed, or why not. */
@@ -58,6 +108,10 @@ class Bets(private val store: Store, private val book: Book) {
         val bets = decode(store.setting(SETTING))
         if (bets.any { it.goalId == goalId && it.week == monday }) return@transaction BetRefusal.ALREADY
         if (bets.count { it.state == BetState.OPEN } >= MOST_OPEN) return@transaction BetRefusal.TOO_MANY
+        // A bet is on doing more than is done already, and no more than the week can still hold.
+        val room = room(store.habitTicksSince(Days.earliestOpenDay(monday)), goal, book.today())
+        if (times < room.first) return@transaction BetRefusal.DONE_ALREADY
+        if (times > room.last) return@transaction BetRefusal.OUT_OF_REACH
         if (stake > book.balance()) return@transaction BetRefusal.TOO_POOR
         store.addEntry(Entry(at = book.millis(), day = book.today(), kind = EntryKind.BET, amount = -stake, goalId = goalId, label = "Bet: ${goal.name} $times times this week"))
         store.putSetting(SETTING, encode(bets + Bet(goalId, monday, times.coerceAtLeast(1), stake)))
@@ -74,13 +128,14 @@ class Bets(private val store: Store, private val book: Book) {
         if (bets.none { it.state == BetState.OPEN }) return@transaction emptyList()
         val today = book.today()
         val earliest = bets.filter { it.state == BetState.OPEN }.minOf { it.week }
-        val ticks = store.habitTicksSince(earliest.minusDays(31))
+        val ticks = store.habitTicksSince(Days.earliestOpenDay(earliest))
         val settled = mutableListOf<Bet>()
         val updated = bets.map { bet ->
             if (bet.state != BetState.OPEN) return@map bet
-            val name = store.goal(bet.goalId)?.name ?: "a goal"
+            val goal = store.goal(bet.goalId)
+            val name = goal?.name ?: "a goal"
             when {
-                count(ticks, bet.goalId, bet.week) >= bet.times -> {
+                goal != null && count(ticks, goal, bet.week) >= bet.times -> {
                     store.addEntry(Entry(at = book.millis(), day = today, kind = EntryKind.BET, amount = bet.prize, goalId = bet.goalId, label = "Bet won: $name ${bet.times} times"))
                     bet.copy(state = BetState.WON).also { settled += it }
                 }
@@ -98,9 +153,12 @@ class Bets(private val store: Store, private val book: Book) {
         Rules.load(store)
         val bets = decode(store.setting(SETTING))
         val monday = Bosses.monday(book.today())
-        val ticks = store.habitTicksSince(monday.minusDays(31))
+        if (bets.none { it.state == BetState.WON && it.week == monday }) return@transaction
+        val ticks = store.habitTicksSince(Days.earliestOpenDay(monday))
         val updated = bets.map { bet ->
-            if (bet.state != BetState.WON || bet.week != monday || count(ticks, bet.goalId, bet.week) >= bet.times) return@map bet
+            if (bet.state != BetState.WON || bet.week != monday) return@map bet
+            val goal = store.goal(bet.goalId)
+            if (goal == null || count(ticks, goal, bet.week) >= bet.times) return@map bet
             val wins = store.entries(bet.week, book.today()).filter { it.kind == EntryKind.BET && it.goalId == bet.goalId }
             // What it won; if the rules changed since, the win of this goal's bet all the same.
             (wins.lastOrNull { it.amount == bet.prize } ?: wins.lastOrNull { it.amount > 0 && it.label.startsWith("Bet won:") })

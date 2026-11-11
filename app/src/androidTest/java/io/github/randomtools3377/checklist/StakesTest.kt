@@ -8,6 +8,7 @@ import io.github.randomtools3377.checklist.core.Bets
 import io.github.randomtools3377.checklist.core.Entry
 import io.github.randomtools3377.checklist.core.EntryKind
 import io.github.randomtools3377.checklist.core.Feature
+import io.github.randomtools3377.checklist.core.Period
 import io.github.randomtools3377.checklist.core.Repeat
 import io.github.randomtools3377.checklist.data.HabitDraft
 import io.github.randomtools3377.checklist.data.SettingEntity
@@ -28,9 +29,10 @@ class StakesTest {
             val c = (InstrumentationRegistry.getInstrumentation().targetContext.applicationContext as ChecklistApplication).container
             c.db.clearAllTables()
             listOf(Feature.BETS, Feature.SHIELDS).forEach { c.db.dao().putSetting(SettingEntity(it.key, it.onValue)) }
+            // Five times a week, so a bet on 3 (more than the 1 done) fits whatever day the test runs.
             c.repository.saveHabit(
                 HabitDraft(
-                    id = 0, name = "Gym", icon = "🏋️", points = 10, repeat = Repeat.everyDay(nowLocal().date), target = 1, bonus = 0,
+                    id = 0, name = "Gym", icon = "🏋️", points = 10, repeat = Repeat.timesPer(Period.WEEKLY, nowLocal().date), target = 5, bonus = 0,
                     minutes = null, at = null, finishBy = null, finishDay = null,
                 ),
             )

@@ -35,6 +35,24 @@ class BookTest {
     private fun reward(price: Int) = store.addReward(Reward(name = "Reward", icon = "🎁", price = price))
 
     @Test
+    fun aLuckyExtraGoesWithItsOwnTickOnly() = runTest {
+        // A counted goal: 2 a day, 3 for finishing. The first tick was lucky (+12, linked to it).
+        val water = habit(points = 5, target = 2, bonus = 3)
+        book.tickHabit(water.id)
+        val first = store.ticks.single()
+        store.addEntry(Entry(at = 0, day = first.day, kind = EntryKind.BONUS, amount = 12, tickId = first.id, label = "Lucky chest"))
+        val second = book.tickHabit(water.id) as TickResult.Ticked
+        assertEquals(3, second.bonus, "the lucky extra isn't taken for a finishing bonus")
+        assertEquals(5 + 12 + 5 + 3, book.balance())
+        // Taking the second back takes its finishing bonus, but not the first tick's luck.
+        book.undoHabitTick(water.id)
+        assertEquals(5 + 12, book.balance())
+        // Taking the first back takes its luck too, so ticking again can't pay it twice.
+        book.undoHabitTick(water.id)
+        assertEquals(0, book.balance())
+    }
+
+    @Test
     fun tickingEarnsThePointsTheGoalPays() = runTest {
         val goal = habit(points = 10)
 

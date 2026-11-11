@@ -2,6 +2,7 @@ package io.github.randomtools3377.checklist.core
 
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.isoDayNumber
+import kotlin.math.roundToInt
 import kotlin.random.Random
 
 /*
@@ -61,7 +62,11 @@ object Bosses {
     /** What beating a boss pays. */
     val REWARD: Int get() = Rules.current.bossReward
 
-    /** The settings: this week's fight as "monday:damage"; items used as "FITNESS:3,MIND:2"; when items started; the week paid for. */
+    /**
+     * The settings: this week's fight as "monday:damage:health" (the health is kept from the
+     * first time the week is seen, so changing goals or rules mid-week doesn't move it); items
+     * used as "FITNESS:3,MIND:2"; when items started; the week paid for.
+     */
     const val FIGHT = "boss_fight"
     const val USED = "items_used"
     const val ITEMS_FROM = "items_from"
@@ -97,12 +102,27 @@ object Bosses {
     /** What using [items] does to [boss]. */
     fun damage(items: Map<Item, Int>, boss: Boss): Int = items.entries.sumOf { (item, count) -> hit(item, boss) * count }
 
-    /** How many ticks the goals ask for in the week starting [monday]. */
-    fun expectedTicks(goals: List<Goal>, monday: LocalDate): Int =
-        goals.filter { !it.archived && it.kind == GoalKind.HABIT }.sumOf { goal ->
-            val repeat = goal.repeat ?: return@sumOf 0
-            (0 until 7).count { repeat.window(monday.plusDays(it))?.start == monday.plusDays(it) } * goal.target
+    /**
+     * How many ticks the goals ask for in the week starting [monday]. A goal done so many times
+     * a month or a year has its times spread over the days of the month or year, so the week
+     * holding the 1st doesn't carry them all.
+     */
+    fun expectedTicks(goals: List<Goal>, monday: LocalDate): Int {
+        var total = 0.0
+        for (goal in goals) {
+            if (goal.archived || goal.kind != GoalKind.HABIT) continue
+            val repeat = goal.repeat ?: continue
+            for (n in 0 until 7) {
+                val day = monday.plusDays(n)
+                val window = repeat.window(day) ?: continue
+                total += when (window.period) {
+                    Period.MONTHLY, Period.YEARLY -> goal.target.toDouble() / (window.end.toEpochDays() - window.start.toEpochDays() + 1).toDouble()
+                    else -> if (window.start == day) goal.target.toDouble() else 0.0
+                }
+            }
         }
+        return total.roundToInt()
+    }
 
     /** Items in hand: one for every tick since items started, less those used. */
     fun inventory(ticks: List<Tick>, goals: List<Goal>, since: Long, used: Map<Item, Int>): Map<Item, Int> {
@@ -121,11 +141,20 @@ object Bosses {
         count.toIntOrNull()?.takeIf { it > 0 }?.let { item to it }
     }.toMap()
 
-    /** The damage done this week, from "monday:damage"; 0 for another week. */
+    /** The damage done this week, from "monday:damage:health" (or the older "monday:damage"); 0 for another week. */
     fun damageIn(text: String?, monday: LocalDate): Int {
-        val (week, damage) = text?.split(":")?.takeIf { it.size == 2 } ?: return 0
-        return if (week == monday.toString()) damage.toIntOrNull() ?: 0 else 0
+        val parts = text?.split(":")?.takeIf { it.size == 2 || it.size == 3 } ?: return 0
+        return if (parts[0] == monday.toString()) parts[1].toIntOrNull() ?: 0 else 0
     }
+
+    /** This week's boss's health as it was kept; null when it isn't kept yet for this week. */
+    fun healthIn(text: String?, monday: LocalDate): Int? {
+        val parts = text?.split(":")?.takeIf { it.size == 3 } ?: return null
+        return if (parts[0] == monday.toString()) parts[2].toIntOrNull()?.takeIf { it >= 0 } else null
+    }
+
+    /** The fight as kept: "monday:damage:health". */
+    fun encodeFight(monday: LocalDate, damage: Int, health: Int): String = "$monday:$damage:$health"
 }
 
 /**

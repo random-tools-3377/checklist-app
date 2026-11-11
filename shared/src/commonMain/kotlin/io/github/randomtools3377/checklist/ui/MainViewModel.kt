@@ -1261,18 +1261,29 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
             offerTickUndo(goalId, result, luck, wonBets = won.sumOf { it.prize }) {
                 book.undoHabitTick(goalId)
                 luck?.let { repository.removeEntry(it.entryId) }
-                if (won.isNotEmpty()) parts.bets.takeBackWins()
+                parts.bets.takeBackWins()
             }
         }
     }
 
     /** "I slipped" on a goal to quit: today is a miss now, and the misses screen asks why. */
     fun slip(goalId: Long) {
-        viewModelScope.launch { lapses.slip(goalId) }
+        viewModelScope.launch {
+            lapses.slip(goalId)
+            // A tick taken back that had won a bet takes the win back too.
+            parts.bets.takeBackWins()
+        }
     }
 
+    /**
+     * Takes back the goal's latest tick, with what it paid: a lucky extra goes with its tick,
+     * and a bet it had won is open again.
+     */
     fun undoHabitTick(goalId: Long) {
-        viewModelScope.launch { book.undoHabitTick(goalId) }
+        viewModelScope.launch {
+            book.undoHabitTick(goalId)
+            parts.bets.takeBackWins()
+        }
     }
 
     /** Enters how much of a goal's amount was done; a timing from Start and Stop ends with it. */
@@ -1281,7 +1292,10 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
             val result = book.logAmount(goalId, amount, seconds)
             if (seconds != null) repository.setSetting(SETTING_STOPWATCH, "")
             onResult(result)
-            offerTickUndo(goalId, result) { book.undoHabitTick(goalId) }
+            offerTickUndo(goalId, result) {
+                book.undoHabitTick(goalId)
+                parts.bets.takeBackWins()
+            }
         }
     }
 
@@ -1350,12 +1364,20 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
             val result = book.checkItem(stepId)
             onResult(result)
             val step = dao.step(stepId)
-            if (step != null && result is TickResult.Ticked) offerUndo("${step.name} ticked") { book.uncheckItem(stepId) }
+            if (step != null && result is TickResult.Ticked) {
+                offerUndo("${step.name} ticked") {
+                    book.uncheckItem(stepId)
+                    parts.bets.takeBackWins()
+                }
+            }
         }
     }
 
     fun uncheckItem(stepId: Long) {
-        viewModelScope.launch { book.uncheckItem(stepId) }
+        viewModelScope.launch {
+            book.uncheckItem(stepId)
+            parts.bets.takeBackWins()
+        }
     }
 
     /** "Done" on a routine: every item still open, and so the routine. */
@@ -1363,12 +1385,18 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
         viewModelScope.launch {
             val result = book.finishRoutine(goalId)
             onResult(result)
-            offerTickUndo(goalId, result) { book.undoRoutine(goalId) }
+            offerTickUndo(goalId, result) {
+                book.undoRoutine(goalId)
+                parts.bets.takeBackWins()
+            }
         }
     }
 
     fun undoRoutine(goalId: Long) {
-        viewModelScope.launch { book.undoRoutine(goalId) }
+        viewModelScope.launch {
+            book.undoRoutine(goalId)
+            parts.bets.takeBackWins()
+        }
     }
 
     fun tickStep(stepId: Long, onResult: (TickResult) -> Unit = {}) {
@@ -1633,23 +1661,31 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
             }
         }.state(null)
 
-    /** The character's path, its titles earned, and the title shown, while the character is on. */
+    /**
+     * The character's path, its titles earned, and the title shown, while the character is on.
+     * A title once earned is kept, like a badge, even when the history it came from has gone.
+     */
     val characterTitles: StateFlow<CharacterTitles?> =
         combine(character, dao.observeSetting(io.github.randomtools3377.checklist.core.Paths.SETTING), dao.observeSetting(io.github.randomtools3377.checklist.core.Titles.SETTING), settings) { sheet, path, title, s ->
-            sheet?.let { Triple(it, io.github.randomtools3377.checklist.core.Paths.decode(path), title) to s.streak }
+            sheet?.let { Triple(it, io.github.randomtools3377.checklist.core.Paths.decode(path), title) to s }
         }.mapLatest { found ->
-            found?.let { (picked, streak) ->
+            found?.let { (picked, s) ->
                 val (sheet, path, title) = picked
                 withContext(Dispatchers.Default) {
+                    val T = io.github.randomtools3377.checklist.core.Titles
                     val day = currentDay()
                     val from = day.minusDays(STREAK_DAYS)
                     val goals = dao.allGoals().map { it.toCore() }
                     val ticks = dao.allTicks().map { it.toCore() }
                     val records = StreakCounter.records(from, day, goals.filter { !it.archived }, ticks.filter { it.stepId == null }, dao.allLapses().map { it.toCore() })
-                    val earned = io.github.randomtools3377.checklist.core.Titles.earned(
-                        ticks, dao.allEntries().map { it.toCore() }, records, sheet, streak, { at -> at.toLocalDateTime().time },
+                    val now = T.earned(
+                        ticks, dao.allEntries().map { it.toCore() }, records, sheet, s.streak, { at -> at.toLocalDateTime().time }, s.dayEndHour,
                     )
-                    CharacterTitles(path, earned, title, io.github.randomtools3377.checklist.core.Titles.shown(title, path, earned))
+                    val kept = T.decodeKept(dao.setting(T.EARNED))
+                    val all = T.keep(kept, now, day)
+                    if (all != kept) repository.setSetting(T.EARNED, T.encodeKept(all))
+                    val earned = all.keys
+                    CharacterTitles(path, earned, title, T.shown(title, path, earned))
                 }
             }
         }.state(null)
@@ -1677,8 +1713,11 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
                         val earned = entries.map { it.toCore() }
                             .filter { it.kind in io.github.randomtools3377.checklist.core.Experience.KINDS && it.goalId != null }
                             .sumOf { it.amount }
-                        val list = io.github.randomtools3377.checklist.core.Quests.of(day, rows.map { it.goal }).map { quest ->
-                            io.github.randomtools3377.checklist.core.Quests.progress(quest, rows, todays, { at -> at.toLocalDateTime().time }, earned)
+                        // The day's quests are made once and kept all day, so changing the goals doesn't reshuffle them.
+                        val made = repository.questsOf(day, rows.map { it.goal })
+                        val dayEndHour = settings.value.dayEndHour
+                        val list = io.github.randomtools3377.checklist.core.Quests.shown(made, rows).map { quest ->
+                            io.github.randomtools3377.checklist.core.Quests.progress(quest, rows, todays, { at -> at.toLocalDateTime().time }, earned, dayEndHour)
                         }
                         io.github.randomtools3377.checklist.core.DayQuests(day, list)
                     }
@@ -1725,11 +1764,21 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
                 val ticks = dao.allTicks().map { it.toCore() }
                 io.github.randomtools3377.checklist.core.Bets.decode(text).filter { it.week == monday }.mapNotNull { bet ->
                     goals.firstOrNull { it.id == bet.goalId }?.let { goal ->
-                        io.github.randomtools3377.checklist.core.BetRow(bet, "${goal.icon} ${goal.name}", io.github.randomtools3377.checklist.core.Bets.count(ticks, bet.goalId, monday))
+                        io.github.randomtools3377.checklist.core.BetRow(bet, "${goal.icon} ${goal.name}", io.github.randomtools3377.checklist.core.Bets.count(ticks, goal.toCore(), monday))
                     }
                 }
             }
         }.state(null)
+
+    /** For each of [goalIds], the counts a bet can be placed for now; a goal with none is left out. */
+    suspend fun betRooms(goalIds: List<Long>): Map<Long, IntRange> = withContext(Dispatchers.Default) {
+        val day = currentDay()
+        val ticks = dao.habitTicksSince(Days.earliestOpenDay(io.github.randomtools3377.checklist.core.Bosses.monday(day)).toEpochDay()).map { it.toCore() }
+        goalIds.mapNotNull { id ->
+            val goal = dao.goal(id)?.toCore() ?: return@mapNotNull null
+            io.github.randomtools3377.checklist.core.Bets.room(ticks, goal, day).takeIf { !it.isEmpty() }?.let { id to it }
+        }.toMap()
+    }
 
     /** Bets that [goalId] will be done [times] times this week, for [stake] points; [onDone] gets why not, or null. */
     fun placeBet(goalId: Long, times: Int, stake: Int, onDone: (io.github.randomtools3377.checklist.core.BetRefusal?) -> Unit) {

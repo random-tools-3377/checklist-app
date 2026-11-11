@@ -60,6 +60,60 @@ class StakesTest {
     }
 
     @Test
+    fun aBetIsOnMoreThanIsDoneAndNoMoreThanTheWeekHolds() = runTest {
+        val store = MemoryStore()
+        val clock = TestClock(LocalDateTime(2026, 11, 9, 10, 0))
+        val book = Book(store, clock) { kotlinx.datetime.TimeZone.UTC }
+        val bets = Bets(store, book)
+        val read = store.addGoal(Goal(kind = GoalKind.HABIT, name = "Read", icon = "📖", points = 5, repeat = Repeat.everyDay(monday)))
+        val weekdays = Repeat(RepeatKind.WEEKDAYS, monday, weekdays = setOf(1, 3, 5))
+        val gym = store.addGoal(Goal(kind = GoalKind.HABIT, name = "Gym", icon = "🏋️", points = 5, repeat = weekdays))
+        store.addEntry(Entry(at = 0, day = monday, kind = EntryKind.TICK, amount = 100, label = "Start"))
+        // Read on Monday to Wednesday, then a bet on Thursday.
+        repeat(3) { n ->
+            clock.set(LocalDateTime(2026, 11, 9 + n, 10, 0))
+            book.tickHabit(read.id)
+        }
+        clock.set(LocalDateTime(2026, 11, 12, 10, 0))
+        val ticks = store.habitTicksSince(monday)
+        assertEquals(4..7, Bets.room(ticks, store.goal(read.id)!!, book.today()), "more than the 3 done, up to Sunday")
+        assertEquals(BetRefusal.DONE_ALREADY, bets.place(read.id, 3, 10), "already done: no risk in it")
+        assertEquals(BetRefusal.OUT_OF_REACH, bets.place(read.id, 8, 10))
+        // Monday, Wednesday and Friday: only Friday is left, and nothing is done.
+        assertEquals(1..1, Bets.room(ticks, store.goal(gym.id)!!, book.today()))
+        assertEquals(BetRefusal.OUT_OF_REACH, bets.place(gym.id, 2, 10))
+        assertNull(bets.place(read.id, 4, 10))
+    }
+
+    @Test
+    fun aBetCountsWholeTimes() {
+        val water = Goal(id = 1, kind = GoalKind.HABIT, name = "Water", icon = "💧", points = 1, repeat = Repeat.everyDay(monday), target = 8)
+        val pages = Goal(id = 2, kind = GoalKind.HABIT, name = "Pages", icon = "📖", points = 5, repeat = Repeat.everyDay(monday), amount = 20.0)
+        val gym = Goal(id = 3, kind = GoalKind.HABIT, name = "Gym", icon = "🏋️", points = 5, repeat = Repeat.timesPer(Period.WEEKLY, monday), target = 3)
+        fun tick(goal: Goal, day: LocalDate, amount: Double? = null) = Tick(
+            goalId = goal.id, stepId = null, at = 0, day = day, period = goal.period, periodStart = if (goal.period == Period.WEEKLY) monday else day, amount = amount,
+        )
+        // Eight glasses on Monday, three on Tuesday: one whole day.
+        val glasses = List(8) { tick(water, monday) } + List(3) { tick(water, monday.plusDays(1)) }
+        assertEquals(1, Bets.count(glasses, water, monday))
+        // Three entries of 5 pages make no time of 20; one of 20 does.
+        val read = List(3) { tick(pages, monday, 5.0) } + tick(pages, monday.plusDays(1), 20.0)
+        assertEquals(1, Bets.count(read, pages, monday))
+        // Each time of a goal done so many times a week counts.
+        assertEquals(2, Bets.count(List(2) { tick(gym, monday.plusDays(it)) }, gym, monday))
+        assertEquals(3, Bets.reachable(List(2) { tick(gym, monday.plusDays(it)) }, gym, monday, monday.plusDays(5)))
+        // Water on Wednesday morning, 2 of 8 done: Wednesday to Sunday can each still be a whole day.
+        val wednesday = glasses + List(2) { tick(water, monday.plusDays(2)) }
+        assertEquals(1 + 5, Bets.reachable(wednesday, water, monday, monday.plusDays(2)))
+    }
+
+    @Test
+    fun aGoalDueAgainAfterItIsDoneCanBeDoneEveryFewDays() {
+        val every2 = Goal(id = 1, kind = GoalKind.HABIT, name = "Plants", icon = "🪴", points = 5, repeat = Repeat(RepeatKind.AFTER_DONE, monday, interval = 2))
+        assertEquals(4, Bets.reachable(emptyList(), every2, monday, monday), "Monday, Wednesday, Friday and Sunday")
+    }
+
+    @Test
     fun betsAreKeptAndReadBack() {
         val list = listOf(Bet(3, monday, 4, 25), Bet(5, monday, 2, 10, BetState.WON))
         assertEquals(list, Bets.decode(Bets.encode(list)))

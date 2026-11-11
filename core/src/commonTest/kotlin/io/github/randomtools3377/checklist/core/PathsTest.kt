@@ -47,6 +47,35 @@ class PathsTest {
     }
 
     @Test
+    fun ticksAfterMidnightOnTheUsersDayAreNightOwlTicks() {
+        // With the day ending at 4 am, 0:30 is the end of the day before, not early.
+        val late = List(20) { tick(30) }
+        assertEquals(setOf(Title.NIGHT_OWL), Titles.earned(late, emptyList(), emptyList(), sheet, streak, timeOf, dayEndHour = 4))
+        assertEquals(setOf(Title.EARLY_BIRD), Titles.earned(late, emptyList(), emptyList(), sheet, streak, timeOf), "the day ends at midnight")
+    }
+
+    @Test
+    fun aGoalNamedLikeAGamePayoutEarnsNoTitle() {
+        val dips = List(10) { Entry(at = 1, day = monday, kind = EntryKind.TICK, amount = 5, goalId = 1, label = "Lucky dip") }
+        val bonuses = List(10) { Entry(at = 1, day = monday, kind = EntryKind.BONUS, amount = 5, goalId = 1, label = "Lucky dip") }
+        assertTrue(Title.LUCKY_STAR !in Titles.earned(emptyList(), dips + bonuses, emptyList(), sheet, streak, timeOf))
+        val lucky = List(10) { Entry(at = 1, day = monday, kind = EntryKind.BONUS, amount = 12, tickId = 3, label = "Lucky chest") }
+        assertTrue(Title.LUCKY_STAR in Titles.earned(emptyList(), lucky, emptyList(), sheet, streak, timeOf))
+    }
+
+    @Test
+    fun aTitleOnceEarnedIsKept() {
+        val kept = Titles.keep(emptyMap(), setOf(Title.UNSTOPPABLE), monday)
+        assertEquals(mapOf(Title.UNSTOPPABLE to monday), kept)
+        // Later the streak is out of sight, and another title comes.
+        val later = Titles.keep(kept, setOf(Title.EARLY_BIRD), monday.plusDays(500))
+        assertEquals(mapOf(Title.UNSTOPPABLE to monday, Title.EARLY_BIRD to monday.plusDays(500)), later)
+        assertEquals(later, Titles.decodeKept(Titles.encodeKept(later)))
+        assertTrue(Titles.decodeKept("NOPE=2026-11-09,EARLY_BIRD=x").isEmpty())
+        assertEquals("🚂 Unstoppable", Titles.shown("UNSTOPPABLE", null, later.keys))
+    }
+
+    @Test
     fun theLongestStreakSkipsEmptyDays() {
         val days = (0 until 60).map { n ->
             when {

@@ -530,7 +530,7 @@ fun TodayScreen(
                 TodaySection.BETS -> if (bets != null) item(key = "bets") {
                     bets?.let { rows ->
                         val habits = (view.dueToday + view.thisWeek).map { it.goal }.filter { it.kind == io.github.randomtools3377.checklist.core.GoalKind.HABIT }.distinctBy { it.id }
-                        BetsCard(rows, habits, view.balance) { goalId, times, stake, done -> vm.placeBet(goalId, times, stake, done) }
+                        BetsCard(rows, habits, view.balance, rooms = { ids -> vm.betRooms(ids) }) { goalId, times, stake, done -> vm.placeBet(goalId, times, stake, done) }
                         Spacer(Modifier.height(12.dp))
                     }
                 }

@@ -122,9 +122,14 @@ private val GoalKey = ActionParameters.Key<Long>("goal")
 class ToggleTick : ActionCallback {
     override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
         val goalId = parameters[GoalKey] ?: return
-        val book = (context.applicationContext as ChecklistApplication).container.book
+        val container = (context.applicationContext as ChecklistApplication).container
+        val book = container.book
         val result = book.tickHabit(goalId)
-        if (result == TickResult.AlreadyDone) book.undoHabitTick(goalId)
+        if (result == TickResult.AlreadyDone) {
+            book.undoHabitTick(goalId)
+            // A bet that tick had won is open again.
+            container.bets.takeBackWins()
+        }
         if (result is TickResult.Ticked && result.finished) io.github.randomtools3377.checklist.reminders.Reminders.afterDone(context, goalId)
         CalendarWidget().update(context, glanceId)
     }

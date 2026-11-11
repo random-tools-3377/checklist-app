@@ -3,6 +3,7 @@ package io.github.randomtools3377.checklist.core
 import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
+import kotlinx.datetime.LocalTime
 import kotlinx.datetime.isoDayNumber
 import kotlinx.datetime.minus
 import kotlinx.datetime.plus
@@ -20,6 +21,13 @@ object Days {
         val hour = dayEndHour.coerceIn(0, MAX_DAY_END_HOUR)
         return if (moment.hour < hour) moment.date.minusDays(1) else moment.date
     }
+
+    /**
+     * Where [time] falls in the user's day, in seconds from midnight. With the day ending at
+     * 4am, 1:30am belongs to the day before, so it comes after 11pm (as 25:30), not first.
+     */
+    fun secondOfDay(time: LocalTime, dayEndHour: Int): Int =
+        time.toSecondOfDay() + if (time.hour < dayEndHour.coerceIn(0, MAX_DAY_END_HOUR)) 24 * 60 * 60 else 0
 
     /** First day of the [period] that contains [day]. */
     fun periodStart(day: LocalDate, period: Period): LocalDate = when (period) {

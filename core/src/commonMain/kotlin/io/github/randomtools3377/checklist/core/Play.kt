@@ -13,7 +13,7 @@ import kotlin.random.Random
 
 enum class QuestKind { EARLY, GOAL, AREA, ALL_BY, POINTS }
 
-/** One of the day's quests. [id] is its place in the day's list. */
+/** One of the day's quests. [id] is its place in the day's list, which is kept all day (see [Quests.SETTING_DAY]). */
 data class Quest(
     val id: Int,
     val kind: QuestKind,
@@ -40,6 +40,12 @@ object Quests {
 
     /** The quests already paid, as "2026-11-11:0,2" for that day. */
     const val SETTING_PAID = "quests_paid"
+
+    /**
+     * The day's quests, kept the first time they are made, so adding, moving or reordering goals
+     * later in the day doesn't change them: the day on the first line, then a quest a line.
+     */
+    const val SETTING_DAY = "quests_day"
 
     private val NOON = LocalTime(12, 0)
     private val EVENING = LocalTime(20, 0)
@@ -76,23 +82,70 @@ object Quests {
 
     /**
      * How far along [quest] is: [rows] are today's goals, [ticks] today's ticks with [timeOf]
-     * giving their time, [earned] what goals have paid today.
+     * giving their time, [earned] what goals have paid today. Times are on the user's day, which
+     * ends at [dayEndHour]: a tick after midnight that still belongs to the day is late, not early.
      */
-    fun progress(quest: Quest, rows: List<HabitRow>, ticks: List<Tick>, timeOf: (Long) -> LocalTime, earned: Int): QuestProgress {
+    fun progress(quest: Quest, rows: List<HabitRow>, ticks: List<Tick>, timeOf: (Long) -> LocalTime, earned: Int, dayEndHour: Int = 0): QuestProgress {
+        fun second(at: Long) = Days.secondOfDay(timeOf(at), dayEndHour)
+        val by = quest.by?.let { Days.secondOfDay(it, dayEndHour) }
+        val inArea = rows.filter { SkillArea.of(it.goal) == quest.area }
         val done = when (quest.kind) {
-            QuestKind.EARLY -> ticks.filter { timeOf(it.at) < quest.by!! }.map { it.goalId }.distinct().size
+            QuestKind.EARLY -> ticks.filter { by == null || second(it.at) < by }.map { it.goalId }.distinct().size
             QuestKind.GOAL -> if (rows.any { it.goal.id == quest.goalId && it.done }) 1 else 0
-            QuestKind.AREA -> rows.count { SkillArea.of(it.goal) == quest.area && it.done }
+            QuestKind.AREA -> inArea.count { it.done }
             QuestKind.ALL_BY -> rows.count { it.done }
             QuestKind.POINTS -> earned
         }
+        // Everything due is however many are due now; the quest itself is kept all day.
+        val shownQuest = if (quest.kind == QuestKind.ALL_BY) quest.copy(target = rows.size) else quest
         val complete = when (quest.kind) {
             // Everything done, and the last of it ticked in time.
             QuestKind.ALL_BY -> rows.isNotEmpty() && rows.all { it.done } &&
-                (ticks.maxOfOrNull { timeOf(it.at) } ?: LocalTime(0, 0)) <= quest.by!!
+                (by == null || (ticks.maxOfOrNull { second(it.at) } ?: 0) <= by)
+            // Every goal of the area: also when one of them was taken off today's list since.
+            QuestKind.AREA -> done >= quest.target || (inArea.isNotEmpty() && inArea.all { it.done })
             else -> done >= quest.target
         }
-        return QuestProgress(quest, done.coerceAtMost(quest.target), complete)
+        return QuestProgress(shownQuest, done.coerceAtMost(shownQuest.target), complete)
+    }
+
+    /**
+     * The day's quests to show: a quest naming a goal that isn't on today's list any more
+     * (removed, moved to another day, or private while the lock is on) is left out.
+     */
+    fun shown(quests: List<Quest>, rows: List<HabitRow>): List<Quest> =
+        quests.filter { it.kind != QuestKind.GOAL || rows.any { row -> row.goal.id == it.goalId } }
+
+    fun encodeDay(day: LocalDate, quests: List<Quest>): String =
+        (listOf(day.toString()) + quests.map { q ->
+            listOf(q.id, q.kind.name, q.target, q.reward, q.goalId ?: "", q.area?.name ?: "", q.by ?: "", q.text.replace('\n', ' ')).joinToString("|")
+        }).joinToString("\n")
+
+    /** The quests kept for [day]; null when none are kept for it. */
+    fun decodeDay(text: String?, day: LocalDate): List<Quest>? {
+        val lines = text?.lines() ?: return null
+        if (lines.firstOrNull() != day.toString()) return null
+        val quests = lines.drop(1).mapNotNull { line ->
+            val p = line.split("|", limit = 8).takeIf { it.size == 8 } ?: return@mapNotNull null
+            Quest(
+                id = p[0].toIntOrNull() ?: return@mapNotNull null,
+                kind = QuestKind.entries.firstOrNull { it.name == p[1] } ?: return@mapNotNull null,
+                text = p[7],
+                target = p[2].toIntOrNull() ?: return@mapNotNull null,
+                reward = p[3].toIntOrNull() ?: return@mapNotNull null,
+                goalId = p[4].toLongOrNull(),
+                area = SkillArea.entries.firstOrNull { it.name == p[5] },
+                by = p[6].takeIf { it.isNotEmpty() }?.let { runCatching { LocalTime.parse(it) }.getOrNull() },
+            ).takeIf { q ->
+                when (q.kind) {
+                    QuestKind.EARLY, QuestKind.ALL_BY -> q.by != null
+                    QuestKind.GOAL -> q.goalId != null
+                    QuestKind.AREA -> q.area != null
+                    QuestKind.POINTS -> true
+                }
+            }
+        }
+        return quests.takeIf { it.isNotEmpty() }
     }
 
     fun paidOn(text: String?, day: LocalDate): Set<Int> {
@@ -124,11 +177,14 @@ class Combos(private val store: Store, private val book: Book) {
     suspend fun pay(): List<Entry> = store.transaction {
         Rules.load(store)
         val yesterday = book.today().minusDays(1)
+        val through = store.setting(THROUGH)?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
         if (!Feature.isOn(store, Feature.COMBOS)) {
+            // A day that ended while combos were off was never looked at, so it ends the combo:
+            // turned on again, it starts from 1.
+            if (through == null || through < yesterday) store.putSetting(COUNT, "0")
             store.putSetting(THROUGH, yesterday.toString())
             return@transaction emptyList()
         }
-        val through = store.setting(THROUGH)?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
         if (through == null) {
             store.putSetting(THROUGH, yesterday.toString())
             return@transaction emptyList()
