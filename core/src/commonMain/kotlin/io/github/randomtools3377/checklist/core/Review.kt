@@ -31,6 +31,7 @@ data class ReviewSummary(
     /** How often each reason was given, most first, as the user sees it (their own ones by their words). */
     val reasons: List<Pair<String, Int>>,
     val earned: Int,
+    /** Rewards bought, less ones returned. Below 0 when more came back than was bought. */
     val spent: Int,
     val lost: Int,
     val days: List<DayRecord>,
@@ -46,6 +47,10 @@ data class ReviewSummary(
      * has a category.
      */
     val categories: List<CategorySummary> = emptyList(),
+    /** Savings interest paid in the stretch. */
+    val interest: Int = 0,
+    /** Bets on yourself in the stretch: stakes placed (taken off) and wins (paid), together. */
+    val bets: Int = 0,
 ) {
     val mostSkipped: GoalSummary? get() = goals.filter { it.skipped > 0 }.maxByOrNull { it.skipped }
     val mostMissed: GoalSummary? get() = goals.filter { it.missed > 0 }.maxByOrNull { it.missed }
@@ -53,12 +58,19 @@ data class ReviewSummary(
     val mostTicked: GoalSummary? get() = goals.filter { it.ticks > 0 }.maxByOrNull { it.ticks }
 
     private fun rate(day: Int): Double? = weekdays[day]?.takeIf { it.first > 0 }?.let { it.second.toDouble() / it.first }
-    val bestWeekday: Int? get() = (1..7).filter { rate(it) != null }.maxByOrNull { rate(it)!! }
-    val worstWeekday: Int? get() = (1..7).filter { rate(it) != null }.minByOrNull { rate(it)!! }
+
+    /** Each weekday with something due, and its share done; empty when they all went the same. */
+    private val rates: Map<Int, Double>
+        get() = (1..7).mapNotNull { day -> rate(day)?.let { day to it } }.toMap().takeIf { it.values.distinct().size > 1 }.orEmpty()
+    val bestWeekday: Int? get() = rates.maxByOrNull { it.value }?.key
+    val worstWeekday: Int? get() = rates.minByOrNull { it.value }?.key
 }
 
 object Review {
-    /** Due and done from the habits, and points (ticks and bonuses) from every goal, per category. */
+    /**
+     * Due and done from the habits, and points (ticks and bonuses) from every goal, per category.
+     * A removed goal's points stay with its category, never under "No category".
+     */
     private fun byCategory(goals: List<Goal>, summaries: List<GoalSummary>, entries: List<Entry>): List<CategorySummary> {
         val names = Categories.of(goals)
         if (names.isEmpty()) return emptyList()
@@ -75,13 +87,15 @@ object Review {
     fun range(day: LocalDate, period: Period): Pair<LocalDate, LocalDate> = Days.periodStart(day, period) to Days.periodEnd(day, period)
 
     /**
-     * Sums up [from] to [to]. A habit counts each time its window ends inside the stretch:
-     * done if ticked enough (or, for a single day, skipped), skipped if a skip covered it, missed
-     * if a miss was recorded. Points come from the ledger: earned (ticks, bonuses, refunds),
-     * spent (rewards, less returns) and lost (penalties). A habit counts only from the day
-     * [countsFrom] gives it, the day it was added or brought back. With [hidePrivate], for while
-     * the privacy lock is on for private goals, those goals are left out with their ticks, skips,
-     * misses and points, as on Today.
+     * Sums up [from] to [to]. A habit counts each time its window ends inside the stretch, up to
+     * [today] (days still to come aren't counted yet): done if ticked enough (or, for a single
+     * day, skipped), skipped if a skip covered it, missed if a miss was recorded. [goals] may
+     * include removed ones: they aren't counted as due, but their points keep their category.
+     * Points come from the ledger: earned (ticks, bonuses, refunds, perfect days, challenges),
+     * spent (rewards, less returns), lost (penalties), interest and bets. A habit counts only
+     * from the day [countsFrom] gives it, the day it was added or brought back. With
+     * [hidePrivate], for while the privacy lock is on for private goals, those goals are left
+     * out with their ticks, skips, misses and points, as on Today.
      */
     fun summarize(
         from: LocalDate,
@@ -109,7 +123,9 @@ object Review {
         }
         val live = lapses.filter { !it.forgotten }
         val inRange = entries.filter { it.day >= from && it.day <= to }
-        val habits = goals.filter { it.isHabitLike && it.repeat != null }
+        val active = goals.filter { !it.archived }
+        val habits = active.filter { it.isHabitLike && it.repeat != null }
+        val windows = PastWindows(habits, ticks, lapses)
         val weekdayDue = IntArray(8)
         val weekdayDone = IntArray(8)
         val summaries = habits.map { goal ->
@@ -120,8 +136,8 @@ object Review {
             var run = 0
             var longest = 0
             var day = countsFrom(goal)?.let { maxOf(from, it) } ?: from
-            while (day <= to) {
-                val window = goal.repeat!!.window(day)?.takeIf { it.end == day }
+            while (day <= minOf(to, today)) {
+                val window = windows.window(goal, day)?.takeIf { it.end == day }
                 if (window != null) {
                     val count = goal.timesDone(ticks.filter { it.countsToward(goal, window.start) })
                     val skips = live.count { it.goalId == goal.id && it.kind == LapseKind.SKIP && it.periodStart == window.start }
@@ -159,15 +175,18 @@ object Review {
             to = to,
             goals = summaries,
             reasons = reasons,
-            earned = sum(EntryKind.TICK, EntryKind.BONUS, EntryKind.REFUND, EntryKind.PERFECT_DAY, EntryKind.CHALLENGE),
+            earned = sum(*earnedKinds.toTypedArray()),
             spent = -sum(EntryKind.PURCHASE, EntryKind.RETURN),
             lost = -sum(EntryKind.PENALTY),
-            days = StreakCounter.records(from, to, goals, ticks, lapses, countsFrom),
+            // Days still to come keep their place on the calendar, with nothing due yet.
+            days = StreakCounter.records(from, to, active, ticks, lapses, countsFrom).map { if (it.day > today) it.copy(due = 0, done = 0) else it },
             gaps = gaps.filter { it.to >= from && it.from <= to },
             weekdays = (1..7).associateWith { weekdayDue[it] to weekdayDone[it] },
             earnedByDay = earnedByDay,
             lostByDay = lostByDay,
             categories = byCategory(goals, summaries, inRange),
+            interest = sum(EntryKind.INTEREST),
+            bets = sum(EntryKind.BET),
         )
     }
 }

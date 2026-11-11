@@ -44,6 +44,28 @@ data class Streaks(
 fun Goal.addedOn(zone: TimeZone = TimeZone.currentSystemDefault()): LocalDate? =
     if (createdAt <= 0) null else Instant.fromEpochMilliseconds(createdAt).toLocalDateTime(zone).date
 
+/**
+ * Each habit's window on a day, looking back. A "since last done" goal's repeat only knows the
+ * day it is next due, so the days it was due before come from its history: each day it was
+ * done, and each day it was skipped or missed. Days it stayed late in between don't count.
+ */
+internal class PastWindows(goals: List<Goal>, ticks: List<Tick>, lapses: List<Lapse>) {
+    private val afterDone: Map<Long, Set<LocalDate>> = goals.filter { it.repeat?.kind == RepeatKind.AFTER_DONE }.associate { goal ->
+        val done = ticks.filter { it.goalId == goal.id && it.stepId == null && it.period == goal.period }
+            .groupBy { it.periodStart }
+            .filterValues { goal.timesDone(it) >= goal.target }.keys
+        val lapsed = lapses.filter { it.goalId == goal.id && !it.forgotten && (it.kind == LapseKind.MISS || it.kind == LapseKind.SKIP) }
+            .map { it.periodStart }
+        goal.id to (done + lapsed)
+    }
+
+    fun window(goal: Goal, day: LocalDate): Window? {
+        val repeat = goal.repeat ?: return null
+        val past = afterDone[goal.id] ?: return repeat.window(day)
+        return if (day in past) Window(day, day, Period.DAILY) else repeat.window(day)
+    }
+}
+
 object StreakCounter {
     /**
      * Each day's record from [from] to [to]. A single-day habit counts on its day; one due so
@@ -62,6 +84,7 @@ object StreakCounter {
     ): List<DayRecord> {
         val habits = goals.filter { it.isHabitLike && it.repeat != null }
         val firstDays = habits.associate { it.id to countsFrom(it) }
+        val windows = PastWindows(habits, ticks, lapses)
         val lapsesByDay = lapses.filter { !it.forgotten }.groupBy { it.day }
         // Counted once up front, so a long stretch of history stays quick to go through.
         val ticksByWindow = HashMap<Triple<Long, Period?, LocalDate>, MutableList<Tick>>()
@@ -84,7 +107,7 @@ object StreakCounter {
                 val first = firstDays[goal.id]
                 if (first != null && day < first) continue
                 val repeat = goal.repeat!!
-                val window = repeat.window(day) ?: continue
+                val window = windows.window(goal, day) ?: continue
                 if (window.end != day) continue
                 val count = goal.timesDone(ticksByWindow[Triple(goal.id, goal.period, window.start)].orEmpty())
                 val skips = skipCounts[goal.id to window.start] ?: 0

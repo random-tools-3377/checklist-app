@@ -1054,7 +1054,8 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
         val (from, to) = Review.range(day, period)
         val windowsFrom = Days.earliestOpenDay(from).minusDays(7)
         combine(
-            combine(dao.observeGoals(), hidingPrivate) { goals, hide -> goals to hide },
+            // Removed goals too, so their points keep their category; they aren't counted as due.
+            combine(dao.observeGoals(), dao.observeRemovedGoals(), hidingPrivate) { active, removed, hide -> (active + removed) to hide },
             dao.observeHabitTicksSince(windowsFrom.toEpochDay()),
             dao.observeLapsesSince(windowsFrom.toEpochDay()),
             dao.observeEntries(from.toEpochDay(), to.toEpochDay()),
@@ -1074,9 +1075,11 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
         }
     }.state(null)
 
-    /** Moods over the last year, for the review. */
-    val reviewMoods: StateFlow<List<Mood>> = today.flatMapLatest { day ->
-        dao.observeMoodsSince(day.minusDays(400).toEpochDay()).map { rows -> rows.map { it.toCore() } }
+    /** Moods from the start of the stretch being reviewed, however far back it is. */
+    val reviewMoods: StateFlow<List<Mood>> = combine(reviewPeriod, reviewDay, today) { period, day, todayDay ->
+        Review.range(day ?: todayDay, period).first
+    }.distinctUntilChanged().flatMapLatest { from ->
+        dao.observeMoodsSince(from.toEpochDay()).map { rows -> rows.map { it.toCore() } }
     }.state(emptyList())
 
     // The daily mood check-in

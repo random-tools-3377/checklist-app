@@ -61,9 +61,9 @@ enum class HelpTopic(val title: String, val intro: String, val steps: List<Strin
         "Look back at how it went: a day, a week, a month or a year at a time.",
         listOf(
             "Pick \"Day\", \"Week\", \"Month\" or \"Year\" at the top, and use the arrows to go earlier or later.",
-            "See the {points} you earned, spent and lost in that stretch.",
+            "See the {points} you earned, spent and lost in that stretch, and any savings interest and bets.",
             "\"Each goal\" shows how often it was done, skipped and missed, and its longest run in a row.",
-            "In a month, the calendar marks each day: everything done, some, none, or a gap.",
+            "In a month, the calendar marks each day: everything done, some, none, or a gap. Days still to come aren't counted yet.",
             "Below are the reasons that came up most, any gaps, and stats like your most consistent goal.",
             "Tap \"Badges\" to see every badge, earned or still to earn.",
             "You can put the review behind the privacy lock in Settings → Privacy.",

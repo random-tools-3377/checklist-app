@@ -55,14 +55,16 @@ fun BadgesScreen(earned: Map<Badge, LocalDate>, onSeen: () -> Unit, onBack: () -
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = padding.calculateTopPadding() + 8.dp, bottom = padding.calculateBottomPadding() + 24.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
+            val shown = Badge.shown(character)
             item {
                 Text(
-                    "${earned.size} of ${Badge.shown(character).size} earned. Once earned, a badge is yours to keep. Badges in a series go bronze, silver, then gold.",
+                    // Level badges kept after the character is turned off aren't listed, so aren't counted.
+                    "${shown.count { it in earned }} of ${shown.size} earned. Once earned, a badge is yours to keep. Badges in a series go bronze, silver, then gold.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            val (got, toGo) = Badge.shown(character).partition { it in earned }
+            val (got, toGo) = shown.partition { it in earned }
             items(got.sortedByDescending { earned[it] }, key = { it.name }) { badge -> BadgeRow(badge, earned[badge]) }
             items(toGo, key = { it.name }) { badge -> BadgeRow(badge, null) }
         }

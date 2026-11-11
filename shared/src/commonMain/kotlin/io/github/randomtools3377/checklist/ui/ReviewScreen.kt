@@ -160,11 +160,20 @@ private fun PointsCard(summary: ReviewSummary) {
     ReviewCard(pointsTitle()) {
         Row(Modifier.fillMaxWidth()) {
             PointsFigure("Earned", "+${summary.earned}", goodColor(), Modifier.weight(1f))
-            PointsFigure("Spent", "−${summary.spent}", MaterialTheme.colorScheme.onSurface, Modifier.weight(1f))
+            // A reward returned in a later stretch than it was bought gives points back here.
+            PointsFigure("Spent", if (summary.spent < 0) "+${-summary.spent}" else "−${summary.spent}", MaterialTheme.colorScheme.onSurface, Modifier.weight(1f))
             PointsFigure("Lost", "−${summary.lost}", MaterialTheme.colorScheme.error, Modifier.weight(1f))
+        }
+        if (summary.interest != 0 || summary.bets != 0) {
+            Row(Modifier.fillMaxWidth()) {
+                if (summary.interest != 0) PointsFigure("Interest", withSign(summary.interest), goodColor(), Modifier.weight(1f))
+                if (summary.bets != 0) PointsFigure("Bets", withSign(summary.bets), MaterialTheme.colorScheme.onSurface, Modifier.weight(1f))
+            }
         }
     }
 }
+
+private fun withSign(amount: Int): String = if (amount < 0) "−${-amount}" else "+$amount"
 
 @Composable
 private fun PointsFigure(label: String, value: String, color: androidx.compose.ui.graphics.Color, modifier: Modifier) {
@@ -180,23 +189,24 @@ private fun GoalsCard(summary: ReviewSummary) {
         val shown = summary.goals.filter { it.due > 0 || it.ticks > 0 }
         if (shown.isEmpty()) {
             Text("Nothing was due.", style = MaterialTheme.typography.bodyMedium)
-        }
-        Row {
-            Text("", modifier = Modifier.weight(1f))
-            listOf("Done", "Skipped", "Missed", "Run").forEach {
-                Text(it, style = MaterialTheme.typography.labelSmall, textAlign = TextAlign.Center, modifier = Modifier.width(56.dp))
+        } else {
+            Row {
+                Text("", modifier = Modifier.weight(1f))
+                listOf("Done", "Skipped", "Missed", "Run").forEach {
+                    Text(it, style = MaterialTheme.typography.labelSmall, textAlign = TextAlign.Center, modifier = Modifier.width(56.dp))
+                }
             }
-        }
-        shown.forEach { goal ->
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("${goal.goal.icon} ${goal.goal.name}", maxLines = 1, modifier = Modifier.weight(1f))
-                Cell("${goal.done}/${goal.due}")
-                Cell("${goal.skipped}")
-                Cell("${goal.missed}", if (goal.missed > 0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface)
-                Cell("${goal.longestRun}")
+            shown.forEach { goal ->
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("${goal.goal.icon} ${goal.goal.name}", maxLines = 1, modifier = Modifier.weight(1f))
+                    Cell("${goal.done}/${goal.due}")
+                    Cell("${goal.skipped}")
+                    Cell("${goal.missed}", if (goal.missed > 0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface)
+                    Cell("${goal.longestRun}")
+                }
             }
+            Text("Run: the most times in a row it was done in this stretch.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        Text("Run: the most times in a row it was done in this stretch.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
@@ -310,7 +320,6 @@ private fun GapsCard(gaps: List<Gap>, hideNotes: Boolean) {
 private fun MonthCalendar(summary: ReviewSummary) {
     val colourBlind = LocalColourBlind.current
     val brightness = LocalBrightness.current
-    val byDay = summary.days.associateBy { it.day }
     val first = summary.from
     val blanks = first.dayOfWeek.isoDayNumber - 1
     val cells: List<DayRecord?> = List(blanks) { null } + summary.days
@@ -373,16 +382,12 @@ private fun MonthCalendar(summary: ReviewSummary) {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.testTag("review-calendar-key"),
         )
-        @Suppress("UNUSED_VARIABLE") val unused = byDay
     }
 }
 
 @Composable
 private fun StatsCard(summary: ReviewSummary, streaks: Streaks?) {
     ReviewCard("Stats") {
-        fun line(label: String, value: String?) {
-            // Collected below; a plain function keeps the list readable.
-        }
         val lines = buildList {
             summary.mostConsistent?.let { add("Most consistent" to "${it.goal.icon} ${it.goal.name} · ${(it.consistency * 100).roundToInt()}%") }
             summary.mostTicked?.let { add("Most ticked" to "${it.goal.icon} ${it.goal.name} · ${it.ticks}") }
@@ -394,7 +399,7 @@ private fun StatsCard(summary: ReviewSummary, streaks: Streaks?) {
                 add("${pointsTitle()} from ${it.goal.icon} ${it.goal.name}" to "+${it.points}")
             }
             streaks?.let {
-                add("Current main streak" to "${it.done} days")
+                add("Current main streak" to if (it.done == 1) "1 day" else "${it.done} days")
                 add("Longest run in this stretch" to (summary.goals.maxOfOrNull { g -> g.longestRun }?.toString() ?: "0"))
             }
         }
