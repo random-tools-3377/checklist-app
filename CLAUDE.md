@@ -760,6 +760,54 @@ Build order **(default)**, each step a Release the owner can try:
     (0.60.0; see the end of 17, and "Windows").
 21. Then, chosen by the owner: notes and the things behind each mood, kept as a mood journal,
     without claiming that getting things done changed the mood (0.61.0; see the end of 17).
+22. Then a review of the whole app: the confirmed bugs fixed first (0.62.0), then these, chosen
+    by the owner from the review's suggestions, built in Releases grouped by part of the app:
+    - Bets are removed from the app; open bets give their stake back. Streak shields stay.
+    - Guides don't pop up by themselves. A new user gets a short, simple setup, and screens
+      explain themselves with small hints; the full guides stay behind ⓘ and in Help, to read
+      later. Guides on the misses, penalty, gap check-in and focus timer screens; guides for
+      reminders and every game extra; Help in groups with search; guides point to each other
+      where parts connect.
+    - Skips: a skip is never counted as done and never benefits (no perfect day, no bonus, not
+      "done" in the review), but it doesn't directly punish either: a skipped goal drops out of
+      what the main streak's target counts. A skip can be taken back, which puts everything
+      back as if it never happened. Free skips left are not shown on Today, so as not to
+      encourage skipping. "Perfect day" means the same everywhere: everything due done, none
+      skipped.
+    - Money: with Budget on, any reward can have a money value, and its points price follows
+      the money only when the user links them. What is left at the end of a month can be moved
+      into savings; nothing carries over into the next month's budget. Pay changes apply from a
+      date the user picks, so past months stay as they were. Bill reminders and regular money
+      in; quick "Spent" from the app icon, the budget widget and Today.
+    - Positive things are worded positively everywhere: finished habits and projects are
+      "Completed" or "Achieved", never "Ended".
+    - Also: the gap check-in offers "I forgot to tick it" for each goal and past misses can be
+      corrected; to-dos take categories; "Plan your week" shows flexible goals, deadlines and
+      the phone's calendar events where allowed; dated to-dos open from Today and the planner;
+      "I forgot to tick it" brings back that day's perfect-day bonus and combo; every screen
+      shows the numbers set in "Points and rules"; Today, the widgets, the tile and the morning
+      plan agree on what's next, and the calendar widget is as informative as a calendar app's
+      own; the review lists projects finished, to-dos done and amounts done; Today's mood opens
+      in full, with the journal one tap away; on a low morning, one "start with" suggestion,
+      perhaps with a small reward to look forward to; badges for the budget and mood; editors
+      ask before throwing away changes; a better day timeline; the same buttons on every goal
+      card; the tour asks before adding examples; Undo after "Used it" and a list of used
+      rewards; "Same reason for all" for several misses; a late first check-in asks once; mood
+      in the review as a summary, with the day-by-day notes a tap away; Undo after raising
+      points from the mood page; Settings search finds features and look options; sections and
+      settings for extras that are off stay hidden; Privacy says the lock covers moods; a page
+      for each goal; a reward to save for, starred, on Today; an optional evening check; project
+      deadline reminders; best streaks; more spreadsheets; a fuller mood journal; a safety copy
+      before importing; an optional passphrase on backup files; on Windows, an automatic backup
+      folder, reminders that keep coming with the window closed, and "computer" in place of
+      "phone"; "Erase everything"; focus time kept, with optional breaks; "at most" goals;
+      reordering steps and checklist items; one "days of earning" figure everywhere; quieter
+      notification types for the morning plan and weekly summary; a stricter build check of the
+      no-cloud-backup rules; small accessibility tidying; and, in "Mood and your goals", a
+      switch that highlights what shows up on days something was noted.
+    - Not chosen: a note when a money-priced reward's price moves, celebrations for game wins,
+      and carrying money over into the next month. Still to be decided: the money line on Buy
+      (spending limit left) and paying a reward from savings.
 
 ## Talking to the owner
 
