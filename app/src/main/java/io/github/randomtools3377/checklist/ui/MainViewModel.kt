@@ -169,6 +169,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.datetime.isoDayNumber
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.shareIn
@@ -1432,6 +1433,47 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             .mapLatest { on ->
                 if (!on) null else withContext(Dispatchers.Default) {
                     io.github.randomtools3377.checklist.core.Experience.of(dao.allEntries().map { it.toCore() }, dao.allGoals().map { it.toCore() })
+                }
+            }.state(null)
+
+    /** Today's quests, each with how far along it is, while quests are on; null when off. */
+    val quests: StateFlow<io.github.randomtools3377.checklist.core.DayQuests?> =
+        combine(features, todayState) { on, state -> if (Feature.QUESTS in on) state else null }
+            .flatMapLatest { state ->
+                if (state == null) {
+                    kotlinx.coroutines.flow.flowOf(null)
+                } else {
+                    val day = state.view.day
+                    combine(dao.observeHabitTicksSince(day.toEpochDay()), dao.observeEntries(day.toEpochDay(), day.toEpochDay())) { ticks, entries ->
+                        val rows = state.view.dueToday
+                        val todays = ticks.map { it.toCore() }.filter { it.day == day }
+                        val earned = entries.map { it.toCore() }
+                            .filter { it.kind in io.github.randomtools3377.checklist.core.Experience.KINDS && it.goalId != null }
+                            .sumOf { it.amount }
+                        val list = io.github.randomtools3377.checklist.core.Quests.of(day, rows.map { it.goal }).map { quest ->
+                            io.github.randomtools3377.checklist.core.Quests.progress(quest, rows, todays, { at -> at.toLocalDateTime().time }, earned)
+                        }
+                        io.github.randomtools3377.checklist.core.DayQuests(day, list)
+                    }
+                }
+            }.state(null)
+
+    init {
+        // A finished quest pays its bonus once.
+        viewModelScope.launch {
+            quests.collect { day -> day?.list?.filter { it.complete }?.forEach { repository.payQuest(day.day, it.quest) } }
+        }
+    }
+
+    /** This week's points against last week's by the same time, while the race is on; null when off. */
+    val race: StateFlow<io.github.randomtools3377.checklist.core.RaceStanding?> =
+        combine(features, today, dao.observeBalance()) { on, day, _ -> if (Feature.RACE in on) day else null }
+            .mapLatest { day ->
+                day?.let { d ->
+                    val monday = d.minusDays(d.dayOfWeek.isoDayNumber - 1)
+                    io.github.randomtools3377.checklist.core.Race.of(
+                        dao.entries(monday.minusDays(7).toEpochDay(), d.toEpochDay()).map { it.toCore() }, d, System.currentTimeMillis(),
+                    )
                 }
             }.state(null)
 

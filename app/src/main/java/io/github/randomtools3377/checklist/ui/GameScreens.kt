@@ -64,6 +64,8 @@ import io.github.randomtools3377.checklist.core.Look
 import io.github.randomtools3377.checklist.core.Looks
 import io.github.randomtools3377.checklist.core.Mark
 import io.github.randomtools3377.checklist.core.Outfit
+import io.github.randomtools3377.checklist.core.QuestProgress
+import io.github.randomtools3377.checklist.core.RaceStanding
 import io.github.randomtools3377.checklist.core.Feature
 import io.github.randomtools3377.checklist.core.Level
 import io.github.randomtools3377.checklist.core.Levels
@@ -322,6 +324,63 @@ private fun Swatches(colours: List<Int>, picked: Int, tag: String, onPick: (Int)
                     .semantics { contentDescription = "Colour ${index + 1}" + if (index == picked) ", chosen" else "" }
                     .testTag("$tag:$index"),
             )
+        }
+    }
+}
+
+/** On Today, with quests on: the day's quests, how far along each is, and what each pays. */
+@Composable
+fun QuestsCard(quests: List<QuestProgress>) {
+    Card(Modifier.fillMaxWidth().testTag("quests")) {
+        Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("🗺️ Today's quests", style = MaterialTheme.typography.titleSmall)
+            quests.forEach { progress ->
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.testTag("quest:${progress.quest.id}")) {
+                    Text(if (progress.complete) "✅" else "▫️", modifier = Modifier.width(28.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(progress.quest.text, style = MaterialTheme.typography.bodyMedium)
+                        if (!progress.complete && progress.quest.target > 1) {
+                            Text(
+                                "${progress.done} of ${progress.quest.target}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                    Text(
+                        "+${pointsText(progress.quest.reward)}",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = if (progress.complete) goodColor() else MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** On Today, with the race on: this week against last week by the same time. */
+@Composable
+fun RaceCard(race: RaceStanding) {
+    Card(Modifier.fillMaxWidth().testTag("race")) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
+            Text("🏁", fontSize = 24.sp, modifier = Modifier.width(40.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    when {
+                        race.ahead > 0 -> "${pointsText(race.ahead)} ahead of last week"
+                        race.ahead < 0 -> "${pointsText(-race.ahead)} behind last week"
+                        else -> "Level with last week"
+                    },
+                    style = MaterialTheme.typography.titleSmall,
+                    color = if (race.ahead >= 0) goodColor() else MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.testTag("race-standing"),
+                )
+                Text(
+                    "This week ${race.thisWeek} · last week by now ${race.lastWeek}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
     }
 }

@@ -124,6 +124,8 @@ fun TodayScreen(
     val look by vm.appearance.collectAsStateWithLifecycle()
     val character by vm.character.collectAsStateWithLifecycle()
     val characterLook by vm.look.collectAsStateWithLifecycle()
+    val quests by vm.quests.collectAsStateWithLifecycle()
+    val race by vm.race.collectAsStateWithLifecycle()
     val grid = look.layout == TodayLayout.GRID
     // In the grid, holding a tile opens its full card here.
     var details by remember { mutableStateOf<Long?>(null) }
@@ -419,6 +421,15 @@ fun TodayScreen(
                     // With the character on: its level, under the balance.
                     character?.let { sheet ->
                         LevelCard(sheet, characterLook, onOpen = onCharacter)
+                        Spacer(Modifier.height(12.dp))
+                    }
+                    // With quests and the race on: the day's quests, and this week against last.
+                    quests?.list?.takeIf { it.isNotEmpty() }?.let { list ->
+                        QuestsCard(list)
+                        Spacer(Modifier.height(12.dp))
+                    }
+                    race?.let { standing ->
+                        RaceCard(standing)
                         Spacer(Modifier.height(12.dp))
                     }
                 }

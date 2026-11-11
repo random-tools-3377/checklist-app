@@ -545,6 +545,18 @@ class Repository(private val db: AppDatabase, private val celebrations: Celebrat
 
     suspend fun removePenaltyTask(id: Long) = dao.removePenaltyTask(id)
 
+    /** Pays a finished quest once: its bonus, and a note that it is paid. False if it already was. */
+    suspend fun payQuest(day: LocalDate, quest: io.github.randomtools3377.checklist.core.Quest): Boolean = db.withTransaction {
+        val paid = io.github.randomtools3377.checklist.core.Quests.paidOn(dao.setting(io.github.randomtools3377.checklist.core.Quests.SETTING_PAID), day)
+        if (quest.id in paid) return@withTransaction false
+        val entry = io.github.randomtools3377.checklist.core.Entry(
+            at = nowMillis(), day = day, kind = io.github.randomtools3377.checklist.core.EntryKind.BONUS, amount = quest.reward, label = "Quest: ${quest.text}",
+        )
+        dao.insertEntry(entry.toEntity())
+        dao.putSetting(SettingEntity(io.github.randomtools3377.checklist.core.Quests.SETTING_PAID, io.github.randomtools3377.checklist.core.Quests.encodePaid(day, paid + quest.id)))
+        true
+    }
+
     /** The points history as a spreadsheet (CSV), with the notes on ticks. */
     suspend fun historySpreadsheet(): String {
         val (entries, notes) = db.withTransaction {

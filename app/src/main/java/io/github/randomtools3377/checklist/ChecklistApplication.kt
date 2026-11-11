@@ -50,6 +50,7 @@ class Container(app: Application) {
     val gaps = Gaps(RoomStore(db), book)
     val interest = Interest(RoomStore(db), book)
     val perfectDays = PerfectDays(RoomStore(db), book)
+    val combos = io.github.randomtools3377.checklist.core.Combos(RoomStore(db), book)
 
     /**
      * Finds misses since the last check, then gaps. When the app opens, and when the day ends.
@@ -61,6 +62,7 @@ class Container(app: Application) {
             gaps.find()
             interest.pay()
             perfectDays.pay()
+            combos.pay()
         }
     }
     val celebrationFiles = CelebrationFiles(app.filesDir)

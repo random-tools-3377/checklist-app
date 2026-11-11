@@ -24,6 +24,9 @@ enum class Feature(val key: String, val onValue: String, val title: String, val 
     STREAK_BONUS("streak_bonus", "1", "Streak bonus", "Goals pay 10% more from a 7-day main streak, 20% from 30 and 30% from 100.", "Points"),
     REPEAT_PRICE("repeat_price", "1", "Prices rise on repeat buys", "A reward costs 25% more for each time it was already bought that week.", "Points"),
     CHARACTER("feature_character", "1", "Character and skills", "Your points level up a character, and six skills, Fitness, Health, Mind, Home, Work and Creative, level up from their own goals.", "Game"),
+    QUESTS("feature_quests", "1", "Daily quests", "Three small quests each day from your own goals, like \"tick 2 goals before noon\", each paying a few points.", "Game"),
+    COMBOS("feature_combos", "1", "Combos", "Every perfect day in a row builds a combo that pays a little more each day, until a day is left undone.", "Game"),
+    RACE("feature_race", "1", "Beat last week", "Today shows this week's points against last week's by the same time, so you can race yourself.", "Game"),
     AI("feature_ai", "1", "AI helper", "Help from an AI that runs on this phone, with no internet: a new habit from a sentence, steps for a project, a note on your week, and voice on Today. Needs the Checklist AI app and its AI file.", "AI"),
     ;
 

@@ -511,6 +511,12 @@ Build order **(default)**, each step a Release the owner can try:
     spatula, potted plant; Work: name badge, briefcase, blazer; Creative: beret, paintbrush,
     scarf). Where two pieces go in the same place, the stronger skill's is worn, and the shirt
     takes the leading skill's colour.
+    Daily quests: three a day, picked from the goals due that day (the same all day): a number
+    of goals before noon, a named goal, every goal of one area, everything by 8 pm, or a number
+    of points from goals; each pays 5 points (everything by 8 pm pays 10), once. Combos: each
+    perfect day in a row adds one and pays 2 points for each, up to 20; a day left undone ends
+    it, and a day with nothing due does neither. The race compares points earned from Monday
+    until now with last week until the same moment.
     Build order: skill areas, levels and badge tiers (0.45.0); the drawn character (0.46.0);
     quests, combos and racing last week (0.47.0); items, lucky ticks and bosses (0.48.0); bets
     and streak shields (0.49.0).
