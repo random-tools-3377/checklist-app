@@ -9,6 +9,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import io.github.randomtools3377.checklist.core.Feature
 import io.github.randomtools3377.checklist.core.Repeat
 import io.github.randomtools3377.checklist.data.HabitDraft
 import io.github.randomtools3377.checklist.data.SETTING_TREAT_BUDGET
@@ -30,6 +31,7 @@ class MoneyPriceTest {
         override fun before() = runBlocking {
             val container = (InstrumentationRegistry.getInstrumentation().targetContext.applicationContext as ChecklistApplication).container
             container.db.clearAllTables()
+            container.repository.setSetting(Feature.SUGGESTIONS.key, Feature.SUGGESTIONS.onValue)
             container.repository.saveHabit(read("Read"))
             // A full week of reading pays 35, and earns 7 of money in rewards: 1 of money is 5 points.
             container.repository.setSetting(SETTING_TREAT_BUDGET, "7.0")
