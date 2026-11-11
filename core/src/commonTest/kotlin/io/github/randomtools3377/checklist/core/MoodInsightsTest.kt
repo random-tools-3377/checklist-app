@@ -18,8 +18,8 @@ class MoodInsightsTest {
         PointsName.current = PointsName.DEFAULT
     }
 
-    private fun habit(id: Long, name: String, points: Int = 10, position: Int = id.toInt(), after: Long? = null) =
-        Goal(id = id, kind = GoalKind.HABIT, name = name, icon = "⭐", points = points, repeat = Repeat.everyDay(start), position = position, after = after)
+    private fun habit(id: Long, name: String, points: Int = 10, position: Int = id.toInt(), after: Long? = null, quit: Boolean = false) =
+        Goal(id = id, kind = GoalKind.HABIT, name = name, icon = "⭐", points = points, repeat = Repeat.everyDay(start), position = position, after = after, quit = quit)
 
     private fun ago(days: Int) = today.minusDays(days)
 
@@ -44,7 +44,7 @@ class MoodInsightsTest {
         assertEquals(2.0, lift.difference)
         assertTrue(found.weighs.isEmpty())
         assertEquals(1, found.compared)
-        assertEquals("On days you do it, your mood is about 2.0 higher.", MoodInsights.describe(lift))
+        assertEquals("On days you do it, your mood in the morning is about 2.0 higher.", MoodInsights.describe(lift))
         assertEquals("From 5 days done and 5 days not done.", MoodInsights.basis(lift))
         assertEquals("Goals that often go with a better mood: ⭐ Run.", MoodInsights.liftsLine(found))
     }
@@ -64,7 +64,7 @@ class MoodInsightsTest {
         assertEquals(listOf("Tidy desk"), found.weighs.map { it.goal.name })
         val weigh = found.weighs.single()
         assertEquals(-2.0, weigh.difference)
-        assertEquals("On days you do it, your mood is about 2.0 lower.", MoodInsights.describe(weigh))
+        assertEquals("On days you do it, your mood in the morning is about 2.0 lower.", MoodInsights.describe(weigh))
 
         val ways = MoodInsights.ways(weigh, found, listOf(run, walk, desk))
         assertEquals(listOf(WayKind.AFTER, WayKind.SMALLER, WayKind.PAY_MORE), ways.map { it.kind })
@@ -134,29 +134,65 @@ class MoodInsightsTest {
     }
 
     @Test
-    fun theMoodOnceEverythingIsDoneCountsOverTheMorningAndADropWeighs() {
+    fun daysAreComparedByTheMorningsMood() {
         val run = habit(1, "Run")
-        // Mornings of 2 that end at 4 on days it was done; plain 3s on days it wasn't.
+        // Mornings of 2 that end at 4 on days it was done; plain 3s on days it wasn't. The mood
+        // once everything is done is only given on days everything was done, so it isn't set
+        // against mornings: the morning's counts.
         val lifted = (1..3).map { Mood(ago(it), 2, after = 4) } + (4..6).map { Mood(ago(it), 3) }
         val found = MoodInsights.find(listOf(run), (1..3).map { tick(run, ago(it)) }, lifted, today, Rules())
-        val lift = found.lifts.single()
-        assertEquals(4.0, lift.moodDone)
-        assertEquals(1.0, lift.difference)
-        assertEquals(3, lift.riseDays)
-        assertEquals(2.0, lift.rise)
+        val m = found.weighs.single()
+        assertEquals(2.0, m.moodDone)
+        assertEquals(-1.0, m.difference)
+        assertEquals(3, m.riseDays)
+        assertEquals(2.0, m.rise)
+        assertNull(m.riseGap, "no other days with both moods to set it against")
+    }
 
-        // Good mornings that end lower on days it was done weigh, though the day's mood is the same.
-        val late = habit(2, "Late shift")
-        val dropped = (1..3).map { Mood(ago(it), 5, after = 4) } + (4..6).map { Mood(ago(it), 4) }
-        val drop = MoodInsights.find(listOf(late), (1..3).map { tick(late, ago(it)) }, dropped, today, Rules())
-        assertTrue(drop.lifts.isEmpty())
-        val weigh = drop.weighs.single()
+    @Test
+    fun habitsDoneEveryDayAreNotAllFlaggedByHowEveningsGo() {
+        val run = habit(1, "Run")
+        val read = habit(2, "Read")
+        // Every morning is a 4. On 10 days both are done, and the day ends at 3; on 5 days only
+        // Read is done; on 5 days neither.
+        val moods = (1..10).map { Mood(ago(it), 4, after = 3) } + (11..20).map { Mood(ago(it), 4) }
+        val ticks = (1..10).map { tick(run, ago(it)) } + (1..15).map { tick(read, ago(it)) }
+        val tired = MoodInsights.find(listOf(run, read), ticks, moods, today, Rules())
+        assertTrue(tired.lifts.isEmpty() && tired.weighs.isEmpty(), "a tired evening is the same for every goal")
+        assertEquals(2, tired.compared)
+        // Ending higher instead doesn't lift them all either.
+        val lifted = MoodInsights.find(listOf(run, read), ticks, moods.map { if (it.after != null) it.copy(after = 5) else it }, today, Rules())
+        assertTrue(lifted.lifts.isEmpty() && lifted.weighs.isEmpty())
+    }
+
+    @Test
+    fun daysThatFallFurtherFromTheMorningThanOtherDaysWeigh() {
+        // Due every 2nd day: 2, 4, 6, … days ago.
+        val late = habit(1, "Late shift").copy(repeat = Repeat(RepeatKind.EVERY_N_DAYS, start, interval = 2))
+        // Done 2, 4 and 6 days ago, from 4 down to 2; not done 8, 10 and 12 days ago, at 4. On
+        // the days between, not due, everything else was done and the mood stayed at 4.
+        val moods = listOf(2, 4, 6).map { Mood(ago(it), 4, after = 2) } + listOf(8, 10, 12).map { Mood(ago(it), 4) } +
+            listOf(1, 3, 5).map { Mood(ago(it), 4, after = 4) }
+        val ticks = listOf(2, 4, 6).map { tick(late, ago(it)) }
+        val found = MoodInsights.find(listOf(late), ticks, moods, today, Rules())
+        assertTrue(found.lifts.isEmpty())
+        val weigh = found.weighs.single()
         assertEquals(0.0, weigh.difference)
-        assertEquals(-1.0, weigh.rise)
+        assertEquals(-2.0, weigh.rise)
+        assertEquals(3, weigh.otherRiseDays)
+        assertEquals(0.0, weigh.otherRise)
+        assertEquals(-2.0, weigh.riseGap)
         assertEquals(
-            "On days you do it, your mood is about the same, and it drops about 1.0 from the morning to the end of those days.",
+            "On days you do it, your mood in the morning is about the same. " +
+                "From the morning to the end of those days it drops about 2.0, and on other days it stays about the same.",
             MoodInsights.describe(weigh),
         )
+
+        // When other days drop as much, nothing stands out.
+        val alike = moods.map { if (it.after == 4) it.copy(after = 2) else it }
+        val same = MoodInsights.find(listOf(late), ticks, alike, today, Rules())
+        assertTrue(same.lifts.isEmpty() && same.weighs.isEmpty())
+        assertEquals(1, same.compared)
     }
 
     @Test
@@ -242,10 +278,13 @@ class MoodInsightsTest {
     fun theWordsSayWhatGoesTogetherNeverWhatCauses() {
         val run = habit(1, "Run")
         val desk = habit(2, "Desk")
+        val sugar = habit(3, "No sugar", quit = true)
         val found = MoodFindings(listOf(GoalMood(run, 5, 5, 4.0, 2.0)), listOf(GoalMood(desk, 5, 5, 2.0, 4.0)), 2)
+        val falls = GoalMood(desk, 5, 5, 3.0, 3.0, riseDays = 3, rise = -1.0, otherRiseDays = 3, otherRise = 0.5)
         val words = listOf(
             MoodInsights.liftsLine(found)!!, MoodInsights.NOT_ENOUGH, MoodInsights.NOTHING_STANDS_OUT, MoodInsights.CAVEAT,
-            MoodInsights.describe(found.lifts[0]), MoodInsights.describe(found.weighs[0]),
+            MoodInsights.describe(found.lifts[0]), MoodInsights.describe(found.weighs[0]), MoodInsights.describe(falls),
+            MoodInsights.describe(GoalMood(sugar, 5, 5, 2.0, 4.0)), MoodInsights.startWithLine(run),
         ) + MoodInsights.ways(found.weighs[0], found, listOf(run, desk)).map { it.text }
         for (text in words) {
             for (word in listOf("helped", "lifts you", "lift you", "makes a difference", "because")) assertFalse(word in text, "\"$text\" says $word")
@@ -264,7 +303,35 @@ class MoodInsightsTest {
         assertEquals(read, MoodInsights.startWith(found, listOf(HabitRow(read, 0, window), HabitRow(run, 1, window))))
         assertNull(MoodInsights.startWith(found, listOf(HabitRow(read, 1, window), HabitRow(run, 1, window))))
         assertNull(MoodInsights.startWith(MoodFindings.NONE, listOf(HabitRow(read, 0, window))))
-        assertEquals("Start with ⭐ Run — it usually lifts you.", MoodInsights.startWithLine(run))
+        assertEquals("Start with ⭐ Run — days you do it tend to go with a better mood.", MoodInsights.startWithLine(run))
+        // A goal to quit can't be started: the next one instead.
+        val sugar = habit(3, "No sugar", quit = true)
+        val withQuit = found.copy(lifts = listOf(GoalMood(sugar, 5, 5, 4.5, 2.0)) + found.lifts)
+        assertEquals(run, MoodInsights.startWith(withQuit, listOf(HabitRow(sugar, 0, window), HabitRow(run, 0, window))))
+        assertNull(MoodInsights.startWith(withQuit, listOf(HabitRow(sugar, 0, window))))
+    }
+
+    @Test
+    fun aGoalToQuitIsComparedByDaysAvoidedAndOnlyOffersPayingMore() {
+        val sugar = habit(1, "No sugar", points = 4, quit = true)
+        val run = habit(2, "Run")
+        // No sugar avoided 1 to 5 days ago, which felt 2; not 6 to 10 days ago, which felt 4.
+        // Run done on the days that felt 4.
+        val ticks = (1..5).map { tick(sugar, ago(it)) } + (6..10).map { tick(run, ago(it)) }
+        val found = MoodInsights.find(listOf(sugar, run), ticks, moods(2, 2, 2, 2, 2, 4, 4, 4, 4, 4), today, Rules())
+        val weigh = found.weighs.single()
+        assertEquals("No sugar", weigh.goal.name)
+        assertEquals("On days you avoid it, your mood in the morning is about 2.0 lower.", MoodInsights.describe(weigh))
+        assertEquals("From 5 days avoided and 5 days not avoided.", MoodInsights.basis(weigh))
+        // Nothing to do after, make smaller or get out of the way early: only paying more.
+        val ways = MoodInsights.ways(weigh, found, listOf(sugar, run))
+        assertEquals(listOf(WayKind.PAY_MORE), ways.map { it.kind })
+        assertEquals(6, ways.single().points)
+
+        // A goal to quit that goes with a better mood is never the one to do another right after.
+        val desk = habit(3, "Desk")
+        val sweet = MoodFindings(lifts = listOf(GoalMood(sugar, 5, 5, 4.0, 2.0)), weighs = listOf(GoalMood(desk, 5, 5, 2.0, 4.0)), compared = 2)
+        assertEquals(listOf(WayKind.SMALLER, WayKind.PAY_MORE, WayKind.EARLY), MoodInsights.ways(sweet.weighs.single(), sweet, listOf(sugar, desk)).map { it.kind })
     }
 
     @Test
@@ -310,27 +377,27 @@ class MoodInsightsTest {
             Mood(ago(4), 2, factors = listOf("News", "Work", "Coffee")),
             Mood(ago(5), 2, factors = listOf("News")),
             Mood(ago(6), 3, factors = listOf("News", "Work")),
-            Mood(ago(7), 2, after = 4, factors = listOf("Slept well")),
+            Mood(ago(7), 4, after = 2, factors = listOf("Slept well")),
             Mood(ago(8), 3),
         )
         val found = MoodInsights.find(emptyList(), emptyList(), moods, today, Rules())
         assertTrue(found.lifts.isEmpty() && found.weighs.isEmpty())
         assertTrue(found.enough)
 
-        // Slept well: 4, 5, 4 and 4 (the mood once everything was done counts) against 2, 2, 3, 3.
+        // Slept well: 4, 5, 4 and 4 (the morning's mood, not the one once everything was done) against 2, 2, 3, 3.
         val slept = found.betterFactors.single()
         assertEquals("Slept well", slept.factor, "one name, whatever its capitals")
         assertEquals(4, slept.notedDays)
         assertEquals(4, slept.otherDays)
         assertEquals(4.25, slept.moodNoted)
         assertEquals(2.5, slept.moodOther)
-        assertEquals("Slept well: your mood is about 1.8 higher on days you note it.", MoodInsights.describe(slept))
+        assertEquals("Slept well: your mood in the morning is about 1.8 higher on days you note it.", MoodInsights.describe(slept))
         assertEquals("From 4 days noted and 4 days not.", MoodInsights.basis(slept))
 
         // News: 2, 2, 3 against 4, 5, 4, 4, 3.
         val news = found.lowerFactors.single()
         assertEquals("News", news.factor)
-        assertEquals("News: your mood is about 1.7 lower on days you note it.", MoodInsights.describe(news))
+        assertEquals("News: your mood in the morning is about 1.7 lower on days you note it.", MoodInsights.describe(news))
 
         // Work goes with neither; Coffee isn't compared, with only two days.
         assertEquals(3, found.factorsCompared, "Slept well, Work and News")

@@ -91,7 +91,7 @@ private fun MoodGoalsList(
     ) {
         item {
             Text(
-                "From your mood check-ins over the last ${MoodInsights.DAYS} days: how you feel on days you do each goal, " +
+                "From your mood check-ins over the last ${MoodInsights.DAYS} days: how you feel in the morning on days you do each goal, " +
                     "next to days it was due and not done, and on days you note something, next to days you don't. " +
                     "Moods go from 1 (😞) to 5 (😄).",
                 style = MaterialTheme.typography.bodyMedium,

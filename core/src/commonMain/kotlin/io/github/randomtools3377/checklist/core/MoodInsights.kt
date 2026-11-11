@@ -10,17 +10,20 @@ import kotlin.math.round
  * days, each habit's days done are compared with its days due and not done, and each noted thing
  * (like "Slept well") with the days it wasn't noted, to find what goes with a better mood (in the
  * code, goals that "lift") and what goes with a lower one (goals that "weigh"), with kind ways
- * into the goals that weigh. The words only ever say what goes together: never that a goal or a
- * thing caused a mood, and never that a goal is to blame.
+ * into the goals that weigh. Days are compared by the morning's mood, which every day with a mood
+ * has: the one once everything is done is only given on days everything was done, so it would
+ * set evenings against mornings. How the mood moved over the day counts too, set against how it
+ * moved on other days. The words only ever say what goes together: never that a goal or a thing
+ * caused a mood, and never that a goal is to blame.
  */
 
 /**
  * One habit's mood numbers over the last [MoodInsights.DAYS] days. [doneDays] and [notDoneDays]
  * are the days with a mood when it was done, and when it was due and not done. [moodDone] and
- * [moodNotDone] are the average moods on those days (the mood after everything was done if
- * given, else the morning's), once there are enough of them (see [Rules.moodMinDays]). [rise] is
- * the average change from the morning to after everything was done, on the [riseDays] days it
- * was done with both moods.
+ * [moodNotDone] are the average morning moods on those days, once there are enough of them (see
+ * [Rules.moodMinDays]). [rise] is the average change from the morning to after everything was
+ * done, on the [riseDays] days it was done with both moods, and [otherRise] the same on the
+ * [otherRiseDays] other days with both moods.
  */
 data class GoalMood(
     val goal: Goal,
@@ -30,9 +33,18 @@ data class GoalMood(
     val moodNotDone: Double?,
     val riseDays: Int = 0,
     val rise: Double? = null,
+    val otherRiseDays: Int = 0,
+    val otherRise: Double? = null,
 ) {
     /** How much better the mood is on days it was done; below 0 when it is worse. */
     val difference: Double? get() = if (moodDone != null && moodNotDone != null) moodDone - moodNotDone else null
+
+    /**
+     * How much more the mood goes up over the days it was done than over other days; below 0
+     * when it goes up less or drops more. Every day with both moods had everything done, so a
+     * goal due every day has no other days to set it against, and no gap.
+     */
+    val riseGap: Double? get() = if (rise != null && otherRise != null) rise - otherRise else null
 }
 
 /**
@@ -106,8 +118,9 @@ object MoodInsights {
     /**
      * Each active habit's moods, and each noted thing's, over the [DAYS] days before [today]
      * (today is still going, so it waits), sorted into what goes with a better mood and what goes
-     * with a lower one. Each needs at least [Rules.moodMinDays] days each way; a difference of
-     * [Rules.moodNotableTenths] tenths or more counts.
+     * with a lower one, by the morning's mood. Each needs at least [Rules.moodMinDays] days each
+     * way; a difference of [Rules.moodNotableTenths] tenths or more counts. A goal also weighs
+     * when its days go up that much less from the morning than other days with both moods.
      */
     fun find(goals: List<Goal>, ticks: List<Tick>, moods: List<Mood>, today: LocalDate, rules: Rules = Rules.current): MoodFindings {
         val from = today.minusDays(DAYS)
@@ -134,21 +147,25 @@ object MoodInsights {
                     null -> {}
                 }
             }
-            val rises = done.mapNotNull { mood -> mood.after?.let { it - mood.score } }
+            val rises = done.mapNotNull { rise(it) }
+            val doneDays = done.map { it.day }.toSet()
+            val otherRises = moodByDay.values.filter { it.day !in doneDays }.mapNotNull { rise(it) }
             GoalMood(
                 goal = goal,
                 doneDays = done.size,
                 notDoneDays = notDone.size,
-                moodDone = average(done.map { it.last }),
-                moodNotDone = average(notDone.map { it.last }),
+                moodDone = average(done.map { it.score }),
+                moodNotDone = average(notDone.map { it.score }),
                 riseDays = rises.size,
                 rise = average(rises),
+                otherRiseDays = otherRises.size,
+                otherRise = average(otherRises),
             )
         }
         val lifts = all.filter { (it.difference ?: 0.0) >= notable }
             .sortedWith(compareByDescending<GoalMood> { it.difference }.thenByDescending { it.doneDays }.thenBy { it.goal.position })
         val liftIds = lifts.map { it.goal.id }.toSet()
-        val weighs = all.filter { it.goal.id !in liftIds && ((it.difference ?: 0.0) <= -notable || (it.rise ?: 0.0) <= -notable) }
+        val weighs = all.filter { it.goal.id !in liftIds && ((it.difference ?: 0.0) <= -notable || (it.riseGap ?: 0.0) <= -notable) }
             .sortedWith(compareByDescending<GoalMood> { weight(it) }.thenByDescending { it.doneDays }.thenBy { it.goal.position })
         val factors = factorsOf(moodByDay.values.toList(), ::average)
         val better = factors.filter { (it.difference ?: 0.0) >= notable }
@@ -156,23 +173,29 @@ object MoodInsights {
         val lower = factors.filter { (it.difference ?: 0.0) <= -notable }
             .sortedWith(compareBy<FactorMood> { it.difference }.thenByDescending { it.notedDays }.thenBy { it.factor.lowercase() })
         return MoodFindings(
-            lifts, weighs, compared = all.count { it.difference != null || it.rise != null },
+            lifts, weighs, compared = all.count { it.difference != null || it.riseGap != null },
             betterFactors = better, lowerFactors = lower, factorsCompared = factors.count { it.difference != null },
         )
     }
 
-    /** Each thing noted on any of [moods]' days: the mood on days it was noted against days it wasn't. */
+    /** Each thing noted on any of [moods]' days: the morning's mood on days it was noted against days it wasn't. */
     private fun factorsOf(moods: List<Mood>, average: (List<Int>) -> Double?): List<FactorMood> {
         // One name for each thing, whatever its capitals, as it was first written.
         val names = MoodFactors.tidy(moods.sortedBy { it.day }.flatMap { it.factors })
         return names.map { name ->
             val (noted, other) = moods.partition { MoodFactors.has(it.factors, name) }
-            FactorMood(name, noted.size, other.size, average(noted.map { it.last }), average(other.map { it.last }))
+            FactorMood(name, noted.size, other.size, average(noted.map { it.score }), average(other.map { it.score }))
         }
     }
 
-    /** How much a goal weighs: the bigger of the drop on days it is done and the fall over those days. */
-    private fun weight(m: GoalMood): Double = maxOf(-(m.difference ?: 0.0), -(m.rise ?: 0.0))
+    /** How the mood changed from the morning to once everything was done; null without both. */
+    private fun rise(mood: Mood): Int? = mood.after?.let { it - mood.score }
+
+    /**
+     * How much a goal weighs: the bigger of the drop on days it is done and how much more those
+     * days fall from the morning than other days.
+     */
+    private fun weight(m: GoalMood): Double = maxOf(-(m.difference ?: 0.0), -(m.riseGap ?: 0.0))
 
     /**
      * Whether [goal] was done on [day] (true), due and not done (false), or neither, or only
@@ -238,44 +261,54 @@ object MoodInsights {
 
     /**
      * On a morning that starts low: the goal still to do today that goes with a better mood most,
-     * to start with; null when none is known.
+     * to start with; null when none is known. A goal to quit can't be started, so it is left out.
      */
     fun startWith(findings: MoodFindings, rows: List<HabitRow>): Goal? {
-        val open = rows.filter { !it.done && !it.skipped }.map { it.goal.id }.toSet()
+        val open = rows.filter { !it.done && !it.skipped && !it.goal.quit }.map { it.goal.id }.toSet()
         return findings.lifts.firstOrNull { it.goal.id in open }?.goal
     }
 
-    fun startWithLine(goal: Goal): String = "Start with ${goal.icon} ${goal.name} — it usually lifts you."
+    fun startWithLine(goal: Goal): String = "Start with ${goal.icon} ${goal.name} — days you do it tend to go with a better mood."
 
-    /** The numbers behind a goal, in plain words. */
+    /** The numbers behind a goal, in plain words. A goal to quit is "done" on days it is avoided. */
     fun describe(m: GoalMood): String {
+        val doIt = if (m.goal.quit) "avoid it" else "do it"
         val difference = m.difference
-        val rise = m.rise
         val main = when {
-            difference != null && difference >= 0.05 -> "On days you do it, your mood is about ${tenths(difference)} higher"
-            difference != null && difference <= -0.05 -> "On days you do it, your mood is about ${tenths(difference)} lower"
-            difference != null -> "On days you do it, your mood is about the same"
+            difference != null && difference >= 0.05 -> "On days you $doIt, your mood in the morning is about ${tenths(difference)} higher"
+            difference != null && difference <= -0.05 -> "On days you $doIt, your mood in the morning is about ${tenths(difference)} lower"
+            difference != null -> "On days you $doIt, your mood in the morning is about the same"
             else -> null
         }
-        val fall = rise?.takeIf { it <= -0.05 }
+        // Said only when those days fall further from the morning than other days.
+        val change = m.riseGap?.takeIf { it <= -0.05 }?.let { "${moved(m.rise ?: 0.0)}, and on other days it ${moved(m.otherRise ?: 0.0)}" }
         return when {
-            main != null && fall != null -> "$main, and it drops about ${tenths(fall)} from the morning to the end of those days."
+            main != null && change != null -> "$main. From the morning to the end of those days it $change."
             main != null -> "$main."
-            fall != null -> "On days you do it, your mood drops about ${tenths(fall)} from the morning to the end of the day."
+            change != null -> "From the morning to the end of days you $doIt, your mood $change."
             else -> "Not enough moods yet."
         }
     }
 
-    /** How many days the numbers come from. */
-    fun basis(m: GoalMood): String = "From ${days(m.doneDays)} done and ${days(m.notDoneDays)} not done."
+    /** How the mood moved from the morning, in words: "goes up about 0.5", "drops about 1.0". */
+    private fun moved(change: Double): String = when {
+        change >= 0.05 -> "goes up about ${tenths(change)}"
+        change <= -0.05 -> "drops about ${tenths(change)}"
+        else -> "stays about the same"
+    }
 
-    /** A noted thing's numbers, in plain words: "Slept well: your mood is about 1.1 higher on days you note it." */
+    /** How many days the numbers come from. */
+    fun basis(m: GoalMood): String =
+        if (m.goal.quit) "From ${days(m.doneDays)} avoided and ${days(m.notDoneDays)} not avoided."
+        else "From ${days(m.doneDays)} done and ${days(m.notDoneDays)} not done."
+
+    /** A noted thing's numbers, in plain words: "Slept well: your mood in the morning is about 1.1 higher on days you note it." */
     fun describe(f: FactorMood): String {
         val difference = f.difference ?: return "${f.factor}: not enough moods yet."
         return when {
-            difference >= 0.05 -> "${f.factor}: your mood is about ${tenths(difference)} higher on days you note it."
-            difference <= -0.05 -> "${f.factor}: your mood is about ${tenths(difference)} lower on days you note it."
-            else -> "${f.factor}: your mood is about the same on days you note it."
+            difference >= 0.05 -> "${f.factor}: your mood in the morning is about ${tenths(difference)} higher on days you note it."
+            difference <= -0.05 -> "${f.factor}: your mood in the morning is about ${tenths(difference)} lower on days you note it."
+            else -> "${f.factor}: your mood in the morning is about the same on days you note it."
         }
     }
 
@@ -298,12 +331,16 @@ object MoodInsights {
     /**
      * Up to [MOST_WAYS] kind ways into a goal that goes with a lower mood: doing it right after
      * the goal that goes with a better mood most (with a chain when one can be set), making it
-     * smaller, paying more for it, and getting it out of the way early.
+     * smaller, paying more for it, and getting it out of the way early. A goal to quit is avoided
+     * all day, so it only gets paying more, and is never the goal to do another after.
      */
     fun ways(weigh: GoalMood, findings: MoodFindings, goals: List<Goal>): List<Way> {
         val goal = weigh.goal
+        val more = payMore(goal.points)
+        val pay = Way(WayKind.PAY_MORE, "Pay more for it: ${PointsName.current.amount(more)} instead of ${goal.points}, so it feels worth it.", points = more)
+        if (goal.quit) return listOf(pay)
         val ways = mutableListOf<Way>()
-        val lift = findings.lifts.firstOrNull { it.goal.id != goal.id && goal.after != it.goal.id }?.goal
+        val lift = findings.lifts.firstOrNull { it.goal.id != goal.id && goal.after != it.goal.id && !it.goal.quit }?.goal
         if (lift != null) {
             ways += Way(
                 WayKind.AFTER,
@@ -313,8 +350,7 @@ object MoodInsights {
             )
         }
         ways += Way(WayKind.SMALLER, "Make it smaller. A shorter, easier version still counts, and it's much easier to start.")
-        val more = payMore(goal.points)
-        ways += Way(WayKind.PAY_MORE, "Pay more for it: ${PointsName.current.amount(more)} instead of ${goal.points}, so it feels worth it.", points = more)
+        ways += pay
         ways += Way(WayKind.EARLY, "Get it out of the way early, before the day gets busy.")
         return ways.take(MOST_WAYS)
     }

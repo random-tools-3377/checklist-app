@@ -32,9 +32,11 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -103,10 +105,20 @@ fun MoodFactorChips(offered: List<String>, picked: List<String>, tag: String, on
     }
 }
 
-/** A short note for a check-in, saved with "Save". The box is tagged [tag], its button [tag]-save. */
+/**
+ * A short note for a check-in, saved with "Save", and also when the box goes, like when its card
+ * is closed with "Done" or "Close" or closes by itself, so nothing typed is lost. The box is
+ * tagged [tag], its button [tag]-save.
+ */
 @Composable
 fun MoodNoteField(stored: String?, placeholder: String, tag: String, onSave: (String) -> Unit) {
     var text by rememberSaveable(stored) { mutableStateOf(stored.orEmpty()) }
+    val typed by rememberUpdatedState(text)
+    val saved by rememberUpdatedState(stored)
+    val save by rememberUpdatedState(onSave)
+    DisposableEffect(Unit) {
+        onDispose { if (Moods.tidyNote(typed) != Moods.tidyNote(saved)) save(typed) }
+    }
     Row(verticalAlignment = Alignment.CenterVertically) {
         OutlinedTextField(
             value = text,

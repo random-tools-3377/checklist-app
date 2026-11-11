@@ -182,13 +182,12 @@ class MoodAfterDoneTest {
         app.waitFor { todaysMood()?.score == 3 }
         // Not a low morning: no suggestion.
         assert(!shown("mood-start-with"))
-        // A note under the morning's mood, then "Done".
+        // A note under the morning's mood, then "Done" without "Save": the note is kept.
         app.waitFor { shown("mood-more") }
         type("mood-more-note", "Busy day ahead")
-        app.tap("mood-more-note-save")
-        app.waitFor { todaysMood()?.note == "Busy day ahead" }
         app.tap("mood-more-done")
         app.waitFor { !shown("mood-more") }
+        app.waitFor { todaysMood()?.note == "Busy day ahead" }
         app.waitFor { shown("mood-today") && text("mood-today").contains("note added") }
 
         tickBoth()
