@@ -134,6 +134,8 @@ fun CharacterFigure(
     modifier: Modifier = Modifier,
     expression: io.github.randomtools3377.checklist.core.Expression = io.github.randomtools3377.checklist.core.Expression.CALM,
     jump: Boolean = false,
+    /** Changes to hop again, like each new win on a hard day. */
+    jumpKey: Any? = null,
 ) {
     val marks = remember(look, outfit, expression) { Figure.marks(look, outfit, expression) }
     val paths = remember(marks) {
@@ -142,7 +144,7 @@ fun CharacterFigure(
     val wearing = outfit.gear.joinToString { it.label }.ifEmpty { "everyday clothes" }
     // Jumping for joy: three little hops, each time it starts.
     val lift = remember { androidx.compose.animation.core.Animatable(0f) }
-    androidx.compose.runtime.LaunchedEffect(jump) {
+    androidx.compose.runtime.LaunchedEffect(jump, jumpKey) {
         if (jump) {
             repeat(3) {
                 lift.animateTo(-0.14f, androidx.compose.animation.core.tween(160))
@@ -205,6 +207,7 @@ fun LevelCard(
             Modifier.height(56.dp).testTag("companion-face:${(say?.expression ?: io.github.randomtools3377.checklist.core.Expression.CALM).name}"),
             expression = say?.expression ?: io.github.randomtools3377.checklist.core.Expression.CALM,
             jump = say?.jumps == true,
+            jumpKey = say?.wins,
         )
         Column(Modifier.padding(horizontal = 10.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -232,6 +235,16 @@ fun LevelCard(
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Text(say.line, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(10.dp).testTag("companion-line"))
+                }
+                // On a hard day, each thing done shows as a small win, so the progress is there to see.
+                if (say.hardDay && say.wins > 0) {
+                    Text(
+                        "🌱".repeat(say.wins.coerceAtMost(10)) + "  " + if (say.wins == 1) "1 small win today" else "${say.wins} small wins today",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onTertiaryContainer,
+                        modifier = Modifier.testTag("companion-wins"),
+                    )
                 }
                 if (say.askMood) {
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {

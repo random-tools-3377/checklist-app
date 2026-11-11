@@ -72,6 +72,31 @@ class CompanionTest {
     }
 
     @Test
+    fun onAHardDayEachThingDoneIsAWin() {
+        val first = Checkins.say(facts(mood = 2))
+        assertEquals(0, first.wins)
+        assertFalse(first.jumps)
+        val one = Checkins.say(facts(mood = 2, done = 1, due = 3, left = listOf(run, water)))
+        assertEquals(1, one.wins)
+        assertEquals(Expression.HAPPY, one.expression)
+        assertTrue(one.jumps, "it hops for the win")
+        assertNotEquals(first.line, one.line, "not the same nudge again")
+        assertTrue("stop" in one.line || "Rest" in one.line, one.line)
+        assertEquals(water, one.suggestion)
+        val two = Checkins.say(facts(mood = 2, done = 2, due = 4, left = listOf(run, water)))
+        assertTrue("two" in two.line.lowercase(), two.line)
+        val four = Checkins.say(facts(mood = 1, done = 4, due = 6, left = listOf(run, water)))
+        assertEquals(Expression.PROUD, four.expression)
+        assertTrue("4" in four.line, four.line)
+        // Nothing small left to offer: still a win, with no half-finished sentence.
+        val none = Checkins.say(facts(mood = 2, done = 1, due = 2, left = emptyList()))
+        assertTrue(none.line.endsWith("."), none.line)
+        assertTrue("{next}" !in none.line)
+        // On an ordinary day, there's no tally of wins.
+        assertEquals(0, Checkins.say(facts(mood = 4, done = 1, due = 3)).wins)
+    }
+
+    @Test
     fun itCheersWhenEverythingIsDone() {
         val say = Checkins.say(facts(left = emptyList(), done = 2, due = 2, ask = true))
         assertEquals(Expression.PROUD, say.expression)

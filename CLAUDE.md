@@ -552,7 +552,10 @@ Build order **(default)**, each step a Release the owner can try:
     due and nothing done welcomes the user back; after something left undone yesterday, with
     nothing done yet today, suggests the quickest goal left; from 6 pm with under half done,
     suggests one more. A suggestion can be ticked from the card. Slips count only from the day
-    tracking began, and goals with an amount or to quit are never suggested.
+    tracking began, and goals with an amount or to quit are never suggested. Decided: on a hard
+    day each thing done counts as a win: the card shows a 🌱 for each, the character hops, and
+    its words go on from there (you did it, you could stop here, or one more if you like)
+    instead of the same nudge again; from 3 wins it is proud.
     Then, chosen by the owner: ideas to level up each skill area, always with a way to get more,
     including ideas that build on what the user already does there. **Details (default):** a
     page of ideas for each area, opened from each skill and a "level up next" card (the skill

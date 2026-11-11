@@ -73,6 +73,11 @@ class CheckinTest {
         app.tap("companion-do")
         app.waitFor { runBlocking { dao.allTicks() }.size == 1 }
 
+        // Done, it counts as a win, says so, and moves on rather than repeating itself.
+        app.waitFor { shown("companion-wins") && text("companion-wins").contains("1 small win") }
+        assert(shown("companion-face:HAPPY"))
+        assert(!text("companion-line").contains("One small step is plenty"))
+
         // A new level: it jumps for joy until the cheer is seen.
         runBlocking { dao.putSetting(SettingEntity(Checkins.LEVEL_SEEN, "0")) }
         app.waitFor { shown("companion-cheered") }

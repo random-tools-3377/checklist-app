@@ -100,6 +100,7 @@ keeps the data.
 - 0.51.0: the character checks in, answers your mood, and jumps for joy.
 - 0.52.0: ideas to level up each skill, and always more of them.
 - 0.53.0: a today widget to tick off the day from the home screen; widgets show ticks straight away.
+- 0.54.0: on a hard day, the character counts each thing done as a win.
 
 Every step in CLAUDE.md's build order is built. The iPhone app waits for a way to install it.
 

@@ -46,9 +46,12 @@ data class CompanionSay(
     val suggestion: Goal? = null,
     val askMood: Boolean = false,
     val levelUp: Boolean = false,
+    /** On a hard day: how many things are done today, each one a small win to show. */
+    val wins: Int = 0,
+    val hardDay: Boolean = false,
 ) {
-    /** It jumps for joy at a new level, and when everything is done. */
-    val jumps: Boolean get() = expression == Expression.PROUD
+    /** It jumps for joy at a new level, when everything is done, and for each win on a hard day. */
+    val jumps: Boolean get() = expression == Expression.PROUD || (hardDay && wins > 0)
 }
 
 object Checkins {
@@ -92,19 +95,41 @@ object Checkins {
         if (f.askMood && f.mood == null && !allDone) {
             return CompanionSay(Expression.CALM, pick("How are you feeling today?", "Before we start: how's today feeling?", "Quick check-in: how are you doing?"), askMood = true)
         }
+        // A hard day: gentle, one small thing at a time, and each one done is counted as a win
+        // and said so, with leave to stop there, rather than the same nudge again.
         if (f.mood != null && f.mood <= 2 && !allDone) {
+            val wins = f.doneToday
+            fun more(text: String) = smallText?.let { text.replace("{next}", it) } ?: ""
+            val line = when {
+                wins == 0 && smallText != null -> pick(
+                    "Sounds like a hard day. Be kind to yourself. If you'd like, just one small thing: $smallText.",
+                    "Rough day? That's all right. Maybe just $smallText, and call it a win.",
+                    "Hard days happen. One small step is plenty: $smallText.",
+                )
+                wins == 0 -> pick("Sounds like a hard day. Rest counts too.", "Go easy on yourself today.")
+                wins == 1 -> pick(
+                    "You did it! On a hard day, that one counts double. You could stop here" + (more(", or if you've got a little more in you: {next}.").ifEmpty { "." }),
+                    "That's a win, on a day that didn't feel like it. Rest if you need to" + (more(", or try one more small one: {next}.").ifEmpty { "." }),
+                )
+                wins == 2 -> pick(
+                    "Two done on a hard day. That's real progress." + more(" Another, or a rest? Both are fine: {next}."),
+                    "Look at that: two wins already today." + more(" Only if it feels good: {next}."),
+                )
+                else -> pick(
+                    "$wins done today, on a day like this. That's brilliant." + more(" Keep going only if you want to: {next}."),
+                    "$wins wins on a hard day. I'm proud of us." + more(" Next, if you like: {next}."),
+                )
+            }
             return CompanionSay(
-                Expression.CALM,
-                if (smallText != null) {
-                    pick(
-                        "Sounds like a hard day. Be kind to yourself. If you'd like, just one small thing: $smallText.",
-                        "Rough day? That's all right. Maybe just $smallText, and call it a win.",
-                        "Hard days happen. One small step is plenty: $smallText.",
-                    )
-                } else {
-                    pick("Sounds like a hard day. Rest counts too.", "Go easy on yourself today.")
+                expression = when {
+                    wins == 0 -> Expression.CALM
+                    wins < 3 -> Expression.HAPPY
+                    else -> Expression.PROUD
                 },
+                line = line,
                 suggestion = small,
+                wins = wins,
+                hardDay = true,
             )
         }
         if (allDone) {
