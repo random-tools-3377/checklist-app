@@ -7,13 +7,16 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 pattern='NSURLSession|URLSession|NSURLConnection|NWConnection|NWPathMonitor|CFSocket|CFStream|NSURLRequest|URLRequest|WKWebView|SFSafariViewController|io\.ktor|okhttp|java\.net\.'
-mapfile -t files < <(git ls-files 'core/src/commonMain/*' 'shared/src/commonMain/*' 'shared/src/iosMain/*' 'iosApp/*' | grep -E '\.(kt|swift|m|h)$')
-if found="$(grep -nE "$pattern" "${files[@]}")"; then
+# (Written for the Mac's older bash too: no mapfile.)
+list="$(git ls-files 'core/src/commonMain/*' 'shared/src/commonMain/*' 'shared/src/iosMain/*' 'iosApp/*' | grep -E '\.(kt|swift|m|h)$')"
+count="$(printf '%s\n' "$list" | grep -c . || true)"
+found="$(printf '%s\n' "$list" | tr '\n' '\0' | xargs -0 grep -nE "$pattern" || true)"
+if [ -n "$found" ]; then
   echo "::error::Networking code in the shared or iPhone code, which must not reach the internet:"
   echo "$found"
   exit 1
 fi
-echo "No networking code in ${#files[@]} shared and iPhone source files."
+echo "No networking code in $count shared and iPhone source files."
 if [ $# -ge 1 ]; then
   binary="$1"
   if linked="$(nm -u "$binary" | grep -E '_OBJC_CLASS_\$_(NSURLSession|NSURLConnection|NSURLRequest|NSMutableURLRequest|WKWebView|SFSafariViewController)|_nw_connection_|_CFSocketCreate|_CFStreamCreatePairWithSocket')"; then
