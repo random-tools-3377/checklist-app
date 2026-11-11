@@ -271,12 +271,13 @@ jobs:
           brew install xcodegen
           cd iosApp && xcodegen generate
 
+      # GitHub's Macs have Apple chips, and the app is built for arm64 simulators only.
       - name: Build the app for the simulator
         run: |
           set -o pipefail
           xcodebuild -project iosApp/Checklist.xcodeproj -scheme Checklist -configuration Debug \
             -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -derivedDataPath build/sim \
-            CODE_SIGNING_ALLOWED=NO build | tail -n 100
+            ARCHS=arm64 ONLY_ACTIVE_ARCH=YES CODE_SIGNING_ALLOWED=NO build | tail -n 100
 
       - name: Open it and check it keeps running
         run: |
