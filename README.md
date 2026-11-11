@@ -21,6 +21,17 @@ Open the [Releases page](../../releases) in the phone's browser, download the ne
 Every release is signed with the same key, so a new version installs over the old one and
 keeps the data.
 
+### Windows
+
+Download the newest `checklist-<version>.msi` from the [Releases page](../../releases) and open
+it. The installer isn't signed, so Windows may warn that it doesn't know the app: choose
+**More info**, then **Run anyway**. It installs for your Windows account only, with a Start menu
+entry and a desktop shortcut, and a newer `.msi` installs over the old one.
+
+The data stays on that computer, in your account's `AppData\Local\Checklist` folder (never roamed to a server); nothing is
+sent anywhere. To move goals between the computer and a phone, export them in Settings → Backup
+on one and import the file on the other. Reminders show only while the app is open.
+
 ## What is built
 
 - 0.1.0: goals (habits and projects), ticking, points and the shop.
@@ -125,6 +136,11 @@ Hyperlegible and Lora are under the SIL Open Font License; their notices ship in
 - On every push CI also runs the shared tests on an iPhone simulator, and builds the iPhone app
   as an unsigned `.ipa`, which SideStore or AltStore signs on the phone with the owner's Apple ID.
   The iPhone app has no networking code, and CI checks that in the code and in the built app.
+- `desktop/` is the Windows app: the same screens in a window, with the computer's side in
+  `shared/src/jvmMain` (`DesktopPhone`). On every push CI builds it on Windows as an unsigned
+  `.msi` with its own Java inside, opens it to check it keeps running, and checks its code has no
+  networking (`scripts/check-no-network-desktop.sh`). Its icon is drawn by
+  `tools/make-windows-icon.py`.
 - GitHub Actions, on every push: unit tests, emulator tests (ticking and buying, skips and
   misses, reminders, backups and database updates), a release build, the signature check and
   the network-permission check.

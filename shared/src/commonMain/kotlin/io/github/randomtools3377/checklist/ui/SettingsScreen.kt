@@ -727,7 +727,7 @@ fun SettingsScreen(
                         modifier = Modifier.padding(horizontal = 16.dp),
                     )
                 }
-                if (!phone.previewIsAChoice) {
+                if (!phone.previewIsAChoice && phone.hasRecentsPreview) {
                     Text(
                         "The app's preview is hidden in the recent-apps screen.",
                         style = MaterialTheme.typography.bodyMedium,

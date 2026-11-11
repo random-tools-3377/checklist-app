@@ -15,11 +15,15 @@ typealias PickedFile = String
 
 /**
  * What the shared screens ask of the phone they run on: the parts every phone shares, and what
- * only a phone can do, each phone in its own way (Android in the app, the iPhone in iosMain).
+ * only a phone can do, each phone in its own way (Android in the app, the iPhone in iosMain, and
+ * a Windows computer in jvmMain, as DesktopPhone).
  * Something a phone can't do yet says so ([hasCalendar], [hasAi], [canPickFolder]).
  */
 interface Phone {
     val parts: SharedParts
+
+    /** Whether the device has a recent-apps screen showing the app's preview (a computer doesn't). */
+    val hasRecentsPreview: Boolean get() = true
 
     /** Whether the app is running under its own tests, where first-time tips would get in the way. */
     val underTest: Boolean get() = false

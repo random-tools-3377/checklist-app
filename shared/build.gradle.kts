@@ -2,7 +2,8 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 // What Android and iPhone share beyond the rules in :core: the database and the code around it,
 // and the screens (Compose Multiplatform). What only a phone can do goes through Phone, which
-// each phone fills in. The jvm target is only for building and testing it on any machine.
+// each phone fills in. The jvm target is the Windows app's (see :desktop), and runs the tests on
+// any machine.
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
     alias(libs.plugins.android.library)

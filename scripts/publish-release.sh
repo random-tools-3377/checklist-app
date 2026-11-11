@@ -3,13 +3,15 @@
 # notes in release-notes/<version>.md: the checklist app and Checklist AI, always together and
 # always the same version. Does nothing if that version already has a Release, so a push that
 # doesn't bump the version publishes nothing.
-# The iPhone app's unsigned .ipa goes in too when it was built (a missing one doesn't stop the
-# Android release).
-# Usage: publish-release.sh checklist.apk checklist-ai.apk [checklist.ipa]   (needs GH_TOKEN, GITHUB_REPOSITORY, GITHUB_SHA)
+# The iPhone app's unsigned .ipa and the Windows app's .msi go in too when they were built (a
+# missing one doesn't stop the Android release).
+# Usage: publish-release.sh checklist.apk checklist-ai.apk [checklist.ipa] [Checklist-<version>.msi]
+#   (needs GH_TOKEN, GITHUB_REPOSITORY, GITHUB_SHA; pass "" for a missing .ipa)
 set -euo pipefail
 apk="$1"
 ai_apk="$2"
 ipa="${3:-}"
+msi="${4:-}"
 here="$(cd "$(dirname "$0")" && pwd)"
 version="$(sed -n 's/^appVersionName=//p' gradle.properties | tr -d '[:space:]')"
 tag="v$version"
@@ -73,7 +75,25 @@ PY
   cp "$ipa" "$ipa_asset"
   assets+=("$ipa_asset")
 else
-  echo "::warning::No iPhone app this time: publishing the Android apps only."
+  echo "::warning::No iPhone app this time."
+fi
+
+# The Windows app: the build names it after its version, and it must be an .msi (a Windows
+# Installer file starts with the bytes D0 CF 11 E0 A1 B1 1A E1).
+if [ -n "$msi" ] && [ -s "$msi" ]; then
+  if [ "$(basename "$msi")" != "Checklist-$version.msi" ]; then
+    echo "::error::$msi is not the Windows app for version $version (Checklist-$version.msi)."
+    exit 1
+  fi
+  if [ "$(head -c 8 "$msi" | od -An -tx1 | tr -d ' \n')" != "d0cf11e0a1b11ae1" ]; then
+    echo "::error::$msi is not a Windows Installer file."
+    exit 1
+  fi
+  msi_asset="$(dirname "$msi")/checklist-$version.msi"
+  cp "$msi" "$msi_asset"
+  assets+=("$msi_asset")
+else
+  echo "::warning::No Windows app this time."
 fi
 
 gh release create "$tag" "${assets[@]}" \

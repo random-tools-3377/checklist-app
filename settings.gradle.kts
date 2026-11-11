@@ -22,3 +22,5 @@ dependencyResolutionManagement {
 
 rootProject.name = "checklist"
 include(":core", ":shared", ":app", ":ai")
+// The Windows app (see desktop/build.gradle.kts).
+include(":desktop")

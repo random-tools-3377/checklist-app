@@ -9,8 +9,8 @@ import kotlinx.datetime.LocalTime
 /*
  * The parts of the screens each phone does its own way: dates in the phone's style, the
  * wallpaper's colours, the back button, the system dialogs for files and photos, permissions, the
- * phone's lock, sounds, GIFs and voice. Android's are in androidMain, the iPhone's in iosMain;
- * jvmMain has stand-ins only for building the shared code on any machine.
+ * phone's lock, sounds, GIFs and voice. Android's are in androidMain, the iPhone's in iosMain,
+ * and the Windows app's in jvmMain (which the jvm tests use too).
  */
 
 /** "Wed 11 Nov", in the phone's language. */

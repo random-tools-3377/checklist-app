@@ -304,6 +304,70 @@ jobs:
           fi
           echo "The iPhone app opened and is still running."
 
+  windows:
+    name: Build the Windows app
+    # The Windows app as an .msi, built and opened on Windows. No secrets are used here, and
+    # nothing is signed. Only :core, the jvm part of :shared and :desktop are compiled, so no
+    # Android SDK is needed. The .msi only goes in the Release if this passes, and a broken
+    # Windows build doesn't hold back Android.
+    runs-on: windows-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+    steps:
+      # Windows' git would otherwise check the scripts out with Windows line endings, which bash
+      # can't run.
+      - name: Keep the files' line endings as they are in the repository
+        run: git config --global core.autocrlf false
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - name: Check there is no networking code (a computer has no permission to take away)
+        run: scripts/check-no-network-desktop.sh
+
+      - name: Build the .msi
+        run: ./gradlew --no-daemon :desktop:packageMsi
+
+      - name: Open the app and check it keeps running
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem desktop/build/compose/binaries/main/app -Recurse -Filter Checklist.exe | Select-Object -First 1
+          if (-not $exe) { Write-Host "::error::The built Windows app wasn't found."; exit 1 }
+          Write-Host "Opening $($exe.FullName)"
+          $app = Start-Process -FilePath $exe.FullName -PassThru -RedirectStandardOutput app-out.txt -RedirectStandardError app-err.txt
+          Start-Sleep -Seconds 20
+          $running = @(Get-Process -Name Checklist -ErrorAction SilentlyContinue)
+          if ($running.Count -gt 0) { $running | Stop-Process -Force; Start-Sleep -Seconds 2 }
+          Write-Host "----- what the app printed"
+          Get-Content app-out.txt, app-err.txt -ErrorAction SilentlyContinue | Select-Object -Last 80
+          Write-Host "----- end"
+          if ($running.Count -eq 0) {
+            Write-Host "::error::The Windows app isn't running 20 seconds after opening: it closed or crashed (exit code $($app.ExitCode))."
+            exit 1
+          }
+          if (-not (Test-Path "$env:LOCALAPPDATA\Checklist\checklist.db")) {
+            Write-Host "::error::The Windows app kept running but didn't open its database in $env:LOCALAPPDATA\Checklist."
+            exit 1
+          }
+          Write-Host "The Windows app opened, made its database and was still running 20 seconds later."
+
+      - name: Keep the .msi for the release
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: windows-msi
+          path: desktop/build/compose/binaries/main/msi/*.msi
+          if-no-files-found: error
+          retention-days: 30
+
   sign:
     name: Sign and check the release APKs
     needs: build
@@ -358,8 +422,9 @@ jobs:
 
   release:
     name: Publish the Release
-    needs: [sign, emulator, ipa, iphone-try]
-    # The iPhone app is added when it built; a broken iPhone build doesn't hold back Android.
+    needs: [sign, emulator, ipa, iphone-try, windows]
+    # The iPhone and Windows apps are added when they built; a broken iPhone or Windows build
+    # doesn't hold back Android.
     if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.sign.result == 'success' && needs.emulator.result == 'success'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -381,6 +446,12 @@ jobs:
           name: iphone-ipa
           path: dist
 
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        if: needs.windows.result == 'success'
+        with:
+          name: windows-msi
+          path: dist/windows
+
       - name: Check once more before publishing
         run: |
           for apk in dist/checklist.apk dist/checklist-ai.apk; do
@@ -389,7 +460,9 @@ jobs:
             scripts/check-backup.sh "$apk"
           done
 
-      - name: Publish both signed APKs, and the iPhone app, as one Release
+      - name: Publish both signed APKs, the iPhone app and the Windows app, as one Release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: scripts/publish-release.sh dist/checklist.apk dist/checklist-ai.apk dist/checklist.ipa
+        run: |
+          msi="$(ls dist/windows/*.msi 2>/dev/null | head -n 1 || true)"
+          scripts/publish-release.sh dist/checklist.apk dist/checklist-ai.apk dist/checklist.ipa "$msi"
