@@ -253,6 +253,7 @@ fun RewardEntity.toCore() = Reward(
     prizes = Mystery.decode(prizes),
     size = RewardSize.entries.firstOrNull { it.name == size },
     value = value?.takeIf { it > 0 },
+    followsMoney = followsMoney,
 )
 
 fun Reward.toEntity() = RewardEntity(
@@ -260,6 +261,7 @@ fun Reward.toEntity() = RewardEntity(
     prizes = Mystery.encode(prizes),
     size = size?.name,
     value = value,
+    followsMoney = followsMoney,
 )
 
 fun PurchaseEntity.toCore() = Purchase(

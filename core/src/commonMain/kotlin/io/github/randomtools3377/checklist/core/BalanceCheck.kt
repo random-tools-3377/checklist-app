@@ -35,11 +35,11 @@ object BalanceCheck {
 
     /**
      * Each reward with its days of earning at [perDay] (what the user earns now) and a verdict.
-     * A suggested price comes from its size or money value where it has one ([perDayAtNormal]
-     * and [budget], see [Suggest.price]), or else, for one too cheap or out of reach, a day's or
-     * six weeks' worth.
+     * A suggested price comes from its money value at [rate] (see [MoneyPrices]) or its size at
+     * [perDayAtNormal] (see [Suggest.price]) where it has one, or else, for one too cheap or out
+     * of reach, a day's or six weeks' worth.
      */
-    fun rewards(rewards: List<Reward>, perDay: Double?, perDayAtNormal: Double?, budget: Double?): List<RewardCheck> =
+    fun rewards(rewards: List<Reward>, perDay: Double?, perDayAtNormal: Double?, rate: MoneyPrices.Rate?): List<RewardCheck> =
         rewards.filter { !it.archived }.map { reward ->
             val days = perDay?.takeIf { it > 0 }?.let { reward.price / it }
             val verdict = days?.let {
@@ -49,7 +49,8 @@ object BalanceCheck {
                     else -> PriceVerdict.FAIR
                 }
             }
-            val fromValue = Suggest.price(reward.size, reward.value, perDayAtNormal, budget)
+            val fromValue = reward.value?.let { value -> rate?.let { MoneyPrices.price(value, it) } }
+                ?: Suggest.price(reward.size, perDayAtNormal)
             val suggested = fromValue ?: when (verdict) {
                 PriceVerdict.TOO_CHEAP -> perDay?.let { Suggest.nice(it) }
                 PriceVerdict.OUT_OF_REACH -> perDay?.let { Suggest.nice(it * RewardSize.HUGE.days) }

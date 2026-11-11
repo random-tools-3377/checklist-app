@@ -102,6 +102,7 @@ keeps the data.
 - 0.53.0: a today widget to tick off the day from the home screen; widgets show ticks straight away.
 - 0.54.0: on a hard day, the character counts each thing done as a win.
 - 0.55.0: the app on the iPhone (an unsigned .ipa for SideStore or AltStore); the screens are shared.
+- 0.56.0: rewards priced in money, with points prices that work themselves out and keep in step.
 
 Every step in CLAUDE.md's build order is built. The iPhone app is installed with SideStore or
 AltStore (see the 0.55.0 release notes).

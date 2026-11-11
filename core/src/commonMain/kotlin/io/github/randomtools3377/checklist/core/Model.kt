@@ -255,6 +255,8 @@ data class Reward(
     val size: RewardSize? = null,
     /** What it costs in money, in the user's own currency, which also suggests its price. */
     val value: Double? = null,
+    /** Whether its price follows [value] and keeps in step with what the goals pay (see [MoneyPrices]). */
+    val followsMoney: Boolean = false,
 ) {
     val isMystery: Boolean get() = prizes.isNotEmpty()
 }

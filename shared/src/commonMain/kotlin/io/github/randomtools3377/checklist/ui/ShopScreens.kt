@@ -12,6 +12,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.horizontalScroll
 import io.github.randomtools3377.checklist.core.Amounts
 import io.github.randomtools3377.checklist.core.Suggest
+import io.github.randomtools3377.checklist.core.MoneyPrices
 import io.github.randomtools3377.checklist.core.RewardSize
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
@@ -226,7 +227,11 @@ private fun RewardCard(
                 Spacer(Modifier.width(8.dp))
                 Column(Modifier.weight(1f)) {
                     Text(reward.name, style = MaterialTheme.typography.titleMedium)
-                    Text(pointsText(reward.price), style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        pointsText(reward.price) + (reward.value?.takeIf { reward.followsMoney }?.let { " · ${moneyText(it)}" } ?: ""),
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.testTag("price:${reward.name}"),
+                    )
                     if (reward.price != row.usualPrice) {
                         Text(
                             "Usually ${row.usualPrice}: bought ${if (row.boughtThisWeek == 1) "once" else "${row.boughtThisWeek} times"} this week. Back to normal on Monday.",
@@ -297,52 +302,58 @@ private fun BoughtCard(purchase: Purchase, onUse: () -> Unit, onReturn: () -> Un
     }
 }
 
+/** [value] in the phone's own currency, like "$25" or "$3.50". */
+internal fun moneyText(value: Double): String {
+    val cents = kotlin.math.round(value * 100).toLong()
+    val whole = cents / 100
+    val rest = cents % 100
+    return moneySymbol() + if (rest == 0L) "$whole" else "$whole." + rest.toString().padStart(2, '0')
+}
+
 /**
- * "What is it worth?": a size, or what it costs in money, suggests a price from the user's usual
- * earnings at Normal. Money needs the weekly treat budget, asked for here the first time.
+ * What a reward costs in money, and whether its price follows it. Following, the price in points
+ * works itself out from the weekly treat budget and what the goals pay, and keeps in step with
+ * them (see MoneyPrices). The budget is asked for here the first time.
  */
 @Composable
-private fun WorthField(
-    size: RewardSize?,
-    onSize: (RewardSize?) -> Unit,
+private fun MoneyField(
     money: String,
     onMoney: (String) -> Unit,
-    price: String,
-    onPrice: (String) -> Unit,
+    follows: Boolean,
+    onFollows: (Boolean) -> Unit,
     vm: MainViewModel,
 ) {
-    val perDay by vm.usualAtNormal.collectAsStateWithLifecycle()
     val budget by vm.treatBudget.collectAsStateWithLifecycle()
     var budgetText by rememberSaveable { mutableStateOf("") }
-    val features by vm.features.collectAsStateWithLifecycle()
-    // An extra: shown when turned on, or when this reward already has a value.
-    if (io.github.randomtools3377.checklist.core.Feature.SUGGESTIONS !in features && size == null && money.isBlank()) return
-    Text("What is it worth?", style = MaterialTheme.typography.titleSmall)
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
-        RewardSize.entries.forEach { choice ->
-            FilterChip(
-                selected = size == choice,
-                onClick = { onSize(if (size == choice) null else choice) },
-                label = { Text(choice.label) },
-                modifier = Modifier.testTag("size:${choice.name}"),
-            )
-        }
-    }
+    val symbol = remember { moneySymbol() }
     OutlinedTextField(
         value = money,
         onValueChange = { text -> onMoney(text.filter { it.isDigit() || it == '.' || it == ',' }.take(9)) },
-        label = { Text("Or what it costs in money") },
+        label = { Text("What it costs in money") },
+        prefix = if (symbol.isNotEmpty()) ({ Text(symbol) }) else null,
         singleLine = true,
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
         modifier = Modifier.fillMaxWidth().testTag("field:money"),
     )
-    val moneyValue = Amounts.parse(money)
-    if (moneyValue != null && budget == null) {
+    if (Amounts.parse(money)?.takeIf { it > 0 } == null) return
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.weight(1f)) {
+            Text("Price follows what it costs", style = MaterialTheme.typography.bodyLarge)
+            Text(
+                "The price in ${pointsWord()} works itself out from this, and keeps in step as your goals change.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Switch(checked = follows, onCheckedChange = onFollows, modifier = Modifier.testTag("field:follows-money"))
+    }
+    if (budget == null) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             OutlinedTextField(
                 value = budgetText,
                 onValueChange = { text -> budgetText = text.filter { it.isDigit() || it == '.' || it == ',' }.take(9) },
                 label = { Text("What you'd spend on treats in a week") },
+                prefix = if (symbol.isNotEmpty()) ({ Text(symbol) }) else null,
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                 modifier = Modifier.weight(1f).testTag("field:treat-budget"),
@@ -354,12 +365,41 @@ private fun WorthField(
             ) { Text("Set") }
         }
         Text(
-            "Prices from money are worked out from this: a normal week of ticking earns it. Change it in Settings.",
+            "Money and ${pointsWord()} are linked by this: doing everything due in a week earns this much in rewards. Change it in Settings.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
-    val suggested = Suggest.price(if (moneyValue != null) null else size, moneyValue, perDay, budget)
+}
+
+/**
+ * "How big is it?": a size suggests a price from the user's usual earnings at Normal, and so does
+ * what it costs in money when the price doesn't follow it.
+ */
+@Composable
+private fun SizeField(
+    size: RewardSize?,
+    onSize: (RewardSize?) -> Unit,
+    moneyValue: Double?,
+    price: String,
+    onPrice: (String) -> Unit,
+    vm: MainViewModel,
+) {
+    val perDay by vm.usualAtNormal.collectAsStateWithLifecycle()
+    val rate by vm.moneyRate.collectAsStateWithLifecycle()
+    Text(if (moneyValue != null) "Or roughly how big is it?" else "How big is it?", style = MaterialTheme.typography.titleSmall)
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
+        RewardSize.entries.forEach { choice ->
+            FilterChip(
+                selected = size == choice,
+                onClick = { onSize(if (size == choice) null else choice) },
+                label = { Text(choice.label) },
+                modifier = Modifier.testTag("size:${choice.name}"),
+            )
+        }
+    }
+    val fromMoney = moneyValue?.let { value -> rate?.let { MoneyPrices.price(value, it) } }
+    val suggested = if (size != null) Suggest.price(size, perDay) else fromMoney
     when {
         suggested != null -> Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
             Text(
@@ -372,7 +412,7 @@ private fun WorthField(
                 TextButton(onClick = { onPrice(suggested.toString()) }, modifier = Modifier.testTag("use-suggested-price")) { Text("Use it") }
             }
         }
-        (size != null || moneyValue != null) && perDay == null -> Text(
+        size != null && perDay == null -> Text(
             "Add a goal or two first: the suggestion comes from what your goals pay.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -490,10 +530,16 @@ fun RewardEditor(id: Long, vm: MainViewModel, onClose: () -> Unit) {
     var price by rememberSaveable { mutableStateOf("") }
     var mystery by rememberSaveable { mutableStateOf(false) }
     var prizes by rememberSaveable { mutableStateOf(listOf("", "")) }
-    // What it is worth, which suggests its price: a size, or what it costs in money.
+    // What it is worth: what it costs in money, which the price can follow, or a size, which
+    // suggests a price.
     var size by rememberSaveable { mutableStateOf<String?>(null) }
     var money by rememberSaveable { mutableStateOf("") }
+    var follows by rememberSaveable { mutableStateOf(false) }
     var showErrors by rememberSaveable { mutableStateOf(false) }
+    val rate by vm.moneyRate.collectAsStateWithLifecycle()
+    val perDay by vm.usualAtNormal.collectAsStateWithLifecycle()
+    val budget by vm.treatBudget.collectAsStateWithLifecycle()
+    val features by vm.features.collectAsStateWithLifecycle()
 
     LaunchedEffect(id) {
         if (!loaded) {
@@ -503,6 +549,7 @@ fun RewardEditor(id: Long, vm: MainViewModel, onClose: () -> Unit) {
                 price = it.price.toString()
                 size = it.size?.name
                 money = it.value?.let { v -> Amounts.format(v) }.orEmpty()
+                follows = it.followsMoney
                 if (it.isMystery) {
                     mystery = true
                     prizes = it.prizes
@@ -513,7 +560,10 @@ fun RewardEditor(id: Long, vm: MainViewModel, onClose: () -> Unit) {
     }
 
     val nameError = if (name.isBlank()) "Give it a name" else null
-    val priceValue = price.toIntOrNull()
+    val moneyValue = Amounts.parse(money)?.takeIf { it > 0 }
+    // Following money, the price works itself out; until it can, it is typed in as usual.
+    val autoPrice = if (follows && moneyValue != null) rate?.let { MoneyPrices.price(moneyValue, it) } else null
+    val priceValue = autoPrice ?: price.toIntOrNull()
     val priceError = if (priceValue == null || priceValue < 1) "A price of at least 1 point" else null
     val prizesError = if (mystery && Mystery.tidy(prizes).size < 2) "Write at least two things it could be" else null
 
@@ -527,7 +577,8 @@ fun RewardEditor(id: Long, vm: MainViewModel, onClose: () -> Unit) {
                 vm.saveReward(
                     RewardDraft(
                         id = id, name = name.trim(), icon = icon, price = priceValue!!, prizes = if (mystery) Mystery.tidy(prizes) else emptyList(),
-                        size = size?.let { RewardSize.valueOf(it) }, value = Amounts.parse(money),
+                        size = size?.let { RewardSize.valueOf(it) }, value = moneyValue,
+                        followsMoney = follows && moneyValue != null,
                     ),
                     onDone = onClose,
                 )
@@ -545,27 +596,68 @@ fun RewardEditor(id: Long, vm: MainViewModel, onClose: () -> Unit) {
             supportingText = if (showErrors && nameError != null) ({ Text(nameError) }) else null,
             modifier = Modifier.fillMaxWidth().testTag("field:name"),
         )
-        NumberField(
-            label = "Price in ${pointsWord()}",
-            value = price,
-            onValueChange = { price = it },
-            tag = "field:price",
-            error = if (showErrors) priceError else null,
-        )
+        // An extra: shown when turned on, or when this reward already has a value.
+        val worth = io.github.randomtools3377.checklist.core.Feature.SUGGESTIONS in features || size != null || money.isNotBlank()
+        if (worth) {
+            MoneyField(
+                money = money,
+                onMoney = { text ->
+                    // Typing a money value for the first time makes the price follow it.
+                    if (money.isBlank() && text.isNotBlank()) follows = true
+                    money = text
+                },
+                follows = follows,
+                onFollows = { follows = it },
+                vm = vm,
+            )
+        }
+        if (autoPrice != null) {
+            Column(Modifier.fillMaxWidth()) {
+                Text("Price: ${pointsText(autoPrice)}", style = MaterialTheme.typography.titleMedium, modifier = Modifier.testTag("auto-price"))
+                Text(
+                    buildList {
+                        perDay?.takeIf { it > 0 }?.let { usual ->
+                            val days = autoPrice / usual
+                            add(if (days < 1) "Less than a day of your usual" else "≈ ${days.toInt()} day${if (days.toInt() == 1) "" else "s"} of your usual")
+                        }
+                        add("worked out from ${moneyText(moneyValue!!)}")
+                    }.joinToString(", ") + ".",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        } else {
+            NumberField(
+                label = "Price in ${pointsWord()}",
+                value = price,
+                onValueChange = { price = it },
+                tag = "field:price",
+                error = if (showErrors) priceError else null,
+            )
+            if (follows && moneyValue != null && budget != null) {
+                Text(
+                    "Add a goal that repeats first: the price comes from what your goals pay. Until then, set it here.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.testTag("auto-price-waiting"),
+                )
+            }
+        }
         Text(
             "There is no limit on how often a reward can be bought, as long as the balance covers the price.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        WorthField(
-            size = size?.let { RewardSize.valueOf(it) },
-            onSize = { size = it?.name },
-            money = money,
-            onMoney = { money = it },
-            price = price,
-            onPrice = { price = it },
-            vm = vm,
-        )
+        if (worth && autoPrice == null && !(follows && moneyValue != null)) {
+            SizeField(
+                size = size?.let { RewardSize.valueOf(it) },
+                onSize = { size = it?.name },
+                moneyValue = moneyValue,
+                price = price,
+                onPrice = { price = it },
+                vm = vm,
+            )
+        }
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
             Column(Modifier.weight(1f)) {
                 Text("Mystery reward", style = MaterialTheme.typography.bodyLarge)

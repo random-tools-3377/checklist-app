@@ -78,13 +78,15 @@ fun hourText(hour: Int): String = when (hour) {
 
 /**
  * How easy rewards are to earn: a level by hand, or getting harder (or easier) a level at a time
- * on a schedule. Also the weekly treat budget that prices from money are worked out from.
+ * on a schedule. Also the weekly treat budget, which links money and points for rewards priced in
+ * money (see MoneyPrices).
  */
 @Composable
 private fun DifficultySettings(vm: MainViewModel) {
     val setting by vm.difficulty.collectAsState()
     val now by vm.currentDifficulty.collectAsState()
     val budget by vm.treatBudget.collectAsState()
+    val moneyRate by vm.moneyRate.collectAsState()
     var rampFrom by rememberSaveable { mutableStateOf(Difficulty.EASY) }
     var rampTo by rememberSaveable { mutableStateOf(Difficulty.NORMAL) }
     var weeks by rememberSaveable { mutableStateOf("6") }
@@ -148,6 +150,7 @@ private fun DifficultySettings(vm: MainViewModel) {
                 value = budgetText,
                 onValueChange = { text -> budgetText = text.filter { it.isDigit() || it == '.' || it == ',' }.take(9) },
                 label = { Text("Weekly treat budget, in money") },
+                prefix = moneySymbol().takeIf { it.isNotEmpty() }?.let { symbol -> { Text(symbol) } },
                 singleLine = true,
                 keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal),
                 modifier = Modifier.weight(1f).testTag("field:treat-budget"),
@@ -155,7 +158,8 @@ private fun DifficultySettings(vm: MainViewModel) {
             TextButton(onClick = { vm.setTreatBudget(Amounts.parse(budgetText)) }, modifier = Modifier.testTag("save-treat-budget")) { Text("Set") }
         }
         Text(
-            "For suggested prices from what a reward costs: a normal week of ticking earns this much.",
+            "Links money and ${pointsWord()} for rewards with a price in money: doing everything due in a week earns this much in rewards." +
+                (moneyRate?.let { " Now ${moneyText(1.0)} is about ${io.github.randomtools3377.checklist.core.Suggest.nice(it.pointsPerUnit)} ${pointsWord()}." } ?: ""),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )

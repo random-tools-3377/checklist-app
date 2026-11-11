@@ -86,6 +86,14 @@ The app has no network access unless the owner decides otherwise for this app.
 - A points history lists every change to the balance: what it was for, when, and how much.
 - The balance can go negative. A reward can't be bought for more than the balance, so a negative
   balance means the shop is effectively closed until the user earns back.
+- A reward can have what it costs in money. Its price in points then works itself out from that,
+  and keeps in step as the goals change, so rewards of very different costs are priced fairly.
+  **Details (default):** the weekly treat budget in Settings links money and points: doing
+  everything due in a week earns that much in rewards, at Normal. Typing a money value turns
+  "Price follows what it costs" on for that reward, and it can be turned off to set the price by
+  hand. Prices move when what a full week of goals pays drifts more than a tenth from the rate in
+  use, or the budget changes. Rewards given a money value before 0.56.0 keep their price until it
+  is turned on. Bought rewards keep what they cost.
 
 ## Celebrations
 

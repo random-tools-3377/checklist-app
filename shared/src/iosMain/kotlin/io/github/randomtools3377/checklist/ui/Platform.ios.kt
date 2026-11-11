@@ -39,6 +39,7 @@ import platform.Foundation.NSDateFormatter
 import platform.Foundation.NSDateFormatterNoStyle
 import platform.Foundation.NSDateFormatterShortStyle
 import platform.Foundation.NSLocale
+import platform.Foundation.NSLocaleCurrencySymbol
 import platform.Foundation.NSURL
 import platform.Foundation.currentLocale
 import platform.Foundation.writeToFile
@@ -93,6 +94,8 @@ actual val canMatchWallpaper: Boolean get() = false
 actual fun wallpaperColors(dark: Boolean): ColorScheme? = null
 
 actual fun canShowEmoji(emoji: String): Boolean = true
+
+actual fun moneySymbol(): String = NSLocale.currentLocale.objectForKey(NSLocaleCurrencySymbol) as? String ?: ""
 
 /** The iPhone has no back button; screens have their own back arrow. */
 @Composable

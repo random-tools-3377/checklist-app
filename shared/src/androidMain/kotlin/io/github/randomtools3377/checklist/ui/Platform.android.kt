@@ -81,6 +81,8 @@ actual fun canShowEmoji(emoji: String): Boolean = try {
     false
 }
 
+actual fun moneySymbol(): String = runCatching { java.util.Currency.getInstance(Locale.getDefault()).symbol }.getOrDefault("")
+
 @Composable
 actual fun BackButton(enabled: Boolean, onBack: () -> Unit) = BackHandler(enabled = enabled, onBack = onBack)
 

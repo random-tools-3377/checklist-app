@@ -19,14 +19,22 @@ class BalanceCheckTest {
             Reward(id = 3, name = "Trip", icon = "✈️", price = 2000),
             Reward(id = 4, name = "Coffee", icon = "☕", price = 10, size = RewardSize.SMALL),
         )
-        val checks = BalanceCheck.rewards(rewards, perDay = 20.0, perDayAtNormal = 20.0, budget = null)
+        val checks = BalanceCheck.rewards(rewards, perDay = 20.0, perDayAtNormal = 20.0, rate = null)
         assertEquals(listOf(PriceVerdict.TOO_CHEAP, PriceVerdict.FAIR, PriceVerdict.OUT_OF_REACH, PriceVerdict.FAIR), checks.map { it.verdict })
         assertEquals(3.0, checks[1].days)
         assertEquals(20, checks[0].suggested) // a day's worth
         assertNull(checks[1].suggested)
         assertEquals(840, checks[2].suggested) // six weeks' worth
         assertEquals(20, checks[3].suggested) // from its size
-        assertNull(BalanceCheck.rewards(rewards, perDay = null, perDayAtNormal = null, budget = null)[0].verdict)
+        assertNull(BalanceCheck.rewards(rewards, perDay = null, perDayAtNormal = null, rate = null)[0].verdict)
+
+        // A money value is priced at the money rate; one that already follows it has nothing to change.
+        val money = listOf(
+            Reward(id = 5, name = "Book", icon = "📚", price = 40, value = 12.0),
+            Reward(id = 6, name = "Game", icon = "🎮", price = 250, value = 50.0, followsMoney = true),
+        )
+        val priced = BalanceCheck.rewards(money, perDay = 20.0, perDayAtNormal = 20.0, rate = MoneyPrices.Rate(5.0, 30.0))
+        assertEquals(listOf(60, null), priced.map { it.suggested })
     }
 
     @Test

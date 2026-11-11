@@ -28,6 +28,8 @@ actual fun wallpaperColors(dark: Boolean): ColorScheme? = null
 
 actual fun canShowEmoji(emoji: String): Boolean = true
 
+actual fun moneySymbol(): String = runCatching { java.util.Currency.getInstance(java.util.Locale.getDefault()).symbol }.getOrDefault("")
+
 @Composable
 actual fun BackButton(enabled: Boolean, onBack: () -> Unit) {}
 

@@ -42,7 +42,8 @@ data class Backup(
      * format 19 the daily mood check-in;
      * format 20 habit chains;
      * format 21 each goal's skill area, for the character;
-     * format 22 bets on yourself in the points history.
+     * format 22 bets on yourself in the points history;
+     * format 23 rewards whose price follows what they cost in money.
      */
     val checks: List<Check> = emptyList(),
     /** The user's own photo behind Today, in base64 (format 10). */
@@ -54,7 +55,7 @@ data class Backup(
         const val APP = "checklist"
 
         /** Raised whenever the file's layout changes in a way older versions can't read. */
-        const val FORMAT = 22
+        const val FORMAT = 23
 
         private val json = Json {
             prettyPrint = true

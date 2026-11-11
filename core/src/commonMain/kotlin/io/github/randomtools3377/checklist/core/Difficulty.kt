@@ -116,18 +116,12 @@ object Suggest {
     }
 
     /**
-     * A reward's price from its size, or from what it costs in money against the user's weekly
-     * treat budget (a normal week's earnings are worth that budget). [perDay] is the user's
-     * usual earnings at Normal. Null when there is nothing to go on.
+     * A reward's price from its size: so many days of [perDay], the user's usual earnings at
+     * Normal. Null when there is nothing to go on. Prices from money are worked out by [MoneyPrices].
      */
-    fun price(size: RewardSize?, money: Double?, perDay: Double?, weeklyBudget: Double?): Int? {
-        if (perDay == null || perDay <= 0.0) return null
-        val raw = when {
-            money != null && money > 0 && weeklyBudget != null && weeklyBudget > 0 -> money / weeklyBudget * perDay * 7
-            size != null -> perDay * size.days
-            else -> return null
-        }
-        return nice(raw)
+    fun price(size: RewardSize?, perDay: Double?): Int? {
+        if (size == null || perDay == null || perDay <= 0.0) return null
+        return nice(perDay * size.days)
     }
 
     /** Rounds a price to something easy to read: to 5 from 20, to 10 from 200, to 50 from 1,000. */
@@ -143,11 +137,10 @@ object Suggest {
 
     /**
      * What the user's goals would pay a day if all were done, at Normal: each goal's points for
-     * every time it is due over the next 4 weeks, spread over the days. A first guess at "your
-     * usual" before there is any history.
+     * every time it is due over the next [days] days (4 weeks unless said), spread over them. A
+     * first guess at "your usual" before there is any history.
      */
-    fun expectedPerDay(goals: List<Goal>, today: LocalDate): Double? {
-        val days = 28
+    fun expectedPerDay(goals: List<Goal>, today: LocalDate, days: Int = 28): Double? {
         var total = 0
         for (goal in goals) {
             if (goal.archived || goal.kind != GoalKind.HABIT) continue

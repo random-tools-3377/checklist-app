@@ -133,6 +133,7 @@ import io.github.randomtools3377.checklist.data.SETTING_WEEK_PLANNED
 import io.github.randomtools3377.checklist.data.SETTING_MOOD_SKIPPED
 import io.github.randomtools3377.checklist.data.SETTING_MOOD
 import io.github.randomtools3377.checklist.data.SETTING_TREAT_BUDGET
+import io.github.randomtools3377.checklist.core.MoneyPrices
 import io.github.randomtools3377.checklist.data.RewardDraft
 import io.github.randomtools3377.checklist.data.SETTING_DAY_END_HOUR
 import io.github.randomtools3377.checklist.data.DEFAULT_SNOOZE_MINUTES
@@ -1376,6 +1377,25 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
         }
     }.state(null)
 
+    /**
+     * Points for 1 of money, for rewards whose price follows what they cost (see MoneyPrices):
+     * the rate in use, or a fresh one once the goals have drifted from it. Null without a weekly
+     * treat budget or a repeating goal that pays.
+     */
+    val moneyRate: StateFlow<MoneyPrices.Rate?> = combine(
+        dao.observeSetting(MoneyPrices.RATE), dao.observeGoals(), treatBudget, today,
+    ) { stored, goals, budget, day ->
+        MoneyPrices.next(MoneyPrices.decode(stored), MoneyPrices.fresh(goals.map { it.toCore() }, day, budget))
+    }.state(null)
+
+    init {
+        // Prices that follow money keep in step with what the goals pay, and with the budget.
+        viewModelScope.launch {
+            combine(dao.observeGoals(), treatBudget, dao.observeRewards(), today) { _, _, _, day -> day }
+                .collectLatest { day -> repository.keepMoneyPricesInStep(day) }
+        }
+    }
+
     /** Savings interest on a positive balance each week, as a whole percentage; 0 is off. */
     val interestPercent: StateFlow<Int> =
         dao.observeSetting(Interest.PERCENT).map { it?.toIntOrNull()?.coerceIn(0, 100) ?: 0 }.state(0)
@@ -1417,13 +1437,13 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
             combine(dao.observeRewards(), shown, dao.observeHabitTicksSince(day.minusDays(BalanceCheck.DAYS).toEpochDay())) { r, g, t -> Triple(r, g, t) },
             perDay,
             usualAtNormal,
-            treatBudget,
+            moneyRate,
             currentDifficulty,
-        ) { (rewards, goals, ticks), earned, atNormal, budget, rate ->
+        ) { (rewards, goals, ticks), earned, atNormal, money, rate ->
             BalanceCheckView(
                 perDay = earned,
                 rate = rate,
-                rewards = BalanceCheck.rewards(rewards.map { it.toCore() }, earned, atNormal, budget),
+                rewards = BalanceCheck.rewards(rewards.map { it.toCore() }, earned, atNormal, money),
                 goals = BalanceCheck.goals(goals, ticks.map { it.toCore() }, day) { it.createdAt.toLocalDateTime().date },
             )
         }

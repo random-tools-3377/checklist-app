@@ -36,6 +36,9 @@ expect fun wallpaperColors(dark: Boolean): ColorScheme?
 /** Whether this phone can draw [emoji] (newer emoji are left out on older phones). */
 expect fun canShowEmoji(emoji: String): Boolean
 
+/** The symbol of the phone's own currency, like "$" or "£", or empty if it has none. */
+expect fun moneySymbol(): String
+
 /** The phone's back button or gesture, while [enabled]. Phones without one ignore it. */
 @Composable
 expect fun BackButton(enabled: Boolean = true, onBack: () -> Unit)

@@ -9,6 +9,7 @@ import io.github.randomtools3377.checklist.core.Moves
 import io.github.randomtools3377.checklist.core.Retimes
 import io.github.randomtools3377.checklist.core.Todos
 import io.github.randomtools3377.checklist.core.Mystery
+import io.github.randomtools3377.checklist.core.MoneyPrices
 import io.github.randomtools3377.checklist.core.GoalKind
 import io.github.randomtools3377.checklist.core.Period
 import io.github.randomtools3377.checklist.core.Reminder
@@ -188,6 +189,8 @@ data class RewardDraft(
     /** How big a treat it is, or what it costs in money, which suggest its price. */
     val size: RewardSize? = null,
     val value: Double? = null,
+    /** Whether its price follows [value] (see MoneyPrices). */
+    val followsMoney: Boolean = false,
 )
 
 /** Adding, editing, ordering and removing goals and rewards; settings; export and import. */
@@ -497,6 +500,7 @@ class Repository(private val db: AppDatabase, private val celebrations: GifStore
                     prizes = Mystery.encode(draft.prizes),
                     size = draft.size?.name,
                     value = draft.value?.takeIf { it > 0 },
+                    followsMoney = draft.followsMoney && (draft.value ?: 0.0) > 0,
                 ),
             )
         } else {
@@ -504,10 +508,27 @@ class Repository(private val db: AppDatabase, private val celebrations: GifStore
                 existing.copy(
                     name = draft.name, icon = draft.icon, price = draft.price, prizes = Mystery.encode(draft.prizes),
                     size = draft.size?.name, value = draft.value?.takeIf { it > 0 },
+                    followsMoney = draft.followsMoney && (draft.value ?: 0.0) > 0,
                 ),
             )
         }
         Unit
+    }
+
+    /**
+     * Keeps the prices of rewards that follow money in step with what the goals pay: works out the
+     * money rate from the goals and the weekly treat budget, keeps the one in use unless it has
+     * drifted (see MoneyPrices), and reprices those rewards. Ones already bought keep what they cost.
+     */
+    suspend fun keepMoneyPricesInStep(today: LocalDate): Unit = db.withTransaction {
+        val budget = dao.setting(SETTING_TREAT_BUDGET)?.toDoubleOrNull()?.takeIf { it > 0 }
+        val stored = MoneyPrices.decode(dao.setting(MoneyPrices.RATE))
+        val rate = MoneyPrices.next(stored, MoneyPrices.fresh(dao.allGoals().map { it.toCore() }, today, budget))
+            ?: return@withTransaction
+        if (rate != stored) dao.putSetting(SettingEntity(MoneyPrices.RATE, MoneyPrices.encode(rate)))
+        val rows = dao.activeRewards()
+        val changes = MoneyPrices.changes(rows.map { it.toCore() }, rate)
+        rows.filter { it.id in changes }.forEach { dao.updateReward(it.copy(price = changes.getValue(it.id))) }
     }
 
     /** A new price for a reward, from the balance check. Ones already bought keep what they cost. */
