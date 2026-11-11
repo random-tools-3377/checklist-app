@@ -23,8 +23,14 @@ kotlin {
             jvmTarget.set(JvmTarget.JVM_17)
         }
     }
-    iosArm64()
-    iosSimulatorArm64()
+    // The iPhone app links the shared code as Shared.framework (see iosApp/project.yml).
+    listOf(iosArm64(), iosSimulatorArm64()).forEach { target ->
+        target.binaries.framework {
+            baseName = "Shared"
+            isStatic = true
+            binaryOption("bundleId", "io.github.randomtools3377.checklist.shared")
+        }
+    }
 
     sourceSets {
         commonMain.dependencies {

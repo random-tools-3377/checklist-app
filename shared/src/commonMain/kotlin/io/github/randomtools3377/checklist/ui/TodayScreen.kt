@@ -971,7 +971,7 @@ private fun HabitCard(
                             }
                             val seconds = ((now - running.startedAt) / 1000).coerceAtLeast(0)
                             Text(
-                                "⏱ %02d:%02d · Stop".format(seconds / 60, seconds % 60),
+                                "⏱ ${(seconds / 60).toString().padStart(2, '0')}:${(seconds % 60).toString().padStart(2, '0')} · Stop",
                                 style = MaterialTheme.typography.labelLarge,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.error,

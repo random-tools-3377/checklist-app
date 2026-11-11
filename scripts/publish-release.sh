@@ -3,10 +3,13 @@
 # notes in release-notes/<version>.md: the checklist app and Checklist AI, always together and
 # always the same version. Does nothing if that version already has a Release, so a push that
 # doesn't bump the version publishes nothing.
-# Usage: publish-release.sh checklist.apk checklist-ai.apk   (needs GH_TOKEN, GITHUB_REPOSITORY, GITHUB_SHA)
+# The iPhone app's unsigned .ipa goes in too when it was built (a missing one doesn't stop the
+# Android release).
+# Usage: publish-release.sh checklist.apk checklist-ai.apk [checklist.ipa]   (needs GH_TOKEN, GITHUB_REPOSITORY, GITHUB_SHA)
 set -euo pipefail
 apk="$1"
 ai_apk="$2"
+ipa="${3:-}"
 here="$(cd "$(dirname "$0")" && pwd)"
 version="$(sed -n 's/^appVersionName=//p' gradle.properties | tr -d '[:space:]')"
 tag="v$version"
@@ -50,7 +53,30 @@ asset="$(dirname "$apk")/checklist-$version.apk"
 ai_asset="$(dirname "$ai_apk")/checklist-ai-$version.apk"
 cp "$apk" "$asset"
 cp "$ai_apk" "$ai_asset"
-gh release create "$tag" "$asset" "$ai_asset" \
+assets=("$asset" "$ai_asset")
+
+# The iPhone app: its version must match too.
+if [ -n "$ipa" ] && [ -s "$ipa" ]; then
+  ipa_version="$(python3 - "$ipa" <<'PY'
+import plistlib, sys, zipfile
+with zipfile.ZipFile(sys.argv[1]) as z:
+    name = next(n for n in z.namelist() if n.endswith(".app/Info.plist") and n.count("/") == 2)
+    info = plistlib.loads(z.read(name))
+print(info.get("CFBundleShortVersionString", ""), info.get("CFBundleIdentifier", ""))
+PY
+)"
+  if [ "$ipa_version" != "$version io.github.randomtools3377.checklist" ]; then
+    echo "::error::$ipa says '$ipa_version', not version $version of io.github.randomtools3377.checklist."
+    exit 1
+  fi
+  ipa_asset="$(dirname "$ipa")/checklist-$version.ipa"
+  cp "$ipa" "$ipa_asset"
+  assets+=("$ipa_asset")
+else
+  echo "::warning::No iPhone app this time: publishing the Android apps only."
+fi
+
+gh release create "$tag" "${assets[@]}" \
   --repo "$GITHUB_REPOSITORY" \
   --target "$GITHUB_SHA" \
   --title "Checklist $version" \

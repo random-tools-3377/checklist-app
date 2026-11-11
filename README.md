@@ -101,8 +101,10 @@ keeps the data.
 - 0.52.0: ideas to level up each skill, and always more of them.
 - 0.53.0: a today widget to tick off the day from the home screen; widgets show ticks straight away.
 - 0.54.0: on a hard day, the character counts each thing done as a win.
+- 0.55.0: the app on the iPhone (an unsigned .ipa for SideStore or AltStore); the screens are shared.
 
-Every step in CLAUDE.md's build order is built. The iPhone app waits for a way to install it.
+Every step in CLAUDE.md's build order is built. The iPhone app is installed with SideStore or
+AltStore (see the 0.55.0 release notes).
 
 The emoji list is built from Unicode's emoji data via the MIT-licensed `unicode-emoji-json`
 package; its notice ships in `shared/src/commonMain/composeResources/files/emoji-NOTICE.txt`. The fonts Nunito, Atkinson
@@ -111,10 +113,14 @@ Hyperlegible and Lora are under the SIL Open Font License; their notices ship in
 
 ## How it is built
 
-- `core/` holds the rules in Kotlin Multiplatform, shared by Android and the planned iPhone app,
-  with their unit tests. `app/` is the Android app, in Jetpack Compose.
-- On every push CI also runs the shared tests on an iPhone simulator, so the shared code stays
-  ready for the iPhone app.
+- `core/` holds the rules in Kotlin Multiplatform, shared by Android and the iPhone, with their
+  unit tests. `shared/` holds the database (Room) and every screen (Compose Multiplatform), also
+  for both; what only a phone can do goes through `Phone`, which each phone fills in. `app/` is
+  the Android app around them, with its reminders, widgets and tile; `iosApp/` is the iPhone app
+  (a small Swift shell, made into an Xcode project by XcodeGen).
+- On every push CI also runs the shared tests on an iPhone simulator, and builds the iPhone app
+  as an unsigned `.ipa`, which SideStore or AltStore signs on the phone with the owner's Apple ID.
+  The iPhone app has no networking code, and CI checks that in the code and in the built app.
 - GitHub Actions, on every push: unit tests, emulator tests (ticking and buying, skips and
   misses, reminders, backups and database updates), a release build, the signature check and
   the network-permission check.

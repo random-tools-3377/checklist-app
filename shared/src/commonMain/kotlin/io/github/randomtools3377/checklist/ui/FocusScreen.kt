@@ -37,7 +37,7 @@ import kotlinx.coroutines.delay
 /** "12:05" for minutes and seconds left. */
 private fun clockText(millis: Long): String {
     val seconds = (millis + 999) / 1000
-    return "%d:%02d".format(seconds / 60, seconds % 60)
+    return "${seconds / 60}:${(seconds % 60).toString().padStart(2, '0')}"
 }
 
 /**
