@@ -65,14 +65,14 @@ class MoneyPriceTest {
         app.onNodeWithTag("save").performClick()
         app.waitFor { shown("buy:Film") }
         app.waitFor { priceOf("Film") == 60 }
-        app.onNodeWithTag("price:Film").assertTextContains("60 points", substring = true)
+        app.onNodeWithTag("price:Film", useUnmergedTree = true).assertTextContains("60 points", substring = true)
 
         // A second goal that pays as much again: a point is worth half as much, so the price doubles.
         runBlocking { container.repository.saveHabit(read("Run")) }
         app.waitFor { priceOf("Film") == 120 }
         app.waitFor {
             try {
-                app.onNodeWithTag("price:Film").assertTextContains("120 points", substring = true)
+                app.onNodeWithTag("price:Film", useUnmergedTree = true).assertTextContains("120 points", substring = true)
                 true
             } catch (e: AssertionError) {
                 false
