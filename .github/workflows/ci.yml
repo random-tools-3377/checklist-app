@@ -202,6 +202,9 @@ jobs:
       - name: Check there is no networking code (the iPhone has no permission to take away)
         run: scripts/check-no-network-ios.sh
 
+      - name: Give Gradle more memory (linking the iPhone app needs it)
+        run: sed -i '' 's/^org.gradle.jvmargs=.*/org.gradle.jvmargs=-Xmx6g -Dfile.encoding=UTF-8/' gradle.properties
+
       - name: Make the Xcode project
         run: |
           brew install xcodegen
