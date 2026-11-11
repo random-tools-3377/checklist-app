@@ -153,4 +153,13 @@ object Shields {
         }
         return Shielded(main, held, saved)
     }
+
+    /**
+     * Every streak on [today] as Today shows them: with shields on, counting from [from], the
+     * main one is the one shields keep going. [from] is null while shields are off.
+     */
+    fun streaks(records: List<DayRecord>, from: LocalDate?, today: LocalDate, settings: StreakSettings): Streaks {
+        val plain = StreakCounter.count(records, today, settings)
+        return if (from == null) plain else plain.copy(done = of(records, from, today, settings).main)
+    }
 }

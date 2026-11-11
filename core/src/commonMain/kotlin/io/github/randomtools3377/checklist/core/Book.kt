@@ -212,6 +212,54 @@ class Book(
     }
 
     /**
+     * "I forgot to tick it" (see [Lapses.forgotToTick]): finishes [goal]'s window that started on
+     * [periodStart], now past, with what was left of it. The ticks go on [day], the day of the
+     * miss, and are paid today as ticking them then would have been: the goal's points for each
+     * time added, its finishing bonus, and its challenge's bonus if that is now complete. A goal
+     * with an amount gets what is left of it in one entry. Skips of a week's, month's or year's
+     * times count as some of them, as when the miss was found.
+     */
+    suspend fun finishMissedWindow(goal: Goal, day: LocalDate, period: Period, periodStart: LocalDate): Unit = store.transaction {
+        useRules()
+        val ticks = store.habitTicks(goal.id, periodStart).filter { it.goalId == goal.id && it.stepId == null && it.period == period }
+        val skips = if (period == Period.DAILY) 0 else {
+            store.lapses(goal.id, periodStart, day).count { it.kind == LapseKind.SKIP && it.periodStart == periodStart && !it.forgotten }
+        }
+        val needed = goal.target - skips
+        val before = goal.timesDone(ticks)
+        if (before >= needed) return@transaction
+        val pay = payer(goal, day)
+        val paidOn = today()
+        val at = millis()
+        fun tick(amount: Double?) = Tick(goalId = goal.id, stepId = null, at = at, day = day, period = period, periodStart = periodStart, amount = amount)
+        fun paid(tickId: Long, kind: EntryKind, amount: Int) =
+            Entry(at = at, day = paidOn, kind = kind, amount = amount, goalId = goal.id, tickId = tickId, label = goal.name)
+        var lastTickId: Long
+        val after: Int
+        if (goal.hasAmount) {
+            val progress = goal.progressOf(ticks)
+            val left = Amounts.tidy(needed * goal.amount!! - progress) ?: return@transaction
+            lastTickId = store.addTick(tick(left))
+            after = Amounts.times(progress + left, goal.amount).coerceAtMost(goal.target)
+            val points = pay(goal.points) * (after - before)
+            if (points != 0) store.addEntry(paid(lastTickId, EntryKind.TICK, points))
+        } else {
+            lastTickId = 0
+            repeat(needed - before) {
+                lastTickId = store.addTick(tick(null))
+                store.addEntry(paid(lastTickId, EntryKind.TICK, pay(goal.points)))
+            }
+            after = needed
+        }
+        if (after >= goal.target) {
+            if (goal.target > 1 && goal.bonus > 0 && bonusesOn(ticks).isEmpty()) {
+                store.addEntry(paid(lastTickId, EntryKind.BONUS, pay(goal.bonus)))
+            }
+            payChallenge(goal, paidOn, lastTickId, pay)
+        }
+    }
+
+    /**
      * Takes back the latest tick of the habit's current period and the points it paid. If that
      * leaves the habit unfinished, its finishing bonus is taken back too.
      */

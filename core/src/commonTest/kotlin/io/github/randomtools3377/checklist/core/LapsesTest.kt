@@ -160,6 +160,64 @@ class LapsesTest {
     }
 
     @Test
+    fun iForgotToTickItFinishesACountedGoalAndPaysItsBonus() = runTest {
+        val water = store.addGoal(
+            Goal(kind = GoalKind.HABIT, name = "Water", icon = "💧", points = 1, repeat = Repeat.everyDay(start), target = 8, bonus = 5, allowance = 1),
+        )
+        lapses.closeDays()
+        repeat(6) { book.tickHabit(water.id) }
+        at(12)
+        val miss = lapses.closeDays().single()
+        assertEquals(6, book.balance())
+
+        assertTrue(lapses.forgotToTick(miss.id))
+
+        val wednesday = LocalDate(2026, 11, 11)
+        assertEquals(8, store.ticks.count { it.goalId == water.id && it.periodStart == wednesday })
+        assertEquals(6 + 2 + 5, book.balance()) // the two ticks left, and the finishing bonus
+        val record = StreakCounter.records(wednesday, wednesday, store.goals, store.ticks, store.lapses).single()
+        assertEquals(1, record.done)
+        assertEquals(0, record.misses)
+    }
+
+    @Test
+    fun iForgotToTickItFinishesATimesPerWeekGoalCountingItsSkips() = runTest {
+        val gym = habit(points = 10, allowance = 2, repeat = Repeat.timesPer(Period.WEEKLY, start), target = 4)
+        lapses.closeDays()
+        book.tickHabit(gym.id) // Wednesday
+        at(13)
+        lapses.skip(gym.id, null, null) // Friday: one of the four
+        at(17)
+        val miss = lapses.closeDays().single()
+
+        assertTrue(lapses.forgotToTick(miss.id))
+
+        val monday = LocalDate(2026, 11, 9)
+        assertEquals(3, store.ticks.count { it.goalId == gym.id && it.periodStart == monday }) // two added
+        assertEquals(30, book.balance())
+        val sunday = LocalDate(2026, 11, 15)
+        assertEquals(1, StreakCounter.records(sunday, sunday, store.goals, store.ticks, store.lapses).single().done)
+    }
+
+    @Test
+    fun iForgotToTickItEntersWhatIsLeftOfAnAmount() = runTest {
+        val read = store.addGoal(
+            Goal(kind = GoalKind.HABIT, name = "Read", icon = "📖", points = 4, repeat = Repeat.everyDay(start), amount = 20.0, unit = "pages", allowance = 1),
+        )
+        lapses.closeDays()
+        book.logAmount(read.id, 12.0)
+        at(12)
+        val miss = lapses.closeDays().single()
+
+        assertTrue(lapses.forgotToTick(miss.id))
+
+        val wednesday = LocalDate(2026, 11, 11)
+        val ticks = store.ticks.filter { it.goalId == read.id && it.periodStart == wednesday }
+        assertEquals(listOf(12.0, 8.0), ticks.map { it.amount })
+        assertEquals(4, book.balance())
+    }
+
+    @Test
     fun aPenaltyIsPaidByMakingUpAGoalOrARandomPenaltyTaskAndPaysNothing() = runTest {
         val run = habit(allowance = 0)
         lapses.skip(run.id, Reason.CHOSE_NOT, null)
@@ -215,6 +273,18 @@ class StreaksTest {
 
         val clean = StreakCounter.count(records.take(2) + record(0, 3, 1), today, StreakSettings(StreakTarget.COUNT, 2))
         assertEquals(3, clean.noSkips) // today without skips counts, with the two days before it
+    }
+
+    @Test
+    fun aDayWhoseOnlyDueThingWasMissedBreaksTheMainStreak() {
+        // Two days kept, then a day with nothing else due and a project's deadline missed.
+        val records = listOf(record(3, 2, 2), record(2, 2, 2), record(1, 0, 0, misses = 1), record(0, 2, 0))
+        assertEquals(0, StreakCounter.count(records, today, StreakSettings(StreakTarget.PERCENT, 90)).done)
+        assertEquals(0, StreakCounter.count(records, today, StreakSettings(StreakTarget.COUNT, 1)).done)
+        assertEquals(0, Shields.of(records, LocalDate(2026, 1, 1), today, StreakSettings()).main)
+        // A day with only a skip on it still counts, as a skipped goal counts as done.
+        val skipped = listOf(record(2, 2, 2), record(1, 0, 0, skips = 1))
+        assertEquals(2, StreakCounter.count(skipped, today, StreakSettings()).done)
     }
 
     @Test

@@ -80,6 +80,157 @@ class GapsTest {
         assertEquals(GapKind.POINT_LOSS, gap.kind)
         assertEquals(LocalDate(2026, 11, 11), gap.from)
     }
+
+    private fun weekdays() = store.addGoal(
+        Goal(kind = GoalKind.HABIT, name = "Walk", icon = "🚶", points = 2, repeat = Repeat(RepeatKind.WEEKDAYS, start, weekdays = setOf(1, 2, 3, 4, 5))),
+    )
+
+    private fun gym() = store.addGoal(
+        Goal(kind = GoalKind.HABIT, name = "Gym", icon = "🏋️", points = 5, repeat = Repeat.timesPer(Period.WEEKLY, start), target = 3),
+    )
+
+    @Test
+    fun aTimesPerWeekGoalAlreadyDoneLeavesAQuietWeekendOutOfGaps() = runTest {
+        val walk = weekdays()
+        val gym = gym()
+        lapses.closeDays()
+        for (day in 9..13) {
+            at(day)
+            book.tickHabit(walk.id)
+            if (day % 2 == 1) book.tickHabit(gym.id) // Monday, Wednesday and Friday
+        }
+        at(16) // Monday: nothing ticked at the weekend, and nothing was due then
+        lapses.closeDays()
+
+        assertTrue(gaps.find().isEmpty())
+    }
+
+    @Test
+    fun aTimesPerWeekGoalDoneLateInItsWeekIsNoGapButWeeksWithNothingAre() = runTest {
+        val gym = gym()
+        lapses.closeDays()
+        for (day in 13..15) {
+            at(day)
+            book.tickHabit(gym.id) // Friday to Sunday
+        }
+        at(16)
+        lapses.closeDays()
+        assertTrue(gaps.find().isEmpty())
+
+        // Two whole weeks with nothing ticked: each ends with its times not done.
+        at(30)
+        lapses.closeDays()
+        val gap = gaps.find().single()
+        assertEquals(LocalDate(2026, 11, 22) to LocalDate(2026, 11, 29), gap.from to gap.to)
+    }
+
+    @Test
+    fun afterMonthsAwayOneGapCoversEveryMissFound() = runTest {
+        val run = habit()
+        val plants = store.addGoal(
+            Goal(kind = GoalKind.HABIT, name = "Water plants", icon = "🪴", points = 3, repeat = Repeat(RepeatKind.AFTER_DONE, LocalDate(2026, 11, 20), interval = 5)),
+        )
+        val letter = store.addGoal(Goal(kind = GoalKind.TODO, name = "Post the letter", icon = "✉️", points = 2, repeat = null))
+        lapses.closeDays()
+        book.tickHabit(run.id) // Monday 9 November
+        book.tickHabit(letter.id) // a to-do with no date, done that day
+        clock.set(LocalDateTime(2027, 2, 7, 10, 0)) // the app opened again 90 days later
+
+        val found = lapses.closeDays()
+        val gap = gaps.find().single()
+
+        // Misses are looked for as far back as gaps are, so the one gap covers them all.
+        assertEquals(Gaps.LOOK_BACK_DAYS + 1, found.count { it.goalId == run.id })
+        assertEquals(LocalDate(2026, 12, 8) to LocalDate(2027, 2, 6), gap.from to gap.to)
+        assertTrue(store.lapses.all { it.gapId == gap.id })
+        assertEquals(listOf(gap.id), store.openPenalties().map { it.gapId })
+        // The days before are still gone through, with no misses: the "since last done" goal, due
+        // then, waits on Today, late since its day, and the to-do takes the day it was done.
+        assertTrue(found.none { it.goalId == plants.id })
+        val waiting = store.goals.first { it.id == plants.id }.repeat!!
+        assertEquals(LocalDate(2027, 2, 7) to LocalDate(2026, 11, 20), waiting.start to waiting.lateSince)
+        assertEquals(Repeat(RepeatKind.ONCE, LocalDate(2026, 11, 9)), store.goals.first { it.id == letter.id }.repeat)
+    }
+
+    @Test
+    fun aPenaltyGivenBackIsNoPointLoss() = runTest {
+        store.putSetting(Gaps.SETTING_DAYS, "30") // only the point loss can trigger it here
+        val run = habit(points = 60) // 30 off for each miss
+        lapses.closeDays()
+        book.tickHabit(run.id)
+        at(11)
+        val tuesday = lapses.closeDays().single()
+        assertTrue(lapses.forgotToTick(tuesday.id)) // it was done after all: the 30 comes back
+        at(12) // Wednesday missed: 30 off
+        lapses.closeDays()
+
+        assertTrue(gaps.find().isEmpty())
+    }
+
+    @Test
+    fun afterAGapIsAnsweredOneMoreQuietDayIsNoNewGap() = runTest {
+        val run = habit()
+        lapses.closeDays()
+        book.tickHabit(run.id) // Monday
+        at(12)
+        lapses.closeDays()
+        val first = gaps.find().single()
+        gaps.explain(first.id, Reason.ILL, null)
+
+        at(13) // Thursday was quiet too: one day, below the two a gap needs
+        lapses.closeDays()
+        assertTrue(gaps.find().isEmpty())
+
+        at(14) // and Friday: now it is two days
+        lapses.closeDays()
+        val second = gaps.find().single()
+        assertEquals(LocalDate(2026, 11, 12) to LocalDate(2026, 11, 13), second.from to second.to)
+    }
+
+    @Test
+    fun afterAGapIsAnsweredASmallLossIsNoNewGap() = runTest {
+        store.putSetting(Gaps.SETTING_DAYS, "30") // only the point loss can trigger it here
+        val run = habit(points = 50) // 25 off for each miss
+        val stretch = store.addGoal(
+            Goal(kind = GoalKind.HABIT, name = "Stretch", icon = "🧘", points = 4, repeat = Repeat.everyDay(start), allowance = 0), // 2 off
+        )
+        lapses.closeDays()
+        book.tickHabit(run.id)
+        book.tickHabit(stretch.id)
+        at(12) // Tuesday and Wednesday missed: 54 off
+        lapses.closeDays()
+        val first = gaps.find().single()
+        assertEquals(GapKind.POINT_LOSS, first.kind)
+        gaps.explain(first.id, Reason.NO_TIME, null)
+        book.tickHabit(run.id) // Thursday: only the stretch is missed, 2 off
+        at(13)
+        lapses.closeDays()
+
+        assertTrue(gaps.find().isEmpty())
+    }
+
+    @Test
+    fun afterAGapIsAnsweredABigLossOfItsOwnIsANewGap() = runTest {
+        store.putSetting(Gaps.SETTING_DAYS, "30") // only the point loss can trigger it here
+        val run = habit(points = 50) // 25 off for each miss
+        lapses.closeDays()
+        book.tickHabit(run.id) // Monday
+        at(12) // Tuesday and Wednesday missed: 50 off
+        lapses.closeDays()
+        gaps.explain(gaps.find().single().id, Reason.ILL, null)
+        for (day in 12..17) {
+            at(day)
+            lapses.closeDays()
+            assertTrue(gaps.find().isEmpty())
+            if (day != 14 && day != 17) book.tickHabit(run.id) // Saturday and Tuesday missed: 50 off in 4 days
+        }
+        at(18)
+        lapses.closeDays()
+
+        val second = gaps.find().single()
+        assertEquals(GapKind.POINT_LOSS, second.kind)
+        assertEquals(LocalDate(2026, 11, 14) to LocalDate(2026, 11, 17), second.from to second.to)
+    }
 }
 
 class ReviewTest {

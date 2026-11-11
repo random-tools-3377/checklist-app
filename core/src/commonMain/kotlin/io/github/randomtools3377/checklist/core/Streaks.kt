@@ -83,9 +83,14 @@ object StreakCounter {
         return records
     }
 
-    internal fun meetsTarget(record: DayRecord, settings: StreakSettings): Boolean = when (settings.target) {
-        StreakTarget.COUNT -> record.done >= minOf(settings.value, record.due)
-        StreakTarget.PERCENT -> record.done * 100 >= settings.value * record.due
+    /**
+     * Whether [record]'s day reaches the main streak's target. A day whose only due thing was
+     * missed, like a project's deadline or a "since last done" goal's day, doesn't.
+     */
+    internal fun meetsTarget(record: DayRecord, settings: StreakSettings): Boolean = when {
+        record.due == 0 -> record.misses == 0
+        settings.target == StreakTarget.COUNT -> record.done >= minOf(settings.value, record.due)
+        else -> record.done * 100 >= settings.value * record.due
     }
 
     /**

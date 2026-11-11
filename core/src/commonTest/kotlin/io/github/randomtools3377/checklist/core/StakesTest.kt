@@ -86,6 +86,18 @@ class StakesTest {
     }
 
     @Test
+    fun theWidgetsStreaksUseShieldsAsTodayDoes() {
+        val settings = StreakSettings(StreakTarget.PERCENT, 100)
+        val records = (0 until 30).map { day(it, true) } + day(30, false) + (31 until 36).map { day(it, true) }
+        val today = monday.plusDays(35)
+        val plain = StreakCounter.count(records, today, settings)
+        assertEquals(plain, Shields.streaks(records, null, today, settings))
+        val shielded = Shields.streaks(records, monday, today, settings)
+        assertEquals(35, shielded.done)
+        assertEquals(plain.copy(done = 35), shielded) // only the main streak changes
+    }
+
+    @Test
     fun shieldsDontChangeThePastBeforeTheyStarted() {
         val settings = StreakSettings(StreakTarget.PERCENT, 100)
         val records = (0 until 10).map { day(it, true) } + day(10, false) + (11 until 14).map { day(it, true) }

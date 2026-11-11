@@ -44,6 +44,13 @@ class Lapses(
 
         /** Days of history checked at most, so a long time away doesn't take forever. */
         const val MAX_DAYS_BACK = 400
+
+        /**
+         * Days back misses are recorded at most: as far back as gaps are looked for, so after a
+         * long time away every miss found can be part of one gap, not each owe its own reason.
+         * Days before that are still gone through, so to-dos and "since last done" goals move on.
+         */
+        const val MISSES_DAYS_BACK = Gaps.LOOK_BACK_DAYS
     }
 
     /**
@@ -153,6 +160,7 @@ class Lapses(
         }
         if (checked >= yesterday) return@transaction emptyList()
         val from = maxOf(checked.plusDays(1), yesterday.minusDays(MAX_DAYS_BACK))
+        val missesFrom = yesterday.minusDays(MISSES_DAYS_BACK)
         val goals = store.activeGoals()
         val ticks = store.habitTicksSince(Days.earliestOpenDay(from).minusDays(7))
         val found = mutableListOf<Lapse>()
@@ -164,11 +172,15 @@ class Lapses(
             for (goal in goals) {
                 val afterDone = repeats[goal.id]?.takeIf { it.kind == RepeatKind.AFTER_DONE }
                 if (afterDone != null) {
-                    if (day != afterDone.start) continue
-                    if (goal.timesDone(ticks.filter { it.countsToward(goal, day) }) >= goal.target) continue
-                    val skipped = store.lapses(goal.id, day, day).any { it.kind == LapseKind.SKIP && it.periodStart == day && !it.forgotten }
+                    // Due on its start. After a long time away that can be before the days checked
+                    // here; then it counts on the first of them, so it still moves on.
+                    val dueOn = if (afterDone.start < from && afterDone.start > checked) from else afterDone.start
+                    if (day != dueOn) continue
+                    val start = afterDone.start
+                    if (goal.timesDone(ticks.filter { it.countsToward(goal, start) }) >= goal.target) continue
+                    val skipped = store.lapses(goal.id, start, day).any { it.kind == LapseKind.SKIP && it.periodStart == start && !it.forgotten }
                     // One miss on the day it was due; after that it stays on Today with no more.
-                    if (!skipped && afterDone.lateSince == null) {
+                    if (!skipped && afterDone.lateSince == null && day >= missesFrom) {
                         val over = used(goal, day) >= book.difficulty(day).allowed(goal.allowed)
                         found += record(goal, LapseKind.MISS, day, Period.DAILY, day, over, null, null).lapse
                     }
@@ -182,6 +194,7 @@ class Lapses(
                     if (store.habitTicks(goal.id, day).any { it.stepId == null }) store.setRepeat(goal.id, Repeat(RepeatKind.ONCE, day))
                     continue
                 }
+                if (day < missesFrom) continue
                 if (goal.isHabitLike) {
                     val repeat = goal.repeat ?: continue
                     val window = repeat.window(day) ?: continue
@@ -222,9 +235,10 @@ class Lapses(
     }
 
     /**
-     * "I forgot to tick it": the miss is undone. The goal is ticked for the day it was missed,
-     * paying its points, and any penalty the miss caused is refunded and its penalty task
-     * dropped if it wasn't done yet.
+     * "I forgot to tick it": the miss is undone. The goal is done for the day, week, month or
+     * year it was missed in: what was left of it is ticked, paying its points and any finishing bonus
+     * (see [Book.finishMissedWindow]). Any penalty the miss caused is refunded and its penalty
+     * task dropped if it wasn't done yet.
      */
     suspend fun forgotToTick(lapseId: Long): Boolean = store.transaction {
         Rules.load(store)
@@ -232,12 +246,6 @@ class Lapses(
         if (lapse == null || lapse.kind != LapseKind.MISS || lapse.forgotten || lapse.period == null) return@transaction false
         val goal = store.goal(lapse.goalId) ?: return@transaction false
         val now = book.millis()
-        val tickId = store.addTick(
-            Tick(goalId = goal.id, stepId = null, at = now, day = lapse.day, period = lapse.period, periodStart = lapse.periodStart),
-        )
-        store.addEntry(
-            Entry(at = now, day = book.today(), kind = EntryKind.TICK, amount = book.payer(goal, lapse.day)(goal.points), goalId = goal.id, tickId = tickId, label = goal.name),
-        )
         if (lapse.cost > 0) {
             store.addEntry(
                 Entry(at = now, day = book.today(), kind = EntryKind.REFUND, amount = lapse.cost, goalId = goal.id, label = goal.name, lapseId = lapse.id),
@@ -251,6 +259,8 @@ class Lapses(
             if (penalty.doneAt == null && penalty.cancelledAt == null) store.updatePenalty(penalty.copy(cancelledAt = now))
         }
         store.updateLapse(lapse.copy(forgotten = true, reason = lapse.reason ?: Reason.FORGOT))
+        // Ticked once the miss is undone, so a challenge it completes isn't held back by it.
+        book.finishMissedWindow(goal, lapse.day, lapse.period, lapse.periodStart)
         true
     }
 

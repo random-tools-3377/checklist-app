@@ -37,7 +37,10 @@ import androidx.glance.text.TextStyle
 import io.github.randomtools3377.checklist.ChecklistApplication
 import io.github.randomtools3377.checklist.MainActivity
 import io.github.randomtools3377.checklist.core.Days
+import io.github.randomtools3377.checklist.core.Feature
 import io.github.randomtools3377.checklist.core.Period
+import io.github.randomtools3377.checklist.core.Rules
+import io.github.randomtools3377.checklist.core.Shields
 import io.github.randomtools3377.checklist.core.StreakCounter
 import io.github.randomtools3377.checklist.core.StreakSettings
 import io.github.randomtools3377.checklist.core.StreakTarget
@@ -55,6 +58,7 @@ import io.github.randomtools3377.checklist.data.parseDayEndHour
 import io.github.randomtools3377.checklist.data.toCore
 import io.github.randomtools3377.checklist.data.toEpochDay
 import io.github.randomtools3377.checklist.ui.pointsText
+import kotlinx.datetime.LocalDate
 
 /** What the balance and streaks widget shows, read from the database each time it is drawn. */
 data class StatsData(val balance: Int, val streaks: Streaks, val due: Int, val done: Int, val week: WeekProgress?, val look: WidgetLook = WidgetLook())
@@ -105,6 +109,13 @@ class StatsWidget : GlanceAppWidget() {
             )
             val records = StreakCounter.records(since, today, goals, ticks, lapses)
             val todayRecord = records.lastOrNull()
+            // Streak shields, while on, keep the main streak going, as on Today.
+            val shieldsFrom = if (Feature.SHIELDS.isOn(dao.setting(Feature.SHIELDS.key))) {
+                Rules.current = Rules.decode(dao.setting(Rules.SETTING))
+                dao.setting(Shields.FROM)?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: today
+            } else {
+                null
+            }
             val target = dao.setting(SETTING_WEEKLY_TARGET)?.toIntOrNull() ?: 0
             val week = if (target <= 0) null else {
                 val monday = Days.periodStart(today, Period.WEEKLY)
@@ -112,7 +123,7 @@ class StatsWidget : GlanceAppWidget() {
             }
             return StatsData(
                 balance = dao.balance(),
-                streaks = StreakCounter.count(records, today, streak),
+                streaks = Shields.streaks(records, shieldsFrom, today, streak),
                 due = todayRecord?.due ?: 0,
                 done = todayRecord?.done ?: 0,
                 week = week,

@@ -35,17 +35,26 @@ class Gaps(private val store: Store, private val book: Book) {
         )
     }
 
-    /** Days from [from] to [to] when at least one habit was due (by its window ending) or a project deadline fell. */
-    private fun dueDays(from: LocalDate, to: LocalDate, goals: List<Goal>): Set<LocalDate> {
+    /**
+     * Days from [from] to [to] when at least one habit was due or a project deadline fell. A goal
+     * due so many times a week, month or year counts on the days it was ticked, and on the last
+     * day of its window when that ended with times still to do. On its other days nothing of it
+     * is due, so a week already done doesn't make a quiet weekend look like a gap.
+     */
+    private fun dueDays(from: LocalDate, to: LocalDate, goals: List<Goal>, ticks: List<Tick>): Set<LocalDate> {
         val days = mutableSetOf<LocalDate>()
+        val byWindow = ticks.filter { it.stepId == null }.groupBy { Triple(it.goalId, it.period, it.periodStart) }
+        fun due(goal: Goal, day: LocalDate): Boolean {
+            if (!goal.isHabitLike) return goal.deadline == day
+            val repeat = goal.repeat ?: return false
+            if (repeat.kind != RepeatKind.TIMES_PER) return repeat.isDueOn(day)
+            val window = repeat.window(day) ?: return false
+            val mine = byWindow[Triple(goal.id, window.period, window.start)].orEmpty()
+            return mine.any { it.day == day } || (window.end == day && goal.timesDone(mine) < goal.target)
+        }
         var day = from
         while (day <= to) {
-            if (goals.any { goal ->
-                    if (goal.isHabitLike) goal.repeat?.isDueOn(day) == true else goal.deadline == day
-                }
-            ) {
-                days += day
-            }
+            if (goals.any { due(it, day) }) days += day
             day = day.plusDays(1)
         }
         return days
@@ -68,7 +77,7 @@ class Gaps(private val store: Store, private val book: Book) {
         val from = maxOf(since, yesterday.minusDays(LOOK_BACK_DAYS))
         if (from > yesterday) return@transaction emptyList()
         val goals = store.activeGoals()
-        val due = dueDays(from, yesterday, goals)
+        val due = dueDays(from, yesterday, goals, store.habitTicksSince(Days.earliestOpenDay(from)))
         val ticked = store.tickedDays(from, yesterday)
         val existing = store.gaps().toMutableList()
         fun covered(day: LocalDate) = existing.any { day >= it.from && day <= it.to }
@@ -96,8 +105,13 @@ class Gaps(private val store: Store, private val book: Book) {
             day = day.plusDays(1)
         }
 
-        // A big point loss within one week.
-        val losses = store.entries(from, yesterday).filter { it.kind == EntryKind.PENALTY }
+        // A big point loss within one week. A penalty given back by "I forgot to tick it" wasn't lost,
+        // and one on a day of a gap already answered was asked about there.
+        val undone = store.allLapses(from, yesterday).filter { it.forgotten }.map { it.id }.toSet()
+        val answered = existing.filter { it.reason != null }
+        val losses = store.entries(from, yesterday).filter { entry ->
+            entry.kind == EntryKind.PENALTY && entry.lapseId !in undone && answered.none { entry.day >= it.from && entry.day <= it.to }
+        }
         var lossDay = from
         while (lossDay <= yesterday) {
             val weekEnd = lossDay.plusDays(6)
@@ -113,6 +127,14 @@ class Gaps(private val store: Store, private val book: Book) {
             val newDays = generateSequence(stretchFrom) { it.plusDays(1) }.takeWhile { it <= stretchTo }.filter { !covered(it) }.toList()
             if (newDays.isEmpty()) continue
             val open = existing.find { it.reason == null && it.to.plusDays(1) >= newDays.first() && it.from <= newDays.last() }
+            // After a gap already answered, the days that follow make a new one only if they are one on their own.
+            if (open == null) {
+                val enough = when (kind) {
+                    GapKind.NOTHING_TICKED -> newDays.count { it in due && it !in ticked } >= settings.days
+                    GapKind.POINT_LOSS -> -losses.filter { it.day in newDays }.sumOf { it.amount } >= settings.points
+                }
+                if (!enough) continue
+            }
             val gap = if (open != null) {
                 open.copy(from = minOf(open.from, newDays.first()), to = maxOf(open.to, newDays.last())).also {
                     store.updateGap(it)
