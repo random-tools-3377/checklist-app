@@ -33,7 +33,7 @@ class TimelineWidgetTest {
     private var morning = 0L
 
     @Before
-    fun twoGoals() = runBlocking {
+    fun twoGoals() = runBlocking<Unit> {
         container.db.clearAllTables()
         val today = nowLocal().date
         container.repository.saveHabit(
@@ -62,7 +62,7 @@ class TimelineWidgetTest {
     }
 
     @Test
-    fun ticksShowOnTheWidgetStraightAway() = runBlocking {
+    fun ticksShowOnTheWidgetStraightAway() = runBlocking<Unit> {
         val updates = Channel<TimelineData>(Channel.UNLIMITED)
         val watching = launch { DayPlans.following(context) { TodayWidget.load(context) }.collect { updates.send(it) } }
         try {
@@ -98,7 +98,7 @@ class TimelineWidgetTest {
     }
 
     @Test
-    fun theCalendarWidgetFollowsTicksToo() = runBlocking {
+    fun theCalendarWidgetFollowsTicksToo() = runBlocking<Unit> {
         val updates = Channel<Int>(Channel.UNLIMITED)
         val watching = launch {
             DayPlans.following(context) { CalendarWidget.load(context) }.collect { data -> updates.send(data.agenda.first { it.goal.id == brush }.count) }
