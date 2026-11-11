@@ -97,7 +97,13 @@ fun PlanScreen(days: List<TodayView>, vm: MainViewModel, padding: PaddingValues,
             item { SectionTitle("In your calendar") }
             items(dayEvents.size) { i -> EventLine(dayEvents[i]) }
         }
-        val due = view.dueToday.sortedWith(compareBy({ it.goal.at ?: it.goal.times.minOrNull() }, { it.goal.position }))
+        // In time order through the user's day: a time before the day-end hour is the night after.
+        val due = view.dueToday.sortedWith(
+            compareBy(
+                { row -> (row.goal.at?.let(::listOf) ?: row.goal.times).minOfOrNull { io.github.randomtools3377.checklist.core.DayHours.minuteOf(it, settings.dayEndHour) } },
+                { it.goal.position },
+            ),
+        )
         if (due.isEmpty() && view.thisWeek.isEmpty() && view.projects.none { it.goal.deadline == view.day }) {
             item { Text("Nothing due.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
         }

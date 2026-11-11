@@ -59,6 +59,29 @@ class BoostsTest {
     }
 
     @Test
+    fun todaysPerfectDayLineUsesTheSameTestAsTheBonus() = runTest {
+        val sunday = LocalDate(2026, 11, 15)
+        clock.set(LocalDateTime(2026, 11, 15, 10, 0))
+        val read = store.addGoal(Goal(kind = GoalKind.HABIT, name = "Read", icon = "📖", points = 5, repeat = Repeat.everyDay(monday)))
+        val gym = store.addGoal(Goal(kind = GoalKind.HABIT, name = "Gym", icon = "🏋️", points = 5, repeat = Repeat.timesPer(Period.WEEKLY, monday), target = 3))
+        fun today() = StreakCounter.records(sunday, sunday, store.goals, store.ticks, store.lapses).single()
+
+        book.tickHabit(read.id)
+        book.tickHabit(gym.id)
+        book.tickHabit(gym.id)
+        // The week ends today with the gym at 2 of 3: not perfect yet.
+        assertTrue(!PerfectDays.isPerfect(today()))
+        book.tickHabit(gym.id)
+        assertTrue(PerfectDays.isPerfect(today()))
+
+        // Skipped and then done anyway: still not perfect.
+        val walk = store.addGoal(Goal(kind = GoalKind.HABIT, name = "Walk", icon = "🚶", points = 5, repeat = Repeat.everyDay(monday)))
+        Lapses(store, book).skip(walk.id, reason = null, note = null)
+        book.tickHabit(walk.id)
+        assertTrue(!PerfectDays.isPerfect(today()))
+    }
+
+    @Test
     fun aRewardCostsMoreEachTimeItIsBoughtInAWeek() = runTest {
         store.putSetting(Feature.REPEAT_PRICE.key, Feature.REPEAT_PRICE.onValue)
         val coffee = store.addReward(Reward(name = "Coffee", icon = "☕", price = 20))

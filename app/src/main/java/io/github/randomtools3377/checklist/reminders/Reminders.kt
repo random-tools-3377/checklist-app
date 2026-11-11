@@ -159,12 +159,13 @@ object Reminders {
             showMorningPlan(context, dayEnd)
         }
         weeklies(dao, since.local(), until.local(), dayEnd).lastOrNull { it.at.millis() > since }?.let { showWeekly(context, it.day) }
-        // A focus timer that ran out while the app was closed.
-        Focus.current(context)?.takeIf { it.running && it.endsAt <= until }?.let { focus ->
-            Focus.stop(context)
+        // A focus timer whose time is up (not one ending in the next few seconds): its goal is
+        // ticked here, unless the app on screen took the timer first and ticked it there.
+        Focus.takeEnded(context, nowMillis)?.let { focus ->
+            val result = (context.applicationContext as ChecklistApplication).container.book.tickHabit(focus.goalId)
+            if (result is io.github.randomtools3377.checklist.core.TickResult.Ticked && result.finished) afterDone(context, focus.goalId)
             dao.goal(focus.goalId)?.toCore()?.let { goal ->
-                val at = nowLocal()
-                show(context, goal, Alert(goal.id, Days.dayOf(at, dayEnd), at, AlertKind.FOCUS_DONE), count = 0, hidden = dao.setting(LOCK_PRIVATE) == "1" && goal.private, skip = null, dayEnd = dayEnd)
+                showFocusDone(context, goal, result, hidden = dao.setting(LOCK_PRIVATE) == "1" && goal.private)
             }
         }
         if (due.isNotEmpty()) {
@@ -353,6 +354,40 @@ object Reminders {
     fun notificationId(goalId: Long): Int = (goalId % 1_000_000).toInt() + 1000
 
     /**
+     * The focus timer ran out: says so, and that its goal was ticked. It has nothing to tap but
+     * itself, which opens the app, and it takes the place of that goal's reminder.
+     */
+    private fun showFocusDone(context: Context, goal: Goal, result: io.github.randomtools3377.checklist.core.TickResult, hidden: Boolean) {
+        if (!canNotify(context)) return
+        val text = when (result) {
+            is io.github.randomtools3377.checklist.core.TickResult.Ticked -> "Time's up: ticked, +${result.points + result.bonus}"
+            io.github.randomtools3377.checklist.core.TickResult.AlreadyDone -> "Time's up: it was already done"
+            else -> "Time's up"
+        }
+        val id = notificationId(goal.id)
+        val open = PendingIntent.getActivity(
+            context,
+            id,
+            Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+        val notification = NotificationCompat.Builder(context, CHANNEL)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle(if (hidden) "🔒 A private goal" else "${goal.icon} ${goal.name}")
+            .setContentText(text)
+            .setContentIntent(open)
+            .setAutoCancel(true)
+            .setCategory(NotificationCompat.CATEGORY_REMINDER)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .build()
+        try {
+            NotificationManagerCompat.from(context).notify(id, notification)
+        } catch (e: SecurityException) {
+            // Notifications were turned off in the meantime.
+        }
+    }
+
+    /**
      * Takes away the goal reminders showing whose goal is done or skipped for their day by now,
      * or no longer there. Ones shown before they carried their goal and day are left alone.
      */
@@ -391,7 +426,7 @@ object Reminders {
             AlertKind.MORNING -> "Your plan for today"
             AlertKind.AGAIN -> "Still to do"
             AlertKind.WEEKLY -> "Your week"
-            AlertKind.FOCUS_DONE -> "Time's up: tap Done to tick it"
+            AlertKind.FOCUS_DONE -> "Time's up"
             AlertKind.USUAL -> "About now, as usual"
             AlertKind.NEXT -> "Next up"
         }

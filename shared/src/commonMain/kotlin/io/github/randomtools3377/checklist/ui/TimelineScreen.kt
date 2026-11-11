@@ -52,8 +52,14 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import io.github.randomtools3377.checklist.core.DayHours
 import io.github.randomtools3377.checklist.core.HabitRow
+import io.github.randomtools3377.checklist.core.Pace
+import io.github.randomtools3377.checklist.core.PaceSettings
+import io.github.randomtools3377.checklist.core.Retimes
 import io.github.randomtools3377.checklist.core.TodayView
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.LocalTime
 import kotlin.math.roundToInt
 
@@ -61,9 +67,20 @@ import kotlin.math.roundToInt
 private val HOUR = 64.dp
 
 /**
- * A day as a timeline of hours: goals with a clock time sit at it, the rest wait above under
- * "Any time". Hold a goal and drag it to another time, or tap it to pick one; either changes its
- * time for this day only. Times snap to quarter hours.
+ * A goal on the timeline at [minute] (see [DayHours.minuteOf]). [number] is which of its times,
+ * for a goal done several times a day: it keeps those times, so it can't be moved here.
+ */
+private class Block(val row: HabitRow, val minute: Int, val number: Int = 0) {
+    val movable: Boolean get() = number == 0
+    val done: Boolean get() = row.done || (number > 0 && row.count >= number)
+}
+
+/**
+ * A day as a timeline of hours, to the end of the user's day (past midnight when the day ends
+ * later): goals with a clock time sit at it, the rest wait above under "Any time". Hold a goal and
+ * drag it to another time, or tap it to pick one; either changes its time for this day only.
+ * Times snap to quarter hours. A goal done several times a day sits at each of its times, set or
+ * spread over the day, and keeps them.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -74,6 +91,7 @@ fun TimelineScreen(
     onRetime: (goalId: Long, minute: Int?) -> Unit,
     onBack: () -> Unit,
     events: List<io.github.randomtools3377.checklist.core.Busy> = emptyList(),
+    pace: PaceSettings = PaceSettings(dayEndHour = 0, defaultFinish = null),
 ) {
     var picking by remember { mutableStateOf<HabitRow?>(null) }
     Scaffold(
@@ -89,10 +107,15 @@ fun TimelineScreen(
     ) { padding ->
         if (view == null) return@Scaffold
         val rows = view.dueToday
-        val timed = rows.filter { it.goal.at != null }
-        val anyTime = rows.filter { it.goal.at == null }
-        val earliest = timed.minOfOrNull { it.goal.at!!.hour } ?: firstHour
-        val startHour = minOf(firstHour, earliest).coerceIn(0, 23)
+        val dayEnd = pace.dayEndHour
+        val several = rows.filter { Retimes.keepsTimes(it.goal) }
+            .map { row -> row to Pace.slots(row.goal, view.day, pace).map { DayHours.minuteOf(it.at.time, dayEnd) } }
+        val blocks = rows.filter { !Retimes.keepsTimes(it.goal) && it.goal.at != null }.map { Block(it, DayHours.minuteOf(it.goal.at!!, dayEnd)) } +
+            several.flatMap { (row, minutes) -> minutes.mapIndexed { i, minute -> Block(row, minute, number = i + 1) } }
+        val anyTime = rows.filter { !Retimes.keepsTimes(it.goal) && it.goal.at == null }
+        // Done several times a day with no times to show (not set, and not spread without a day start and finish).
+        val severalAnyTime = several.filter { it.second.isEmpty() }.map { it.first }
+        val startHour = DayHours.startHour(firstHour, blocks.map { it.minute }, dayEnd)
         Column(
             Modifier
                 .fillMaxSize()
@@ -105,13 +128,15 @@ fun TimelineScreen(
                 Text("Nothing due this day.", modifier = Modifier.padding(top = 24.dp))
                 return@Column
             }
-            if (anyTime.isNotEmpty()) {
+            if (anyTime.isNotEmpty() || severalAnyTime.isNotEmpty()) {
                 Text("Any time", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
-                Text(
-                    "Tap one to give it a time today.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                if (anyTime.isNotEmpty()) {
+                    Text(
+                        "Tap one to give it a time today.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(vertical = 8.dp)) {
                     anyTime.forEach { row ->
                         AssistChip(
@@ -120,17 +145,30 @@ fun TimelineScreen(
                             modifier = Modifier.testTag("anytime:${row.goal.name}"),
                         )
                     }
+                    severalAnyTime.forEach { row ->
+                        AssistChip(
+                            onClick = {},
+                            enabled = false,
+                            label = { Text("${row.goal.icon} ${row.goal.name} · ${row.count} of ${row.goal.target}" + if (row.done) " ✓" else "") },
+                            modifier = Modifier.testTag("anytime:${row.goal.name}"),
+                        )
+                    }
                 }
                 HorizontalDivider()
             }
             Text(
-                "Hold a goal and drag it to another time, or tap it. It changes this day only.",
+                "Hold a goal and drag it to another time, or tap it. It changes this day only." +
+                    if (several.isNotEmpty()) " Goals done several times a day keep their times." else "",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(vertical = 8.dp),
             )
             events.filter { it.allDay }.forEach { EventLine(it) }
-            Hours(startHour, timed, events.filter { !it.allDay }, onTap = { picking = it }, onDrop = { row, minute -> onRetime(row.goal.id, minute) })
+            Hours(
+                view.day, startHour, dayEnd, blocks, events.filter { !it.allDay },
+                onTap = { picking = it },
+                onDrop = { row, minute -> onRetime(row.goal.id, minute) },
+            )
         }
     }
     picking?.let { row ->
@@ -138,15 +176,20 @@ fun TimelineScreen(
     }
 }
 
+/** "7:15 am" for [minute] as from [DayHours.minuteOf], past midnight too. */
+private fun minuteText(minute: Int): String = (minute.mod(24 * 60)).let { timeText(LocalTime(it / 60, it % 60)) }
+
 @Composable
 private fun Hours(
+    day: LocalDate,
     startHour: Int,
-    timed: List<HabitRow>,
+    dayEnd: Int,
+    blocks: List<Block>,
     events: List<io.github.randomtools3377.checklist.core.Busy>,
     onTap: (HabitRow) -> Unit,
     onDrop: (HabitRow, Int) -> Unit,
 ) {
-    val hours = 24 - startHour
+    val hours = DayHours.endHour(dayEnd) - startHour
     val density = LocalDensity.current
     val hourPx = with(density) { HOUR.toPx() }
     Box(Modifier.fillMaxWidth().height(HOUR * hours)) {
@@ -154,7 +197,7 @@ private fun Hours(
         for (i in 0 until hours) {
             Row(Modifier.offset(y = HOUR * i).fillMaxWidth()) {
                 Text(
-                    timeText(LocalTime(startHour + i, 0)),
+                    timeText(LocalTime((startHour + i) % 24, 0)),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.width(56.dp),
@@ -163,9 +206,10 @@ private fun Hours(
             }
         }
         // Events from the phone's calendar, as grey blocks on the right.
+        val midnight = LocalDateTime(day, LocalTime(0, 0))
         events.forEach { event ->
-            val from = (event.start.hour * 60 + event.start.minute - startHour * 60).coerceAtLeast(0)
-            val to = (event.end.hour * 60 + event.end.minute - startHour * 60).let { if (event.end.date > event.start.date) hours * 60 else it }.coerceAtLeast(from + 15)
+            val from = (Pace.minutesBetween(midnight, event.start).toInt() - startHour * 60).coerceIn(0, hours * 60 - 15)
+            val to = (Pace.minutesBetween(midnight, event.end).toInt() - startHour * 60).coerceAtMost(hours * 60).coerceAtLeast(from + 15)
             Box(
                 Modifier
                     .offset(x = 220.dp, y = HOUR * (from / 60f))
@@ -179,50 +223,60 @@ private fun Hours(
             }
         }
         // Goals at their time; ones at the same time sit side by side.
-        val placed = timed.sortedBy { it.goal.at }.groupBy { it.goal.at!!.hour * 60 + it.goal.at!!.minute }
+        val placed = blocks.sortedBy { it.minute }.groupBy { it.minute }
+        val last = DayHours.endHour(dayEnd) * 60 - 1
         placed.forEach { (minute, sameTime) ->
-            sameTime.forEachIndexed { index, row ->
-                key(row.goal.id) {
+            sameTime.forEachIndexed { index, block ->
+                val row = block.row
+                key(row.goal.id, block.number) {
                     var dragY by remember { mutableFloatStateOf(0f) }
                     val baseY = (minute - startHour * 60) / 60f * hourPx
+                    val of = if (block.movable) "" else " · ${block.number} of ${row.goal.target}"
                     Box(
                         Modifier
                             .offset { IntOffset(with(density) { (64 + index * 110).dp.roundToPx() }, (baseY + dragY).roundToInt()) }
                             .width(146.dp)
                             .background(
-                                if (row.done) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.primaryContainer,
+                                if (block.done) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.primaryContainer,
                                 RoundedCornerShape(8.dp),
                             )
-                            .pointerInput(row.goal.id) {
-                                detectDragGesturesAfterLongPress(
-                                    onDrag = { change, delta ->
-                                        change.consume()
-                                        dragY += delta.y
-                                    },
-                                    onDragEnd = {
-                                        val moved = minute + (dragY / hourPx * 60).roundToInt()
-                                        val snapped = ((moved / 15f).roundToInt() * 15).coerceIn(startHour * 60, 24 * 60 - 15)
-                                        dragY = 0f
-                                        if (snapped != minute) onDrop(row, snapped)
-                                    },
-                                    onDragCancel = { dragY = 0f },
-                                )
-                            }
-                            .clickable { onTap(row) }
-                            .semantics { contentDescription = "${row.goal.name} at ${timeText(row.goal.at!!)}" }
-                            .testTag("timeline-goal:${row.goal.name}")
+                            .then(
+                                if (!block.movable) {
+                                    Modifier
+                                } else {
+                                    Modifier
+                                        .pointerInput(row.goal.id, minute, startHour, dayEnd) {
+                                            detectDragGesturesAfterLongPress(
+                                                onDrag = { change, delta ->
+                                                    change.consume()
+                                                    dragY += delta.y
+                                                },
+                                                onDragEnd = {
+                                                    val moved = minute + (dragY / hourPx * 60).roundToInt()
+                                                    val snapped = DayHours.drop(moved, startHour, dayEnd)
+                                                    dragY = 0f
+                                                    if (snapped != minute % (24 * 60)) onDrop(row, snapped)
+                                                },
+                                                onDragCancel = { dragY = 0f },
+                                            )
+                                        }
+                                        .clickable { onTap(row) }
+                                },
+                            )
+                            .semantics { contentDescription = "${row.goal.name}$of at ${minuteText(minute)}" }
+                            .testTag(if (block.movable) "timeline-goal:${row.goal.name}" else "timeline-goal:${row.goal.name}:${block.number}")
                             .padding(horizontal = 8.dp, vertical = 6.dp),
                     ) {
                         Column {
                             Text(
-                                "${row.goal.icon} ${row.goal.name}" + if (row.done) " ✓" else "",
+                                "${row.goal.icon} ${row.goal.name}" + if (block.done) " ✓" else "",
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                                 style = MaterialTheme.typography.bodyMedium,
                             )
                             val extra = (dragY / hourPx * 60).roundToInt()
                             Text(
-                                timeText(LocalTime(((minute + extra).coerceIn(0, 24 * 60 - 1)) / 60, ((minute + extra).coerceIn(0, 24 * 60 - 1)) % 60)),
+                                minuteText((minute + extra).coerceIn(0, last)) + of,
                                 style = MaterialTheme.typography.labelSmall,
                             )
                         }

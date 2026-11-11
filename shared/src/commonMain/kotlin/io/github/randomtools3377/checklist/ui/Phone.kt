@@ -53,6 +53,12 @@ interface Phone {
     fun resumeFocus()
     fun stopFocus()
 
+    /**
+     * Ends the focus timer and hands it over, once: null when it was already ended elsewhere
+     * (on Android, by the alarm at its end, which ticks the goal itself).
+     */
+    fun takeFocus(): FocusState? = focus()?.also { stopFocus() }
+
     // The phone's calendar
 
     val hasCalendar: Boolean get() = false

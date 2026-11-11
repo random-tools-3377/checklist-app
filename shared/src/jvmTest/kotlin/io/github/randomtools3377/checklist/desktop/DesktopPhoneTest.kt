@@ -126,6 +126,11 @@ class DesktopPhoneTest {
         assertFalse(again.backupReminderOn())
         again.stopFocus()
         assertEquals(null, DesktopPhone(appVersion = "0.0.0", folder = folder).focus())
+        // The timer is handed over once when it ends, so its goal is ticked once.
+        phone.startFocus(goalId = 7, minutes = 25)
+        assertEquals(7L, phone.takeFocus()?.goalId)
+        assertEquals(null, phone.takeFocus())
+        assertEquals(null, phone.focus())
     }
 
     @Test

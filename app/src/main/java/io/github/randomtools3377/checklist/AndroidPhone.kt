@@ -71,6 +71,7 @@ class AndroidPhone(private val app: ChecklistApplication) : Phone {
     override fun pauseFocus() = Focus.pause(app)
     override fun resumeFocus() = Focus.resume(app)
     override fun stopFocus() = Focus.stop(app)
+    override fun takeFocus(): FocusState? = Focus.take(app)
 
     override val hasCalendar: Boolean = true
     override fun calendarAllowed(): Boolean = PhoneCalendar.allowed(app)

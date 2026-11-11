@@ -277,6 +277,8 @@ data class TodayState(
     /** For the character's check-ins: what was left undone yesterday, and days in a row with nothing done. */
     val leftYesterday: Int = 0,
     val daysAway: Int = 0,
+    /** Today is perfect so far, by the same test that pays the perfect-day bonus (see PerfectDays). */
+    val perfectSoFar: Boolean = false,
 )
 
 /** What Today needs besides goals and ticks. */
@@ -559,6 +561,7 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
                 }.toMap(),
                 leftYesterday = io.github.randomtools3377.checklist.core.Checkins.leftYesterday(tracked, day),
                 daysAway = io.github.randomtools3377.checklist.core.Checkins.daysAway(tracked, day),
+                perfectSoFar = records.lastOrNull()?.takeIf { it.day == day }?.let(PerfectDays::isPerfect) == true,
             )
         }
     }.state(null)
@@ -890,11 +893,14 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
         refreshFocus()
     }
 
-    /** Time's up, or "Done now": the goal is ticked. */
+    /**
+     * Time's up, or "Done now": the goal is ticked. The timer is taken from the phone as it is
+     * now, so if the phone's alarm already ended it and ticked the goal, it isn't ticked again.
+     */
     fun finishFocus(onResult: (TickResult) -> Unit) {
-        val goalId = focus.value?.goalId ?: return
-        stopFocus()
-        tickHabit(goalId, onResult)
+        val goalId = phone.takeFocus()?.goalId
+        refreshFocus()
+        if (goalId != null) tickHabit(goalId, onResult)
     }
 
     /** A tab to open, asked for by a notification (the weekly summary opens the review). */

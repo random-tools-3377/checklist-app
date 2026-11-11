@@ -332,6 +332,7 @@ fun ChecklistApp(vm: MainViewModel) {
                     onRetime = { goalId, minute -> day?.let { vm.retime(goalId, it.day, minute) } },
                     onBack = ::pop,
                     events = day?.let { io.github.randomtools3377.checklist.core.BusyTime.on(calendarEvents, it.day, settings.dayEndHour) }.orEmpty(),
+                    pace = io.github.randomtools3377.checklist.core.PaceSettings(settings.dayEndHour, settings.defaultFinish, settings.dayStart),
                 )
             }
             "character" -> {

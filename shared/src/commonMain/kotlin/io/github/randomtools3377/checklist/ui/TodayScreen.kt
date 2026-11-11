@@ -582,8 +582,9 @@ fun TodayScreen(
                 TodaySection.DUE_TODAY -> {
                     startGoals()
                     if (plan.isNotEmpty()) item(key = "title-today") { SectionTitle("Today") }
-                    // Everything due today done, none skipped: the perfect-day bonus comes when the day ends.
-                    if (filter == null && boosts.perfectDayBonus > 0 && screen.plan.isNotEmpty() && screen.plan.all { it.row.count >= it.row.goal.target }) {
+                    // Everything due today done (with goals whose week, month or year ends today), none
+                    // skipped: the perfect-day bonus comes when the day ends.
+                    if (filter == null && boosts.perfectDayBonus > 0 && screen.perfectSoFar) {
                         item(key = "perfect-day") {
                             Text(
                                 "🌟 Perfect day so far: +${boosts.perfectDayBonus} when the day ends",
@@ -1047,7 +1048,8 @@ private fun LazyListScope.habitSection(
 @Composable
 private fun PaceCard(screen: TodayState, onSettings: () -> Unit) {
     val pace: TodayPace? = screen.pace
-    val left = screen.plan.count { !it.row.done }
+    // Each time still to do, so "8 glasses" with 2 done counts 6, as the pace shares the time out.
+    val left = screen.plan.sumOf { it.row.left }
     Card(
         modifier = Modifier.fillMaxWidth().testTag("pace"),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
@@ -1055,6 +1057,7 @@ private fun PaceCard(screen: TodayState, onSettings: () -> Unit) {
         Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
             val color = MaterialTheme.colorScheme.onSecondaryContainer
             when {
+                left == 0 && screen.plan.any { it.row.skipped } -> Text("Nothing left to do today.", color = color, style = MaterialTheme.typography.titleSmall)
                 left == 0 -> Text("Everything due today is done. 🎉", color = color, style = MaterialTheme.typography.titleSmall)
                 pace == null -> {
                     Text("$left left today", color = color, style = MaterialTheme.typography.titleSmall)

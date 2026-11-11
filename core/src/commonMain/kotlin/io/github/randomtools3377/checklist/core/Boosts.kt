@@ -88,6 +88,12 @@ class PerfectDays(private val store: Store, private val book: Book) {
 
         /** The bonus while the feature is on; off (0) until the user turns it on. */
         suspend fun bonus(store: Store): Int = store.setting(BONUS)?.toIntOrNull()?.coerceIn(0, 10_000) ?: 0
+
+        /**
+         * Whether [record]'s day is perfect: something was due, everything due was done, and
+         * nothing was skipped. Today's "Perfect day so far" uses the same test as the bonus.
+         */
+        fun isPerfect(record: DayRecord): Boolean = record.due > 0 && record.done >= record.due && record.skips == 0
     }
 
     /** Pays the bonus for every perfect day that ended since the last time. Returns what was paid. */
@@ -106,7 +112,7 @@ class PerfectDays(private val store: Store, private val book: Book) {
             val ticks = store.habitTicksSince(Days.earliestOpenDay(day))
             val lapses = store.allLapses(day, yesterday)
             for (record in StreakCounter.records(day, yesterday, goals, ticks, lapses)) {
-                if (record.due > 0 && record.done >= record.due && record.skips == 0) {
+                if (isPerfect(record)) {
                     val entry = Entry(at = book.millis(), day = record.day, kind = EntryKind.PERFECT_DAY, amount = bonus, label = "Perfect day")
                     paid += entry.copy(id = store.addEntry(entry))
                 }

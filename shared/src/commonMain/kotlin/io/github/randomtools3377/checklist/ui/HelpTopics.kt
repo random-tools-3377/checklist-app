@@ -279,6 +279,7 @@ enum class HelpTopic(val title: String, val intro: String, val steps: List<Strin
             "Hold a goal and drag it to another time. Times snap to quarter hours.",
             "Or tap a goal to pick a time, or \"Usual time\" to put it back.",
             "Changes are for this day only; reminders, pacing and the order follow them.",
+            "A goal done several times a day sits at each of its times and keeps them.",
             "With \"Phone calendar\" on, your calendar's events show here too.",
         ),
     ),
