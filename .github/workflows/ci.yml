@@ -240,6 +240,69 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+  iphone-try:
+    name: Open the iPhone app on a simulator
+    # Builds the iPhone app for the simulator, opens it, and checks it is still running a while
+    # later, with a screenshot in the log. The .ipa only goes in the Release if this passes.
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - name: Pick an Xcode the Kotlin compiler supports
+        run: |
+          xcode="$(ls -d /Applications/Xcode_16*.app 2>/dev/null | sort -V | tail -n 1 || true)"
+          if [ -n "$xcode" ]; then sudo xcode-select -s "$xcode"; fi
+          xcodebuild -version
+
+      - name: Give Gradle more memory (linking the iPhone app needs it)
+        run: sed -i '' 's/^org.gradle.jvmargs=.*/org.gradle.jvmargs=-Xmx6g -Dfile.encoding=UTF-8/' gradle.properties
+
+      - name: Make the Xcode project
+        run: |
+          brew install xcodegen
+          cd iosApp && xcodegen generate
+
+      - name: Build the app for the simulator
+        run: |
+          set -o pipefail
+          xcodebuild -project iosApp/Checklist.xcodeproj -scheme Checklist -configuration Debug \
+            -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -derivedDataPath build/sim \
+            CODE_SIGNING_ALLOWED=NO build | tail -n 100
+
+      - name: Open it and check it keeps running
+        run: |
+          udid="$(xcrun simctl list devices available -j | python3 -c "
+          import json, sys
+          devices = json.load(sys.stdin)['devices']
+          print(next(d['udid'] for runtime, list_ in sorted(devices.items(), reverse=True) if 'iOS' in runtime for d in list_ if d['name'].startswith('iPhone')))
+          ")"
+          echo "Simulator: $udid"
+          xcrun simctl boot "$udid"
+          xcrun simctl bootstatus "$udid" -b
+          xcrun simctl install "$udid" build/sim/Build/Products/Debug-iphonesimulator/Checklist.app
+          xcrun simctl launch "$udid" io.github.randomtools3377.checklist
+          sleep 30
+          xcrun simctl io "$udid" screenshot shot.png
+          sips -Z 640 shot.png > /dev/null
+          echo "----- screenshot (png, base64)"
+          base64 -i shot.png
+          echo "----- end of screenshot"
+          if ! xcrun simctl spawn "$udid" launchctl list | grep -q "io.github.randomtools3377.checklist"; then
+            echo "::error::The iPhone app isn't running 30 seconds after opening: it closed or crashed."
+            xcrun simctl spawn "$udid" log show --last 2m --predicate 'process == "Checklist"' --style compact | tail -n 80 || true
+            exit 1
+          fi
+          echo "The iPhone app opened and is still running."
+
   sign:
     name: Sign and check the release APKs
     needs: build
@@ -294,7 +357,7 @@ jobs:
 
   release:
     name: Publish the Release
-    needs: [sign, emulator, ipa]
+    needs: [sign, emulator, ipa, iphone-try]
     # The iPhone app is added when it built; a broken iPhone build doesn't hold back Android.
     if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.sign.result == 'success' && needs.emulator.result == 'success'
     runs-on: ubuntu-24.04
@@ -312,7 +375,7 @@ jobs:
           path: dist
 
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        if: needs.ipa.result == 'success'
+        if: needs.ipa.result == 'success' && needs.iphone-try.result == 'success'
         with:
           name: iphone-ipa
           path: dist
