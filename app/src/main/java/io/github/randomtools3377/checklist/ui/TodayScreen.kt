@@ -123,6 +123,7 @@ fun TodayScreen(
     val week by vm.weekProgress.collectAsStateWithLifecycle()
     val look by vm.appearance.collectAsStateWithLifecycle()
     val character by vm.character.collectAsStateWithLifecycle()
+    val characterLook by vm.look.collectAsStateWithLifecycle()
     val grid = look.layout == TodayLayout.GRID
     // In the grid, holding a tile opens its full card here.
     var details by remember { mutableStateOf<Long?>(null) }
@@ -417,7 +418,7 @@ fun TodayScreen(
                     Spacer(Modifier.height(12.dp))
                     // With the character on: its level, under the balance.
                     character?.let { sheet ->
-                        LevelCard(sheet, onOpen = onCharacter)
+                        LevelCard(sheet, characterLook, onOpen = onCharacter)
                         Spacer(Modifier.height(12.dp))
                     }
                 }

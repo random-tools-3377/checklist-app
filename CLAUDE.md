@@ -504,6 +504,13 @@ Build order **(default)**, each step a Release the owner can try:
     **Details (default):** everything is original to this app, its names and art included.
     Experience is every point a goal has ever paid (ticks and their bonuses), worked out from the
     points history, so past ticks count from the start; spending and penalties don't lower it.
+    The character is a friendly front-facing figure, drawn by the app from simple shapes in the
+    shared code: 6 skin tones, 6 hair styles, 6 hair colours and 3 kinds of eyes. Each skill
+    earns a piece of gear at levels 5, 10 and 20 (Fitness: trainers, headband, gold medal;
+    Health: water bottle, healthy glow, heart; Mind: glasses, book, graduation cap; Home: apron,
+    spatula, potted plant; Work: name badge, briefcase, blazer; Creative: beret, paintbrush,
+    scarf). Where two pieces go in the same place, the stronger skill's is worn, and the shirt
+    takes the leading skill's colour.
     Build order: skill areas, levels and badge tiers (0.45.0); the drawn character (0.46.0);
     quests, combos and racing last week (0.47.0); items, lucky ticks and bosses (0.48.0); bets
     and streak shields (0.49.0).

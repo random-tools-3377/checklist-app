@@ -61,6 +61,12 @@ class CharacterTest {
         app.waitFor { text("skill-level:FITNESS").contains("Level 3") }
         app.waitFor { text("skill-level:MIND").contains("Level 1") }
 
+        // The character is drawn, and its style is kept.
+        app.waitFor { shown("character-figure") }
+        app.tap("hair:CURLY")
+        app.tap("skin:4")
+        app.waitFor { runBlocking { dao.setting(io.github.randomtools3377.checklist.core.Looks.SETTING) }?.startsWith("4,CURLY,") == true }
+
         // The goal's skill, changed in its editor, is saved.
         app.activityRule.scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
         app.waitFor { shown("nav:goals") }

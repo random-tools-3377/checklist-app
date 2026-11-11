@@ -303,7 +303,8 @@ fun ChecklistApp(vm: MainViewModel = viewModel()) {
             }
             "character" -> {
                 val sheet by vm.character.collectAsStateWithLifecycle()
-                CharacterScreen(sheet, onBack = ::pop)
+                val look by vm.look.collectAsStateWithLifecycle()
+                CharacterScreen(sheet, look, onLook = vm::setLook, onBack = ::pop)
             }
             "plan-week" -> WeekPlanScreen(vm, onOpenPlan = { goTo(AppTab.PLAN) }, onBack = ::pop)
             "done" -> DoneListScreen(doneList, onOpen = { goal -> push(editRoute(goal)) }, onBack = ::pop)

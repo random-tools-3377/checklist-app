@@ -1435,6 +1435,16 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 }
             }.state(null)
 
+    /** How the user has styled the character: skin, hair and eyes. */
+    val look: StateFlow<io.github.randomtools3377.checklist.core.Look> =
+        dao.observeSetting(io.github.randomtools3377.checklist.core.Looks.SETTING)
+            .map { io.github.randomtools3377.checklist.core.Looks.decode(it) }
+            .state(io.github.randomtools3377.checklist.core.Look())
+
+    fun setLook(look: io.github.randomtools3377.checklist.core.Look) {
+        viewModelScope.launch { repository.setSetting(io.github.randomtools3377.checklist.core.Looks.SETTING, io.github.randomtools3377.checklist.core.Looks.encode(look)) }
+    }
+
     /** The weekly planning card on Today: from Monday, until this week is planned or put off. */
     val showWeekPlan: StateFlow<Boolean> = combine(today, features, dao.observeSetting(SETTING_WEEK_PLANNED)) { day, on, planned ->
         Feature.WEEKLY_PLANNING in on && planned != YearReview.weekOf(day).toString()
