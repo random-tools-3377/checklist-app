@@ -101,11 +101,10 @@ internal object IosReminders {
         for (alert in waiting) {
             val goal = goals.find { it.id == alert.goalId } ?: continue
             val hidden = hidePrivate && goal.private
-            val content = UNMutableNotificationContent().apply {
-                setTitle(if (hidden) "🔒 A private goal" else "${goal.icon} ${goal.name}")
-                setBody(if (hidden) "Due now" else words(alert))
-                setSound(UNNotificationSound.defaultSound)
-            }
+            val content = UNMutableNotificationContent()
+            content.title = if (hidden) "🔒 A private goal" else "${goal.icon} ${goal.name}"
+            content.body = if (hidden) "Due now" else words(alert)
+            content.sound = UNNotificationSound.defaultSound
             val request = UNNotificationRequest.requestWithIdentifier(
                 "goal-${alert.goalId}-${alert.at}-${alert.kind}",
                 content,
