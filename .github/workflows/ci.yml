@@ -334,8 +334,8 @@ jobs:
       - name: Check there is no networking code (a computer has no permission to take away)
         run: scripts/check-no-network-desktop.sh
 
-      - name: Build the .msi
-        run: ./gradlew --no-daemon :desktop:packageMsi
+      - name: Build the .msi, and the app unpacked to try it
+        run: ./gradlew --no-daemon :desktop:packageMsi :desktop:createDistributable
 
       - name: Open the app and check it keeps running
         shell: pwsh
