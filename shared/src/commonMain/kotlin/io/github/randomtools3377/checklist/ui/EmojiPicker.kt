@@ -58,6 +58,31 @@ data class EmojiEntry(val emoji: String, val name: String, val toned: String?) {
 data class EmojiGroup(val name: String, val emojis: List<EmojiEntry>)
 
 /**
+ * The characters of [emoji] a font needs to draw it, as code points: the joiner, the variation
+ * selectors and the tag letters of flags like England's left out, as they draw nothing alone.
+ * Used where the screens draw with Skia (the iPhone and the computer) to leave out emoji the
+ * device has no font for.
+ */
+internal fun emojiParts(emoji: String): List<Int> {
+    val parts = mutableListOf<Int>()
+    var i = 0
+    while (i < emoji.length) {
+        val high = emoji[i]
+        val low = emoji.getOrNull(i + 1)
+        val point = if (high.isHighSurrogate() && low != null && low.isLowSurrogate()) {
+            i += 2
+            0x10000 + ((high.code - 0xD800) shl 10) + (low.code - 0xDC00)
+        } else {
+            i += 1
+            high.code
+        }
+        val drawsNothing = point == 0x200D || point in 0xFE00..0xFE0F || point in 0xE0020..0xE007F
+        if (!drawsNothing) parts += point
+    }
+    return parts
+}
+
+/**
  * The full standard emoji set, bundled with the app (assets/emoji.tsv, built by
  * tools/make-emoji-list.py from Unicode's data). Emoji the phone's font can't draw are left out.
  */

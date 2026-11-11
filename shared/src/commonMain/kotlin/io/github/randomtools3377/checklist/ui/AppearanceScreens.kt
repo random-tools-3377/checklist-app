@@ -80,6 +80,7 @@ private val Rainbow = listOf(Color.Red, Color.Yellow, Color.Green, Color.Cyan, C
 /** Settings → Appearance: light, dark, phone or black, and the colour the app is built from. */
 @Composable
 fun AppearanceScreen(appearance: Appearance, vm: MainViewModel, onAnyColour: () -> Unit, onBack: () -> Unit) {
+    val phone = LocalPhone.current
     Scaffold(
         topBar = {
             TopAppBar(
@@ -93,7 +94,7 @@ fun AppearanceScreen(appearance: Appearance, vm: MainViewModel, onAnyColour: () 
             Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Text("Theme", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+            Title("Theme")
             SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
                 ThemeMode.entries.forEachIndexed { index, mode ->
                     SegmentedButton(
@@ -111,7 +112,7 @@ fun AppearanceScreen(appearance: Appearance, vm: MainViewModel, onAnyColour: () 
             )
 
             Spacer(Modifier.height(4.dp))
-            Text("Colour", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+            Title("Colour")
             FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Colors.PRESETS.forEach { (name, color) ->
                     Swatch(name, appearance.color == color, Modifier.background(Color(color), CircleShape)) { vm.setColor(color) }
@@ -132,25 +133,17 @@ fun AppearanceScreen(appearance: Appearance, vm: MainViewModel, onAnyColour: () 
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                Column(Modifier.weight(1f)) {
-                    Text("Colour-blind friendly", style = MaterialTheme.typography.bodyLarge)
-                    Text(
-                        "Good things in blue and bad things in orange, like points earned and lost, whatever the app's colour. " +
-                            "The review calendar marks each day with ✓ or ✕ too, and goals get colours that stay apart.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                androidx.compose.material3.Switch(
-                    checked = appearance.colourBlind,
-                    onCheckedChange = vm::setColourBlind,
-                    modifier = Modifier.testTag("switch:colour-blind"),
-                )
-            }
+            SwitchRow(
+                "Colour-blind friendly",
+                appearance.colourBlind,
+                "switch:colour-blind",
+                hint = "Good things in blue and bad things in orange, like points earned and lost, whatever the app's colour. " +
+                    "The review calendar marks each day with ✓ or ✕ too, and goals get colours that stay apart.",
+                onChange = vm::setColourBlind,
+            )
 
             Spacer(Modifier.height(4.dp))
-            Text("Today", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+            Title("Today")
             Choice("Layout", TodayLayout.entries, appearance.layout, { it.label }, "layout") { vm.setTodayLayout(it) }
             Text(
                 if (appearance.layout == TodayLayout.GRID) "Big tiles, two to a row. Tap a tile to tick it; hold it for its details, skip or focus." else "A card for each goal, with its buttons.",
@@ -167,27 +160,30 @@ fun AppearanceScreen(appearance: Appearance, vm: MainViewModel, onAnyColour: () 
             BackdropSetting(appearance, vm)
 
             Spacer(Modifier.height(4.dp))
-            Text("Today's sections", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+            Title("Today's sections")
             SectionsEditor(appearance.sections) { change -> vm.changeSections(change) }
             Spacer(Modifier.height(4.dp))
-            Text("Tabs", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+            Title("Tabs")
             TabsEditor(appearance.tabs, vm)
 
             Spacer(Modifier.height(4.dp))
-            Text("Personal", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+            Title("Personal")
             PointsNameSetting(vm)
             Choice("Font", FontChoice.entries, appearance.font, { it.label }, "font") { vm.setFont(it) }
-            AppIconSetting(appearance.icon) { vm.setAppIcon(it) }
-            Choice("Widgets", io.github.randomtools3377.checklist.widget.WidgetStyle.entries, appearance.widgetStyle, { it.label }, "widget-style") { vm.setWidgetStyle(it) }
-            Text(
-                if (appearance.widgetStyle == io.github.randomtools3377.checklist.widget.WidgetStyle.SEE_THROUGH) {
-                    "White text on a see-through background, over your wallpaper."
-                } else {
-                    "In the app's colours, light or dark with the phone."
-                },
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            // The app's icon and the widgets' look only where there are icon choices and widgets.
+            if (phone.canChangeIcon) AppIconSetting(appearance.icon) { vm.setAppIcon(it) }
+            if (phone.hasWidgets) {
+                Choice("Widgets", io.github.randomtools3377.checklist.widget.WidgetStyle.entries, appearance.widgetStyle, { it.label }, "widget-style") { vm.setWidgetStyle(it) }
+                Text(
+                    if (appearance.widgetStyle == io.github.randomtools3377.checklist.widget.WidgetStyle.SEE_THROUGH) {
+                        "White text on a see-through background, over your wallpaper."
+                    } else {
+                        "In the app's colours, light or dark with the phone."
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             CelebrationSettings(appearance.celebrate, vm)
         }
     }
@@ -277,14 +273,9 @@ private fun AppIconSetting(current: io.github.randomtools3377.checklist.AppIcon,
 @Composable
 private fun CelebrationSettings(style: CelebrationStyle, vm: MainViewModel) {
     Text("Celebrations", style = MaterialTheme.typography.bodyLarge)
-    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-        Text("Sound", modifier = Modifier.weight(1f))
-        androidx.compose.material3.Switch(style.sound, { vm.setCelebrationSound(it) }, modifier = Modifier.testTag("celebrate:sound"))
-    }
-    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-        Text("Buzz", modifier = Modifier.weight(1f))
-        androidx.compose.material3.Switch(style.buzz, { vm.setCelebrationBuzz(it) }, modifier = Modifier.testTag("celebrate:buzz"))
-    }
+    SwitchRow("Sound", style.sound, "celebrate:sound") { vm.setCelebrationSound(it) }
+    // A computer has nothing to buzz.
+    if (LocalPhone.current.canBuzz) SwitchRow("Buzz", style.buzz, "celebrate:buzz") { vm.setCelebrationBuzz(it) }
     Choice("Confetti", ConfettiAmount.entries, style.confetti, { it.label }, "confetti") { vm.setConfetti(it) }
     Text("A GIF for every goal", style = MaterialTheme.typography.bodyLarge)
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -315,12 +306,12 @@ private fun CelebrationSettings(style: CelebrationStyle, vm: MainViewModel) {
 private fun SectionsEditor(sections: List<SectionChoice>, onChange: ((List<SectionChoice>) -> List<SectionChoice>) -> Unit) {
     sections.forEachIndexed { index, choice ->
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-            androidx.compose.material3.Checkbox(
+            TickBoxRow(
                 checked = choice.shown,
-                onCheckedChange = { onChange { now -> Sections.toggle(now, choice.section) } },
-                modifier = Modifier.testTag("section:${choice.section.name}"),
-            )
-            Text(choice.section.label, modifier = Modifier.weight(1f))
+                tag = "section:${choice.section.name}",
+                modifier = Modifier.weight(1f),
+                onChange = { onChange { now -> Sections.toggle(now, choice.section) } },
+            ) { Text(choice.section.label) }
             IconButton(onClick = { onChange { now -> Sections.move(now, now.indexOfFirst { it.section == choice.section }, -1) } }, enabled = index > 0, modifier = Modifier.testTag("section-up:${choice.section.name}")) {
                 Icon(Icons.Filled.KeyboardArrowUp, contentDescription = "Move ${choice.section.label} up")
             }
@@ -341,13 +332,13 @@ private fun TabsEditor(tabs: TabChoice, vm: MainViewModel) {
     val listed = tabs.order.filter { offered(it) }
     listed.forEachIndexed { index, tab ->
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-            androidx.compose.material3.Checkbox(
+            TickBoxRow(
                 checked = tab !in tabs.hidden,
-                onCheckedChange = { shown -> vm.setTabHidden(tab, hidden = !shown) },
+                tag = "tab:${tab.name}",
+                modifier = Modifier.weight(1f),
                 enabled = tab != AppTabKind.TODAY,
-                modifier = Modifier.testTag("tab:${tab.name}"),
-            )
-            Text(tab.label, modifier = Modifier.weight(1f))
+                onChange = { shown -> vm.setTabHidden(tab, hidden = !shown) },
+            ) { Text(tab.label) }
             IconButton(onClick = { vm.moveTab(tab, -1) }, enabled = index > 0, modifier = Modifier.testTag("tab-up:${tab.name}")) {
                 Icon(Icons.Filled.KeyboardArrowUp, contentDescription = "Move ${tab.label} earlier")
             }
@@ -365,13 +356,19 @@ private fun TabsEditor(tabs: TabChoice, vm: MainViewModel) {
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         tabs.shown.filter { offered(it) }.forEach { tab ->
             androidx.compose.material3.FilterChip(
-                selected = tabs.opensOn == tab,
+                selected = tabs.opensOn(budgetOn = offered(AppTabKind.BUDGET)) == tab,
                 onClick = { vm.setFirstTab(tab) },
                 label = { Text(tab.label) },
                 modifier = Modifier.testTag("first-tab:${tab.name}"),
             )
         }
     }
+}
+
+/** A section's title on the Appearance page, marked as a heading for screen readers. */
+@Composable
+private fun Title(text: String) {
+    Text(text, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.asHeading())
 }
 
 /** A labelled row of choices, one of which is picked. */

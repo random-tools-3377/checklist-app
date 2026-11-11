@@ -28,6 +28,9 @@ import kotlinx.datetime.toJavaLocalTime
 import org.jetbrains.skia.Bitmap
 import org.jetbrains.skia.Codec
 import org.jetbrains.skia.Data
+import org.jetbrains.skia.FontMgr
+import org.jetbrains.skia.FontStyle
+import org.jetbrains.skia.Typeface
 import java.awt.FileDialog
 import java.awt.GraphicsEnvironment
 import java.io.ByteArrayInputStream
@@ -66,7 +69,25 @@ actual val canMatchWallpaper: Boolean get() = false
 @Composable
 actual fun wallpaperColors(dark: Boolean): ColorScheme? = null
 
-actual fun canShowEmoji(emoji: String): Boolean = true
+/** The computer's emoji font, as Skia finds it for a smiley; null if it has none. */
+private val emojiFont: Typeface? by lazy {
+    runCatching { FontMgr.default.matchFamilyStyleCharacter(null, FontStyle.NORMAL, null, 0x1F600) }.getOrNull()
+}
+
+/** Whether [font] draws [point] itself, rather than the stand-in box of a last-resort font. */
+private fun draws(font: Typeface?, point: Int): Boolean =
+    font != null && font.getUTF32Glyph(point).toInt() != 0 && !font.familyName.contains("LastResort")
+
+/**
+ * Whether the computer can draw [emoji]: each part of it is in its emoji font, or in another font
+ * Skia finds for it, as the screens draw with Skia. Shown if the fonts can't be asked.
+ */
+actual fun canShowEmoji(emoji: String): Boolean = runCatching {
+    val parts = emojiParts(emoji)
+    parts.isNotEmpty() && parts.all { point ->
+        draws(emojiFont, point) || draws(FontMgr.default.matchFamilyStyleCharacter(null, FontStyle.NORMAL, null, point), point)
+    }
+}.getOrDefault(true)
 
 actual fun moneySymbol(): String = runCatching { java.util.Currency.getInstance(java.util.Locale.getDefault()).symbol }.getOrDefault("")
 

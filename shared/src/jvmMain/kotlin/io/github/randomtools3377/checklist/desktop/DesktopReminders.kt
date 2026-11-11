@@ -13,6 +13,7 @@ import io.github.randomtools3377.checklist.data.SETTING_DEFAULT_FINISH
 import io.github.randomtools3377.checklist.data.SharedParts
 import io.github.randomtools3377.checklist.data.nowLocal
 import io.github.randomtools3377.checklist.data.nowMillis
+import io.github.randomtools3377.checklist.data.nextInChain
 import io.github.randomtools3377.checklist.data.parseDayEndHour
 import io.github.randomtools3377.checklist.data.toCore
 import io.github.randomtools3377.checklist.data.toEpochDay
@@ -100,6 +101,16 @@ class DesktopReminders(private val phone: DesktopPhone) {
         val hidePrivate = dao.setting(LOCK_PRIVATE) == "1"
         val title = if (goal == null || (goal.private && hidePrivate)) "⏱ Focus" else "⏱ ${goal.icon} ${goal.name}"
         show(title, "Time's up")
+    }
+
+    /** The goals after [goalId] in a habit chain, still to do today, as "Next up". */
+    suspend fun showNext(goalId: Long) {
+        val next = nextInChain(phone.parts.db.dao(), goalId)
+        when (next.size) {
+            0 -> {}
+            1 -> show(next[0].title, "Next up")
+            else -> show("Next up", next.joinToString("\n") { it.title })
+        }
     }
 
     private fun showIcon() {

@@ -3,6 +3,7 @@
 package io.github.randomtools3377.checklist.ios
 
 import io.github.randomtools3377.checklist.data.SharedParts
+import io.github.randomtools3377.checklist.data.nextInChain
 import io.github.randomtools3377.checklist.data.nowMillis
 import io.github.randomtools3377.checklist.data.openDatabase
 import io.github.randomtools3377.checklist.reminders.FocusState
@@ -58,8 +59,8 @@ private class SavePickerDelegate(private val onAnswer: (Boolean) -> Unit) : NSOb
 
 /**
  * The iPhone's side of what the shared screens ask of the phone. The iPhone app has no phone
- * calendar, AI, automatic backup folder, home-screen icon choice or widgets yet; it says so and
- * the screens leave those out.
+ * calendar, AI, automatic backup folder, home-screen icon choice, widgets, morning plan, weekly
+ * summary or snooze yet; it says so and the screens leave those out.
  */
 class IosPhone : Phone {
     override val parts: SharedParts by lazy { SharedParts(openDatabase(), IosGifs(), IosPhoto()) }
@@ -95,7 +96,12 @@ class IosPhone : Phone {
     override suspend fun rescheduleReminders() = IosReminders.reschedule(parts, focus())
 
     override fun afterDone(goalId: Long) {
-        scope.launch { runCatching { IosReminders.reschedule(parts, focus()) } }
+        scope.launch {
+            runCatching { IosReminders.reschedule(parts, focus()) }
+            // The goals after it in a habit chain, shown at the bottom of the screen.
+            val next = runCatching { nextInChain(parts.db.dao(), goalId) }.getOrDefault(emptyList())
+            if (next.isNotEmpty()) toast("Next up: " + next.joinToString(", ") { it.title })
+        }
     }
 
     override fun canNotify(): Boolean = IosReminders.allowed
@@ -203,9 +209,10 @@ class IosPhone : Phone {
     override suspend fun addGif(file: PickedFile): Result<String> {
         val bytes = readFile(file) ?: return Result.failure(Exception("That file couldn't be opened."))
         removeFile(file)
-        if (bytes.size > MAX_GIF_BYTES) return Result.failure(Exception("That GIF is too big. Pick one under ${MAX_GIF_BYTES / 1_048_576} MB."))
+        // The photo picker can't show only GIFs, so a still photo can come here too.
         val header = bytes.copyOf(minOf(6, bytes.size)).decodeToString()
-        if (header != "GIF87a" && header != "GIF89a") return Result.failure(Exception("That file isn't a GIF."))
+        if (header != "GIF87a" && header != "GIF89a") return Result.failure(Exception("That photo isn't a GIF. Pick a GIF."))
+        if (bytes.size > MAX_GIF_BYTES) return Result.failure(Exception("That GIF is too big. Pick one under ${MAX_GIF_BYTES / 1_048_576} MB."))
         val name = "own-" + Random.nextBytes(8).joinToString("") { (it.toInt() and 0xFF).toString(16).padStart(2, '0') } + ".gif"
         parts.gifs.write(name, bytes)
         return Result.success(name)

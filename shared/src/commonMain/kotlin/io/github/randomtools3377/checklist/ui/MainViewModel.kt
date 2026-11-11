@@ -1648,10 +1648,16 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
         DoneList.of(shown, steps.map { it.toCore() }, (stepTicks + todoTicks).map { it.toCore() })
     }.state(emptyList())
 
-    /** The optional features turned on (see Feature). Off until the user turns them on. */
+    /**
+     * The optional features turned on (see Feature). Off until the user turns them on. The AI
+     * helper counts only on a phone that has it, so its cards stay away elsewhere.
+     */
     val features: StateFlow<Set<Feature>> = combine(Feature.entries.map { dao.observeSetting(it.key) }) { values ->
-        Feature.entries.filterIndexed { i, feature -> feature.isOn(values[i]) }.toSet()
+        Feature.entries.filterIndexed { i, feature -> feature.isOn(values[i]) && (feature != Feature.AI || phone.hasAi) }.toSet()
     }.state(emptySet())
+
+    /** Whether [feature] is on, read now, for before [features] has been loaded. */
+    suspend fun featureOn(feature: Feature): Boolean = feature.isOn(dao.setting(feature.key))
 
     /** The character's level and skills, while the character is on; null when it is off. */
     val character: StateFlow<io.github.randomtools3377.checklist.core.CharacterSheet?> =

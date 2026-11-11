@@ -22,7 +22,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -32,7 +31,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
@@ -88,6 +86,17 @@ const val SETTING_TIPS_OFF = "tips_off"
 /** A guide's text, with the user's own word for points. */
 private fun words(text: String) = text.replace("{points}", pointsWord())
 
+/** Whether this guide is for [phone]: none for widgets or the AI where there are none. */
+internal fun HelpTopic.shownOn(phone: Phone): Boolean = when (this) {
+    HelpTopic.WIDGETS -> phone.hasWidgets
+    HelpTopic.AI -> phone.hasAi
+    else -> true
+}
+
+/** This guide's steps on [phone]: those for the automatic backup folder only where there is one. */
+internal fun HelpTopic.stepsOn(phone: Phone): List<String> =
+    if (this == HelpTopic.BACKUP && !phone.canPickFolder) steps.filterNot { "Choose a folder" in it || "automatic backup" in it } else steps
+
 /** A "?" in a top bar that opens the screen's guide, if it has one. */
 @Composable
 fun HelpAction() {
@@ -116,9 +125,10 @@ fun HelpDialog(topic: HelpTopic, onDismiss: () -> Unit, firstTime: Boolean = fal
 
 @Composable
 private fun HelpText(topic: HelpTopic) {
+    val phone = LocalPhone.current
     Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(words(topic.intro), style = MaterialTheme.typography.bodyLarge)
-        topic.steps.forEach { step ->
+        topic.stepsOn(phone).forEach { step ->
             Row {
                 Text("•", modifier = Modifier.width(16.dp), style = MaterialTheme.typography.bodyMedium)
                 Text(words(step), style = MaterialTheme.typography.bodyMedium)
@@ -149,6 +159,7 @@ fun FirstTimeTip(route: String, vm: MainViewModel) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HelpScreen(vm: MainViewModel, onBack: () -> Unit) {
+    val phone = LocalPhone.current
     val tips by vm.tips.collectAsStateWithLifecycle()
     var open by rememberSaveable { mutableStateOf<String?>(null) }
     Scaffold(
@@ -165,17 +176,12 @@ fun HelpScreen(vm: MainViewModel, onBack: () -> Unit) {
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = padding.calculateTopPadding() + 8.dp, bottom = padding.calculateBottomPadding() + 24.dp),
         ) {
             item {
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                    Column(Modifier.weight(1f)) {
-                        Text("Tips the first time", style = MaterialTheme.typography.bodyLarge)
-                        Text(
-                            "A short guide the first time each part of the app opens.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    Switch(checked = tips?.on ?: true, onCheckedChange = { vm.setTipsOn(it) }, modifier = Modifier.testTag("tips-on"))
-                }
+                SwitchRow(
+                    "Tips the first time",
+                    tips?.on ?: true,
+                    "tips-on",
+                    hint = "A short guide the first time each part of the app opens.",
+                ) { vm.setTipsOn(it) }
                 TextButton(onClick = vm::showTipsAgain, enabled = tips?.seen?.isNotEmpty() == true, modifier = Modifier.testTag("tips-again")) {
                     Text("Show every tip again")
                 }
@@ -185,13 +191,13 @@ fun HelpScreen(vm: MainViewModel, onBack: () -> Unit) {
                     modifier = Modifier.padding(vertical = 8.dp),
                 )
             }
-            items(HelpTopic.entries.toList(), key = { it.name }) { topic ->
+            items(HelpTopic.entries.filter { it.shownOn(phone) }, key = { it.name }) { topic ->
                 Column(Modifier.fillMaxWidth().clickable { open = if (open == topic.name) null else topic.name }.padding(vertical = 10.dp).testTag("help-topic:${topic.name}")) {
                     Text(topic.title, style = MaterialTheme.typography.titleMedium)
                     if (open == topic.name) {
                         Column(Modifier.padding(top = 6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                             Text(words(topic.intro), style = MaterialTheme.typography.bodyMedium)
-                            topic.steps.forEach { step ->
+                            topic.stepsOn(phone).forEach { step ->
                                 Row {
                                     Text("•", modifier = Modifier.width(16.dp))
                                     Text(words(step), style = MaterialTheme.typography.bodyMedium)

@@ -9,6 +9,12 @@ import io.github.randomtools3377.checklist.data.HabitDraft
 import io.github.randomtools3377.checklist.data.LOCK_PRIVATE
 import io.github.randomtools3377.checklist.data.SettingEntity
 import io.github.randomtools3377.checklist.data.nowLocal
+import io.github.randomtools3377.checklist.data.nextInChain
+import io.github.randomtools3377.checklist.ui.HelpTopic
+import io.github.randomtools3377.checklist.ui.canShowEmoji
+import io.github.randomtools3377.checklist.ui.notificationsNotHere
+import io.github.randomtools3377.checklist.ui.shownOn
+import io.github.randomtools3377.checklist.ui.stepsOn
 import io.github.randomtools3377.checklist.ui.usesTwentyFourHours
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.DatePeriod
@@ -154,5 +160,40 @@ class DesktopPhoneTest {
     fun theClockFollowsTheRegion() {
         assertFalse(usesTwentyFourHours(Locale.US))
         assertTrue(usesTwentyFourHours(Locale.GERMANY))
+    }
+
+    @Test
+    fun whatAComputerCantDoIsLeftOutOrSaidSo() {
+        assertEquals("Morning plan, weekly summary and snooze", notificationsNotHere(phone))
+        assertFalse(phone.canBuzz)
+        assertFalse(phone.hasRecentsPreview)
+        // No guides for widgets or the AI, and no backup folder steps.
+        assertFalse(HelpTopic.WIDGETS.shownOn(phone))
+        assertFalse(HelpTopic.AI.shownOn(phone))
+        assertTrue(HelpTopic.BACKUP.shownOn(phone))
+        val backup = HelpTopic.BACKUP.stepsOn(phone)
+        assertEquals(HelpTopic.BACKUP.steps.size - 2, backup.size)
+        assertTrue(backup.none { "folder" in it || "automatic" in it })
+    }
+
+    @Test
+    fun anEmojiNoFontHasIsLeftOut() {
+        assertFalse(canShowEmoji("\u200D"))
+        // Skia's own library isn't in every test run; where it is, a character no font has is left out.
+        if (runCatching { org.jetbrains.skia.FontMgr.default }.isFailure) return
+        assertFalse(canShowEmoji("\uDBFF\uDFFD"))
+    }
+
+    @Test
+    fun theNextGoalInAChainIsShownAfterATick() = runTest {
+        val coffee = addRead(null)
+        phone.parts.repository.saveHabit(
+            HabitDraft(
+                id = 0, name = "Journal", icon = "📓", points = 5, repeat = Repeat.everyDay(nowLocal().date.plus(DatePeriod(days = -7))),
+                target = 1, bonus = 0, minutes = null, at = null, finishBy = null, finishDay = null, after = coffee,
+            ),
+        )
+        assertTrue(phone.parts.book.tickHabit(coffee) is TickResult.Ticked)
+        assertEquals(listOf("📓 Journal"), nextInChain(dao, coffee).map { it.title })
     }
 }

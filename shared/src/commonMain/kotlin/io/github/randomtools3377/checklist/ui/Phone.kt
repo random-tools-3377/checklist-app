@@ -20,7 +20,8 @@ class NotSavedException : Exception("Not saved.")
  * What the shared screens ask of the phone they run on: the parts every phone shares, and what
  * only a phone can do, each phone in its own way (Android in the app, the iPhone in iosMain, and
  * a Windows computer in jvmMain, as DesktopPhone).
- * Something a phone can't do yet says so ([hasCalendar], [hasAi], [canPickFolder]).
+ * Something a phone can't do yet says so ([hasCalendar], [hasAi], [canPickFolder],
+ * [hasPlanNotifications], [canSnooze]), and the screens leave it out or say it isn't there yet.
  */
 interface Phone {
     val parts: SharedParts
@@ -39,7 +40,7 @@ interface Phone {
     /** Sets the next reminders again, after goals or settings changed. */
     suspend fun rescheduleReminders()
 
-    /** A goal is done: its reminders for now go. */
+    /** A goal is done: its reminders for now go, and the goals after it in a habit chain are reminded. */
     fun afterDone(goalId: Long)
 
     /** Drops snoozed reminders, after a restore, when a goal's id can mean another goal. */
@@ -50,6 +51,12 @@ interface Phone {
 
     /** Opens the phone's notification settings for this app. */
     fun openNotificationSettings()
+
+    /** Whether the morning plan and the weekly summary come as notifications here. */
+    val hasPlanNotifications: Boolean get() = false
+
+    /** Whether a reminder can be snoozed from its notification here. */
+    val canSnooze: Boolean get() = false
 
     // The focus timer, kept by the phone so it carries on while the app is closed.
 
@@ -128,6 +135,9 @@ interface Phone {
 
     /** Whether there are home-screen widgets to style. */
     val hasWidgets: Boolean get() = false
+
+    /** Whether the device can buzz, for celebrations (a computer can't). */
+    val canBuzz: Boolean get() = true
 
     // Small things kept on this phone only, not in the backup (like the emoji picked lately).
 

@@ -90,6 +90,12 @@ data class TabChoice(
     /** The first tab, or Today if the first one is hidden. */
     val opensOn: AppTabKind get() = if (first in hidden) AppTabKind.TODAY else first
 
+    /**
+     * The tab the app opens on, with [budgetOn] saying whether the Budget feature is on: Today
+     * if the first tab is hidden, or is Budget while Budget is off.
+     */
+    fun opensOn(budgetOn: Boolean): AppTabKind = opensOn.takeIf { it != AppTabKind.BUDGET || budgetOn } ?: AppTabKind.TODAY
+
     companion object {
         fun decode(hidden: String?, first: String?, order: String? = null): TabChoice = TabChoice(
             hidden = hidden.orEmpty().split(",").mapNotNull { name -> AppTabKind.entries.firstOrNull { it.name == name } }

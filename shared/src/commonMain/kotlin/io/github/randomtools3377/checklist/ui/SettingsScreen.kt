@@ -13,6 +13,7 @@ import io.github.randomtools3377.checklist.core.Amounts
 import io.github.randomtools3377.checklist.core.Difficulty
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -36,7 +37,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -177,12 +177,7 @@ private fun DifficultySettings(vm: MainViewModel) {
 private fun CalendarSettings(vm: MainViewModel) {
     val phone = LocalPhone.current
     if (!phone.hasCalendar) {
-        Text(
-            "This phone's calendar can't be shown yet.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-        )
+        NotOnThisDevice(Feature.CALENDAR.title, Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
         return
     }
     val choice by vm.calendarChoice.collectAsState()
@@ -208,14 +203,15 @@ private fun CalendarSettings(vm: MainViewModel) {
             Text("Which calendars", style = MaterialTheme.typography.bodyLarge)
             calendars.forEach { cal ->
                 val shown = choice.second.isEmpty() || cal.id in choice.second
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().testTag("calendar:${cal.name}")) {
-                    androidx.compose.material3.Checkbox(
-                        checked = shown,
-                        onCheckedChange = { on ->
-                            val current = if (choice.second.isEmpty()) calendars.map { it.id }.toSet() else choice.second
-                            vm.setCalendarIds(if (on) current + cal.id else current - cal.id)
-                        },
-                    )
+                TickBoxRow(
+                    checked = shown,
+                    tag = "calendar:${cal.name}",
+                    modifier = Modifier.fillMaxWidth(),
+                    onChange = { on ->
+                        val current = if (choice.second.isEmpty()) calendars.map { it.id }.toSet() else choice.second
+                        vm.setCalendarIds(if (on) current + cal.id else current - cal.id)
+                    },
+                ) {
                     Column {
                         Text(cal.name, style = MaterialTheme.typography.bodyMedium)
                         if (cal.account.isNotBlank() && cal.account != cal.name) {
@@ -230,12 +226,27 @@ private fun CalendarSettings(vm: MainViewModel) {
 
 @Composable
 private fun SwitchLine(title: String, hint: String, on: Boolean, tag: String, onChange: (Boolean) -> Unit) {
-    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.bodyLarge)
-            Text(hint, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        Switch(checked = on, onCheckedChange = onChange, modifier = Modifier.testTag("switch:$tag"))
+    SwitchRow(title, on, "switch:$tag", hint = hint, onChange = onChange)
+}
+
+/** The notifications [phone] can't give yet, like "Morning plan, weekly summary and snooze"; null if none. */
+internal fun notificationsNotHere(phone: Phone): String? {
+    val missing = listOfNotNull(
+        "morning plan".takeIf { !phone.hasPlanNotifications },
+        "weekly summary".takeIf { !phone.hasPlanNotifications },
+        "snooze".takeIf { !phone.canSnooze },
+    )
+    if (missing.isEmpty()) return null
+    val names = if (missing.size == 1) missing[0] else missing.dropLast(1).joinToString(", ") + " and " + missing.last()
+    return names.replaceFirstChar { it.uppercase() }
+}
+
+/** Something this device doesn't have: its name, and that it isn't here yet. */
+@Composable
+private fun NotOnThisDevice(title: String, modifier: Modifier = Modifier) {
+    Column(modifier.fillMaxWidth().testTag("not-here:$title")) {
+        Text(title, style = MaterialTheme.typography.bodyLarge)
+        Text("Not on this device yet.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
@@ -245,6 +256,7 @@ private fun SwitchLine(title: String, hint: String, on: Boolean, tag: String, on
  */
 @Composable
 fun FeaturesScreen(vm: MainViewModel, onAppearance: () -> Unit, onBack: () -> Unit) {
+    val phone = LocalPhone.current
     val features by vm.features.collectAsState()
     val interest by vm.interestPercent.collectAsState()
     val boosts by vm.boosts.collectAsState()
@@ -272,7 +284,8 @@ fun FeaturesScreen(vm: MainViewModel, onAppearance: () -> Unit, onBack: () -> Un
                 style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
             )
-            Feature.entries.groupBy { it.group }.forEach { (group, inGroup) ->
+            // The AI helper is left out where there is no Checklist AI to use.
+            Feature.entries.filter { it != Feature.AI || phone.hasAi }.groupBy { it.group }.forEach { (group, inGroup) ->
                 HorizontalDivider(Modifier.padding(top = 8.dp))
                 Section(group)
                 inGroup.forEach { feature ->
@@ -342,7 +355,7 @@ private fun Section(title: String) {
         title,
         style = MaterialTheme.typography.titleSmall,
         color = MaterialTheme.colorScheme.primary,
-        modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 4.dp),
+        modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 4.dp).asHeading(),
     )
 }
 
@@ -545,7 +558,8 @@ fun SettingsScreen(
                         onChange = { vm.setDayStart(it) },
                         tag = "setting:day-start",
                         emptyText = "Not set",
-                        hint = "Goals done several times a day are spread out from then to the finish time, and the morning plan comes then.",
+                        hint = "Goals done several times a day are spread out from then to the finish time" +
+                            if (phone.hasPlanNotifications) ", and the morning plan comes then." else ".",
                     )
                     TimeSetting(
                         label = "Finish each day's goals by",
@@ -586,59 +600,50 @@ fun SettingsScreen(
                 HorizontalDivider(Modifier.padding(top = 8.dp))
                 Section("Notifications")
                 NotificationSettings()
-                val weekly by vm.weeklySummary.collectAsState()
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
-                ) {
-                    Column(Modifier.weight(1f)) {
-                        Text("Weekly summary", style = MaterialTheme.typography.bodyLarge)
-                        Text(
-                            "Sunday at 6 pm: how much got done, the ${pointsWord()}, and your best goal. It opens the review.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    Switch(checked = weekly, onCheckedChange = { vm.setWeeklySummary(it) }, modifier = Modifier.testTag("setting:weekly"))
+                if (phone.hasPlanNotifications) {
+                    val weekly by vm.weeklySummary.collectAsState()
+                    SwitchRow(
+                        "Weekly summary",
+                        weekly,
+                        "setting:weekly",
+                        hint = "Sunday at 6 pm: how much got done, the ${pointsWord()}, and your best goal. It opens the review.",
+                        padding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+                    ) { vm.setWeeklySummary(it) }
                 }
-                val snooze by vm.snoozeMinutes.collectAsState()
-                Column(Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
-                    Text("Snooze for", style = MaterialTheme.typography.bodyLarge)
-                    Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)) {
-                        listOf(10 to "10 min", 30 to "30 min", 60 to "1 hour").forEach { (minutes, label) ->
-                            androidx.compose.material3.FilterChip(
-                                selected = snooze == minutes,
-                                onClick = { vm.setSnoozeMinutes(minutes) },
-                                label = { Text(label) },
-                                modifier = Modifier.testTag("snooze:$minutes"),
-                            )
+                if (phone.canSnooze) {
+                    val snooze by vm.snoozeMinutes.collectAsState()
+                    Column(Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
+                        Text("Snooze for", style = MaterialTheme.typography.bodyLarge)
+                        Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)) {
+                            listOf(10 to "10 min", 30 to "30 min", 60 to "1 hour").forEach { (minutes, label) ->
+                                androidx.compose.material3.FilterChip(
+                                    selected = snooze == minutes,
+                                    onClick = { vm.setSnoozeMinutes(minutes) },
+                                    label = { Text(label) },
+                                    modifier = Modifier.testTag("snooze:$minutes"),
+                                )
+                            }
                         }
-                    }
-                    Text(
-                        "Snooze on a reminder brings it back after this long, unless it's done by then.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
-                ) {
-                    Column(Modifier.weight(1f)) {
-                        Text("Morning plan", style = MaterialTheme.typography.bodyLarge)
                         Text(
-                            if (settings.dayStart == null) "Set when your day starts, above, and it comes then: today's list, what to do first, and the pace."
-                            else "When your day starts: today's list, what to do first, and the pace.",
+                            "Snooze on a reminder brings it back after this long, unless it's done by then.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
-                    Switch(
-                        checked = settings.morningPlan,
-                        onCheckedChange = { vm.setMorningPlan(it) },
-                        modifier = Modifier.testTag("setting:morning-plan"),
-                    )
                 }
+                if (phone.hasPlanNotifications) {
+                    SwitchRow(
+                        "Morning plan",
+                        settings.morningPlan,
+                        "setting:morning-plan",
+                        hint = if (settings.dayStart == null) "Set when your day starts, above, and it comes then: today's list, what to do first, and the pace."
+                        else "When your day starts: today's list, what to do first, and the pace.",
+                        padding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+                    ) { vm.setMorningPlan(it) }
+                }
+                // What this device's notifications can't do yet, said once.
+                val missing = notificationsNotHere(phone)
+                if (missing != null) NotOnThisDevice(missing, Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
             }
             if (shows("Backup backup export import file automatic folder restore reminder spreadsheet csv excel sheets history")) {
                 HorizontalDivider(Modifier.padding(top = 8.dp))
@@ -715,17 +720,13 @@ fun SettingsScreen(
                     ) { Text("Export history as a spreadsheet") }
     
                     // The reminder
-                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(top = 4.dp)) {
-                        Column(Modifier.weight(1f)) {
-                            Text("Backup reminder", style = MaterialTheme.typography.bodyLarge)
-                            Text(
-                                "Today reminds you when your last backup is over a week old.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                        Switch(checked = backups.reminderOn, onCheckedChange = { vm.setBackupReminder(it) }, modifier = Modifier.testTag("setting:backup-reminder"))
-                    }
+                    SwitchRow(
+                        "Backup reminder",
+                        backups.reminderOn,
+                        "setting:backup-reminder",
+                        hint = "Today reminds you when your last backup is over a week old.",
+                        padding = PaddingValues(top = 4.dp),
+                    ) { vm.setBackupReminder(it) }
                 }
             }
             if (shows("Privacy privacy lock fingerprint private hide recents screenshots")) {
@@ -756,32 +757,23 @@ fun SettingsScreen(
                         modifier = Modifier.padding(horizontal = 16.dp),
                     )
                 }
-                if (!phone.previewIsAChoice && phone.hasRecentsPreview) {
+                // Nothing on a computer, which has no recent-apps screen; a switch only where hiding it is a choice.
+                if (phone.hasRecentsPreview && !phone.previewIsAChoice) {
                     Text(
                         "The app's preview is hidden in the recent-apps screen.",
                         style = MaterialTheme.typography.bodyMedium,
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                     )
-                } else {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                } else if (phone.hasRecentsPreview) {
+                    SwitchRow(
+                        "Hide in recent apps",
+                        hideInRecents,
+                        "setting:hide-recents",
+                        hint = "On this phone, hiding the preview also blocks screenshots of the app.",
+                        padding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
                     ) {
-                        Column(Modifier.weight(1f)) {
-                            Text("Hide in recent apps", style = MaterialTheme.typography.bodyLarge)
-                            Text(
-                                "On this phone, hiding the preview also blocks screenshots of the app.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                        Switch(
-                            checked = hideInRecents,
-                            onCheckedChange = {
-                                hideInRecents = it
-                                phone.setHidesPreview(it)
-                            },
-                        )
+                        hideInRecents = it
+                        phone.setHidesPreview(it)
                     }
                 }
                 Text(
@@ -927,10 +919,7 @@ private fun NotificationSettings() {
 
 @Composable
 private fun LockSwitch(label: String, on: Boolean, tag: String, onChange: (Boolean) -> Unit) {
-    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
-        Text(label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
-        Switch(checked = on, onCheckedChange = onChange, modifier = Modifier.testTag(tag))
-    }
+    SwitchRow(label, on, tag, padding = PaddingValues(horizontal = 16.dp, vertical = 4.dp), onChange = onChange)
 }
 
 /** What a day needs for the main streak: a number of goals, or a percentage of those due. */

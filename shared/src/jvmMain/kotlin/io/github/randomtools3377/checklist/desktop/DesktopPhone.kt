@@ -13,6 +13,7 @@ import kotlinx.coroutines.IO
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.jetbrains.skia.EncodedImageFormat
 import org.jetbrains.skia.FilterMipmap
@@ -33,8 +34,9 @@ import kotlin.random.Random
 /**
  * The computer's side of what the shared screens ask of the phone, for the Windows app (see the
  * desktop module). Everything is kept in the app's own folder ([appDataFolder]). A computer has
- * no phone calendar, AI, automatic backup folder, icon choice or widgets here; it says so and the
- * screens leave those out. Reminders show only while the app is open (see [DesktopReminders]).
+ * no phone calendar, AI, automatic backup folder, icon choice, widgets, buzz, morning plan,
+ * weekly summary or snooze here; it says so and the screens leave those out. Reminders show only
+ * while the app is open (see [DesktopReminders]), with "Next up" for a habit chain.
  */
 class DesktopPhone(
     override val appVersion: String,
@@ -102,7 +104,9 @@ class DesktopPhone(
 
     override suspend fun rescheduleReminders() {}
 
-    override fun afterDone(goalId: Long) {}
+    override fun afterDone(goalId: Long) {
+        scope.launch { runCatching { reminders.showNext(goalId) } }
+    }
 
     override fun canNotify(): Boolean = DesktopReminders.canShow()
 
@@ -189,8 +193,9 @@ class DesktopPhone(
     override fun localValue(file: String, key: String): String? = local.string("$file.$key")
     override fun setLocalValue(file: String, key: String, value: String) = local.setString("$file.$key", value)
 
-    // A computer has no recent-apps screen showing the app's preview.
+    // A computer has no recent-apps screen showing the app's preview, and nothing to buzz.
     override val hasRecentsPreview: Boolean = false
+    override val canBuzz: Boolean = false
 
     override fun toast(text: String) {
         messages.value = text

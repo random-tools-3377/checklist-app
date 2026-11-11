@@ -64,4 +64,13 @@ class SectionsTest {
         assertEquals("GOALS,SHOP", TabChoice.encodeHidden(setOf(AppTabKind.SHOP, AppTabKind.GOALS, AppTabKind.TODAY)))
         assertEquals(TabChoice(), TabChoice.decode(null, null))
     }
+
+    @Test
+    fun theBudgetTabIsNotOpenedWhileBudgetIsOff() {
+        val tabs = TabChoice.decode(null, "BUDGET")
+        assertEquals(AppTabKind.BUDGET, tabs.opensOn(budgetOn = true))
+        assertEquals(AppTabKind.TODAY, tabs.opensOn(budgetOn = false))
+        assertEquals(AppTabKind.TODAY, TabChoice.decode("BUDGET", "BUDGET").opensOn(budgetOn = true))
+        assertEquals(AppTabKind.REVIEW, TabChoice.decode(null, "REVIEW").opensOn(budgetOn = false))
+    }
 }

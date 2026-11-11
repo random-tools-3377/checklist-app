@@ -61,6 +61,9 @@ class AndroidPhone(private val app: ChecklistApplication) : Phone {
         Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, app.packageName),
     )
 
+    override val hasPlanNotifications: Boolean = true
+    override val canSnooze: Boolean = true
+
     override fun exactAlarmsAllowed(): Boolean = Reminders.exactAlarmsAllowed(app)
 
     override fun openExactAlarmSettings() {

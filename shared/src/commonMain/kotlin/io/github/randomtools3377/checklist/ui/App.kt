@@ -206,7 +206,10 @@ fun ChecklistApp(vm: MainViewModel) {
     LaunchedEffect(appearance.loaded) {
         if (appearance.loaded && !firstTabApplied) {
             firstTabApplied = true
-            val first = AppTab.entries[appearance.tabs.opensOn.ordinal]
+            // The Budget tab only while Budget is on, read here as the features may not be loaded yet.
+            val budgetOn = appearance.tabs.opensOn != io.github.randomtools3377.checklist.core.AppTabKind.BUDGET ||
+                vm.featureOn(io.github.randomtools3377.checklist.core.Feature.BUDGET)
+            val first = AppTab.entries[appearance.tabs.opensOn(budgetOn).ordinal]
             if (first != AppTab.TODAY && stack.size == 1 && stack[0] == AppTab.TODAY.route) stack[0] = first.route
         }
     }
