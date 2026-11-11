@@ -305,8 +305,21 @@ fun ChecklistApp(vm: MainViewModel = viewModel()) {
                 val sheet by vm.character.collectAsStateWithLifecycle()
                 val look by vm.look.collectAsStateWithLifecycle()
                 val titles by vm.characterTitles.collectAsStateWithLifecycle()
-                CharacterScreen(sheet, look, onLook = vm::setLook, onBack = ::pop, titles = titles, onPath = vm::setPath, onTitle = vm::setTitle)
+                CharacterScreen(
+                    sheet, look, onLook = vm::setLook, onBack = ::pop, titles = titles, onPath = vm::setPath, onTitle = vm::setTitle,
+                    onIdeas = { area -> push("ideas/${area.name}") },
+                )
             }
+            "ideas" -> IdeasScreen(
+                vm,
+                start = parts.getOrNull(1)?.let { name -> io.github.randomtools3377.checklist.core.SkillArea.entries.firstOrNull { it.name == name } }
+                    ?: io.github.randomtools3377.checklist.core.SkillArea.FITNESS,
+                onAdd = { idea ->
+                    vm.useIdea(idea)
+                    push("habit/${idea.goalId ?: 0}")
+                },
+                onBack = ::pop,
+            )
             "plan-week" -> WeekPlanScreen(vm, onOpenPlan = { goTo(AppTab.PLAN) }, onBack = ::pop)
             "done" -> DoneListScreen(doneList, onOpen = { goal -> push(editRoute(goal)) }, onBack = ::pop)
             "removed" -> RemovedGoalsScreen(removedGoals, onRestore = { vm.restoreGoal(it.id) }, onBack = ::pop)
@@ -394,6 +407,7 @@ fun ChecklistApp(vm: MainViewModel = viewModel()) {
                                 onTimeline = { push("timeline/0") },
                                 onPlanWeek = { push("plan-week") },
                                 onCharacter = { push("character") },
+                                onIdeas = { area -> push("ideas/${area.name}") },
                                 skipRequest = skipRequest,
                                 onSkipRequestHandled = vm::clearSkipRequest,
                                 padding = padding,

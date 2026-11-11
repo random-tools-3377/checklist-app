@@ -113,6 +113,7 @@ fun TodayScreen(
     onTimeline: () -> Unit = {},
     onPlanWeek: () -> Unit = {},
     onCharacter: () -> Unit = {},
+    onIdeas: (io.github.randomtools3377.checklist.core.SkillArea) -> Unit = {},
     skipRequest: Long?,
     onSkipRequestHandled: () -> Unit,
     padding: PaddingValues,
@@ -440,6 +441,7 @@ fun TodayScreen(
                             onMoodLater = vm::skipMood,
                             onSuggestion = { row, at -> tick(row, Spot().apply { center = at }) },
                             onCheered = vm::levelSeen,
+                            onIdeas = onIdeas,
                         )
                         Spacer(Modifier.height(12.dp))
                     }

@@ -544,6 +544,21 @@ Build order **(default)**, each step a Release the owner can try:
     nothing done yet today, suggests the quickest goal left; from 6 pm with under half done,
     suggests one more. A suggestion can be ticked from the card. Slips count only from the day
     tracking began, and goals with an amount or to quit are never suggested.
+    Then, chosen by the owner: ideas to level up each skill area, always with a way to get more,
+    including ideas that build on what the user already does there. **Details (default):** a
+    page of ideas for each area, opened from each skill and a "level up next" card (the skill
+    with the least experience) on the character page, and from the character's card on Today
+    once the day is done or nothing is due. It has three kinds: stepping up the user's own goals
+    in that area (5 minutes longer up to half an hour, 10 up to an hour, then 15; about a fifth
+    more of an amount in a round step; once more a week), which can always be stepped up again;
+    eight ideas that come with the app for each of three stages in each area (getting started
+    below skill level 5, building up below 10, pushing further from 10), best suited first,
+    three at a time, with "More ideas" going round the list again and bringing back hidden ones
+    when nothing else is left; and, with the AI helper ready, three new ideas from the AI at a
+    time, told what was already shown so each ask brings different ones. "Not for me" hides an
+    idea; ideas like a goal the user has are left out. Adding opens the goal editor filled in,
+    with the area, a difficulty and its suggested points; stepping up opens the goal's editor
+    with the new value. Nothing is saved until the user saves it.
     Then, also chosen by the owner: paths and titles (at level 10 the user chooses a path, like
     Athlete, Scholar or Maker, which gives a title and a little more experience in its skill;
     more titles come from habits, like "Early bird"); and moods and moves, where the character
@@ -552,7 +567,8 @@ Build order **(default)**, each step a Release the owner can try:
     check-in, gentle on a hard day and celebrating on a good one. It jumps for joy at a new level.
     Build order: skill areas, levels and badge tiers (0.45.0); the drawn character (0.46.0);
     quests, combos and racing last week (0.47.0); items, lucky ticks and bosses (0.48.0); bets
-    and streak shields (0.49.0); paths and titles (0.50.0); moods and moves (0.51.0).
+    and streak shields (0.49.0); paths and titles (0.50.0); moods and moves (0.51.0); ideas to level up
+    each area (0.52.0).
 
 ## Talking to the owner
 

@@ -98,6 +98,7 @@ keeps the data.
 - 0.49.0: bet on yourself, and streak shields.
 - 0.50.0: paths and titles for the character.
 - 0.51.0: the character checks in, answers your mood, and jumps for joy.
+- 0.52.0: ideas to level up each skill, and always more of them.
 
 Every step in CLAUDE.md's build order is built. The iPhone app waits for a way to install it.
 

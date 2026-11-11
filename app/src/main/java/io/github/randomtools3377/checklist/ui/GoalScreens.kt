@@ -646,6 +646,48 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Long)
         }
     }
 
+    // A goal idea fills in the fields, for the user to check and save: from the AI helper, or
+    // from the ideas to level up a skill.
+    fun fill(idea: io.github.randomtools3377.checklist.core.GoalIdea) {
+        name = idea.name
+        idea.icon?.let { icon = it }
+        when (idea.repeat) {
+            io.github.randomtools3377.checklist.core.IdeaRepeat.EVERY_DAY -> choice = RepeatChoice.EVERY_DAY
+            io.github.randomtools3377.checklist.core.IdeaRepeat.DAYS_OF_WEEK -> {
+                choice = RepeatChoice.WEEKDAYS
+                weekdays = idea.days
+            }
+            io.github.randomtools3377.checklist.core.IdeaRepeat.TIMES_PER_WEEK -> {
+                choice = RepeatChoice.TIMES_PER
+                per = Period.WEEKLY
+                target = (idea.timesPerWeek ?: 1).toString()
+            }
+        }
+        atMinute = idea.time?.let { it.hour * 60 + it.minute }
+        idea.minutes?.let { minutes = it.toString() }
+        idea.amount?.let { amount ->
+            amountText = io.github.randomtools3377.checklist.core.Amounts.format(amount)
+            unit = idea.unit.orEmpty()
+        }
+    }
+
+    // An idea to level up a skill, chosen on the ideas page: a new goal filled in, or this
+    // goal stepped up (longer, more, or more times a week).
+    LaunchedEffect(loaded) {
+        if (!loaded) return@LaunchedEffect
+        val idea = vm.takeIdea(id) ?: return@LaunchedEffect
+        if (idea.goalId == null) {
+            fill(idea.goal)
+            skill = idea.area.name
+            effort = idea.effort.name
+            if (points.isBlank()) points = idea.effort.points.toString()
+        } else {
+            idea.goal.minutes?.let { minutes = it.toString() }
+            idea.goal.amount?.let { amountText = io.github.randomtools3377.checklist.core.Amounts.format(it) }
+            idea.goal.timesPerWeek?.let { target = it.toString() }
+        }
+    }
+
     val intervalValue = interval.toIntOrNull()
     val needsInterval = choice in setOf(RepeatChoice.EVERY_FEW_DAYS, RepeatChoice.WEEKDAYS, RepeatChoice.MONTH_DATES, RepeatChoice.MONTH_WEEKDAY, RepeatChoice.AFTER_DONE)
     val yearDayValue = yearDay.toIntOrNull()
@@ -759,28 +801,7 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Long)
         if (!loaded) return@EditorScaffold
         if (id == 0L) {
             // With the AI helper on: a sentence fills in the fields below, to check and save.
-            AiDescribeCard(vm) { idea ->
-                name = idea.name
-                idea.icon?.let { icon = it }
-                when (idea.repeat) {
-                    io.github.randomtools3377.checklist.core.IdeaRepeat.EVERY_DAY -> choice = RepeatChoice.EVERY_DAY
-                    io.github.randomtools3377.checklist.core.IdeaRepeat.DAYS_OF_WEEK -> {
-                        choice = RepeatChoice.WEEKDAYS
-                        weekdays = idea.days
-                    }
-                    io.github.randomtools3377.checklist.core.IdeaRepeat.TIMES_PER_WEEK -> {
-                        choice = RepeatChoice.TIMES_PER
-                        per = Period.WEEKLY
-                        target = (idea.timesPerWeek ?: 1).toString()
-                    }
-                }
-                atMinute = idea.time?.let { it.hour * 60 + it.minute }
-                idea.minutes?.let { minutes = it.toString() }
-                idea.amount?.let { amount ->
-                    amountText = io.github.randomtools3377.checklist.core.Amounts.format(amount)
-                    unit = idea.unit.orEmpty()
-                }
-            }
+            AiDescribeCard(vm) { idea -> fill(idea) }
         }
         IconPicker(icon) { icon = it }
         OutlinedTextField(

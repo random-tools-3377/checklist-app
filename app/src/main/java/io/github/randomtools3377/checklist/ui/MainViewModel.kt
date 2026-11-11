@@ -222,6 +222,8 @@ data class CompanionView(
     val say: io.github.randomtools3377.checklist.core.CompanionSay,
     val talks: Boolean,
     val suggestion: HabitRow?,
+    /** An area to offer ideas for, on a day with everything done or nothing due. */
+    val ideaArea: io.github.randomtools3377.checklist.core.SkillArea? = null,
 )
 
 data class TodayState(
@@ -1646,8 +1648,70 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     newLevel = level.takeIf { seenLevel != null && it > seenLevel },
                 ),
             )
-            CompanionView(say, talks, say.suggestion?.let { goal -> left.firstOrNull { it.goal.id == goal.id } })
+            // With everything done, or nothing due, it offers ideas for the area furthest behind.
+            val restful = !say.levelUp && !say.askMood && (rows.isEmpty() || rows.all { it.done })
+            CompanionView(
+                say, talks, say.suggestion?.let { goal -> left.firstOrNull { it.goal.id == goal.id } },
+                ideaArea = if (restful) io.github.randomtools3377.checklist.core.Ideas.weakest(sheet) else null,
+            )
         }.state(null)
+
+    // Ideas to level up a skill area
+
+    /** Every goal not removed, for the ideas: what the user does already. */
+    val currentGoals: StateFlow<List<Goal>> = dao.observeGoals().map { rows -> rows.map { it.toCore() }.filter { !it.archived } }.state(emptyList())
+
+    /** Ideas the user said aren't for them. */
+    val hiddenIdeas: StateFlow<Set<String>> =
+        dao.observeSetting(io.github.randomtools3377.checklist.core.Ideas.HIDDEN).map { io.github.randomtools3377.checklist.core.Ideas.decodeHidden(it) }.state(emptySet())
+
+    fun hideIdea(key: String) {
+        viewModelScope.launch {
+            val now = io.github.randomtools3377.checklist.core.Ideas.decodeHidden(dao.setting(io.github.randomtools3377.checklist.core.Ideas.HIDDEN))
+            repository.setSetting(io.github.randomtools3377.checklist.core.Ideas.HIDDEN, io.github.randomtools3377.checklist.core.Ideas.encodeHidden(now + key))
+        }
+    }
+
+    /** Brings back the ideas hidden for [area]. */
+    fun unhideIdeas(area: io.github.randomtools3377.checklist.core.SkillArea) {
+        viewModelScope.launch {
+            val prefix = area.name.lowercase() + ":"
+            val now = io.github.randomtools3377.checklist.core.Ideas.decodeHidden(dao.setting(io.github.randomtools3377.checklist.core.Ideas.HIDDEN))
+            repository.setSetting(io.github.randomtools3377.checklist.core.Ideas.HIDDEN, io.github.randomtools3377.checklist.core.Ideas.encodeHidden(now.filterNot { it.startsWith(prefix) }.toSet()))
+        }
+    }
+
+    /** An idea waiting for the goal editor to open: a new goal, or a step up of goal [AreaIdea.goalId]. */
+    private val editorIdea = MutableStateFlow<io.github.randomtools3377.checklist.core.AreaIdea?>(null)
+
+    /** Hands [idea] to the goal editor about to open, which fills it in for the user to check and save. */
+    fun useIdea(idea: io.github.randomtools3377.checklist.core.AreaIdea) {
+        editorIdea.value = idea
+    }
+
+    /** The idea for the editor of goal [id] (0 for a new one), once. */
+    fun takeIdea(id: Long): io.github.randomtools3377.checklist.core.AreaIdea? {
+        val idea = editorIdea.value ?: return null
+        if ((idea.goalId ?: 0L) != id) return null
+        editorIdea.value = null
+        return idea
+    }
+
+    /** Asks the AI for new ideas for [area]; [onResult] gets them, or why there are none. */
+    fun aiIdeas(area: io.github.randomtools3377.checklist.core.SkillArea, shown: List<String>, onResult: (List<io.github.randomtools3377.checklist.core.AreaIdea>, String?) -> Unit) {
+        viewModelScope.launch {
+            val ask = io.github.randomtools3377.checklist.core.AreaIdeasFromAi
+            val level = character.value?.skillLevel(area)?.level ?: 1
+            val prompt = ask.prompt(area, level, currentGoals.value, shown)
+            io.github.randomtools3377.checklist.data.AiClient.ask(getApplication(), ask.SYSTEM, prompt, ask.SCHEMA, ask.MAX_TOKENS).fold(
+                onSuccess = { answer ->
+                    val ideas = ask.parse(answer, area, shown + currentGoals.value.map { it.name })
+                    onResult(ideas, if (ideas.isEmpty()) "The AI's ideas didn't make sense. Try again." else null)
+                },
+                onFailure = { e -> onResult(emptyList(), "The AI couldn't answer: ${e.message ?: "unknown error"}.") },
+            )
+        }
+    }
 
     /** The new level has been cheered. */
     fun levelSeen() {

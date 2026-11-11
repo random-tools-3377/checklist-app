@@ -190,6 +190,7 @@ fun LevelCard(
     onMoodLater: () -> Unit = {},
     onSuggestion: (io.github.randomtools3377.checklist.core.HabitRow, Offset) -> Unit = { _, _ -> },
     onCheered: () -> Unit = {},
+    onIdeas: (SkillArea) -> Unit = {},
 ) {
     val say = companion?.say
     Card(
@@ -268,6 +269,12 @@ fun LevelCard(
                 if (say.levelUp) {
                     androidx.compose.material3.TextButton(onClick = onCheered, modifier = Modifier.testTag("companion-cheered")) { Text("🎉 Yay!") }
                 }
+                // On a day that's done, or free: something to grow next.
+                companion.ideaArea?.let { area ->
+                    androidx.compose.material3.TextButton(onClick = { onIdeas(area) }, modifier = Modifier.testTag("companion-ideas")) {
+                        Text("💡 Ideas to level up ${area.icon} ${area.label}")
+                    }
+                }
             }
         }
         }
@@ -284,6 +291,7 @@ fun CharacterScreen(
     titles: CharacterTitles? = null,
     onPath: (Path) -> Unit = {},
     onTitle: (String) -> Unit = {},
+    onIdeas: (SkillArea) -> Unit = {},
 ) {
     Scaffold(
         topBar = {
@@ -323,8 +331,9 @@ fun CharacterScreen(
                     )
                 }
             }
+            LevelUpNextCard(sheet, onIdeas)
             Text("Skills", style = MaterialTheme.typography.titleMedium)
-            SkillArea.entries.forEach { area -> SkillRow(area, sheet.skillLevel(area), sheet.skills[area] ?: 0) }
+            SkillArea.entries.forEach { area -> SkillRow(area, sheet.skillLevel(area), sheet.skills[area] ?: 0, onIdeas = { onIdeas(area) }) }
             PathCard(sheet, titles?.path, onPath)
             TitlesCard(titles, onTitle)
             GearCard(sheet, outfit)
@@ -341,7 +350,7 @@ fun CharacterScreen(
 }
 
 @Composable
-private fun SkillRow(area: SkillArea, level: Level, xp: Long) {
+private fun SkillRow(area: SkillArea, level: Level, xp: Long, onIdeas: () -> Unit) {
     Card(Modifier.fillMaxWidth().testTag("skill-row:${area.name}")) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(12.dp)) {
             Text(area.icon, fontSize = 28.sp, modifier = Modifier.width(44.dp))
@@ -357,12 +366,35 @@ private fun SkillRow(area: SkillArea, level: Level, xp: Long) {
                     )
                 }
                 LinearProgressIndicator(progress = { level.share }, modifier = Modifier.fillMaxWidth())
-                Text(
-                    "$xp experience · ${level.toNext} to level ${level.level + 1}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        "$xp experience · ${level.toNext} to level ${level.level + 1}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1f),
+                    )
+                    androidx.compose.material3.TextButton(onClick = onIdeas, modifier = Modifier.testTag("skill-ideas:${area.name}")) { Text("💡 Ideas") }
+                }
             }
+        }
+    }
+}
+
+/** The skill furthest behind, with ideas to level it up. */
+@Composable
+private fun LevelUpNextCard(sheet: CharacterSheet, onIdeas: (SkillArea) -> Unit) {
+    val area = io.github.randomtools3377.checklist.core.Ideas.weakest(sheet)
+    Card(
+        Modifier.fillMaxWidth().testTag("level-up-next"),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+    ) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("💡 Level up next: ${area.icon} ${area.label}", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+            Text(
+                "${area.label} is the skill furthest behind. See activities to grow it, ideas to build on what you already do, and more whenever you want them.",
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            androidx.compose.material3.FilledTonalButton(onClick = { onIdeas(area) }, modifier = Modifier.testTag("level-up-next-ideas")) { Text("See ideas") }
         }
     }
 }
