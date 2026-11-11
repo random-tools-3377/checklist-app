@@ -26,6 +26,8 @@ class WidgetColors(
     val primaryContainer: ColorProvider,
     val secondaryContainer: ColorProvider,
     val error: ColorProvider,
+    /** Text on [primary], for the widgets' main buttons. */
+    val onPrimary: ColorProvider,
 )
 
 private fun fixed(argb: Long) = ColorProvider(Color(argb))
@@ -46,7 +48,7 @@ fun widgetColors(): WidgetColors {
     else dayNight(ColourBlind.bad(Brightness.LIGHT), ColourBlind.bad(Brightness.DARK))
     return WidgetColors(
         colours.widgetBackground, colours.onSurface, colours.onSurfaceVariant, colours.primary,
-        colours.primaryContainer, colours.secondaryContainer, bad,
+        colours.primaryContainer, colours.secondaryContainer, bad, colours.onPrimary,
     )
 }
 
@@ -57,6 +59,7 @@ private fun coloursFor(look: WidgetLook): WidgetColors {
             widgetBackground = fixed(0x61000000), onSurface = fixed(0xFFFFFFFF), onSurfaceVariant = fixed(0xD9FFFFFF),
             primary = fixed(0xFFFFFFFF), primaryContainer = fixed(0x33FFFFFF), secondaryContainer = fixed(0x40FFFFFF),
             error = fixed(0xFFFFB4AB),
+            onPrimary = fixed(0xFF1B1B1F),
         )
     }
     val color = look.color
@@ -71,8 +74,9 @@ private fun coloursFor(look: WidgetLook): WidgetColors {
             primaryContainer = dayNight(light.primaryContainer, dark.primaryContainer),
             secondaryContainer = dayNight(light.secondaryContainer, dark.secondaryContainer),
             error = dayNight(light.error, dark.error),
+            onPrimary = dayNight(light.onPrimary, dark.onPrimary),
         )
     }
     val t = GlanceTheme.colors
-    return WidgetColors(t.widgetBackground, t.onSurface, t.onSurfaceVariant, t.primary, t.primaryContainer, t.secondaryContainer, t.error)
+    return WidgetColors(t.widgetBackground, t.onSurface, t.onSurfaceVariant, t.primary, t.primaryContainer, t.secondaryContainer, t.error, t.onPrimary)
 }

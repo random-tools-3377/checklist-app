@@ -8,8 +8,6 @@ import io.github.randomtools3377.checklist.ChecklistApplication
 import io.github.randomtools3377.checklist.core.Alert
 import io.github.randomtools3377.checklist.core.AlertKind
 import io.github.randomtools3377.checklist.core.SkipCheck
-import io.github.randomtools3377.checklist.widget.CalendarWidget
-import io.github.randomtools3377.checklist.widget.StatsWidget
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -31,8 +29,7 @@ class AlarmReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) = work {
         runCatching { (context.applicationContext as ChecklistApplication).container.closeDays() }
         Reminders.fire(context)
-        CalendarWidget.refresh(context)
-        StatsWidget.refresh(context)
+        io.github.randomtools3377.checklist.widget.Widgets.refreshAll(context)
     }
 }
 
@@ -102,7 +99,6 @@ class SkipReceiver : BroadcastReceiver() {
 class SystemEventsReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) = work {
         Reminders.reschedule(context)
-        CalendarWidget.refresh(context)
-        StatsWidget.refresh(context)
+        io.github.randomtools3377.checklist.widget.Widgets.refreshAll(context)
     }
 }

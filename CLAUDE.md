@@ -210,6 +210,15 @@ The app has no network access unless the owner decides otherwise for this app.
   instead, because it needs the warning, the reason and the penalty **(default)**.
 - The widget can be resized: small shows today's agenda with times and tick buttons, larger shows
   the week or the month **(default)**.
+- A today widget: the day as a timeline, to tick off what's to do today and what's next without
+  opening the app. Every widget shows a tick made on it straight away. **Details (default):**
+  today's goals in Today's order (recommended or the user's own), with the next one at the top,
+  big, with its button; then the rest, each with its time ("~" for when to get to it, red when
+  late) and its own button: "Done", "+1" for a goal done several times a day, "Avoided" for one
+  to quit, and a routine's next item; to-dos after. Done ones fold to the bottom, crossed off,
+  and tapping one takes it back. Once everything is done it shows tomorrow's list. Small, it
+  shows only what's up next and what comes after. It redraws every half hour so the times stay
+  right.
 
 ## Review
 

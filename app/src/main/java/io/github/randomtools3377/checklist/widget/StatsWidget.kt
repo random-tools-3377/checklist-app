@@ -2,6 +2,8 @@ package io.github.randomtools3377.checklist.widget
 
 import android.content.Context
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -65,8 +67,12 @@ class StatsWidget : GlanceAppWidget() {
     override val sizeMode = SizeMode.Responsive(setOf(SMALL, WIDE))
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
-        val data = load(context)
-        provideContent { GlanceTheme { androidx.compose.runtime.CompositionLocalProvider(LocalWidgetLook provides data.look) { StatsContent(data) } } }
+        val first = load(context)
+        provideContent {
+            // Read again on every change while awake.
+            val data by androidx.compose.runtime.remember { DayPlans.following(context) { load(context) } }.collectAsState(first)
+            GlanceTheme { androidx.compose.runtime.CompositionLocalProvider(LocalWidgetLook provides data.look) { StatsContent(data) } }
+        }
     }
 
     companion object {

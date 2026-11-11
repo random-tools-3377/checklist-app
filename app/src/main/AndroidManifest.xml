@@ -140,6 +140,19 @@
                 android:resource="@xml/shortcuts" />
         </activity-alias>
 
+        <!-- The today widget: the day as a timeline, ticked off from the home screen. -->
+        <receiver
+            android:name=".widget.TodayWidgetReceiver"
+            android:exported="true"
+            android:label="@string/today_widget_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/today_widget_info" />
+        </receiver>
+
         <!-- The calendar widget. -->
         <receiver
             android:name=".widget.CalendarWidgetReceiver"

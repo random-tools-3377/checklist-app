@@ -22,8 +22,6 @@ import io.github.randomtools3377.checklist.data.CelebrationFiles
 import io.github.randomtools3377.checklist.data.Repository
 import io.github.randomtools3377.checklist.data.RoomStore
 import io.github.randomtools3377.checklist.reminders.Reminders
-import io.github.randomtools3377.checklist.widget.CalendarWidget
-import io.github.randomtools3377.checklist.widget.StatsWidget
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
@@ -74,6 +72,9 @@ class Container(app: Application) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val changes = MutableSharedFlow<Unit>(replay = 1, extraBufferCapacity = 1)
 
+    /** Fires whenever goals, ticks, settings or the points history change, from anywhere. */
+    val dataChanges: kotlinx.coroutines.flow.SharedFlow<Unit> get() = changes
+
     init {
         // Whenever goals, ticks or settings change, from the app, the widget or a notification,
         // set the next reminder and redraw the widget.
@@ -117,8 +118,7 @@ class Container(app: Application) {
         scope.launch {
             changes.debounce(400).collect {
                 runCatching { Reminders.reschedule(app) }
-                runCatching { CalendarWidget.refresh(app) }
-                runCatching { StatsWidget.refresh(app) }
+                io.github.randomtools3377.checklist.widget.Widgets.refreshAll(app)
             }
         }
     }

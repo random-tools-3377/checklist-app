@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Checklist</string>
+    <string name="today_widget_name">Checklist today</string>
+    <string name="today_widget_description">Your day as a timeline: what\'s up next with a big Done button, then the rest in order. Tick them off without opening the app.</string>
     <string name="widget_name">Checklist calendar</string>
     <string name="widget_description">Goals due today, with tick boxes. Make it wider for the week, taller for the month.</string>
     <string name="stats_widget_name">Checklist balance and streaks</string>

@@ -2,6 +2,8 @@ package io.github.randomtools3377.checklist.widget
 
 import android.content.Context
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -70,8 +72,12 @@ class CalendarWidget : GlanceAppWidget() {
     override val sizeMode = SizeMode.Responsive(setOf(SMALL, WIDE, TALL))
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
-        val data = load(context)
-        provideContent { GlanceTheme { androidx.compose.runtime.CompositionLocalProvider(LocalWidgetLook provides data.look) { Content(data) } } }
+        val first = load(context)
+        provideContent {
+            // Read again on every change while awake, so a tick made on the widget shows on it.
+            val data by androidx.compose.runtime.remember { DayPlans.following(context) { load(context) } }.collectAsState(first)
+            GlanceTheme { androidx.compose.runtime.CompositionLocalProvider(LocalWidgetLook provides data.look) { Content(data) } }
+        }
     }
 
     companion object {
@@ -179,10 +185,24 @@ private fun Agenda(items: List<AgendaItem>) {
                     Box(GlanceModifier.width(4.dp).height(22.dp).cornerRadius(2.dp).background(androidx.compose.ui.graphics.Color(color))) {}
                     Spacer(GlanceModifier.width(4.dp))
                 }
-                CheckBox(
-                    checked = item.done,
-                    onCheckedChange = actionRunCallback<ToggleTick>(actionParametersOf(GoalKey to item.goal.id)),
-                )
+                if (item.goal.target > 1 && !item.done) {
+                    // Done several times a day: +1 adds one; the box would look ticked after the first.
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = GlanceModifier
+                            .width(40.dp).height(28.dp)
+                            .cornerRadius(14.dp)
+                            .background(colors.primaryContainer)
+                            .clickable(actionRunCallback<ToggleTick>(actionParametersOf(GoalKey to item.goal.id))),
+                    ) {
+                        Text("+1", style = TextStyle(color = colors.primary, fontSize = 13.sp, fontWeight = FontWeight.Bold))
+                    }
+                } else {
+                    CheckBox(
+                        checked = item.done,
+                        onCheckedChange = actionRunCallback<ToggleTick>(actionParametersOf(GoalKey to item.goal.id)),
+                    )
+                }
                 Spacer(GlanceModifier.width(4.dp))
                 Column(GlanceModifier.defaultWeight()) {
                     Text(
