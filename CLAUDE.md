@@ -529,6 +529,12 @@ Build order **(default)**, each step a Release the owner can try:
     bet per habit a week and three at a time; reaching the count wins twice the stake straight
     away, and undoing the tick that won it takes the win back; a week ending short loses it.
     Shields count from the day they are turned on; badges count streaks without them.
+    Paths: Athlete, Healer, Scholar, Homemaker, Professional and Maker, one per area; the path's
+    area gets 10% more experience, worked out over the whole history, so the path can be
+    changed. Titles: Early bird (20 ticks before 8 am), Night owl (20 after 10 pm), Weekend
+    warrior (everything due on 8 weekend days), Unstoppable (a 50-day main streak), All-rounder
+    (every skill at level 5), Boss slayer (4 bosses), Quest hunter (30 quests) and Lucky star
+    (10 lucky ticks). The user picks the title shown: the path's, an earned one, or none.
     Then, also chosen by the owner: paths and titles (at level 10 the user chooses a path, like
     Athlete, Scholar or Maker, which gives a title and a little more experience in its skill;
     more titles come from habits, like "Early bird"); and moods and moves, where the character

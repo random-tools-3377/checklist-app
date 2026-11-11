@@ -127,8 +127,11 @@ object Experience {
     /** What counts as experience: what goals pay, as ticks, finishing bonuses and challenges. */
     val KINDS = setOf(EntryKind.TICK, EntryKind.BONUS, EntryKind.CHALLENGE)
 
-    /** The character sheet from the points history. [goals] should include removed goals. */
-    fun of(entries: List<Entry>, goals: List<Goal>): CharacterSheet {
+    /**
+     * The character sheet from the points history. [goals] should include removed goals. With a
+     * [path], its skill gets [Paths.BONUS_PERCENT] more experience.
+     */
+    fun of(entries: List<Entry>, goals: List<Goal>, path: Path? = null): CharacterSheet {
         val byId = goals.associateBy { it.id }
         val perGoal = entries.filter { it.kind in KINDS && it.goalId != null }.groupBy { it.goalId!! }
             .mapValues { (_, list) -> list.sumOf { it.amount.toLong() }.coerceAtLeast(0) }
@@ -138,6 +141,7 @@ object Experience {
             val area = SkillArea.of(goal)
             skills[area] = (skills[area] ?: 0) + xp
         }
+        path?.let { p -> skills[p.area]?.let { skills[p.area] = it * (100 + Paths.BONUS_PERCENT) / 100 } }
         val xp = perGoal.values.sum()
         return CharacterSheet(xp, Levels.of(xp, Levels.CHARACTER_STEP), skills)
     }

@@ -208,6 +208,14 @@ data class RewardRow(val reward: Reward, val usual: String?, val usualPrice: Int
 
 data class ShopView(val balance: Int, val rewards: List<RewardRow>, val bought: List<Purchase>)
 
+/** The character's path, the titles earned, the setting for the title shown, and the title shown. */
+data class CharacterTitles(
+    val path: io.github.randomtools3377.checklist.core.Path?,
+    val earned: Set<io.github.randomtools3377.checklist.core.Title>,
+    val setting: String?,
+    val shown: String?,
+)
+
 /** Everything the Today screen shows. */
 data class TodayState(
     val view: TodayView,
@@ -1462,12 +1470,43 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     /** The character's level and skills, while the character is on; null when it is off. */
     val character: StateFlow<io.github.randomtools3377.checklist.core.CharacterSheet?> =
-        combine(features, dao.observeBalance(), dao.observeGoals()) { on, _, _ -> Feature.CHARACTER in on }
-            .mapLatest { on ->
-                if (!on) null else withContext(Dispatchers.Default) {
-                    io.github.randomtools3377.checklist.core.Experience.of(dao.allEntries().map { it.toCore() }, dao.allGoals().map { it.toCore() })
+        combine(features, dao.observeBalance(), dao.observeGoals(), dao.observeSetting(io.github.randomtools3377.checklist.core.Paths.SETTING)) { on, _, _, path ->
+            if (Feature.CHARACTER in on) io.github.randomtools3377.checklist.core.Paths.decode(path) to true else null to false
+        }.mapLatest { (path, on) ->
+            if (!on) null else withContext(Dispatchers.Default) {
+                io.github.randomtools3377.checklist.core.Experience.of(dao.allEntries().map { it.toCore() }, dao.allGoals().map { it.toCore() }, path)
+            }
+        }.state(null)
+
+    /** The character's path, its titles earned, and the title shown, while the character is on. */
+    val characterTitles: StateFlow<CharacterTitles?> =
+        combine(character, dao.observeSetting(io.github.randomtools3377.checklist.core.Paths.SETTING), dao.observeSetting(io.github.randomtools3377.checklist.core.Titles.SETTING), settings) { sheet, path, title, s ->
+            sheet?.let { Triple(it, io.github.randomtools3377.checklist.core.Paths.decode(path), title) to s.streak }
+        }.mapLatest { found ->
+            found?.let { (picked, streak) ->
+                val (sheet, path, title) = picked
+                withContext(Dispatchers.Default) {
+                    val day = currentDay()
+                    val from = day.minusDays(STREAK_DAYS)
+                    val goals = dao.allGoals().map { it.toCore() }
+                    val ticks = dao.allTicks().map { it.toCore() }
+                    val records = StreakCounter.records(from, day, goals.filter { !it.archived }, ticks.filter { it.stepId == null }, dao.allLapses().map { it.toCore() })
+                    val earned = io.github.randomtools3377.checklist.core.Titles.earned(
+                        ticks, dao.allEntries().map { it.toCore() }, records, sheet, streak, { at -> at.toLocalDateTime().time },
+                    )
+                    CharacterTitles(path, earned, title, io.github.randomtools3377.checklist.core.Titles.shown(title, path, earned))
                 }
-            }.state(null)
+            }
+        }.state(null)
+
+    fun setPath(path: io.github.randomtools3377.checklist.core.Path) {
+        viewModelScope.launch { repository.setSetting(io.github.randomtools3377.checklist.core.Paths.SETTING, path.name) }
+    }
+
+    /** The title to show: a title's name, "PATH" for the path's, or "" for none. */
+    fun setTitle(choice: String) {
+        viewModelScope.launch { repository.setSetting(io.github.randomtools3377.checklist.core.Titles.SETTING, choice) }
+    }
 
     /** Today's quests, each with how far along it is, while quests are on; null when off. */
     val quests: StateFlow<io.github.randomtools3377.checklist.core.DayQuests?> =

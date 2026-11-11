@@ -124,6 +124,7 @@ fun TodayScreen(
     val look by vm.appearance.collectAsStateWithLifecycle()
     val character by vm.character.collectAsStateWithLifecycle()
     val characterLook by vm.look.collectAsStateWithLifecycle()
+    val characterTitles by vm.characterTitles.collectAsStateWithLifecycle()
     val quests by vm.quests.collectAsStateWithLifecycle()
     val race by vm.race.collectAsStateWithLifecycle()
     val boss by vm.boss.collectAsStateWithLifecycle()
@@ -422,7 +423,7 @@ fun TodayScreen(
                     Spacer(Modifier.height(12.dp))
                     // With the character on: its level, under the balance.
                     character?.let { sheet ->
-                        LevelCard(sheet, characterLook, onOpen = onCharacter)
+                        LevelCard(sheet, characterLook, onOpen = onCharacter, title = characterTitles?.shown)
                         Spacer(Modifier.height(12.dp))
                     }
                     // With quests and the race on: the day's quests, and this week against last.

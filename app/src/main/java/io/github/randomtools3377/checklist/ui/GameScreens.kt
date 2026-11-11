@@ -64,6 +64,10 @@ import io.github.randomtools3377.checklist.core.Look
 import io.github.randomtools3377.checklist.core.Looks
 import io.github.randomtools3377.checklist.core.Mark
 import io.github.randomtools3377.checklist.core.Outfit
+import io.github.randomtools3377.checklist.core.Path
+import io.github.randomtools3377.checklist.core.Paths
+import io.github.randomtools3377.checklist.core.Title
+import io.github.randomtools3377.checklist.core.Titles
 import io.github.randomtools3377.checklist.core.QuestProgress
 import io.github.randomtools3377.checklist.core.BossView
 import io.github.randomtools3377.checklist.core.BetRefusal
@@ -155,7 +159,7 @@ fun CharacterFigure(look: Look, outfit: Outfit, modifier: Modifier = Modifier) {
 
 /** On Today, with the character on: its level and how far to the next. Tap for the character page. */
 @Composable
-fun LevelCard(sheet: CharacterSheet, look: Look, onOpen: () -> Unit) {
+fun LevelCard(sheet: CharacterSheet, look: Look, onOpen: () -> Unit, title: String? = null) {
     Card(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onOpen).testTag("level-card"),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer),
@@ -164,7 +168,12 @@ fun LevelCard(sheet: CharacterSheet, look: Look, onOpen: () -> Unit) {
         CharacterFigure(look, remember(sheet) { Outfit.of(sheet) }, Modifier.height(56.dp))
         Column(Modifier.padding(horizontal = 10.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("⭐ Level ${sheet.level.level}", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                Text(
+                    "⭐ Level ${sheet.level.level}" + (title?.let { " · $it" } ?: ""),
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.weight(1f).testTag("level-title"),
+                )
                 Text(
                     "${sheet.level.toNext} to level ${sheet.level.level + 1}",
                     style = MaterialTheme.typography.bodySmall,
@@ -179,7 +188,15 @@ fun LevelCard(sheet: CharacterSheet, look: Look, onOpen: () -> Unit) {
 
 /** The character page: its level, and each skill's level and medal. */
 @Composable
-fun CharacterScreen(sheet: CharacterSheet?, look: Look, onLook: (Look) -> Unit, onBack: () -> Unit) {
+fun CharacterScreen(
+    sheet: CharacterSheet?,
+    look: Look,
+    onLook: (Look) -> Unit,
+    onBack: () -> Unit,
+    titles: CharacterTitles? = null,
+    onPath: (Path) -> Unit = {},
+    onTitle: (String) -> Unit = {},
+) {
     Scaffold(
         topBar = {
             TopAppBar(
@@ -210,6 +227,7 @@ fun CharacterScreen(sheet: CharacterSheet?, look: Look, onLook: (Look) -> Unit, 
             Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text("⭐ Level ${sheet.level.level}", fontSize = 28.sp, fontWeight = FontWeight.Bold, modifier = Modifier.testTag("character-level"))
+                    titles?.shown?.let { Text(it, style = MaterialTheme.typography.titleMedium, modifier = Modifier.testTag("character-title")) }
                     LinearProgressIndicator(progress = { sheet.level.share }, modifier = Modifier.fillMaxWidth())
                     Text(
                         "${sheet.xp} experience in all · ${sheet.level.toNext} to level ${sheet.level.level + 1}",
@@ -219,6 +237,8 @@ fun CharacterScreen(sheet: CharacterSheet?, look: Look, onLook: (Look) -> Unit, 
             }
             Text("Skills", style = MaterialTheme.typography.titleMedium)
             SkillArea.entries.forEach { area -> SkillRow(area, sheet.skillLevel(area), sheet.skills[area] ?: 0) }
+            PathCard(sheet, titles?.path, onPath)
+            TitlesCard(titles, onTitle)
             GearCard(sheet, outfit)
             StyleCard(look, onLook)
             Text(
@@ -553,4 +573,73 @@ private fun PlaceBetDialog(habits: List<Goal>, balance: Int, onPlace: (Long, Int
         },
         dismissButton = { TextButton(onClick = onClose) { Text("Cancel") } },
     )
+}
+
+/** Choosing a path, from level 10: a title and a little more experience in its skill. */
+@Composable
+private fun PathCard(sheet: CharacterSheet, path: Path?, onPath: (Path) -> Unit) {
+    Card(Modifier.fillMaxWidth().testTag("path")) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("Path", style = MaterialTheme.typography.titleSmall)
+            if (sheet.level.level < Paths.AT_LEVEL) {
+                Text(
+                    "At level ${Paths.AT_LEVEL} you choose a path, like Athlete or Scholar: a title, and ${Paths.BONUS_PERCENT}% more experience in its skill.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                return@Column
+            }
+            Text(
+                if (path == null) "Choose your path. Its skill gets ${Paths.BONUS_PERCENT}% more experience. You can change it later."
+                else "${path.icon} ${path.title}: ${path.area.icon} ${path.area.label} gets ${Paths.BONUS_PERCENT}% more experience.",
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Path.entries.forEach { choice ->
+                    FilterChip(
+                        selected = choice == path,
+                        onClick = { onPath(choice) },
+                        label = { Text("${choice.icon} ${choice.title}") },
+                        modifier = Modifier.testTag("path:${choice.name}"),
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** The titles earned, the one shown picked from them, and those still to earn. */
+@Composable
+private fun TitlesCard(titles: CharacterTitles?, onTitle: (String) -> Unit) {
+    if (titles == null) return
+    Card(Modifier.fillMaxWidth().testTag("titles")) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("Titles", style = MaterialTheme.typography.titleSmall)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                titles.path?.let { path ->
+                    FilterChip(
+                        selected = titles.setting == null || titles.setting == Titles.FROM_PATH,
+                        onClick = { onTitle(Titles.FROM_PATH) },
+                        label = { Text("${path.icon} ${path.title}") },
+                    )
+                }
+                Title.entries.filter { it in titles.earned }.forEach { title ->
+                    FilterChip(
+                        selected = titles.setting == title.name,
+                        onClick = { onTitle(title.name) },
+                        label = { Text("${title.icon} ${title.label}") },
+                        modifier = Modifier.testTag("title:${title.name}"),
+                    )
+                }
+                FilterChip(selected = titles.setting == "", onClick = { onTitle("") }, label = { Text("None") })
+            }
+            Title.entries.filter { it !in titles.earned }.forEach { title ->
+                Text(
+                    "${title.icon} ${title.label}: ${title.how}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
 }
