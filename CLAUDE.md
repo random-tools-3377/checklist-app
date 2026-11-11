@@ -276,7 +276,7 @@ The app has no network access unless the owner decides otherwise for this app.
 - A shop reward with a money value counts as spent in the budget when it is bought. Returning it
   takes it back off.
 - A full suite of budget features. The budget can be gamified too, with a setting.
-- **Details (default), built in three Releases:**
+- **Details (default), built in two Releases:**
   - **0.57.0, the budget itself.** Budget is an extra on the Features page that adds a Budget
     tab. Pay is an amount per hour, day, week, month or year, with an optional take-home
     percentage for tax. Each weekday has a start and stop time and an unpaid break, or is a day
@@ -298,11 +298,22 @@ The app has no network access unless the owner decides otherwise for this app.
     from a first date, counted as spent on the day, with what's coming up), savings goals (a
     target, money put in and taken out, a bar, and how long it takes at the user's pay), a
     report for each month (earned, other income, spent and saved, each category, and a chart of
-    each day), and the today bar as a card on Today.
-  - **0.59.0, the budget game,** turned on with its own setting: points for days within the
-    day's share of what's left, a budget streak, bonuses for a month within every category's
-    limit and for reaching a savings goal, budget badges, and celebrations for a full workday and
-    a reached savings goal.
+    each day), and the today bar as a card on Today. A new bill is counted from the day it is
+    added (earlier ones are the user's to add), only while Budget is on, and a stopped bill keeps
+    what it counted; a monthly bill on the 29th to 31st falls on the last day of shorter months.
+    The Budget tab lists the bills due in the next 30 days. Money put into savings comes off
+    what's left in the month, and taking it out puts it back. Today's pay on Today is one of
+    Today's sections, just under the balance, shown while Budget is on and pay is set; a section
+    a newer version adds now goes just after the one before it in the usual order.
+  - **Also in 0.58.0, the budget game,** turned on with its own setting ("Budget game" on the Features
+    page, with Budget on). Each day's share is the month's pay (after tax) and other money in,
+    less its bills, spread evenly over its days. A day that spends no more than its share (bills
+    and savings aside, rewards bought included) pays 3 points; a day that spends nothing pays 5;
+    good days in a row are a money streak, shown on the Budget tab. A month within every
+    category's limit pays 25 when it ends, and reaching a saving goal pays 20, once each. Days
+    are paid the next time the app opens on a new day, from the day the game was turned on,
+    never further back; points go in the points history as bonuses. What was paid shows in a
+    note on the Budget tab.
 
 ## iPhone
 
@@ -649,8 +660,8 @@ Build order **(default)**, each step a Release the owner can try:
     and streak shields (0.49.0); paths and titles (0.50.0); moods and moves (0.51.0); ideas to level up
     each area (0.52.0).
 
-18. Then, chosen by the owner, a budget (see "Budget"): the budget itself (0.57.0), bills,
-    savings goals and reports (0.58.0), and the budget game (0.59.0).
+18. Then, chosen by the owner, a budget (see "Budget"): the budget itself (0.57.0), then bills,
+    savings goals, reports and the budget game (0.58.0).
 
 ## Talking to the owner
 

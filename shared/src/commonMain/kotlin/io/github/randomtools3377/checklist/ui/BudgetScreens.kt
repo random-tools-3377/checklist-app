@@ -136,9 +136,27 @@ fun BudgetScreen(
     onReceived: () -> Unit,
     onCategories: () -> Unit,
     onChangeDay: (LocalDate) -> Unit,
+    onBills: () -> Unit = {},
+    onReport: () -> Unit = {},
 ) {
     LaunchedEffect(Unit) { vm.startBudget() }
     val view by vm.budget.collectAsStateWithLifecycle()
+    val bills by vm.bills.collectAsStateWithLifecycle()
+    val savings by vm.savings.collectAsStateWithLifecycle()
+    val game by vm.moneyGame.collectAsStateWithLifecycle()
+    val paid by vm.moneyPaid.collectAsStateWithLifecycle()
+    paid?.let { payouts ->
+        AlertDialog(
+            onDismissRequest = vm::moneyPaidSeen,
+            title = { Text(if (payouts.any { it.points == io.github.randomtools3377.checklist.core.MoneyGame.SAVED_UP }) "🎉 Saved up!" else "💰 Money game") },
+            text = {
+                Column {
+                    payouts.forEach { Text("+${pointsText(it.points)} · ${it.label.removePrefix("Money: ").replaceFirstChar { c -> c.uppercase() }}") }
+                }
+            },
+            confirmButton = { TextButton(onClick = vm::moneyPaidSeen, modifier = Modifier.testTag("money-paid-ok")) { Text("Nice") } },
+        )
+    }
     val shown = view ?: return
     val now by rememberNow(live = shown.thisMonth)
     val month = remember(shown, now) { Budget.month(shown.first, shown.plan, shown.changes, shown.entries, shown.categories, now) }
@@ -179,6 +197,7 @@ fun BudgetScreen(
         if (plan != null && plan.complete && shown.thisMonth) {
             item { TodayPayCard(Pay.day(plan, now.date, shown.changes[now.date]), now, onChange = { onChangeDay(now.date) }) }
         }
+        game?.let { today -> item { MoneyGameCard(today) } }
         month.pay?.let { pay ->
             item {
                 Card(Modifier.fillMaxWidth().testTag("month-pay")) {
@@ -204,6 +223,13 @@ fun BudgetScreen(
             }
         }
         item { MonthSums(month, shown.thisMonth, onReceived) }
+        if (shown.thisMonth) {
+            item { BillsCard(bills, onBills) }
+            item { SavingsCard(savings, hourly, vm) }
+        }
+        item {
+            TextButton(onClick = onReport, modifier = Modifier.testTag("open-report")) { Text("Report for ${monthName(shown.first)}") }
+        }
         item {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                 Text("Categories", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.weight(1f))
@@ -355,6 +381,18 @@ private fun CategoryRow(spend: CategorySpend) {
 @Composable
 private fun EntryRow(entry: MoneyEntry, category: MoneyCategory?, hourly: Double?, onClick: () -> Unit) {
     val received = entry.kind == MoneyKind.RECEIVED
+    if (entry.savingId != null) {
+        val out = entry.kind == MoneyKind.TAKEN_OUT
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 6.dp).testTag("money:saving:${entry.note}"),
+        ) {
+            Text("🐷", fontSize = 22.sp, modifier = Modifier.width(36.dp))
+            Text((if (out) "Taken out of " else "Put into ") + entry.note, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+            Text((if (out) "+" else "−") + centsText(entry.cents), style = MaterialTheme.typography.bodyLarge)
+        }
+        return
+    }
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 6.dp).testTag("money:${entry.note.ifBlank { category?.name ?: "Money in" }}"),
@@ -366,6 +404,7 @@ private fun EntryRow(entry: MoneyEntry, category: MoneyCategory?, hourly: Double
                 if (!received && entry.note.isNotBlank()) category?.let { add(it.name) }
                 if (!received && hourly != null) add(workText(entry.cents, hourly))
                 if (entry.purchaseId != null) add("bought in the shop")
+                if (entry.billId != null) add("bill")
             }
             if (line.isNotEmpty()) {
                 Text(line.joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -593,6 +632,8 @@ fun MoneyEditor(id: Long, received: Boolean, vm: MainViewModel, onClose: () -> U
     var note by rememberSaveable { mutableStateOf("") }
     var day by rememberSaveable { mutableStateOf(nowLocal().date.toEpochDay()) }
     var purchaseId by rememberSaveable { mutableStateOf<Long?>(null) }
+    var billId by rememberSaveable { mutableStateOf<Long?>(null) }
+    var savingId by rememberSaveable { mutableStateOf<Long?>(null) }
     var at by rememberSaveable { mutableStateOf(0L) }
     var showErrors by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(id) {
@@ -604,6 +645,8 @@ fun MoneyEditor(id: Long, received: Boolean, vm: MainViewModel, onClose: () -> U
                 note = it.note
                 day = it.day.toEpochDay()
                 purchaseId = it.purchaseId
+                billId = it.billId
+                savingId = it.savingId
                 at = it.at
             }
             loaded = true
@@ -614,6 +657,7 @@ fun MoneyEditor(id: Long, received: Boolean, vm: MainViewModel, onClose: () -> U
     val categoryError = if (kind == MoneyKind.SPENT && categoryId == null) "Pick what it was for" else null
     EditorScaffold(
         title = when {
+            savingId != null -> "Savings"
             id != 0L -> "Edit"
             kind == MoneyKind.RECEIVED -> "Money in"
             else -> "Spent"
@@ -627,7 +671,7 @@ fun MoneyEditor(id: Long, received: Boolean, vm: MainViewModel, onClose: () -> U
                     MoneyEntry(
                         id = id, kind = kind, cents = Budget.cents(value!!),
                         categoryId = if (kind == MoneyKind.SPENT) categoryId else null,
-                        note = note, day = day.toDay(), at = at, purchaseId = purchaseId,
+                        note = note, day = day.toDay(), at = at, purchaseId = purchaseId, billId = billId, savingId = savingId,
                     ),
                     onClose,
                 )
@@ -635,7 +679,9 @@ fun MoneyEditor(id: Long, received: Boolean, vm: MainViewModel, onClose: () -> U
         },
     ) {
         if (!loaded) return@EditorScaffold
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (savingId != null) {
+            Text(if (kind == MoneyKind.TAKEN_OUT) "Taken out of savings" else "Put into savings", style = MaterialTheme.typography.titleSmall)
+        } else Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             FilterChip(selected = kind == MoneyKind.SPENT, onClick = { kind = MoneyKind.SPENT }, label = { Text("Spent") }, modifier = Modifier.testTag("money-kind:SPENT"))
             FilterChip(selected = kind == MoneyKind.RECEIVED, onClick = { kind = MoneyKind.RECEIVED }, label = { Text("Money in") }, modifier = Modifier.testTag("money-kind:RECEIVED"))
         }
@@ -809,4 +855,94 @@ internal val MoneyIcon: androidx.compose.ui.graphics.vector.ImageVector by lazy 
         pathFillType = androidx.compose.ui.graphics.PathFillType.EvenOdd,
         fill = androidx.compose.ui.graphics.SolidColor(androidx.compose.ui.graphics.Color.Black),
     ).build()
+}
+
+/** Today's pay on Today: what's earned so far, filling up live. Hidden until pay is set. */
+@Composable
+fun TodayMoneyCard(vm: MainViewModel, onOpen: () -> Unit) {
+    val plan by vm.payPlan.collectAsStateWithLifecycle()
+    val view by vm.budget.collectAsStateWithLifecycle()
+    val shown = plan?.takeIf { it.complete } ?: return
+    val now by rememberNow(live = true)
+    val pay = Pay.day(shown, now.date, view?.changes?.get(now.date))
+    val hours = pay.hours
+    Card(Modifier.fillMaxWidth().padding(vertical = 4.dp).clickable(onClick = onOpen).testTag("today-money")) {
+        Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("💼", fontSize = 22.sp, modifier = Modifier.width(36.dp))
+                Text(
+                    when {
+                        pay.paidOff -> "Day off, paid: ${moneyText(pay.total, alwaysCents = true)}"
+                        hours == null -> "A day off"
+                        else -> "${moneyText(pay.earned(now), alwaysCents = true)} of ${moneyText(pay.total, alwaysCents = true)} today"
+                    },
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+            if (hours != null) {
+                val done = pay.done(now)
+                LinearProgressIndicator(progress = { done.toFloat() }, modifier = Modifier.fillMaxWidth().padding(top = 6.dp).height(8.dp))
+                Text(
+                    when {
+                        done <= 0.0 -> "Starts at ${timeText(minuteTime(hours.start))}"
+                        done >= 1.0 -> "Done for the day"
+                        else -> "${minutesText(pay.minutesLeft(now))} to go"
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 2.dp),
+                )
+            }
+        }
+    }
+}
+
+/** The budget game today: the day's share, what's spent against it, and the money streak. */
+@Composable
+private fun MoneyGameCard(game: MoneyGameView) {
+    Card(Modifier.fillMaxWidth().testTag("money-game")) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text("🎮 Money game", style = MaterialTheme.typography.titleSmall)
+            val share = game.share
+            if (share == null) {
+                Text(
+                    "Set up your pay, or add money in, and each day gets its share of the month to stay within.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                return@Column
+            }
+            val shareCents = Budget.cents(share)
+            val over = game.spentCents > shareCents
+            Text(
+                "Spent today ${centsText(game.spentCents)} of ${centsText(shareCents)}",
+                style = MaterialTheme.typography.titleMedium,
+                color = if (over) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.testTag("money-game-today"),
+            )
+            LinearProgressIndicator(
+                progress = { if (shareCents > 0) (game.spentCents.toFloat() / shareCents).coerceIn(0f, 1f) else 1f },
+                color = if (over) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Text(
+                when {
+                    over -> "Over today's share: no points for today, and the streak starts again tomorrow."
+                    game.spentCents == 0L -> "Nothing spent yet: +${io.github.randomtools3377.checklist.core.MoneyGame.NO_SPEND_DAY} if it stays that way, +${io.github.randomtools3377.checklist.core.MoneyGame.GOOD_DAY} within the share."
+                    else -> "${centsText(shareCents - game.spentCents)} left today: +${io.github.randomtools3377.checklist.core.MoneyGame.GOOD_DAY} if it stays within."
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            if (game.streak > 0) {
+                Text("🔥 ${game.streak} good money day${if (game.streak == 1) "" else "s"} in a row", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.testTag("money-streak"))
+            }
+            Text(
+                "Points come the next day. A month within every limit pays +${io.github.randomtools3377.checklist.core.MoneyGame.MONTH_BONUS}, and reaching a saving goal +${io.github.randomtools3377.checklist.core.MoneyGame.SAVED_UP}.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
 }

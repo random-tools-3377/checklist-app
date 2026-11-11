@@ -3,6 +3,9 @@ package io.github.randomtools3377.checklist.core
 /** The parts of Today the user can show, hide and put in their own order. */
 enum class TodaySection(val label: String) {
     BALANCE("Balance"),
+
+    /** Today's pay filling up, while Budget is on and pay is set. */
+    MONEY("Today's pay"),
     WEEKLY_TARGET("Weekly target"),
     STREAKS("Streaks"),
     PACE("Pace and order"),
@@ -18,8 +21,8 @@ data class SectionChoice(val section: TodaySection, val shown: Boolean)
 
 /**
  * Today's sections in the user's order, each shown or hidden. Stored as names in order, with a
- * "-" in front of hidden ones: "BALANCE,-STREAKS,DUE_TODAY". Sections a newer version adds come
- * at the end, shown.
+ * "-" in front of hidden ones: "BALANCE,-STREAKS,DUE_TODAY". Sections a newer version adds are
+ * shown, just after the one before them in the usual order, or first if that one isn't there.
  */
 object Sections {
     val DEFAULT: List<SectionChoice> = TodaySection.entries.map { SectionChoice(it, shown = true) }
@@ -30,7 +33,12 @@ object Sections {
             val section = TodaySection.entries.firstOrNull { it.name == part.removePrefix("-") } ?: return@mapNotNull null
             SectionChoice(section, shown = !hidden)
         }.distinctBy { it.section }
-        return stored + TodaySection.entries.filter { s -> stored.none { it.section == s } }.map { SectionChoice(it, true) }
+        val all = stored.toMutableList()
+        TodaySection.entries.filter { s -> stored.none { it.section == s } }.forEach { added ->
+            val before = TodaySection.entries.take(added.ordinal).lastOrNull { s -> all.any { it.section == s } }
+            all.add(before?.let { s -> all.indexOfFirst { it.section == s } + 1 } ?: 0, SectionChoice(added, true))
+        }
+        return all
     }
 
     fun encode(choices: List<SectionChoice>): String =

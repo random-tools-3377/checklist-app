@@ -44,7 +44,8 @@ data class Backup(
      * format 21 each goal's skill area, for the character;
      * format 22 bets on yourself in the points history;
      * format 23 rewards whose price follows what they cost in money;
-     * format 24 the budget.
+     * format 24 the budget;
+     * format 25 bills and saving goals.
      */
     val checks: List<Check> = emptyList(),
     /** The user's own photo behind Today, in base64 (format 10). */
@@ -58,12 +59,15 @@ data class Backup(
     val money: List<MoneyEntry> = emptyList(),
     val moneyCategories: List<MoneyCategory> = emptyList(),
     val workDays: List<WorkDay> = emptyList(),
+    /** Bills and saving goals (format 25). */
+    val bills: List<Bill> = emptyList(),
+    val savingGoals: List<SavingGoal> = emptyList(),
 ) {
     companion object {
         const val APP = "checklist"
 
         /** Raised whenever the file's layout changes in a way older versions can't read. */
-        const val FORMAT = 24
+        const val FORMAT = 25
 
         private val json = Json {
             prettyPrint = true

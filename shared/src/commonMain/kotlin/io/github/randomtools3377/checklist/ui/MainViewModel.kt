@@ -136,6 +136,10 @@ import io.github.randomtools3377.checklist.data.SETTING_MOOD
 import io.github.randomtools3377.checklist.data.SETTING_TREAT_BUDGET
 import io.github.randomtools3377.checklist.core.MoneyPrices
 import io.github.randomtools3377.checklist.core.Budget
+import io.github.randomtools3377.checklist.core.Bill
+import io.github.randomtools3377.checklist.core.SavingGoal
+import io.github.randomtools3377.checklist.core.SavingProgress
+import io.github.randomtools3377.checklist.core.MoneyGame
 import io.github.randomtools3377.checklist.core.MoneyCategory
 import io.github.randomtools3377.checklist.core.MoneyEntry
 import io.github.randomtools3377.checklist.core.Pay
@@ -280,6 +284,9 @@ data class BalanceCheckView(val perDay: Double?, val rate: Difficulty, val rewar
 data class Stopwatch(val goalId: Long, val startedAt: Long)
 
 /** What the privacy lock covers, as chosen in Settings. */
+/** Today in the budget game: its share, what's spent, and good money days in a row with and without today. */
+data class MoneyGameView(val share: Double?, val spentCents: Long, val streak: Int, val streakBefore: Int)
+
 /** The Budget tab's month: [first] is its first day. */
 data class BudgetView(
     val first: LocalDate,
@@ -1927,6 +1934,90 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
         }
         budgetMonth.value = if (shown >= now) null else shown
     }
+
+    /** Bills and subscriptions, stopped ones included (for the history). */
+    val bills: StateFlow<List<Bill>> = dao.observeBills().map { rows -> rows.map { it.toCore() } }.state(emptyList())
+
+    /** Saving goals with what's in each. */
+    val savings: StateFlow<List<SavingProgress>> = combine(dao.observeSavingGoals(), dao.observeSavingMoney()) { goals, money ->
+        SavingProgress.of(goals.map { it.toCore() }, money.map { it.toCore() })
+    }.state(emptyList())
+
+    init {
+        // Bills count as spent on their days, by themselves, while Budget is on.
+        viewModelScope.launch {
+            combine(features, today, dao.observeBills()) { on, _, _ -> Feature.BUDGET in on }
+                .collectLatest { on -> if (on) repository.countBills(nowLocal().date) }
+        }
+    }
+
+    suspend fun loadBill(id: Long): Bill? = repository.bill(id)
+
+    fun saveBill(bill: Bill, onDone: () -> Unit) {
+        viewModelScope.launch {
+            repository.saveBill(bill, nowLocal().date)
+            onDone()
+        }
+    }
+
+    fun removeBill(id: Long, onDone: () -> Unit) {
+        viewModelScope.launch {
+            repository.removeBill(id)
+            onDone()
+        }
+    }
+
+    fun saveSavingGoal(goal: SavingGoal) {
+        viewModelScope.launch { repository.saveSavingGoal(goal) }
+    }
+
+    fun removeSavingGoal(id: Long) {
+        viewModelScope.launch { repository.removeSavingGoal(id) }
+    }
+
+    /** Puts money into a saving goal, or takes it out. With the budget game on, reaching it pays. */
+    fun moveSaving(goal: SavingGoal, cents: Long, out: Boolean) {
+        viewModelScope.launch {
+            repository.moveSaving(goal.id, cents, out, nowLocal().date, goal.name)
+            settleMoneyGame()
+        }
+    }
+
+    /** The budget game's points just paid, to celebrate; null once seen. */
+    val moneyPaid = MutableStateFlow<List<MoneyGame.Payout>?>(null)
+
+    private suspend fun settleMoneyGame() {
+        val on = features.value
+        if (Feature.BUDGET !in on || Feature.BUDGET_GAME !in on) return
+        val paid = repository.settleMoneyGame(nowLocal().date)
+        if (paid.isNotEmpty()) moneyPaid.value = paid
+    }
+
+    fun moneyPaidSeen() {
+        moneyPaid.value = null
+    }
+
+    init {
+        // The budget game pays for the days gone by when a new day starts, or when it's turned on.
+        viewModelScope.launch {
+            combine(features, today) { on, day -> (Feature.BUDGET in on && Feature.BUDGET_GAME in on) to day }
+                .collectLatest { (on, _) -> if (on) settleMoneyGame() }
+        }
+    }
+
+    /** Today in the budget game: the day's share, what's spent, and the money streak; null while it's off. */
+    val moneyGame: StateFlow<MoneyGameView?> = combine(features, budget, savings) { on, view, _ ->
+        if (Feature.BUDGET !in on || Feature.BUDGET_GAME !in on || view == null || !view.thisMonth) return@combine null
+        val today = nowLocal().date
+        val entries = repository.moneyThisAndLastMonth(today)
+        val shares = mutableMapOf<LocalDate, Double?>()
+        val shareOf = { d: LocalDate -> shares.getOrPut(Budget.monthOf(d)) { MoneyGame.share(view.plan, Budget.monthOf(d), view.changes, entries) } }
+        val from = repository.moneyGameFrom() ?: today
+        val share = shareOf(today)
+        val spent = MoneyGame.spent(today, entries)
+        val before = MoneyGame.streak(from, today.minusDays(1), shareOf, entries)
+        MoneyGameView(share, spent, if (share != null && MoneyGame.day(spent, share) != MoneyGame.Day.OVER) before + 1 else before, before)
+    }.state(null)
 
     /** Puts in the starting categories the first time the budget is opened. */
     fun startBudget() {

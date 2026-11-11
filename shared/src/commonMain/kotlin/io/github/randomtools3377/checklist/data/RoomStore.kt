@@ -194,10 +194,31 @@ fun MoneyEntity.toCore() = io.github.randomtools3377.checklist.core.MoneyEntry(
     id = id,
     kind = io.github.randomtools3377.checklist.core.MoneyKind.entries.firstOrNull { it.name == kind } ?: io.github.randomtools3377.checklist.core.MoneyKind.SPENT,
     cents = cents, categoryId = categoryId, note = note, day = day.toDay(), at = at, purchaseId = purchaseId,
+    billId = billId, savingId = savingId,
 )
 
 fun io.github.randomtools3377.checklist.core.MoneyEntry.toEntity() = MoneyEntity(
     id = id, kind = kind.name, cents = cents, categoryId = categoryId, note = note, day = day.toEpochDay(), at = at, purchaseId = purchaseId,
+    billId = billId, savingId = savingId,
+)
+
+fun BillEntity.toCore() = io.github.randomtools3377.checklist.core.Bill(
+    id = id, name = name, icon = icon, cents = cents, categoryId = categoryId,
+    every = io.github.randomtools3377.checklist.core.BillEvery.entries.firstOrNull { it.name == every } ?: io.github.randomtools3377.checklist.core.BillEvery.MONTHS,
+    count = count.coerceAtLeast(1), first = first.toDay(), until = until?.toDay(), archived = archived, countedTo = countedTo?.toDay(),
+)
+
+fun io.github.randomtools3377.checklist.core.Bill.toEntity() = BillEntity(
+    id = id, name = name, icon = icon, cents = cents, categoryId = categoryId, every = every.name, count = count.coerceAtLeast(1),
+    first = first.toEpochDay(), until = until?.toEpochDay(), archived = archived, countedTo = countedTo?.toEpochDay(),
+)
+
+fun SavingGoalEntity.toCore() = io.github.randomtools3377.checklist.core.SavingGoal(
+    id = id, name = name, icon = icon, targetCents = targetCents, position = position, archived = archived, createdAt = createdAt,
+)
+
+fun io.github.randomtools3377.checklist.core.SavingGoal.toEntity() = SavingGoalEntity(
+    id = id, name = name, icon = icon, targetCents = targetCents, position = position, archived = archived, createdAt = createdAt,
 )
 
 fun MoneyCategoryEntity.toCore() = io.github.randomtools3377.checklist.core.MoneyCategory(

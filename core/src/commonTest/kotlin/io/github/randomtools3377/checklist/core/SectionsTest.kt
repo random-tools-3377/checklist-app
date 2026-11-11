@@ -6,25 +6,37 @@ import kotlin.test.assertEquals
 class SectionsTest {
     @Test
     fun sectionsKeepTheirOrderAndWhichAreHidden() {
-        val choices = Sections.decode("STREAKS,-BALANCE,DUE_TODAY")
-        assertEquals(listOf(TodaySection.STREAKS, TodaySection.BALANCE, TodaySection.DUE_TODAY), choices.take(3).map { it.section })
+        val stored = "STREAKS,-BALANCE,MONEY,WEEKLY_TARGET,PACE,DUE_TODAY,TODOS,THIS_WEEK,THIS_MONTH,THIS_YEAR,PROJECTS"
+        val choices = Sections.decode(stored)
+        assertEquals(listOf(TodaySection.STREAKS, TodaySection.BALANCE, TodaySection.MONEY), choices.take(3).map { it.section })
         assertEquals(false, choices[1].shown)
-        // The rest follow, shown, in their usual order.
         assertEquals(TodaySection.entries.size, choices.size)
-        assertEquals(TodaySection.WEEKLY_TARGET, choices[3].section)
-        assertEquals(true, choices.drop(3).all { it.shown })
+        assertEquals(stored, Sections.encode(choices))
         assertEquals(choices, Sections.decode(Sections.encode(choices)))
         assertEquals(Sections.DEFAULT, Sections.decode(null))
         assertEquals(Sections.DEFAULT, Sections.decode("NOT_A_SECTION,,"))
     }
 
     @Test
+    fun aSectionANewerVersionAddsGoesWhereItUsuallyIs() {
+        // Stored before Today's pay was added: it comes in just after the balance, shown.
+        val older = Sections.decode("STREAKS,-BALANCE,WEEKLY_TARGET,PACE,DUE_TODAY,TODOS,THIS_WEEK,THIS_MONTH,THIS_YEAR,PROJECTS")
+        assertEquals(
+            listOf(TodaySection.STREAKS, TodaySection.BALANCE, TodaySection.MONEY, TodaySection.WEEKLY_TARGET),
+            older.take(4).map { it.section },
+        )
+        assertEquals(true, older[2].shown)
+        // With nothing before it stored, it goes first.
+        assertEquals(TodaySection.BALANCE, Sections.decode("DUE_TODAY").first().section)
+    }
+
+    @Test
     fun sectionsMoveAndHide() {
-        val moved = Sections.move(Sections.DEFAULT, 2, -1)
-        assertEquals(listOf(TodaySection.BALANCE, TodaySection.STREAKS, TodaySection.WEEKLY_TARGET), moved.take(3).map { it.section })
+        val moved = Sections.move(Sections.DEFAULT, 3, -1)
+        assertEquals(listOf(TodaySection.BALANCE, TodaySection.MONEY, TodaySection.STREAKS, TodaySection.WEEKLY_TARGET), moved.take(4).map { it.section })
         assertEquals(Sections.DEFAULT, Sections.move(Sections.DEFAULT, 0, -1)) // already at the top
         val hidden = Sections.toggle(Sections.DEFAULT, TodaySection.PACE)
-        assertEquals("BALANCE,WEEKLY_TARGET,STREAKS,-PACE,DUE_TODAY,TODOS,THIS_WEEK,THIS_MONTH,THIS_YEAR,PROJECTS", Sections.encode(hidden))
+        assertEquals("BALANCE,MONEY,WEEKLY_TARGET,STREAKS,-PACE,DUE_TODAY,TODOS,THIS_WEEK,THIS_MONTH,THIS_YEAR,PROJECTS", Sections.encode(hidden))
     }
 
     @Test

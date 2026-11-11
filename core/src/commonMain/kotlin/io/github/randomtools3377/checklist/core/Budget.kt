@@ -165,9 +165,9 @@ object Pay {
     fun workMinutes(cents: Long, hourly: Double): Int = maxOf(1, (cents / 100.0 / hourly * 60).roundToLong().toInt())
 }
 
-/** Whether money went out or came in. */
+/** Whether money went out, came in, or was put into or taken out of a saving goal. */
 @Serializable
-enum class MoneyKind { SPENT, RECEIVED }
+enum class MoneyKind { SPENT, RECEIVED, SAVED, TAKEN_OUT }
 
 /** What a category is for, when the app files things in it itself. */
 @Serializable
@@ -187,7 +187,8 @@ data class MoneyCategory(
 
 /**
  * Money spent or received on [day], in cents. Spending has a category. A reward bought in the
- * shop with a money value is filed under Rewards with its [purchaseId].
+ * shop with a money value is filed under Rewards with its [purchaseId]; a bill counted by itself
+ * has its [billId]. Money put into or taken out of a saving goal has its [savingId].
  */
 @Serializable
 data class MoneyEntry(
@@ -199,6 +200,8 @@ data class MoneyEntry(
     val day: LocalDate,
     val at: Long = 0,
     val purchaseId: Long? = null,
+    val billId: Long? = null,
+    val savingId: Long? = null,
 )
 
 /** A category's spending in a month, against its limit. */
@@ -213,12 +216,14 @@ data class MoneyMonth(
     val receivedCents: Long,
     val spentCents: Long,
     val categories: List<CategorySpend>,
+    /** Put into saving goals, less what was taken out. */
+    val savedCents: Long = 0,
 ) {
-    /** What's left now: pay earned so far and other income, less spending. */
-    val leftNow: Double get() = (pay?.earned ?: 0.0) + (receivedCents - spentCents) / 100.0
+    /** What's left now: pay earned so far and other income, less spending and saving. */
+    val leftNow: Double get() = (pay?.earned ?: 0.0) + (receivedCents - spentCents - savedCents) / 100.0
 
     /** What will be left at the end of the month if nothing else is spent. */
-    val leftAtEnd: Double get() = (pay?.total ?: 0.0) + (receivedCents - spentCents) / 100.0
+    val leftAtEnd: Double get() = (pay?.total ?: 0.0) + (receivedCents - spentCents - savedCents) / 100.0
 }
 
 object Budget {
@@ -255,6 +260,7 @@ object Budget {
             receivedCents = inMonth.filter { it.kind == MoneyKind.RECEIVED }.sumOf { it.cents },
             spentCents = spent.sumOf { it.cents },
             categories = shown.map { CategorySpend(it, byCategory[it.id] ?: 0) },
+            savedCents = inMonth.sumOf { if (it.kind == MoneyKind.SAVED) it.cents else if (it.kind == MoneyKind.TAKEN_OUT) -it.cents else 0 },
         )
     }
 }

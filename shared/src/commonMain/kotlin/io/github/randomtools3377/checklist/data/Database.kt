@@ -208,6 +208,40 @@ data class MoneyEntity(
     val at: Long,
     /** The purchase, for a reward bought in the shop. */
     val purchaseId: Long?,
+    /** The bill it was counted for, by itself. Added in version 21. */
+    val billId: Long? = null,
+    /** The saving goal it was put into or taken out of. Added in version 21. */
+    val savingId: Long? = null,
+)
+
+/** Bills and subscriptions (Bill in the shared code). Added in version 21. */
+@Entity(tableName = "bills")
+data class BillEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val name: String,
+    val icon: String,
+    val cents: Long,
+    val categoryId: Long?,
+    /** BillEvery: WEEKS or MONTHS. */
+    val every: String,
+    val count: Int,
+    /** Epoch days. */
+    val first: Long,
+    val until: Long?,
+    val archived: Boolean,
+    val countedTo: Long?,
+)
+
+/** Saving goals (SavingGoal in the shared code). Added in version 21. */
+@Entity(tableName = "saving_goals")
+data class SavingGoalEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val name: String,
+    val icon: String,
+    val targetCents: Long,
+    val position: Int,
+    val archived: Boolean,
+    val createdAt: Long,
 )
 
 /** The budget's categories of spending (MoneyCategory in the shared code). Added in version 20. */
@@ -578,6 +612,20 @@ interface ChecklistDao {
     @Query("DELETE FROM work_days WHERE day = :day") suspend fun deleteWorkDay(day: Long)
     @Query("DELETE FROM work_days") suspend fun deleteWorkDays()
     @Insert suspend fun insertWorkDays(rows: List<WorkDayEntity>)
+    @Query("SELECT * FROM bills ORDER BY name") fun observeBills(): Flow<List<BillEntity>>
+    @Query("SELECT * FROM bills ORDER BY id") suspend fun allBills(): List<BillEntity>
+    @Query("SELECT * FROM bills WHERE id = :id") suspend fun bill(id: Long): BillEntity?
+    @Insert suspend fun insertBill(row: BillEntity): Long
+    @Update suspend fun updateBill(row: BillEntity)
+    @Query("DELETE FROM bills") suspend fun deleteBills()
+    @Insert suspend fun insertBills(rows: List<BillEntity>)
+    @Query("SELECT * FROM saving_goals ORDER BY position") fun observeSavingGoals(): Flow<List<SavingGoalEntity>>
+    @Query("SELECT * FROM saving_goals ORDER BY position") suspend fun allSavingGoals(): List<SavingGoalEntity>
+    @Insert suspend fun insertSavingGoal(row: SavingGoalEntity): Long
+    @Update suspend fun updateSavingGoal(row: SavingGoalEntity)
+    @Query("DELETE FROM saving_goals") suspend fun deleteSavingGoals()
+    @Insert suspend fun insertSavingGoals(rows: List<SavingGoalEntity>)
+    @Query("SELECT * FROM money WHERE savingId IS NOT NULL ORDER BY day, at") fun observeSavingMoney(): Flow<List<MoneyEntity>>
 
     @Query("SELECT * FROM checks") suspend fun allChecks(): List<CheckEntity>
     @Query("DELETE FROM checks") suspend fun deleteChecks()
@@ -649,11 +697,13 @@ interface ChecklistDao {
         MoneyEntity::class,
         MoneyCategoryEntity::class,
         WorkDayEntity::class,
+        BillEntity::class,
+        SavingGoalEntity::class,
     ],
-    version = 20,
+    version = 21,
     exportSchema = true,
     // Versions 4 to 8 only add tables and columns, so Room works the migrations out from the layouts.
-    autoMigrations = [AutoMigration(from = 3, to = 4), AutoMigration(from = 4, to = 5), AutoMigration(from = 5, to = 6), AutoMigration(from = 6, to = 7), AutoMigration(from = 7, to = 8), AutoMigration(from = 8, to = 9), AutoMigration(from = 9, to = 10), AutoMigration(from = 10, to = 11), AutoMigration(from = 11, to = 12), AutoMigration(from = 12, to = 13), AutoMigration(from = 13, to = 14), AutoMigration(from = 14, to = 15), AutoMigration(from = 15, to = 16), AutoMigration(from = 16, to = 17), AutoMigration(from = 17, to = 18), AutoMigration(from = 18, to = 19), AutoMigration(from = 19, to = 20)],
+    autoMigrations = [AutoMigration(from = 3, to = 4), AutoMigration(from = 4, to = 5), AutoMigration(from = 5, to = 6), AutoMigration(from = 6, to = 7), AutoMigration(from = 7, to = 8), AutoMigration(from = 8, to = 9), AutoMigration(from = 9, to = 10), AutoMigration(from = 10, to = 11), AutoMigration(from = 11, to = 12), AutoMigration(from = 12, to = 13), AutoMigration(from = 13, to = 14), AutoMigration(from = 14, to = 15), AutoMigration(from = 15, to = 16), AutoMigration(from = 16, to = 17), AutoMigration(from = 17, to = 18), AutoMigration(from = 18, to = 19), AutoMigration(from = 19, to = 20), AutoMigration(from = 20, to = 21)],
 )
 @ConstructedBy(AppDatabaseConstructor::class)
 abstract class AppDatabase : RoomDatabase() {

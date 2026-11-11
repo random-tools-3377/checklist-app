@@ -345,6 +345,9 @@ fun ChecklistApp(vm: MainViewModel) {
             "money" -> androidx.compose.runtime.key(route) { MoneyEditor(id, received = parts.getOrNull(2) == "in", vm = vm, onClose = ::pop) }
             "budget-categories" -> CategoriesScreen(vm, onBack = ::pop)
             "work-day" -> androidx.compose.runtime.key(route) { WorkDayEditor(id.toDay(), vm, onClose = ::pop) }
+            "budget-bills" -> BillsScreen(vm, onBill = { billId -> push("bill/$billId") }, onBack = ::pop)
+            "bill" -> androidx.compose.runtime.key(route) { BillEditor(id, vm, onClose = ::pop) }
+            "budget-report" -> BudgetReportScreen(vm, onBack = ::pop)
             "settings" -> SettingsScreen(
                 settings, vm,
                 onAppearance = { push("appearance") },
@@ -427,6 +430,7 @@ fun ChecklistApp(vm: MainViewModel) {
                                 onPlanWeek = { push("plan-week") },
                                 onCharacter = { push("character") },
                                 onIdeas = { area -> push("ideas/${area.name}") },
+                                onBudget = { goTo(AppTab.BUDGET) },
                                 skipRequest = skipRequest,
                                 onSkipRequestHandled = vm::clearSkipRequest,
                                 padding = padding,
@@ -475,6 +479,8 @@ fun ChecklistApp(vm: MainViewModel) {
                             onReceived = { push("money/0/in") },
                             onCategories = { push("budget-categories") },
                             onChangeDay = { day -> push("work-day/${day.toEpochDay()}") },
+                            onBills = { push("budget-bills") },
+                            onReport = { push("budget-report") },
                         )
                         AppTab.SHOP -> if (settings.locks.shop && !unlocked) {
                             LockedPanel("The shop", unlock, Modifier.padding(padding))
