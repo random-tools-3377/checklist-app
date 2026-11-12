@@ -935,7 +935,7 @@ private fun MoneyGameCard(game: MoneyGameView) {
             val shareCents = Budget.cents(share)
             val over = game.spentCents > shareCents
             Text(
-                "Spent today ${centsText(game.spentCents)} of ${centsText(shareCents)}",
+                "Spent today: ${centsText(game.spentCents)}",
                 style = MaterialTheme.typography.titleMedium,
                 color = if (over) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.testTag("money-game-today"),
@@ -945,11 +945,18 @@ private fun MoneyGameCard(game: MoneyGameView) {
                 color = if (over) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
                 modifier = Modifier.fillMaxWidth(),
             )
+            // The line the game draws for the day, with where it comes from: it is no target to spend.
+            Text(
+                "Stay under ${centsText(shareCents)} for a good money day. That is this month's pay, less bills, spread over its days.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.testTag("money-game-line"),
+            )
             Text(
                 when {
-                    over -> "Over today's share: no points for today, and the streak starts again tomorrow."
-                    game.spentCents == 0L -> "A no-spend day so far: +${io.github.randomtools3377.checklist.core.MoneyGame.NO_SPEND_DAY} if it stays that way, +${io.github.randomtools3377.checklist.core.MoneyGame.GOOD_DAY} within the share."
-                    else -> "${centsText(shareCents - game.spentCents)} left today: +${io.github.randomtools3377.checklist.core.MoneyGame.GOOD_DAY} if it stays within."
+                    over -> "Over today's line: no points for today, and the streak starts again tomorrow."
+                    game.spentCents == 0L -> "A no-spend day so far: +${io.github.randomtools3377.checklist.core.MoneyGame.NO_SPEND_DAY} if it stays that way, +${io.github.randomtools3377.checklist.core.MoneyGame.GOOD_DAY} if you spend but stay under the line."
+                    else -> "${centsText(shareCents - game.spentCents)} under the line: +${io.github.randomtools3377.checklist.core.MoneyGame.GOOD_DAY} if it stays that way."
                 },
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
