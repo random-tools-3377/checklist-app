@@ -14,6 +14,7 @@ import io.github.randomtools3377.checklist.data.LOCK_PRIVATE
 import io.github.randomtools3377.checklist.data.SETTING_DAY_END_HOUR
 import io.github.randomtools3377.checklist.data.SETTING_DEFAULT_FINISH
 import io.github.randomtools3377.checklist.data.SharedParts
+import io.github.randomtools3377.checklist.data.eveningChecks
 import io.github.randomtools3377.checklist.data.nowLocal
 import io.github.randomtools3377.checklist.data.nowMillis
 import io.github.randomtools3377.checklist.data.parseDayEndHour
@@ -46,7 +47,7 @@ import platform.darwin.NSObject
 /**
  * Reminders on the iPhone: the next ones are handed to the iPhone ahead of time, since an app
  * can't wake itself up to show them. They are set again whenever goals, ticks or settings change,
- * so a goal ticked off has no reminder left waiting.
+ * so a goal ticked off has no reminder left waiting, and the evening check lists what is open now.
  */
 internal object IosReminders {
     /** How far ahead, and how many: the iPhone keeps at most 64 waiting for an app. */
@@ -116,9 +117,13 @@ internal object IosReminders {
             val lapses = dao.lapses(goal.id, window.start.toEpochDay(), window.end.toEpochDay()).map { it.toCore() }
             Alerts.stillToDo(goal, window, ticks, lapses, alert.number)
         }
+        // The evening check for each of the next days, when it is on: what is still open on its
+        // day as things stand. Everything is handed over again on every change, so its list stays
+        // current, and a day with nothing open has none.
+        val evenings = eveningChecks(dao, from, to)
         // Every day's first reminders before "keep reminding" repeats, so one day's repeats
         // don't take the places of the next days' reminders.
-        val waiting = Alerts.keep(stillToDo, MOST)
+        val waiting = Alerts.keep(stillToDo, MOST - evenings.size)
 
         center.removeAllPendingNotificationRequests()
         for (alert in waiting) {
@@ -133,6 +138,18 @@ internal object IosReminders {
                 "goal-${alert.goalId}-${alert.at}-${alert.kind}",
                 content,
                 UNCalendarNotificationTrigger.triggerWithDateMatchingComponents(components(alert.at), repeats = false),
+            )
+            center.addNotificationRequest(request, withCompletionHandler = null)
+        }
+        for (evening in evenings) {
+            val content = UNMutableNotificationContent()
+            content.setTitle(evening.list.title)
+            content.setBody(evening.list.lines().joinToString("\n"))
+            content.setSound(UNNotificationSound.defaultSound)
+            val request = UNNotificationRequest.requestWithIdentifier(
+                "evening-${evening.at}",
+                content,
+                UNCalendarNotificationTrigger.triggerWithDateMatchingComponents(components(evening.at), repeats = false),
             )
             center.addNotificationRequest(request, withCompletionHandler = null)
         }

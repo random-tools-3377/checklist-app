@@ -91,6 +91,12 @@ fun ReviewScreen(
     /** The misses in the stretch that still stand, and what opens one to put it right (see [PastMissDialog]). */
     misses: List<io.github.randomtools3377.checklist.core.Lapse> = emptyList(),
     onMiss: (Long) -> Unit = {},
+    /** The best run of each streak ever, shown beside today's numbers. */
+    best: Streaks? = null,
+    /** The main streak's target, to find the longest streak within a past stretch. */
+    streakSettings: io.github.randomtools3377.checklist.core.StreakSettings = io.github.randomtools3377.checklist.core.StreakSettings(),
+    /** The user's day today: a stretch that ended before it is a past one. */
+    today: LocalDate? = null,
 ) {
     // A goal with several misses in the stretch: the box that asks which one to open.
     val choosing = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<Long?>(null) }
@@ -173,7 +179,7 @@ fun ReviewScreen(
         val shownMoods = moods.filter { it.day >= summary.from && it.day <= summary.to }
         if (shownMoods.isNotEmpty() && !hideReasons) item { MoodCard(shownMoods, summary, onMoodGoals, onMoodJournal) }
         if (summary.gaps.isNotEmpty()) item { GapsCard(summary.gaps, hideGapNotes) }
-        item { StatsCard(summary, streaks) }
+        item { StatsCard(summary, streaks, best, streakSettings, today) }
     }
 }
 
@@ -437,8 +443,53 @@ private fun MonthCalendar(summary: ReviewSummary) {
     }
 }
 
+/** One line of the review's stats about a streak, with the tag its value carries. */
+internal data class StreakStat(val label: String, val value: String, val tag: String)
+
+private fun daysText(days: Int): String = if (days == 1) "1 day" else "$days days"
+
+/**
+ * The streak lines of the review's stats. For the stretch that holds today: the current main
+ * streak ([now]) with the best ever beside it, and the best run of each other streak ([best],
+ * once it is worked out; never shown below today's number, which streak shields can keep going).
+ * For a past week, month or year: the longest each streak ran within that stretch ([within])
+ * instead of today's numbers. The main streak always has its line; the others only once they
+ * have run at all, so nobody is shown a row of zeros.
+ */
+internal fun streakStats(now: Streaks?, best: Streaks?, within: Streaks?): List<StreakStat> {
+    fun others(runs: Streaks, label: (String) -> String): List<StreakStat> = listOf(
+        Triple("miss-free run", runs.noMisses, "review-streak:miss-free"),
+        Triple("skip-free run", runs.noSkips, "review-streak:skip-free"),
+        Triple("run within the limit", runs.withinLimit, "review-streak:within-limit"),
+        Triple("run of perfect days", runs.perfect, "review-streak:perfect"),
+    ).filter { it.second > 0 }.map { (name, days, tag) -> StreakStat(label(name), daysText(days), tag) }
+    return when {
+        within != null ->
+            listOf(StreakStat("Longest main streak in this stretch", daysText(within.done), "review-streak:main")) +
+                others(within) { "Longest $it in this stretch" }
+        now == null -> emptyList()
+        best == null -> listOf(StreakStat("Current main streak", daysText(now.done), "review-streak:main"))
+        else -> io.github.randomtools3377.checklist.core.BestStreaks.atLeast(best, now).let { top ->
+            val main = if (top.done > 0) "${daysText(now.done)} · best ${daysText(top.done)}" else daysText(now.done)
+            listOf(StreakStat("Current main streak", main, "review-streak:main")) + others(top) { "Best $it" }
+        }
+    }
+}
+
 @Composable
-private fun StatsCard(summary: ReviewSummary, streaks: Streaks?) {
+private fun StatsCard(
+    summary: ReviewSummary,
+    streaks: Streaks?,
+    best: Streaks?,
+    streakSettings: io.github.randomtools3377.checklist.core.StreakSettings,
+    today: LocalDate?,
+) {
+    // A past stretch shows the longest each streak ran within it; a single past day has no streak to show.
+    val past = today != null && summary.to < today
+    val within = androidx.compose.runtime.remember(summary.days, streakSettings, past) {
+        if (past && summary.from != summary.to) io.github.randomtools3377.checklist.core.BestStreaks.of(summary.days, streakSettings) else null
+    }
+    val streakLines = if (past) streakStats(null, null, within) else streakStats(streaks, best, null)
     ReviewCard("Stats") {
         val lines = buildList {
             summary.mostConsistent?.let { add("Most consistent" to "${it.goal.icon} ${it.goal.name} · ${(it.consistency * 100).roundToInt()}%") }
@@ -450,17 +501,22 @@ private fun StatsCard(summary: ReviewSummary, streaks: Streaks?) {
             summary.goals.filter { it.points > 0 }.sortedByDescending { it.points }.take(3).forEach {
                 add("${pointsTitle()} from ${it.goal.icon} ${it.goal.name}" to "+${it.points}")
             }
-            streaks?.let {
-                add("Current main streak" to if (it.done == 1) "1 day" else "${it.done} days")
-                add("Longest run in this stretch" to (summary.goals.maxOfOrNull { g -> g.longestRun }?.toString() ?: "0"))
-            }
+            // One goal's times done in a row, which the streaks below (whole days) are not.
+            if (streaks != null) add("Longest run of one goal in this stretch" to (summary.goals.maxOfOrNull { g -> g.longestRun }?.toString() ?: "0"))
         }
-        if (lines.isEmpty()) Text("Not enough yet to say.", style = MaterialTheme.typography.bodyMedium)
+        if (lines.isEmpty() && streakLines.isEmpty()) Text("Not enough yet to say.", style = MaterialTheme.typography.bodyMedium)
         lines.forEachIndexed { index, (label, value) ->
             if (index > 0) HorizontalDivider()
             Row(Modifier.padding(vertical = 4.dp)) {
                 Text(label, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
                 Text(value, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+            }
+        }
+        streakLines.forEachIndexed { index, stat ->
+            if (index > 0 || lines.isNotEmpty()) HorizontalDivider()
+            Row(Modifier.padding(vertical = 4.dp)) {
+                Text(stat.label, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+                Text(stat.value, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium, modifier = Modifier.testTag(stat.tag))
             }
         }
         Spacer(Modifier.height(2.dp))

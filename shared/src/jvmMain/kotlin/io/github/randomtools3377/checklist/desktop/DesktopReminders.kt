@@ -11,6 +11,7 @@ import io.github.randomtools3377.checklist.data.LOCK_PRIVATE
 import io.github.randomtools3377.checklist.data.SETTING_DAY_END_HOUR
 import io.github.randomtools3377.checklist.data.SETTING_DEFAULT_FINISH
 import io.github.randomtools3377.checklist.data.SharedParts
+import io.github.randomtools3377.checklist.data.eveningChecks
 import io.github.randomtools3377.checklist.data.nowLocal
 import io.github.randomtools3377.checklist.data.nowMillis
 import io.github.randomtools3377.checklist.data.nextInChain
@@ -39,8 +40,9 @@ data class DueReminder(val goalId: Long, val title: String, val text: String)
  * Reminders on a computer, while the app is open. Nothing can be handed to the computer ahead of
  * time, so once a minute the app looks for the reminders due since it last looked, worked out
  * as the iPhone works out the ones it hands over (leaving out what is done or skipped), and shows
- * them from its icon in the notification area. Nothing reminds while the app is closed, and
- * nothing shows where the computer has no notification area.
+ * them from its icon in the notification area. The evening check, when it is on, shows the same
+ * way at its time. Nothing reminds while the app is closed, and nothing shows where the computer
+ * has no notification area.
  */
 class DesktopReminders(private val phone: DesktopPhone) {
     @Volatile
@@ -85,6 +87,8 @@ class DesktopReminders(private val phone: DesktopPhone) {
                     due.take(4).joinToString("\n") { it.title } + if (due.size > 4) "\nand ${due.size - 4} more" else "",
                 )
             }
+            // The evening check, at its time: what is still open today.
+            evening(phone.parts, from, to)?.let { show(it.title, it.text) }
         }
         focusDone()
     }
@@ -174,6 +178,18 @@ class DesktopReminders(private val phone: DesktopPhone) {
                 )
             }.distinctBy { it.goalId to it.text }
         }
+
+        /**
+         * The evening check due from [from] (included) to [to] (not included), if anything is
+         * still open on its day: how many, and the list, as every phone words it.
+         */
+        suspend fun evening(parts: SharedParts, from: LocalDateTime, to: LocalDateTime): DueReminder? =
+            eveningChecks(parts.db.dao(), from, to).lastOrNull()?.let { due ->
+                DueReminder(Alerts.MORNING_GOAL, due.list.title, due.list.lines(EVENING_LINES).joinToString("\n"))
+            }
+
+        /** How many lines of the evening check fit a message from the notification area. */
+        private const val EVENING_LINES = 4
 
         private fun words(alert: Alert): String = when (alert.kind) {
             AlertKind.ON_TIME -> "Now"

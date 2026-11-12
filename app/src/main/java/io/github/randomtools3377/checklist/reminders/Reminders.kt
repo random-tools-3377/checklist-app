@@ -20,6 +20,7 @@ import io.github.randomtools3377.checklist.core.Alert
 import io.github.randomtools3377.checklist.core.AlertKind
 import io.github.randomtools3377.checklist.core.Alerts
 import io.github.randomtools3377.checklist.core.Days
+import io.github.randomtools3377.checklist.core.EveningList
 import io.github.randomtools3377.checklist.core.Chains
 import io.github.randomtools3377.checklist.core.UsualTimes
 import io.github.randomtools3377.checklist.core.Feature
@@ -42,6 +43,9 @@ import io.github.randomtools3377.checklist.data.SETTING_DAY_END_HOUR
 import io.github.randomtools3377.checklist.data.SETTING_DAY_START
 import io.github.randomtools3377.checklist.data.SETTING_DEFAULT_FINISH
 import io.github.randomtools3377.checklist.data.SETTING_MORNING_PLAN
+import io.github.randomtools3377.checklist.data.eveningChecks
+import io.github.randomtools3377.checklist.data.eveningList
+import io.github.randomtools3377.checklist.data.eveningTimes
 import io.github.randomtools3377.checklist.data.toTime
 import io.github.randomtools3377.checklist.ui.minutesText
 import io.github.randomtools3377.checklist.data.nowLocal
@@ -61,7 +65,8 @@ import kotlinx.datetime.toLocalDateTime
 /**
  * Notifications at set times, scheduled on the phone like a calendar's. One alarm is kept: at the
  * next notification, or at the end of the user's day (so the widget turns over), whichever is
- * first. When it goes off, the notifications due are shown and the next alarm is set.
+ * first. When it goes off, the notifications due are shown and the next alarm is set. The evening
+ * check, when it is on, is one of them: one notification listing what is still open today.
  */
 object Reminders {
     const val CHANNEL = "reminders"
@@ -99,6 +104,7 @@ object Reminders {
         val dao = (context.applicationContext as ChecklistApplication).container.db.dao()
         val goals = dao.activeGoals().map { it.toCore() }
         runCatching { clearDone(context, dao, goals) }
+        runCatching { refreshEvening(context) }
         val dayEnd = parseDayEndHour(dao.setting(SETTING_DAY_END_HOUR))
         val nowMillis = System.currentTimeMillis()
         val now = nowMillis.local()
@@ -110,10 +116,13 @@ object Reminders {
         val defaultFinish = dao.setting(SETTING_DEFAULT_FINISH)?.toIntOrNull()?.toTime()
         val nextAlert = (Alerts.between(goals, from, to, dayEnd, defaultFinish, usualTimes(dao)) + mornings(dao, from, to, dayEnd) + weeklies(dao, from, to, dayEnd))
             .minOfOrNull { it.at }
+        // The evening check, when it is on.
+        val nextEvening = eveningTimes(dao, from, to).minOfOrNull { it.at }
         val dayTurns = LocalDateTime(Days.dayOf(now, dayEnd).plusDays(1), LocalTime(dayEnd, 0))
         val soon = System.currentTimeMillis() + 1_000
         val wake = listOfNotNull(
             nextAlert?.millis(),
+            nextEvening?.millis(),
             dayTurns.millis(),
             Snoozes.next(context)?.coerceAtLeast(soon),
             Focus.alarmAt(context)?.coerceAtLeast(soon),
@@ -159,6 +168,8 @@ object Reminders {
             showMorningPlan(context, dayEnd)
         }
         weeklies(dao, since.local(), until.local(), dayEnd).lastOrNull { it.at.millis() > since }?.let { showWeekly(context, it.day) }
+        // The evening check: what is still open today. Nothing on a day when everything is done.
+        eveningChecks(dao, since.local(), until.local()).lastOrNull { it.at.millis() > since }?.let { showEvening(context, it.list, dayEnd) }
         // A focus timer whose time is up (not one ending in the next few seconds): its goal is
         // ticked here, unless the app on screen took the timer first and ticked it there.
         Focus.takeEnded(context, nowMillis)?.let { focus ->
@@ -345,6 +356,90 @@ object Reminders {
             NotificationManagerCompat.from(context).notify(WEEKLY_ID, notification)
         } catch (e: SecurityException) {
             // Notifications were turned off in the meantime.
+        }
+    }
+
+    /** The evening check's notification (the timing notice has 902 and 903). */
+    const val EVENING_ID = 905
+
+    /** What the evening check that is showing says, to leave it alone while nothing has changed. */
+    private const val EXTRA_EVENING_SAYS = "evening_says"
+
+    private fun eveningSays(list: EveningList): String = list.title + "\n" + list.lines().joinToString("\n")
+
+    /**
+     * The evening check: one notification that lists what is still open on [list]'s day, with a
+     * button that opens Today and one that ticks the first open goal. A locked private goal is
+     * only "A private goal", and no button ticks it. It goes when that day ends at [dayEnd], and
+     * shown again with a newer list it doesn't buzz again.
+     */
+    fun showEvening(context: Context, list: EveningList, dayEnd: Int) {
+        if (!canNotify(context)) return
+        val endsIn = LocalDateTime(list.day.plusDays(1), LocalTime(dayEnd, 0)).millis() - System.currentTimeMillis()
+        if (endsIn <= 0) return
+        val lines = list.lines()
+        val open = PendingIntent.getActivity(
+            context,
+            EVENING_ID,
+            Intent(context, MainActivity::class.java)
+                .putExtra(MainActivity.EXTRA_OPEN, "today")
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+        val builder = NotificationCompat.Builder(context, CHANNEL)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle(list.title)
+            .setContentText(lines.joinToString(", "))
+            .setStyle(NotificationCompat.BigTextStyle().bigText(lines.joinToString("\n")))
+            .setContentIntent(open)
+            .addAction(0, "Open Today", open)
+            .setAutoCancel(true)
+            .setOnlyAlertOnce(true)
+            .setTimeoutAfter(endsIn)
+            // Which day it is for and what it says, to bring it up to date (see refreshEvening).
+            .addExtras(
+                Bundle().apply {
+                    putLong(DoneReceiver.EXTRA_DAY, list.day.toEpochDay())
+                    putString(EXTRA_EVENING_SAYS, eveningSays(list))
+                },
+            )
+            .setCategory(NotificationCompat.CATEGORY_REMINDER)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+        list.firstToTick?.let { item ->
+            val done = PendingIntent.getBroadcast(
+                context,
+                EVENING_ID,
+                Intent(context, DoneReceiver::class.java)
+                    .putExtra(DoneReceiver.EXTRA_GOAL, item.goalId)
+                    .putExtra(DoneReceiver.EXTRA_NOTIFICATION, EVENING_ID)
+                    .putExtra(DoneReceiver.EXTRA_DAY, list.day.toEpochDay()),
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+            )
+            builder.addAction(0, "${item.tick}: ${item.name}", done)
+        }
+        try {
+            NotificationManagerCompat.from(context).notify(EVENING_ID, builder.build())
+        } catch (e: SecurityException) {
+            // Notifications were turned off in the meantime.
+        }
+    }
+
+    /**
+     * Brings the evening check up to date while it is showing: what is still open now, or
+     * nothing once everything is done or its day has ended. After a tick or a skip, from its own
+     * button, in the app, on a widget or the tile.
+     */
+    suspend fun refreshEvening(context: Context) {
+        val manager = context.getSystemService(NotificationManager::class.java) ?: return
+        val shown = manager.activeNotifications.firstOrNull { it.id == EVENING_ID } ?: return
+        val dao = (context.applicationContext as ChecklistApplication).container.db.dao()
+        val dayEnd = parseDayEndHour(dao.setting(SETTING_DAY_END_HOUR))
+        val day = shown.notification.extras.getLong(DoneReceiver.EXTRA_DAY, Long.MIN_VALUE)
+        val list = if (day == Days.dayOf(nowLocal(), dayEnd).toEpochDay()) eveningList(dao, day.toDay()) else null
+        if (list == null) {
+            manager.cancel(EVENING_ID)
+        } else if (shown.notification.extras.getString(EXTRA_EVENING_SAYS) != eveningSays(list)) {
+            showEvening(context, list, dayEnd)
         }
     }
 

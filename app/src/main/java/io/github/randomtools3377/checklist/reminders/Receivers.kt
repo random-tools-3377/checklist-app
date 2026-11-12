@@ -46,7 +46,10 @@ private suspend fun forPastDay(context: Context, intent: Intent): Boolean {
     return day != Long.MIN_VALUE && day != (context.applicationContext as ChecklistApplication).container.book.today().toEpochDay()
 }
 
-/** "Done" on a notification ticks the goal once, on the day it was for. */
+/**
+ * "Done" on a notification ticks the goal once, on the day it was for. From a goal's own reminder
+ * the reminder goes; from the evening check, its list is brought up to date.
+ */
 class DoneReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) = work {
         val goalId = intent.getLongExtra(EXTRA_GOAL, -1)
@@ -54,7 +57,10 @@ class DoneReceiver : BroadcastReceiver() {
             val result = (context.applicationContext as ChecklistApplication).container.book.tickHabit(goalId)
             if (result is io.github.randomtools3377.checklist.core.TickResult.Ticked && result.finished) Reminders.afterDone(context, goalId)
         }
-        NotificationManagerCompat.from(context).cancel(intent.getIntExtra(EXTRA_NOTIFICATION, 0))
+        val notification = intent.getIntExtra(EXTRA_NOTIFICATION, 0)
+        if (notification != Reminders.EVENING_ID) NotificationManagerCompat.from(context).cancel(notification)
+        // The evening check, while it is showing, lists what is still open now, or goes once nothing is.
+        runCatching { Reminders.refreshEvening(context) }
     }
 
     companion object {

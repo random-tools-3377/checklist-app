@@ -242,6 +242,11 @@ private fun SwitchLine(title: String, hint: String, on: Boolean, tag: String, on
     SwitchRow(title, on, "switch:$tag", hint = hint, onChange = onChange)
 }
 
+/** The words a Settings search finds the Notifications part by. */
+internal fun notificationWords(phone: Phone): String =
+    "Notifications notification reminders reminder alarm exact weekly summary snooze morning plan evening check still open" +
+        if (phone.hasWidgets) " widget widgets home screen calendar" else ""
+
 /** The notifications [phone] can't give yet, like "Morning plan, weekly summary and snooze"; null if none. */
 internal fun notificationsNotHere(phone: Phone): String? {
     val missing = listOfNotNull(
@@ -445,10 +450,7 @@ fun SettingsScreen(
     val showPenalties = shows("Penalty tasks penalty limit")
     val showReasons = shows("Reasons for skips and misses reason skip miss own")
     val showGaps = shows("Gaps gap stopped break days loss")
-    val showNotifications = shows(
-        "Notifications notification reminders reminder alarm exact weekly summary snooze morning plan" +
-            if (phone.hasWidgets) " widget widgets home screen calendar" else "",
-    )
+    val showNotifications = shows(notificationWords(phone))
     val showBackup = shows(
         "Backup back up backups export import file restore reminder spreadsheet csv excel sheets history move ${phone.deviceWord}" +
             if (phone.canPickFolder) " automatic folder" else "",
@@ -740,6 +742,8 @@ fun SettingsScreen(
                         padding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
                     ) { vm.setMorningPlan(it) }
                 }
+                val evening by vm.eveningCheck.collectAsState()
+                EveningCheckSetting(evening, settings.dayEndHour, vm::setEveningCheck, Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
                 // What this device's notifications can't do yet, said once.
                 val missing = notificationsNotHere(phone)
                 if (missing != null) NotOnThisDevice(missing, Modifier.padding(horizontal = 16.dp, vertical = 4.dp))

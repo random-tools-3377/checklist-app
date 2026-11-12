@@ -499,6 +499,8 @@ fun ChecklistApp(vm: MainViewModel) {
                         AppTab.REVIEW -> if (settings.locks.review && !unlocked) {
                             LockedPanel("The review", unlock, Modifier.padding(padding))
                         } else {
+                            // Best streaks look through every day there is, so only while the review is open.
+                            val bestStreaks by vm.bestStreaks.collectAsStateWithLifecycle()
                             ReviewScreen(
                                 summary = review,
                                 period = reviewPeriod,
@@ -519,6 +521,9 @@ fun ChecklistApp(vm: MainViewModel) {
                                 onAddGoal = if (goals?.goals?.isEmpty() == true && removedGoals.isEmpty()) ({ goTo(AppTab.GOALS); newGoal = true }) else null,
                                 misses = reviewMisses,
                                 onMiss = { vm.openMiss.value = it },
+                                best = bestStreaks,
+                                streakSettings = settings.streak,
+                                today = today?.view?.day,
                             )
                         }
                         AppTab.BUDGET -> if (settings.locks.budget && !unlocked) {

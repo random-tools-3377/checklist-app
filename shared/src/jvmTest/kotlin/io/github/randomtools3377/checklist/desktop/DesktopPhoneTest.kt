@@ -1,5 +1,6 @@
 package io.github.randomtools3377.checklist.desktop
 
+import io.github.randomtools3377.checklist.core.EveningCheck
 import io.github.randomtools3377.checklist.core.Period
 import io.github.randomtools3377.checklist.core.Reminder
 import io.github.randomtools3377.checklist.core.Repeat
@@ -16,6 +17,7 @@ import io.github.randomtools3377.checklist.ui.LookPlace
 import io.github.randomtools3377.checklist.ui.deviceTitle
 import io.github.randomtools3377.checklist.ui.lookParts
 import io.github.randomtools3377.checklist.ui.canShowEmoji
+import io.github.randomtools3377.checklist.ui.notificationWords
 import io.github.randomtools3377.checklist.ui.notificationsNotHere
 import io.github.randomtools3377.checklist.ui.shownOn
 import io.github.randomtools3377.checklist.ui.stepsOn
@@ -125,6 +127,31 @@ class DesktopPhoneTest {
     }
 
     @Test
+    fun theEveningCheckShowsWhatIsStillOpenAtItsTime() = runTest {
+        val id = addRead(at = null)
+        val today = nowLocal().date
+        // Off until a time is picked.
+        assertEquals(null, DesktopReminders.evening(phone.parts, at(today, 21, 0), at(today, 21, 1)))
+        phone.parts.repository.setSetting(EveningCheck.SETTING, EveningCheck.encode(LocalTime(21, 0)))
+        val shown = DesktopReminders.evening(phone.parts, at(today, 21, 0), at(today, 21, 1))
+        assertEquals("1 still open today" to "📖 Read", shown?.let { it.title to it.text })
+        assertEquals(null, DesktopReminders.evening(phone.parts, at(today, 21, 1), at(today, 21, 2)))
+        // A private goal isn't named while the lock covers private goals.
+        phone.parts.repository.saveHabit(
+            HabitDraft(
+                id = 0, name = "Journal", icon = "📓", points = 5, repeat = Repeat.everyDay(today.plus(DatePeriod(days = -7))),
+                target = 1, bonus = 0, minutes = null, at = null, finishBy = null, finishDay = null, private = true,
+            ),
+        )
+        dao.putSetting(SettingEntity(LOCK_PRIVATE, "1"))
+        assertEquals("📖 Read\n🔒 A private goal", DesktopReminders.evening(phone.parts, at(today, 21, 0), at(today, 21, 1))?.text)
+        // Everything done: nothing is shown.
+        assertTrue(phone.parts.book.tickHabit(id) is TickResult.Ticked)
+        assertTrue(phone.parts.book.tickHabit(dao.activeGoals().single { it.name == "Journal" }.id) is TickResult.Ticked)
+        assertEquals(null, DesktopReminders.evening(phone.parts, at(today, 21, 0), at(today, 21, 1)))
+    }
+
+    @Test
     fun localValuesAreKeptInTheFolder() {
         phone.setLocalValue("emoji", "recent", "📖,💧")
         phone.startFocus(goalId = 7, minutes = 25)
@@ -192,6 +219,9 @@ class DesktopPhoneTest {
         assertTrue(parts.none { SettingsSearch.matches("buzz", it.words) })
         assertTrue(parts.any { it.key == LookPlace.CELEBRATIONS && SettingsSearch.matches("sounds", it.words) })
         assertTrue(parts.any { it.key == LookPlace.THEME && SettingsSearch.matches("dark mode", it.words) })
+        // The evening check is found with the notifications, here as on a phone.
+        assertTrue(SettingsSearch.matches("evening check", notificationWords(phone)))
+        assertFalse(SettingsSearch.matches("widget", notificationWords(phone)))
     }
 
     @Test

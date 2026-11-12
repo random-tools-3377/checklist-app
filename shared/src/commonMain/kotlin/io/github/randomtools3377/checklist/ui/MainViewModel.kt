@@ -915,6 +915,45 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
         viewModelScope.launch { repository.setSetting(SETTING_WEEKLY, if (on) "1" else "0") }
     }
 
+    // The evening check
+
+    /** When the evening check comes, or null while it is off (see EveningCheck). */
+    val eveningCheck: StateFlow<LocalTime?> = dao.observeSetting(io.github.randomtools3377.checklist.core.EveningCheck.SETTING)
+        .map { io.github.randomtools3377.checklist.core.EveningCheck.decode(it) }.state(null)
+
+    /** Sets when the evening check comes; null turns it off. A time that isn't before the day ends isn't taken. */
+    fun setEveningCheck(time: LocalTime?) {
+        viewModelScope.launch {
+            val dayEnd = parseDayEndHour(dao.setting(SETTING_DAY_END_HOUR))
+            if (time != null && !io.github.randomtools3377.checklist.core.EveningCheck.allowed(time, dayEnd)) return@launch
+            repository.setSetting(io.github.randomtools3377.checklist.core.EveningCheck.SETTING, io.github.randomtools3377.checklist.core.EveningCheck.encode(time))
+        }
+    }
+
+    // Best streaks
+
+    /**
+     * The best run of each streak ever, for the review's stats: from every day there is, read
+     * off the same day records as the current streaks on Today. Only worked out while the review
+     * is looked at.
+     */
+    val bestStreaks: StateFlow<Streaks?> = today.flatMapLatest { day ->
+        combine(
+            dao.observeGoals(),
+            dao.observeHabitTicksSince(Long.MIN_VALUE),
+            dao.observeLapsesSince(Long.MIN_VALUE),
+            settings.map { it.streak }.distinctUntilChanged(),
+        ) { goals, tickRows, lapseRows, streak ->
+            withContext(Dispatchers.Default) {
+                val ticks = tickRows.map { it.toCore() }
+                val lapses = lapseRows.map { it.toCore() }
+                val from = listOfNotNull(ticks.minOfOrNull { it.periodStart }, lapses.minOfOrNull { it.periodStart }, day).min()
+                val records = StreakCounter.records(from, day, goals.map { it.toCore() }, ticks, lapses)
+                io.github.randomtools3377.checklist.core.BestStreaks.of(records, streak)
+            }
+        }
+    }.state(null)
+
     // Backups: the reminder, and the automatic backup to a folder
 
     /** What Settings shows about backups, and whether Today shows the reminder. */
