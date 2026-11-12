@@ -29,6 +29,9 @@ import androidx.glance.appwidget.lazy.LazyColumn
 import androidx.glance.appwidget.lazy.items
 import androidx.glance.appwidget.provideContent
 import androidx.glance.appwidget.updateAll
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.datetime.DateTimeUnit
+import kotlinx.datetime.plus
 import androidx.glance.background
 import androidx.glance.layout.Alignment
 import androidx.glance.layout.Box
@@ -75,6 +78,24 @@ import kotlinx.datetime.LocalDate
  * What the widget shows, read from the database each time it is drawn: the agenda of the next
  * days (today first) and the month, worked out in the shared code (see [calendarBoard]).
  */
+/**
+ * What the user turned to on one calendar widget: another month (by its first day) and a day
+ * picked in it, as days since 1970. Kept only while the app's process lives, so the widget goes
+ * back to today by itself.
+ */
+data class CalendarPick(val month: Int? = null, val day: Int? = null)
+
+/** Each calendar widget's [CalendarPick], by its app widget id. */
+object CalendarPicks {
+    val picks = MutableStateFlow<Map<Int, CalendarPick>>(emptyMap())
+
+    fun change(widgetId: Int, change: (CalendarPick) -> CalendarPick?) {
+        val now = picks.value
+        val next = change(now[widgetId] ?: CalendarPick())
+        picks.value = if (next == null) now - widgetId else now + (widgetId to next)
+    }
+}
+
 data class WidgetData(val board: CalendarBoard, val look: WidgetLook = WidgetLook()) {
     val today: LocalDate get() = board.today
     val days: List<AgendaDay> get() = board.days
@@ -85,17 +106,22 @@ data class WidgetData(val board: CalendarBoard, val look: WidgetLook = WidgetLoo
  * The home-screen calendar, like a calendar app's own. Small, it shows today's agenda with times
  * and tick boxes. Wider, the agenda of the next days under day headers, with the phone's calendar
  * events (when that is turned on and allowed), project deadlines and dated to-dos in the same
- * list. Taller, the month, each day with how much was due and done, and today's agenda below.
- * It keeps nothing of its own between redraws, so the month is always the current one.
+ * list. Taller, the month, like a calendar app's: arrows turn to other months, each day shows how
+ * much was due and done and what is on it (events, deadlines, to-dos), and tapping a day shows
+ * its agenda below. The date button goes back to today.
  */
 class CalendarWidget : GlanceAppWidget() {
     override val sizeMode = SizeMode.Responsive(setOf(SMALL, WIDE, TALL))
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val first = load(context)
+        val widgetId = GlanceAppWidgetManager(context).getAppWidgetId(id)
         provideContent {
+            // The month and day this widget was turned to, if any.
+            val picks by CalendarPicks.picks.collectAsState()
+            val pick = picks[widgetId]
             // Read again on every change while awake, so a tick made on the widget shows on it.
-            val data by androidx.compose.runtime.remember { DayPlans.following(context) { load(context) } }.collectAsState(first)
+            val data by androidx.compose.runtime.remember(pick) { DayPlans.following(context) { load(context, pick) } }.collectAsState(first)
             GlanceTheme { androidx.compose.runtime.CompositionLocalProvider(LocalWidgetLook provides data.look) { Content(data) } }
         }
     }
@@ -112,29 +138,67 @@ class CalendarWidget : GlanceAppWidget() {
             }
         }
 
-        suspend fun load(context: Context): WidgetData {
+        suspend fun load(context: Context, pick: CalendarPick? = null): WidgetData {
             val dao = (context.applicationContext as ChecklistApplication).container.db.dao()
             val now = nowLocal()
             val today = Days.dayOf(now, parseDayEndHour(dao.setting(SETTING_DAY_END_HOUR)))
             // The phone's calendar, only while it is turned on in Settings and still allowed.
             val (calendarOn, calendars) = calendarChoice(dao)
+            val month = pick?.month?.let { LocalDate.fromEpochDays(it) }
+            val picked = pick?.day?.let { LocalDate.fromEpochDays(it) }
+            // Events for the whole month shown as well as the days ahead.
+            val shownFirst = month ?: LocalDate(today.year, today.monthNumber, 1)
+            val from = minOf(CalendarView.monthGridStart(shownFirst), today)
+            val days = maxOf(from.daysUntilDay(CalendarView.monthGridStart(shownFirst)) + 42, from.daysUntilDay(today) + CalendarView.AGENDA_DAYS)
             val events = if (calendarOn && PhoneCalendar.allowed(context)) {
                 withContext(Dispatchers.IO) {
-                    runCatching { PhoneCalendar.events(context, calendars, today, CalendarView.AGENDA_DAYS) }.getOrDefault(emptyList())
+                    runCatching { PhoneCalendar.events(context, calendars, from, days) }.getOrDefault(emptyList())
                 }
             } else {
                 emptyList()
             }
-            return WidgetData(calendarBoard(dao, now, events), widgetLook(dao))
+            return WidgetData(calendarBoard(dao, now, events, month, picked), widgetLook(dao))
         }
     }
 }
+
+private fun LocalDate.daysUntilDay(other: LocalDate): Int = other.toEpochDays() - toEpochDays()
 
 class CalendarWidgetReceiver : GlanceAppWidgetReceiver() {
     override val glanceAppWidget: GlanceAppWidget = CalendarWidget()
 }
 
 private val GoalKey = ActionParameters.Key<Long>("goal")
+private val MonthsKey = ActionParameters.Key<Int>("months")
+private val DayKey = ActionParameters.Key<Int>("day")
+
+/** Turns the month on one widget: back or on by [MonthsKey] months, or to today with 0. */
+class TurnMonth : ActionCallback {
+    override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
+        val by = parameters[MonthsKey] ?: 0
+        val widgetId = GlanceAppWidgetManager(context).getAppWidgetId(glanceId)
+        val today = nowLocal().date
+        CalendarPicks.change(widgetId) { pick ->
+            if (by == 0) {
+                null
+            } else {
+                val shown = pick.month?.let { LocalDate.fromEpochDays(it) } ?: LocalDate(today.year, today.monthNumber, 1)
+                CalendarPick(month = shown.plus(by, DateTimeUnit.MONTH).toEpochDays(), day = null)
+            }
+        }
+        CalendarWidget().update(context, glanceId)
+    }
+}
+
+/** Picks a day in the month on one widget, to show its agenda. */
+class PickDay : ActionCallback {
+    override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
+        val day = parameters[DayKey] ?: return
+        val widgetId = GlanceAppWidgetManager(context).getAppWidgetId(glanceId)
+        CalendarPicks.change(widgetId) { it.copy(day = day) }
+        CalendarWidget().update(context, glanceId)
+    }
+}
 
 /** A tick box on the widget: ticks the goal, or takes the tick back if it was already done. */
 class ToggleTick : ActionCallback {
@@ -173,14 +237,31 @@ private fun Content(data: WidgetData) {
             .cornerRadius(16.dp)
             .padding(10.dp),
     ) {
+        val tall = size.height >= 320.dp
         Row(verticalAlignment = Alignment.CenterVertically, modifier = GlanceModifier.fillMaxWidth()) {
-            Text(
-                longDate(data.today),
-                maxLines = 1,
-                style = TextStyle(color = colors.onSurface, fontSize = 14.sp, fontWeight = FontWeight.Bold),
-                modifier = GlanceModifier.defaultWeight().clickable(actionStartActivity(openApp(null))),
-            )
-            if (today != null && today.due > 0) {
+            if (tall) {
+                // Like a calendar app: arrows either side of the month, and a button back to today.
+                val first = data.board.monthFirst
+                HeaderButton("‹", actionRunCallback<TurnMonth>(actionParametersOf(MonthsKey to -1)))
+                Text(
+                    "${MONTH_SHORT[first.monthNumber - 1]} ${first.year}",
+                    maxLines = 1,
+                    style = TextStyle(color = colors.onSurface, fontSize = 15.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center),
+                    modifier = GlanceModifier.width(84.dp).clickable(actionStartActivity(openApp(null))),
+                )
+                HeaderButton("›", actionRunCallback<TurnMonth>(actionParametersOf(MonthsKey to 1)))
+                Spacer(GlanceModifier.defaultWeight())
+                HeaderButton("${data.today.dayOfMonth}", actionRunCallback<TurnMonth>(actionParametersOf(MonthsKey to 0)))
+                Spacer(GlanceModifier.width(6.dp))
+            } else {
+                Text(
+                    longDate(data.today),
+                    maxLines = 1,
+                    style = TextStyle(color = colors.onSurface, fontSize = 14.sp, fontWeight = FontWeight.Bold),
+                    modifier = GlanceModifier.defaultWeight().clickable(actionStartActivity(openApp(null))),
+                )
+            }
+            if (!tall && today != null && today.due > 0) {
                 Text(
                     "${today.done}/${today.due}",
                     style = TextStyle(color = if (today.done >= today.due) colors.good else colors.primary, fontSize = 13.sp, fontWeight = FontWeight.Bold),
@@ -201,14 +282,30 @@ private fun Content(data: WidgetData) {
         }
         Spacer(GlanceModifier.height(6.dp))
         when {
-            size.height >= 320.dp -> {
-                MonthGrid(data.month, data.look.colourBlind)
+            tall -> {
+                val picked = data.board.picked
+                MonthGrid(data.month, data.look.colourBlind, data.board.labels, picked?.date)
                 Spacer(GlanceModifier.height(6.dp))
-                Agenda(listOfNotNull(today), headers = false)
+                // The picked day's agenda under its name, or today's.
+                if (picked != null) Agenda(listOf(picked), headers = true) else Agenda(listOfNotNull(today), headers = false)
             }
             size.width >= 250.dp -> Agenda(data.days, headers = true)
             else -> Agenda(listOfNotNull(today), headers = false)
         }
+    }
+}
+
+private val MONTH_SHORT = listOf("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+
+/** A small round button in the widget's header. */
+@Composable
+private fun HeaderButton(label: String, onClick: androidx.glance.action.Action) {
+    val colors = widgetColors()
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = GlanceModifier.width(30.dp).height(28.dp).cornerRadius(14.dp).background(colors.secondaryContainer).clickable(onClick),
+    ) {
+        Text(label, maxLines = 1, style = TextStyle(color = colors.onSurface, fontSize = 14.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center))
     }
 }
 
@@ -331,7 +428,7 @@ private fun AgendaLineRow(line: AgendaLine) {
  * something left. With [marks], the colour-blind friendly look, ✓, ◐ and ✕ say it too.
  */
 @Composable
-private fun MonthGrid(month: List<DayCell>, marks: Boolean) {
+private fun MonthGrid(month: List<DayCell>, marks: Boolean, labels: Map<LocalDate, List<String>> = emptyMap(), picked: LocalDate? = null) {
     val colors = widgetColors()
     Column(modifier = GlanceModifier.fillMaxWidth()) {
         Row(modifier = GlanceModifier.fillMaxWidth()) {
@@ -348,10 +445,18 @@ private fun MonthGrid(month: List<DayCell>, marks: Boolean) {
             Row(modifier = GlanceModifier.fillMaxWidth()) {
                 week.forEach { cell ->
                     Box(
-                        contentAlignment = Alignment.Center,
+                        contentAlignment = Alignment.TopCenter,
                         modifier = GlanceModifier
                             .defaultWeight()
-                            .then(if (cell.isToday) GlanceModifier.background(colors.primaryContainer).cornerRadius(8.dp) else GlanceModifier),
+                            .then(
+                                when {
+                                    cell.isToday -> GlanceModifier.background(colors.primaryContainer).cornerRadius(8.dp)
+                                    cell.date == picked -> GlanceModifier.background(colors.secondaryContainer).cornerRadius(8.dp)
+                                    else -> GlanceModifier
+                                },
+                            )
+                            // Tapping a day shows what is on it below.
+                            .clickable(actionRunCallback<PickDay>(actionParametersOf(DayKey to cell.date.toEpochDays()))),
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(
@@ -376,6 +481,17 @@ private fun MonthGrid(month: List<DayCell>, marks: Boolean) {
                                     fontSize = 9.sp,
                                     textAlign = TextAlign.Center,
                                 ),
+                            )
+                            // What is on the day, like a calendar app writes it in: the first thing, and how many more.
+                            val on = labels[cell.date].orEmpty()
+                            Text(
+                                when {
+                                    on.isEmpty() -> " "
+                                    on.size == 1 -> on[0]
+                                    else -> "${on[0].take(6)} +${on.size - 1}"
+                                },
+                                maxLines = 1,
+                                style = TextStyle(color = colors.primary, fontSize = 8.sp, textAlign = TextAlign.Center),
                             )
                         }
                     }

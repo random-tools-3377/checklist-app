@@ -8,7 +8,9 @@ import io.github.randomtools3377.checklist.core.Days
 import io.github.randomtools3377.checklist.core.Feature
 import io.github.randomtools3377.checklist.core.GoalKind
 import io.github.randomtools3377.checklist.core.PrivateGoals
+import io.github.randomtools3377.checklist.core.plusDays
 import kotlinx.datetime.LocalDate
+import kotlinx.datetime.isoDayNumber
 import kotlinx.datetime.LocalDateTime
 
 /**
@@ -21,6 +23,12 @@ data class CalendarBoard(
     val month: List<DayCell>,
     /** Whether "+" adds a to-do (with To-dos on Today turned on) rather than a goal. */
     val addsTodo: Boolean = false,
+    /** The first day of the month shown: today's, unless the user turned to another. */
+    val monthFirst: LocalDate = LocalDate(today.year, today.monthNumber, 1),
+    /** The day picked in the month, with its agenda; null while it is today. Nothing on it can be ticked. */
+    val picked: AgendaDay? = null,
+    /** What to write inside each day of the month: events, deadlines and dated to-dos. */
+    val labels: Map<LocalDate, List<String>> = emptyMap(),
 )
 
 /**
@@ -28,27 +36,50 @@ data class CalendarBoard(
  * shown, read by the phone when the calendar is turned on and allowed; empty otherwise. Private
  * goals are only "A private goal" while the privacy lock covers them.
  */
-suspend fun calendarBoard(dao: ChecklistDao, now: LocalDateTime = nowLocal(), events: List<Busy> = emptyList()): CalendarBoard {
+suspend fun calendarBoard(
+    dao: ChecklistDao,
+    now: LocalDateTime = nowLocal(),
+    events: List<Busy> = emptyList(),
+    /** The first day of the month to show; today's month with null. */
+    month: LocalDate? = null,
+    /** A day picked in the month, to show its agenda; today with null. */
+    picked: LocalDate? = null,
+): CalendarBoard {
     val dayEnd = parseDayEndHour(dao.setting(SETTING_DAY_END_HOUR))
     val today = Days.dayOf(now, dayEnd)
     val goals = dao.activeGoals().map { it.toCore() }
     val hidden = if (dao.setting(LOCK_PRIVATE) == "1") PrivateGoals.ids(goals) else emptySet()
-    val since = minOf(CalendarView.monthGridStart(today), Days.earliestOpenDay(today))
+    val monthFirst = month?.let { LocalDate(it.year, it.monthNumber, 1) } ?: LocalDate(today.year, today.monthNumber, 1)
+    val gridStart = CalendarView.monthGridStart(monthFirst)
+    val since = minOf(gridStart, CalendarView.monthGridStart(today), Days.earliestOpenDay(today))
     // Steps ticked, for projects (how many are left by the deadline) and to-dos with steps.
     val withSteps = goals.filter { it.kind == GoalKind.PROJECT || it.kind == GoalKind.TODO }
     val ticks = (dao.habitTicksSince(since.toEpochDay()) + withSteps.flatMap { dao.stepTicks(it.id) }).map { it.toCore() }
     val lapses = dao.lapsesSince(since.toEpochDay()).map { it.toCore() }
     val steps = dao.allSteps().map { it.toCore() }
+    val checks = dao.allChecks().map { it.toCore() }
+    val finished = CalendarView.finishedProjects(goals, steps, ticks)
+    // A picked day's agenda: nothing on it is late or can be ticked, since it isn't today.
+    val pickedDay = picked?.takeIf { it != today }?.let { day ->
+        val lines = CalendarView.days(
+            day, LocalDateTime(day, kotlinx.datetime.LocalTime(0, 0)), 1, goals, steps, ticks, lapses,
+            checks = checks, events = events, dayEndHour = dayEnd, hidden = hidden,
+        ).firstOrNull()?.lines.orEmpty().map { it.copy(canTick = false) }
+        AgendaDay(day, "${io.github.randomtools3377.checklist.core.weekdayShort(day.dayOfWeek.isoDayNumber)} ${day.dayOfMonth}", lines)
+    }
     return CalendarBoard(
         today = today,
         days = CalendarView.days(
             today, now, CalendarView.AGENDA_DAYS, goals, steps, ticks, lapses,
-            checks = dao.allChecks().map { it.toCore() },
+            checks = checks,
             events = events,
             dayEndHour = dayEnd,
             hidden = hidden,
         ),
-        month = CalendarView.month(today, goals, ticks, lapses, CalendarView.finishedProjects(goals, steps, ticks)),
+        month = CalendarView.monthOf(monthFirst, today, goals, ticks, lapses, finished),
+        monthFirst = monthFirst,
+        picked = pickedDay,
+        labels = CalendarView.labels(gridStart, gridStart.plusDays(41), goals, events, finished, hidden),
         addsTodo = Feature.TODOS.isOn(dao.setting(Feature.TODOS.key)),
     )
 }

@@ -322,6 +322,38 @@ object CalendarView {
         return cells((0 until 42).map { start.plusDays(it) }, today.monthNumber, today, goals, ticks, lapses, finished)
     }
 
+    /** The month starting on [first], six weeks from a Monday, with [today] marked: any month, not only today's. */
+    fun monthOf(first: LocalDate, today: LocalDate, goals: List<Goal>, ticks: List<Tick>, lapses: List<Lapse> = emptyList(), finished: Set<Long> = emptySet()): List<DayCell> {
+        val start = monthGridStart(first)
+        return cells((0 until 42).map { start.plusDays(it) }, first.monthNumber, today, goals, ticks, lapses, finished)
+    }
+
+    /**
+     * What to write inside each day of a month grid, like a calendar app does: the phone's
+     * calendar events, project deadlines not yet finished (🚩) and to-dos with a date, by day,
+     * events first. Goals in [hidden] (private, behind the lock) are left out.
+     */
+    fun labels(
+        from: LocalDate,
+        to: LocalDate,
+        goals: List<Goal>,
+        events: List<Busy>,
+        finished: Set<Long> = emptySet(),
+        hidden: Set<Long> = emptySet(),
+    ): Map<LocalDate, List<String>> {
+        val labels = mutableMapOf<LocalDate, MutableList<String>>()
+        fun add(day: LocalDate, text: String) {
+            if (day >= from && day <= to) labels.getOrPut(day) { mutableListOf() } += text
+        }
+        events.sortedBy { it.start }.forEach { add(it.start.date, it.title) }
+        for (goal in goals) {
+            if (goal.archived || goal.id in hidden) continue
+            if (goal.kind == GoalKind.PROJECT && goal.id !in finished) goal.deadline?.let { add(it, "🚩 ${goal.name}") }
+            if (goal.kind == GoalKind.TODO) goal.repeat?.takeIf { it.kind == RepeatKind.ONCE }?.let { add(it.start, goal.name) }
+        }
+        return labels
+    }
+
     /** The projects in [goals] whose steps are all ticked, by [ticks]: their deadline no longer shows. */
     fun finishedProjects(goals: List<Goal>, steps: List<Step>, ticks: List<Tick>): Set<Long> {
         val ticked = ticks.mapNotNull { it.stepId }.toSet()

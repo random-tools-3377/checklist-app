@@ -904,6 +904,10 @@ Build order **(default)**, each step a Release the owner can try:
       never as an amount to spend, and says where it comes from; the user can set their own
       daily amount in its place (setting money_game_daily), or go back to the share worked out
       from the pay.
+    - Decided after 0.67.0: the calendar widget's month works like a calendar app's: arrows
+      turn to other months, a button goes back to today, tapping a day shows its agenda below,
+      and each day names what is on it (calendar events, deadlines, dated to-dos). What was
+      turned to is kept only while the app's process lives. Only today's goals can be ticked.
     - Not chosen: a note when a money-priced reward's price moves, celebrations for game wins,
       and carrying money over into the next month.
     - **The 0.62.0 fixes settled these details (default):** a goal counts in streaks, records,
