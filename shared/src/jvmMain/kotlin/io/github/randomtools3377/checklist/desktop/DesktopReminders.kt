@@ -34,6 +34,8 @@ import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.LocalTime
 import java.awt.EventQueue
 import java.awt.GraphicsEnvironment
+import java.awt.MenuItem
+import java.awt.PopupMenu
 import java.awt.SystemTray
 import java.awt.TrayIcon
 
@@ -41,12 +43,14 @@ import java.awt.TrayIcon
 data class DueReminder(val goalId: Long, val title: String, val text: String)
 
 /**
- * Reminders on a computer, while the app is open. Nothing can be handed to the computer ahead of
+ * Reminders on a computer, while the app is running: with its window open, or closed with the
+ * app carrying on in the notification area (see [DesktopPhone.hideWindow]). Nothing can be handed to the computer ahead of
  * time, so once a minute the app looks for the reminders due since it last looked, worked out
  * as the iPhone works out the ones it hands over (leaving out what is done or skipped), and shows
  * them from its icon in the notification area. The evening check, when it is on, shows the same
- * way at its time, and so does a project's deadline reminder. Nothing reminds while the app is closed, and nothing shows where the computer
- * has no notification area.
+ * way at its time, and so does a project's deadline reminder. The icon's menu has "Open Checklist"
+ * and "Quit". Nothing reminds once the app has quit, and nothing shows where the computer has no
+ * notification area.
  */
 class DesktopReminders(private val phone: DesktopPhone) {
     @Volatile
@@ -67,6 +71,12 @@ class DesktopReminders(private val phone: DesktopPhone) {
             delay(minOf(minute + 500, focusLeft ?: Long.MAX_VALUE).coerceAtLeast(500))
         }
     }
+
+    /** Whether the icon is in the notification area, so the app can be reached with its window closed. */
+    fun hasIcon(): Boolean = tray != null
+
+    /** A message from the icon that isn't a reminder, like that the app is still running. */
+    fun say(title: String, text: String) = show(title, text)
 
     /** Takes the icon away from the notification area, when the app closes. */
     fun stop() {
@@ -130,13 +140,18 @@ class DesktopReminders(private val phone: DesktopPhone) {
     private fun showIcon() {
         if (!canShow()) return
         EventQueue.invokeLater {
-            runCatching {
+            // Without its icon a hidden app couldn't be reached, so its window shows.
+            runCatching<Unit> {
                 val icon = TrayIcon(checklistIcon(64), "Checklist")
                 icon.isImageAutoSize = true
                 icon.addActionListener { phone.bringToFront() }
+                icon.popupMenu = PopupMenu().apply {
+                    add(MenuItem(OPEN).apply { addActionListener { phone.bringToFront() } })
+                    add(MenuItem(QUIT).apply { addActionListener { phone.quit() } })
+                }
                 SystemTray.getSystemTray().add(icon)
                 tray = icon
-            }
+            }.onFailure { phone.windowShown.value = true }
         }
     }
 
@@ -148,6 +163,10 @@ class DesktopReminders(private val phone: DesktopPhone) {
 
     companion object {
         private const val CATCH_UP_MINUTES = 10L
+
+        /** The icon's menu. */
+        const val OPEN = "Open Checklist"
+        const val QUIT = "Quit"
 
         /** Whether this computer has a notification area to show reminders from. */
         fun canShow(): Boolean = !GraphicsEnvironment.isHeadless() && runCatching { SystemTray.isSupported() }.getOrDefault(false)

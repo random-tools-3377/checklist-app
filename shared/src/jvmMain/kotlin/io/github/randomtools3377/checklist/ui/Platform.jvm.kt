@@ -42,6 +42,8 @@ import java.time.format.FormatStyle
 import java.util.Locale
 import javax.sound.sampled.AudioSystem
 import javax.sound.sampled.Clip
+import javax.swing.JFileChooser
+import javax.swing.UIManager
 
 /*
  * The computer's side of the screens (the Windows app, see the desktop module). The jvm tests use
@@ -141,9 +143,31 @@ actual fun rememberOpenFile(mimeTypes: List<String>, onPicked: (PickedFile?) -> 
 
 private val SoundExtensions = listOf("wav", "wave", "aiff", "aif", "au")
 
-/** The computer app keeps no automatic backups in a folder. */
+/**
+ * A folder chooser over the app's window, for the automatic backup: the folder picked, as a full
+ * path, or null if the user cancelled. It opens at [start], the folder chosen before, if any.
+ */
+private fun chooseFolder(phone: Phone, start: PickedFile?): PickedFile? {
+    if (GraphicsEnvironment.isHeadless()) return null
+    return runCatching {
+        // The computer's own look for the chooser; the app's screens are drawn by Compose and don't change.
+        runCatching { UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName()) }
+        val chooser = JFileChooser(start?.let { File(it) }?.takeIf { it.isDirectory })
+        chooser.dialogTitle = "Choose a folder for automatic backups"
+        chooser.fileSelectionMode = JFileChooser.DIRECTORIES_ONLY
+        chooser.isAcceptAllFileFilterUsed = false
+        chooser.isMultiSelectionEnabled = false
+        val answer = chooser.showDialog((phone as? DesktopPhone)?.window, "Choose this folder")
+        if (answer == JFileChooser.APPROVE_OPTION) chooser.selectedFile?.takeIf { it.isDirectory }?.absolutePath else null
+    }.getOrNull()
+}
+
+/** The folder for the automatic backup, picked with a folder chooser. */
 @Composable
-actual fun rememberPickFolder(onPicked: (PickedFile?) -> Unit): () -> Unit = { onPicked(null) }
+actual fun rememberPickFolder(onPicked: (PickedFile?) -> Unit): () -> Unit {
+    val phone = LocalPhone.current
+    return { onPicked(chooseFolder(phone, phone.backupFolder())) }
+}
 
 private val PhotoExtensions = listOf("jpg", "jpeg", "png", "webp", "bmp", "gif")
 

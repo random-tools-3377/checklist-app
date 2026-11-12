@@ -52,6 +52,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -246,7 +250,57 @@ private fun SwitchLine(title: String, hint: String, on: Boolean, tag: String, on
 /** The words a Settings search finds the Notifications part by. */
 internal fun notificationWords(phone: Phone): String =
     "Notifications notification reminders reminder alarm exact weekly summary snooze morning plan evening check still open light up screen edge lighting mood reminder how are you feeling" +
-        if (phone.hasWidgets) " widget widgets home screen calendar" else ""
+        (if (phone.hasWidgets) " widget widgets home screen calendar" else "") +
+        if (phone.canKeepRunning) " keep running window closed quit start sign in windows startup" else ""
+
+/** On a computer: when reminders come, by whether the app keeps running with its window closed. */
+internal fun runningWords(keepsRunning: Boolean): String =
+    if (keepsRunning) "Reminders come while Checklist is running, also with the window closed."
+    else "Reminders come only while the window is open."
+
+/**
+ * On a computer with a notification area: when reminders come, the switch that keeps Checklist
+ * running with its window closed, and (installed on Windows) the one that starts it at sign-in.
+ */
+@Composable
+private fun KeepRunningSettings() {
+    val phone = LocalPhone.current
+    var keeps by remember { mutableStateOf(phone.keepsRunning()) }
+    Text(
+        runningWords(keeps),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(horizontal = 16.dp).testTag("reminders-running"),
+    )
+    SwitchRow(
+        "Keep running when the window is closed",
+        keeps,
+        "setting:keep-running",
+        hint = "Checklist stays by the clock so reminders can come. Quit from its icon there.",
+        padding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+    ) {
+        phone.setKeepsRunning(it)
+        keeps = phone.keepsRunning()
+    }
+    if (phone.canStartAtSignIn) {
+        var starts by remember { mutableStateOf(phone.startsAtSignIn()) }
+        val scope = rememberCoroutineScope()
+        SwitchRow(
+            "Start when I sign in to Windows",
+            starts,
+            "setting:start-at-sign-in",
+            hint = "Checklist starts by the clock, without its window.",
+            padding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+        ) { on ->
+            starts = on
+            scope.launch {
+                val done = withContext(Dispatchers.Default) { runCatching { phone.setStartsAtSignIn(on) }.getOrDefault(false) }
+                starts = phone.startsAtSignIn()
+                if (!done) phone.toast(if (on) "Couldn't add Checklist to your Startup folder." else "Couldn't take Checklist out of your Startup folder.")
+            }
+        }
+    }
+}
 
 /** The notifications [phone] can't give yet, like "Morning plan, weekly summary and snooze"; null if none. */
 internal fun notificationsNotHere(phone: Phone): String? {
@@ -731,6 +785,7 @@ fun SettingsScreen(
                 HorizontalDivider(Modifier.padding(top = 8.dp))
                 Section("Notifications")
                 NotificationSettings()
+                if (phone.canKeepRunning) KeepRunningSettings()
                 if (phone.hasPlanNotifications) {
                     val weekly by vm.weeklySummary.collectAsState()
                     SwitchRow(

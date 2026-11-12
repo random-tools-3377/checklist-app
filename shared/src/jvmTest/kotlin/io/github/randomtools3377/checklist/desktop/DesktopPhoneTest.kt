@@ -268,13 +268,12 @@ class DesktopPhoneTest {
         assertEquals("Morning plan, weekly summary and snooze", notificationsNotHere(phone))
         assertFalse(phone.canBuzz)
         assertFalse(phone.hasRecentsPreview)
-        // No guides for widgets or the AI, and no backup folder steps.
+        // No guides for widgets or the AI; the backup guide has its folder steps, as on Android.
         assertFalse(HelpTopic.WIDGETS.shownOn(phone))
         assertFalse(HelpTopic.AI.shownOn(phone))
         assertTrue(HelpTopic.BACKUP.shownOn(phone))
-        val backup = HelpTopic.BACKUP.stepsOn(phone)
-        assertEquals(HelpTopic.BACKUP.steps.size - 2, backup.size)
-        assertTrue(backup.none { "folder" in it || "automatic" in it })
+        assertTrue(phone.canPickFolder)
+        assertEquals(HelpTopic.BACKUP.steps.size, HelpTopic.BACKUP.stepsOn(phone).size)
     }
 
     @Test

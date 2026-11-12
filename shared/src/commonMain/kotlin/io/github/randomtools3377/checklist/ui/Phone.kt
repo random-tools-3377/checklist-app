@@ -70,6 +70,20 @@ interface Phone {
     /** Whether a reminder can be snoozed from its notification here. */
     val canSnooze: Boolean get() = false
 
+    // A computer: carrying on by the clock with the window closed, so reminders still come.
+
+    /** Whether the app can keep running with its window closed (a computer with a notification area). */
+    val canKeepRunning: Boolean get() = false
+    fun keepsRunning(): Boolean = false
+    fun setKeepsRunning(on: Boolean) {}
+
+    /** Whether the app can be set to start when the user signs in to the computer. */
+    val canStartAtSignIn: Boolean get() = false
+    fun startsAtSignIn(): Boolean = false
+
+    /** Turns starting at sign-in on or off; whether it is now as asked. It can take a moment. */
+    fun setStartsAtSignIn(on: Boolean): Boolean = false
+
     // The focus timer, kept by the phone so it carries on while the app is closed.
 
     fun focus(): FocusState?
