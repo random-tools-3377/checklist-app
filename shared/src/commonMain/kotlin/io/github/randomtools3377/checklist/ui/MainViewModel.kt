@@ -855,7 +855,9 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
         // Looks for new badges a moment after each tick, undo or change of day.
         viewModelScope.launch {
             // Money, moods and the extras turned on too, for the badges of the Budget and the mood check-in.
-            val more = combine(dao.observeSavingMoney(), dao.observeMoodsSince(Long.MIN_VALUE), features) { money, moods, on -> Triple(money.size, moods.size, on) }
+            // The extras are read here, not from [features]: that is made further down, after this runs.
+            val extras = combine(Feature.entries.map { dao.observeSetting(it.key) }) { values -> values.toList() }
+            val more = combine(dao.observeSavingMoney(), dao.observeMoodsSince(Long.MIN_VALUE), extras) { money, moods, on -> Triple(money.size, moods.size, on) }
                 .distinctUntilChanged()
             combine(today, dao.observeBalance(), combine(dao.observeTickCount(), more) { _, _ -> }, settings, dao.observeSetting(SETTING_WEEKLY_TARGET)) { day, _, _, s, target ->
                 Triple(day, s.streak, target?.toIntOrNull() ?: 0)
