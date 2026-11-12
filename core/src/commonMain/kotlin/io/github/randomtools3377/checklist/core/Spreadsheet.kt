@@ -42,9 +42,9 @@ object Spreadsheet {
      * Words the user wrote. One starting like a formula (=, +, -, @) gets a ' in front, so a
      * spreadsheet shows it as written instead of working it out.
      */
-    private fun text(words: String): String = if (words.firstOrNull() in listOf('=', '+', '-', '@', '\t')) "'$words" else words
+    internal fun text(words: String): String = if (words.firstOrNull() in listOf('=', '+', '-', '@', '\t')) "'$words" else words
 
     /** A cell, quoted when it holds a comma, a quote or a line break. */
-    private fun cell(text: String): String =
+    internal fun cell(text: String): String =
         if (text.any { it == ',' || it == '"' || it == '\n' || it == '\r' }) "\"" + text.replace("\"", "\"\"") + "\"" else text
 }

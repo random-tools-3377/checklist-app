@@ -90,7 +90,7 @@ class AmountsTest {
     fun aGoalGetsItsAmountInTheEditor() {
         app.onNodeWithTag("nav:goals").performClick()
         app.waitFor { !gone("goal:Read") }
-        app.tap("goal:Read")
+        app.editGoal("Read")
         app.waitFor { !gone("field:unit") }
         app.onNodeWithTag("field:unit").performTextClearance()
         app.onNodeWithTag("field:unit").performTextInput("pages read")

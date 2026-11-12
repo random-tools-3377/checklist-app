@@ -178,6 +178,8 @@ fun MoodJournalScreen(vm: MainViewModel, onBack: () -> Unit) {
                     )
                 }
             }
+            // The journal as a spreadsheet, saved where the user picks.
+            if (days.isNotEmpty()) item(key = "journal-export") { MoodJournalExportButton(vm) }
             items(days, key = { it.day.toString() }) { mood -> JournalDay(mood) { editing = mood.day.toString() } }
         }
     }

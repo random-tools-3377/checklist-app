@@ -965,6 +965,34 @@ class Repository(private val db: AppDatabase, private val celebrations: GifStore
         return io.github.randomtools3377.checklist.core.Spreadsheet.csv(entries, notes) { it.toLocalDateTime() }
     }
 
+    /** The goal record as a spreadsheet (CSV): each goal each day, done, skipped or missed, with the reason. */
+    suspend fun goalRecordSpreadsheet(today: LocalDate): String {
+        val backup = db.withTransaction {
+            listOf(dao.allGoals().map { it.toCore() }, dao.allSteps().map { it.toCore() }, dao.allTicks().map { it.toCore() }, dao.allLapses().map { it.toCore() })
+        }
+        @Suppress("UNCHECKED_CAST")
+        return io.github.randomtools3377.checklist.core.GoalRecord.csv(
+            goals = backup[0] as List<io.github.randomtools3377.checklist.core.Goal>,
+            steps = backup[1] as List<io.github.randomtools3377.checklist.core.Step>,
+            ticks = backup[2] as List<io.github.randomtools3377.checklist.core.Tick>,
+            lapses = backup[3] as List<io.github.randomtools3377.checklist.core.Lapse>,
+            today = today,
+        )
+    }
+
+    /** The mood journal as a spreadsheet (CSV). */
+    suspend fun moodSpreadsheet(): String = io.github.randomtools3377.checklist.core.MoodSheet.csv(dao.allMoods().map { it.toCore() })
+
+    /** The budget of the month starting on [first] as a spreadsheet (CSV), with its pay by [now]. */
+    suspend fun budgetSpreadsheet(first: LocalDate, now: kotlinx.datetime.LocalDateTime): String {
+        val entries = dao.allMoney().map { it.toCore() }
+        val categories = dao.moneyCategories().map { it.toCore() }
+        val plan = PayPlan.decode(dao.setting(PayPlan.SETTING))
+        val changes = dao.allWorkDays().map { it.toCore() }.associateBy { it.day }
+        val month = Budget.month(Budget.monthOf(first), plan, changes, entries, categories, now)
+        return io.github.randomtools3377.checklist.core.BudgetSheet.csv(Budget.monthOf(first), entries, categories, month.pay, now)
+    }
+
     /** Everything in the app as a backup file's text. */
     suspend fun exportBackup(): String {
         val backup = db.withTransaction {

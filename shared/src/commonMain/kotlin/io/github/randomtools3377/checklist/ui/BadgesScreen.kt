@@ -37,7 +37,13 @@ import kotlinx.datetime.LocalDate
 
 /** Every badge: the ones earned, with the day, and the ones still to earn, with how. */
 @Composable
-fun BadgesScreen(earned: Map<Badge, LocalDate>, onSeen: () -> Unit, onBack: () -> Unit, character: Boolean = false) {
+fun BadgesScreen(
+    earned: Map<Badge, LocalDate>,
+    onSeen: () -> Unit,
+    onBack: () -> Unit,
+    /** The extras turned on: the character's, the Budget's and the mood check-in's badges show only with theirs. */
+    on: Set<io.github.randomtools3377.checklist.core.Feature> = emptySet(),
+) {
     LaunchedEffect(earned.size) { onSeen() }
     Scaffold(
         topBar = {
@@ -55,10 +61,10 @@ fun BadgesScreen(earned: Map<Badge, LocalDate>, onSeen: () -> Unit, onBack: () -
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = padding.calculateTopPadding() + 8.dp, bottom = padding.calculateBottomPadding() + 24.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            val shown = Badge.shown(character)
+            val shown = Badge.shown(on)
             item {
                 Text(
-                    // Level badges kept after the character is turned off aren't listed, so aren't counted.
+                    // A badge kept after its extra is turned off isn't listed, so isn't counted.
                     "${shown.count { it in earned }} of ${shown.size} earned. Once earned, a badge is yours to keep. Badges in a series go bronze, silver, then gold.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,

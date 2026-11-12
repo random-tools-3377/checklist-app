@@ -456,7 +456,7 @@ fun SettingsScreen(
     val showFocus = shows("Focus timer break after a focus session rest pause countdown")
     val showNotifications = shows(notificationWords(phone))
     val showBackup = shows(
-        "Backup back up backups export import file restore reminder spreadsheet csv excel sheets history move ${phone.deviceWord}" +
+        "Backup back up backups export import file restore reminder spreadsheet csv excel sheets history goal record move ${phone.deviceWord}" +
             if (phone.canPickFolder) " automatic folder" else "",
     )
     val showPrivacy = shows(
@@ -850,6 +850,16 @@ fun SettingsScreen(
                         onClick = { unlockFirst { spreadsheetLauncher("checklist-history-${nowLocal().date}.csv") } },
                         modifier = Modifier.testTag("export-spreadsheet"),
                     ) { Text("Export history as a spreadsheet") }
+
+                    // The goal record
+                    Spacer(Modifier.height(12.dp))
+                    Text("Goal record as a spreadsheet", style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        "Each goal on each day it was due: done, skipped or missed, with the reason.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    GoalRecordExportButton(vm)
     
                     // The reminder
                     SwitchRow(

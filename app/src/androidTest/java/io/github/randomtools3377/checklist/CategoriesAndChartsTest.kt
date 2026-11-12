@@ -73,7 +73,7 @@ class CategoriesAndChartsTest {
     fun theEditorOffersTheCategoriesInUse() {
         app.onNodeWithTag("nav:goals").performClick()
         app.waitFor { !gone("goal:Read") }
-        app.tap("goal:Read")
+        app.editGoal("Read")
         app.waitFor { !gone("category:Home") }
         app.tap("category:Home")
         app.tap("save")

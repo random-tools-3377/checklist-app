@@ -72,7 +72,7 @@ class CharacterTest {
         app.waitFor { shown("nav:goals") }
         app.onNodeWithTag("nav:goals").performClick()
         app.waitFor { shown("goal:Morning run") }
-        app.tap("goal:Morning run")
+        app.editGoal("Morning run")
         app.waitFor { shown("skill:HEALTH") }
         app.tap("skill:HEALTH")
         app.tap("save")

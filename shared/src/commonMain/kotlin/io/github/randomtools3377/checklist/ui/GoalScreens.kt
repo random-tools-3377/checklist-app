@@ -126,6 +126,8 @@ fun GoalsScreen(
     view: GoalsView?,
     reordering: Boolean,
     onEdit: (Goal) -> Unit,
+    /** Opens a goal's own page, from a tap on it in the list; its editor is one step on, behind Edit. */
+    onOpen: (Goal) -> Unit = onEdit,
     /** Moves a goal to the place of the one shown next to it (the second goal). */
     onMove: (Goal, Goal) -> Unit,
     onUnlock: () -> Unit,
@@ -239,9 +241,9 @@ fun GoalsScreen(
                 )
             }
         }
-        goalSection("Habits", habits, view, reordering, onEdit, onMove, pick, selected)
-        goalSection("Projects", projects, view, reordering, onEdit, onMove, pick, selected)
-        goalSection("To-dos", todos, view, reordering, onEdit, onMove, pick, selected)
+        goalSection("Habits", habits, view, reordering, onOpen, onMove, pick, selected)
+        goalSection("Projects", projects, view, reordering, onOpen, onMove, pick, selected)
+        goalSection("To-dos", todos, view, reordering, onOpen, onMove, pick, selected)
         completedSection(
             completedFound,
             // Open while searching, so what is found shows.

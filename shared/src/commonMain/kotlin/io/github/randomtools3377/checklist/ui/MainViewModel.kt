@@ -104,6 +104,10 @@ import io.github.randomtools3377.checklist.core.Period
 import io.github.randomtools3377.checklist.core.Review
 import io.github.randomtools3377.checklist.core.FocusTime
 import io.github.randomtools3377.checklist.core.FocusTotals
+import io.github.randomtools3377.checklist.core.GoalPage
+import io.github.randomtools3377.checklist.core.GoalPageView
+import io.github.randomtools3377.checklist.core.StretchDone
+import io.github.randomtools3377.checklist.core.StretchDoneList
 import io.github.randomtools3377.checklist.core.ReviewSummary
 import io.github.randomtools3377.checklist.core.plusDays
 import io.github.randomtools3377.checklist.core.Penalty
@@ -849,7 +853,10 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
     init {
         // Looks for new badges a moment after each tick, undo or change of day.
         viewModelScope.launch {
-            combine(today, dao.observeBalance(), dao.observeTickCount(), settings, dao.observeSetting(SETTING_WEEKLY_TARGET)) { day, _, _, s, target ->
+            // Money, moods and the extras turned on too, for the badges of the Budget and the mood check-in.
+            val more = combine(dao.observeSavingMoney(), dao.observeMoodsSince(Long.MIN_VALUE), features) { money, moods, on -> Triple(money.size, moods.size, on) }
+                .distinctUntilChanged()
+            combine(today, dao.observeBalance(), combine(dao.observeTickCount(), more) { _, _ -> }, settings, dao.observeSetting(SETTING_WEEKLY_TARGET)) { day, _, _, s, target ->
                 Triple(day, s.streak, target?.toIntOrNull() ?: 0)
             }.collectLatest { (day, streak, target) ->
                 delay(BADGE_CHECK_DELAY_MS)
@@ -859,16 +866,25 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
     }
 
     private suspend fun findBadges(day: LocalDate, streak: StreakSettings, target: Int) {
+        val on = features.value
         val ticks = dao.allTicks().map { it.toCore() }
-        if (ticks.isEmpty()) return
+        // The Budget's and the mood check-in's badges need no tick: only their extras on.
+        val moods = if (Feature.MOOD in on) dao.allMoods().map { it.toCore() } else emptyList()
+        val budget = Feature.BUDGET in on
+        if (ticks.isEmpty() && moods.isEmpty() && !budget) return
+        val money = if (budget) dao.allMoney().map { it.toCore() } else emptyList()
+        val savingGoals = if (budget) dao.allSavingGoals().map { it.toCore() } else emptyList()
         val goals = dao.allGoals().map { it.toCore() }
         val steps = dao.allSteps().map { it.toCore() }
         val entries = dao.allEntries().map { it.toCore() }
         val lapses = dao.allLapses().map { it.toCore() }
         val earned = withContext(Dispatchers.Default) {
-            val from = maxOf(ticks.minOf { it.day }, day.minusDays(STREAK_DAYS))
+            val from = maxOf(ticks.minOfOrNull { it.day } ?: day, day.minusDays(STREAK_DAYS))
             val records = StreakCounter.records(from, day, goals.filter { !it.archived }, ticks.filter { it.stepId == null }, lapses)
-            Badges.earned(day, records, streak, goals, steps, ticks, entries, target, character = Feature.CHARACTER in features.value)
+            Badges.earned(
+                day, records, streak, goals, steps, ticks, entries, target, character = Feature.CHARACTER in on,
+                on = on, moods = moods, money = money, savingGoals = savingGoals,
+            )
         }
         val kept = Badges.decode(dao.setting(SETTING_BADGES))
         val merged = Badges.merge(kept, earned)
@@ -1225,6 +1241,75 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
             FocusTime.totals(rows.map { it.toCore() }, (active + removed).map { it.toCore() }, from, to, hidePrivate = hide)
         }
     }.state(null)
+
+    /**
+     * Opens [day] in the review's Day view, from a tap on the month calendar or a day chart. A day
+     * still to come isn't opened.
+     */
+    fun reviewOpenDay(day: LocalDate) {
+        val today = Days.dayOf(nowLocal(), settings.value.dayEndHour)
+        if (day > today) return
+        reviewDay.value = if (day == today) null else day
+        reviewPeriod.value = Period.DAILY
+    }
+
+    /** Day, Week, Month or Year, keeping the date being looked at. */
+    fun reviewShow(period: Period) {
+        reviewPeriod.value = period
+    }
+
+    /**
+     * What was finished in the stretch being reviewed: projects achieved, to-dos done, a missed
+     * project deadline, and what goals with an amount came to. Private goals are left out while
+     * they are locked, as in the rest of the review.
+     */
+    val reviewDone: StateFlow<StretchDone?> = combine(reviewPeriod, reviewDay, today) { period, day, todayDay ->
+        Review.range(day ?: todayDay, period)
+    }.distinctUntilChanged().flatMapLatest { (from, to) ->
+        combine(
+            combine(dao.observeGoals(), hidingPrivate) { goals, hide -> goals to hide },
+            dao.observeSteps(),
+            dao.observeStepTicks(),
+            dao.observeHabitTicksSince(Days.earliestOpenDay(from).toEpochDay()),
+            dao.observeLapsesSince(from.toEpochDay()),
+        ) { (goals, hide), steps, stepTicks, habitTicks, lapseRows ->
+            StretchDoneList.of(
+                from, to,
+                goals = goals.map { it.toCore() },
+                steps = steps.map { it.toCore() },
+                ticks = (stepTicks + habitTicks).map { it.toCore() },
+                lapses = lapseRows.map { it.toCore() },
+                hidePrivate = hide,
+            )
+        }
+    }.state(null)
+
+    // A page for each goal
+
+    /**
+     * Everything [goalId]'s own page shows, kept up to date; null while it loads or once the goal
+     * is gone. Its reasons, notes and privacy are the screen's to hide (see GoalPageScreen).
+     */
+    fun goalPage(goalId: Long): Flow<GoalPageView?> = today.flatMapLatest { day ->
+        combine(
+            combine(dao.observeGoals(), dao.observeRemovedGoals()) { shown, removed -> (shown + removed).firstOrNull { it.id == goalId }?.toCore() },
+            dao.observeSteps(),
+            combine(dao.observeHabitTicksSince(Long.MIN_VALUE), dao.observeStepTicks()) { habit, step -> habit + step },
+            dao.observeLapsesSince(Long.MIN_VALUE),
+            dao.observeEntries(),
+        ) { goal, steps, tickRows, lapseRows, entryRows ->
+            if (goal == null) return@combine null
+            withContext(Dispatchers.Default) {
+                GoalPage.of(
+                    goal, day,
+                    steps = steps.filter { it.goalId == goalId }.map { it.toCore() },
+                    ticks = tickRows.filter { it.goalId == goalId }.map { it.toCore() },
+                    lapses = lapseRows.filter { it.goalId == goalId }.map { it.toCore() },
+                    entries = entryRows.filter { it.goalId == goalId }.map { it.toCore() },
+                )
+            }
+        }
+    }
 
     // The daily mood check-in
 
@@ -2624,6 +2709,29 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
             onDone(message)
         }
     }
+
+    private fun saveSheet(file: PickedFile, onDone: (String) -> Unit, text: suspend () -> String) {
+        viewModelScope.launch {
+            val message = try {
+                phone.writeText(file, text())
+                "Saved. Open it in any spreadsheet app."
+            } catch (e: NotSavedException) {
+                "Not saved."
+            } catch (e: Exception) {
+                "Couldn't write the file."
+            }
+            onDone(message)
+        }
+    }
+
+    /** Writes the goal record, each goal each day, to [file] as a spreadsheet. */
+    fun exportGoalRecord(file: PickedFile, onDone: (String) -> Unit) = saveSheet(file, onDone) { repository.goalRecordSpreadsheet(currentDay()) }
+
+    /** Writes the mood journal to [file] as a spreadsheet. */
+    fun exportMoodJournal(file: PickedFile, onDone: (String) -> Unit) = saveSheet(file, onDone) { repository.moodSpreadsheet() }
+
+    /** Writes the budget of the month starting on [first] to [file] as a spreadsheet. */
+    fun exportBudgetMonth(first: LocalDate, file: PickedFile, onDone: (String) -> Unit) = saveSheet(file, onDone) { repository.budgetSpreadsheet(first, nowLocal()) }
 
     /** The automatic backups in the chosen folder, newest first, to pick one to restore. */
     fun listAutoBackups(onList: (List<Pair<String, PickedFile>>) -> Unit) {

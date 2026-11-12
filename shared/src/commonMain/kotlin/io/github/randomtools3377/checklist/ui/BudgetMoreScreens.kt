@@ -507,6 +507,8 @@ fun BudgetReportScreen(vm: MainViewModel, onBack: () -> Unit) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+            // The month's spending, money in, bills and savings, for a spreadsheet app.
+            item(key = "report-export") { BudgetMonthExportButton(shown.first, vm) }
             item { Text("Where it went", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary) }
             val spent = month.categories.filter { it.cents > 0 }.sortedByDescending { it.cents }
             if (spent.isEmpty()) item { Text("No spending this month.", style = MaterialTheme.typography.bodyMedium) }

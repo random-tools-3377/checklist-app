@@ -75,14 +75,14 @@ class AppearanceTest {
     fun aGoalGetsItsOwnColour() {
         app.onNodeWithTag("nav:goals").performClick()
         app.waitFor { !gone("goal:Read") }
-        app.tap("goal:Read")
+        app.editGoal("Read")
         app.waitFor { !gone("goal-colour:#D9822B") }
         app.tap("goal-colour:#D9822B")
         app.tap("save")
         app.waitFor { runBlocking { dao.allGoals().first { it.name == "Read" }.color } == 0xFFD9822B.toInt() }
 
         // Any colour, from the picker.
-        app.tap("goal:Read")
+        app.editGoal("Read")
         app.waitFor { !gone("goal-colour:any") }
         app.tap("goal-colour:any")
         app.waitFor { !gone("field:hex") }

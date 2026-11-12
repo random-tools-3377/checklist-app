@@ -63,6 +63,8 @@ class TodayExtras(
     val challenges: Map<Long, io.github.randomtools3377.checklist.core.ChallengeProgress> = emptyMap(),
     val onSlip: (Long) -> Unit = {},
     val onTakeBackSkip: (Long) -> Unit = {},
+    /** Opens a goal's own page, from "History" on its card; null where there is no page to open. */
+    val onHistory: ((Long) -> Unit)? = null,
 )
 
 val LocalTodayExtras = androidx.compose.runtime.compositionLocalOf { TodayExtras() }

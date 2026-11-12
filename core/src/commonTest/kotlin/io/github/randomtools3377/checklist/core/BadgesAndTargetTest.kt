@@ -112,4 +112,77 @@ class BadgesAndTargetTest {
         assertTrue(Badges.decode("NOT_A_BADGE=2026-01-01,FIRST_TICK=junk,").isEmpty())
         assertTrue(Badges.decode(null).isEmpty())
     }
+
+    private fun moneyDay(day: LocalDate, label: String = MoneyGame.LABEL_WITHIN) = Entry(at = nextId++, day = day, kind = EntryKind.BONUS, amount = 3, label = label)
+    private fun earnedWith(on: Set<Feature>, today: LocalDate, entries: List<Entry> = emptyList(), moods: List<Mood> = emptyList(), money: List<MoneyEntry> = emptyList(), saving: List<SavingGoal> = emptyList()) =
+        Badges.earned(today, emptyList(), StreakSettings(), emptyList(), emptyList(), emptyList(), entries, 0, on = on, moods = moods, money = money, savingGoals = saving)
+            .associate { it.badge to it.on }
+
+    @Test
+    fun theFirstSavingGoalReachedEarnsItsBadgeOnTheDayItWasReached() {
+        val holiday = SavingGoal(id = 1, name = "Holiday", icon = "🏖️", targetCents = 10_000)
+        val bike = SavingGoal(id = 2, name = "Bike", icon = "🚲", targetCents = 50_000, archived = true)
+        val money = listOf(
+            MoneyEntry(id = 1, kind = MoneyKind.SAVED, cents = 6_000, day = monday, savingId = 1),
+            MoneyEntry(id = 2, kind = MoneyKind.TAKEN_OUT, cents = 2_000, day = monday.plusDays(1), savingId = 1),
+            MoneyEntry(id = 3, kind = MoneyKind.SAVED, cents = 5_000, day = monday.plusDays(2), savingId = 1), // 9,000: not yet
+            MoneyEntry(id = 4, kind = MoneyKind.SAVED, cents = 1_000, day = monday.plusDays(4), savingId = 1),
+            MoneyEntry(id = 5, kind = MoneyKind.SPENT, cents = 90_000, day = monday), // plain spending isn't saving
+        )
+        val budget = setOf(Feature.BUDGET)
+        assertEquals(monday.plusDays(4), earnedWith(budget, monday.plusDays(9), money = money, saving = listOf(holiday, bike))[Badge.SAVED_UP])
+        // Not reached by the day before, and not looked for while Budget is off.
+        assertNull(earnedWith(budget, monday.plusDays(3), money = money, saving = listOf(holiday, bike))[Badge.SAVED_UP])
+        assertNull(earnedWith(emptySet(), monday.plusDays(9), money = money, saving = listOf(holiday, bike))[Badge.SAVED_UP])
+        // A goal removed since was still reached.
+        val bikeMoney = listOf(MoneyEntry(id = 6, kind = MoneyKind.SAVED, cents = 50_000, day = monday, savingId = 2))
+        assertEquals(monday, earnedWith(budget, monday, money = bikeMoney, saving = listOf(bike))[Badge.SAVED_UP])
+    }
+
+    @Test
+    fun moneyStreaksAndAMonthWithinEveryLimitComeFromWhatTheBudgetGamePaid() {
+        val game = setOf(Feature.BUDGET, Feature.BUDGET_GAME)
+        // Six good days, a day over its share (nothing paid), then thirty in a row.
+        val entries = (0..5).map { moneyDay(monday.plusDays(it)) } +
+            (7..36).map { moneyDay(monday.plusDays(it), if (it % 2 == 0) MoneyGame.LABEL_NO_SPEND else MoneyGame.LABEL_WITHIN) } +
+            moneyDay(monday.plusDays(28), MoneyGame.LABEL_MONTH) +
+            Entry(at = 0, day = monday.plusDays(6), kind = EntryKind.BONUS, amount = 5, label = "Quest: tick 2 goals")
+        val all = earnedWith(game, monday.plusDays(40), entries)
+        assertEquals(monday.plusDays(13), all[Badge.MONEY_STREAK_7])
+        assertEquals(monday.plusDays(36), all[Badge.MONEY_STREAK_30])
+        assertEquals(monday.plusDays(28), all[Badge.MONEY_MONTH])
+        // Up to the sixth day: no streak of 7 yet.
+        assertNull(earnedWith(game, monday.plusDays(12), entries)[Badge.MONEY_STREAK_7])
+        // With Budget on but its game off, none of the game's badges.
+        val budgetOnly = earnedWith(setOf(Feature.BUDGET), monday.plusDays(40), entries)
+        assertNull(budgetOnly[Badge.MONEY_STREAK_7])
+        assertNull(budgetOnly[Badge.MONEY_MONTH])
+    }
+
+    @Test
+    fun thirtyDaysOfMoodCheckInsEarnABadgeOnTheThirtiethDay() {
+        // Every other day: 30 days in all, not in a row.
+        val moods = (0..29).map { Mood(day = monday.plusDays(it * 2), score = 3) }
+        assertEquals(monday.plusDays(58), earnedWith(setOf(Feature.MOOD), monday.plusDays(70), moods = moods)[Badge.MOOD_30])
+        assertNull(earnedWith(setOf(Feature.MOOD), monday.plusDays(57), moods = moods)[Badge.MOOD_30])
+        assertNull(earnedWith(emptySet(), monday.plusDays(70), moods = moods)[Badge.MOOD_30])
+    }
+
+    @Test
+    fun theBudgetsAndTheMoodCheckInsBadgesShowOnlyWhileTheirExtrasAreOn() {
+        val plain = Badge.shown(emptySet())
+        assertTrue(listOf(Badge.SAVED_UP, Badge.MONEY_STREAK_7, Badge.MONEY_STREAK_30, Badge.MONEY_MONTH, Badge.MOOD_30, Badge.LEVEL_10).none { it in plain })
+        assertEquals(plain, Badge.shown(character = false))
+        assertEquals(plain + Badge.SAVED_UP, Badge.shown(setOf(Feature.BUDGET)))
+        // The budget game alone, without Budget, shows none of them.
+        assertEquals(plain, Badge.shown(setOf(Feature.BUDGET_GAME)))
+        assertEquals(
+            plain + listOf(Badge.SAVED_UP, Badge.MONEY_STREAK_7, Badge.MONEY_STREAK_30, Badge.MONEY_MONTH),
+            Badge.shown(setOf(Feature.BUDGET, Feature.BUDGET_GAME)),
+        )
+        assertEquals(plain + Badge.MOOD_30, Badge.shown(setOf(Feature.MOOD)))
+        // A new badge kept in the settings reads back.
+        val kept = mapOf(Badge.SAVED_UP to monday, Badge.MOOD_30 to monday.plusDays(1))
+        assertEquals(kept, Badges.decode(Badges.encode(kept)))
+    }
 }

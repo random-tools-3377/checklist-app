@@ -21,6 +21,11 @@ object MoneyGame {
     val MONTH_BONUS: Int get() = Rules.current.moneyMonthBonus
     val SAVED_UP: Int get() = Rules.current.savedUp
 
+    /** What the points history calls each payout; the money badges are found from these (see [Badges]). */
+    const val LABEL_NO_SPEND = "Money: a no-spend day"
+    const val LABEL_WITHIN = "Money: a day within its share"
+    const val LABEL_MONTH = "Money: a month within every limit"
+
     enum class Day { NO_SPEND, WITHIN, OVER }
 
     /** Points for the budget game, with what they were for. */
@@ -88,14 +93,14 @@ object MoneyGame {
         while (d <= to) {
             shareOf(d)?.let { share ->
                 when (day(spent(d, entries), share)) {
-                    Day.NO_SPEND -> payouts += Payout(d, NO_SPEND_DAY, "Money: a no-spend day")
-                    Day.WITHIN -> payouts += Payout(d, GOOD_DAY, "Money: a day within its share")
+                    Day.NO_SPEND -> payouts += Payout(d, NO_SPEND_DAY, LABEL_NO_SPEND)
+                    Day.WITHIN -> payouts += Payout(d, GOOD_DAY, LABEL_WITHIN)
                     Day.OVER -> {}
                 }
             }
             val next = d.plusDays(1)
             if (next.month != d.month && withinLimits(Budget.monthOf(d), categories, entries) == true) {
-                payouts += Payout(d, MONTH_BONUS, "Money: a month within every limit")
+                payouts += Payout(d, MONTH_BONUS, LABEL_MONTH)
             }
             d = next
         }

@@ -61,3 +61,14 @@ fun ComposeTestRule.shownIn(list: String, tag: String): Boolean = try {
 fun ComposeTestRule.toTopOfToday() {
     onNodeWithTag("today-list").performScrollToIndex(0)
 }
+
+/**
+ * Opens [name]'s editor from the Goals list: a tap on the goal opens its own page, and "Edit"
+ * there opens the editor in the page's place, so saving or going back lands on the list again.
+ */
+fun ComposeTestRule.editGoal(name: String) {
+    waitFor { onAllNodes(hasTestTag("goal:$name")).fetchSemanticsNodes().isNotEmpty() }
+    tap("goal:$name")
+    waitFor { onAllNodes(hasTestTag("goal-page-edit")).fetchSemanticsNodes().isNotEmpty() }
+    tap("goal-page-edit")
+}

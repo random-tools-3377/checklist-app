@@ -93,7 +93,7 @@ class FocusAndCopyTest {
     fun aGoalCanBeCopiedRemovedAndBroughtBack() {
         app.onNodeWithTag("nav:goals").performClick()
         app.waitFor { !gone("goal:Read") }
-        app.tap("goal:Read")
+        app.editGoal("Read")
         app.waitFor { !gone("duplicate") }
         app.tap("duplicate")
         // The copy opens in the editor; going back shows both.
@@ -101,7 +101,7 @@ class FocusAndCopyTest {
         app.onNodeWithTag("save").performClick()
         app.waitFor { !gone("goal:Read (copy)") }
 
-        app.tap("goal:Read (copy)")
+        app.editGoal("Read (copy)")
         app.waitFor { !gone("remove") }
         app.tap("remove")
         app.waitFor { !gone("confirm-remove") }

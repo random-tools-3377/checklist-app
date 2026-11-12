@@ -76,7 +76,7 @@ class EditorsAndTodoCategoryTest {
     fun leavingAHabitWithChangesAsksFirst() {
         app.onNodeWithTag("nav:goals").performClick()
         app.waitFor { !gone("goal:Read") }
-        app.tap("goal:Read")
+        app.editGoal("Read")
         app.waitFor { !gone("field:name") }
 
         // Nothing changed: back just leaves.
@@ -85,7 +85,7 @@ class EditorsAndTodoCategoryTest {
         assertTrue(gone("discard-question"))
 
         // With a change, the back arrow asks. "Keep editing" stays, with what was typed.
-        app.tap("goal:Read")
+        app.editGoal("Read")
         app.waitFor { !gone("field:name") }
         app.onNodeWithTag("field:name").performTextReplacement("Read a lot")
         app.onNodeWithTag("editor-back").performClick()
@@ -120,7 +120,7 @@ class EditorsAndTodoCategoryTest {
     fun makingACopySavesTheChangesFirst() {
         app.onNodeWithTag("nav:goals").performClick()
         app.waitFor { !gone("goal:Read") }
-        app.tap("goal:Read")
+        app.editGoal("Read")
         app.waitFor { !gone("duplicate") }
         app.onNodeWithTag("field:name").performTextReplacement("Read daily")
         app.tap("duplicate")
@@ -144,7 +144,7 @@ class EditorsAndTodoCategoryTest {
 
         app.onNodeWithTag("nav:goals").performClick()
         app.waitFor { !gone("goal:Paint the shed") }
-        app.tap("goal:Paint the shed")
+        app.editGoal("Paint the shed")
         app.waitFor { !gone("step-up-1") }
         app.tap("step-up-1")
         app.onNodeWithTag("save").performClick()

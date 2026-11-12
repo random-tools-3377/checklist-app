@@ -34,6 +34,10 @@ class LockedPageTest {
         assertNull(lockedPage("habit/8", locks, setOf(7L)))
         assertNull(lockedPage("habit/0", locks, setOf(7L)))
         assertNull(lockedPage("habit/7", Locks(budget = true), setOf(7L)))
+        // Its own page asks to unlock too; any other goal's page is open, whatever else is locked.
+        assertEquals("This private goal", lockedPage("goal/7", locks, setOf(7L)))
+        assertNull(lockedPage("goal/8", locks, setOf(7L)))
+        assertNull(lockedPage("goal/8", Locks(reasons = true, review = true), setOf(7L)))
     }
 
     @Test

@@ -4,6 +4,8 @@ package io.github.randomtools3377.checklist.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.material3.LinearProgressIndicator
@@ -99,6 +101,15 @@ fun ReviewScreen(
     today: LocalDate? = null,
     /** The time spent with the focus timer in the stretch, for the week and month views. */
     focus: io.github.randomtools3377.checklist.core.FocusTotals? = null,
+    /** How many badges there are to earn with the extras that are on; null for the usual ones. */
+    badgeTotal: Int? = null,
+    /** Opens a day in the Day view, from a tap on the month calendar or a day chart. */
+    onDay: (LocalDate) -> Unit = {},
+    /** Opens a goal's own page, from its row. */
+    onGoal: (Long) -> Unit = {},
+    /** What was finished in the stretch (see StretchDoneList), and what opens the Done list. */
+    done: io.github.randomtools3377.checklist.core.StretchDone? = null,
+    onDoneList: () -> Unit = {},
 ) {
     // A goal with several misses in the stretch: the box that asks which one to open.
     val choosing = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<Long?>(null) }
@@ -141,7 +152,7 @@ fun ReviewScreen(
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
                     Text("🏅", fontSize = 24.sp, modifier = Modifier.width(40.dp))
                     Text("Badges", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
-                    Text("$badges of ${Badge.shown(character).size} · See all", color = MaterialTheme.colorScheme.primary)
+                    Text("$badges of ${badgeTotal ?: Badge.shown(character).size} · See all", color = MaterialTheme.colorScheme.primary)
                 }
             }
         }
@@ -155,7 +166,7 @@ fun ReviewScreen(
                     if (summary.from == summary.to) longDate(summary.from) else "${shortDate(summary.from)} to ${shortDate(summary.to)}",
                     style = MaterialTheme.typography.titleMedium,
                     textAlign = TextAlign.Center,
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(1f).testTag("review:range"),
                 )
                 IconButton(onClick = { onStep(1) }) {
                     Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "Later")
@@ -164,16 +175,21 @@ fun ReviewScreen(
         }
         item { PointsCard(summary) }
         if (period == Period.WEEKLY) item { coachCard(summary) }
-        if (period == Period.WEEKLY || period == Period.MONTHLY) item { DayCharts(summary, period) }
+        // A day still to come has nothing to open.
+        val openDay: (LocalDate) -> Unit = { day -> if (today == null || day <= today) onDay(day) }
+        if (period == Period.WEEKLY || period == Period.MONTHLY) item { DayCharts(summary, period, openDay) }
         if (period == Period.YEARLY) item { YearCard(summary, moods, hideMoods = hideReasons) }
-        if (period == Period.MONTHLY) item { MonthCalendar(summary) }
+        if (period == Period.MONTHLY) item { MonthCalendar(summary, today, openDay) }
         val shownMisses = misses.filter { it.day >= summary.from && it.day <= summary.to }
         item {
-            GoalsCard(summary, shownMisses) { goal ->
+            GoalsCard(summary, shownMisses, onGoal) { goal ->
                 val mine = shownMisses.filter { it.goalId == goal.goal.id }
                 if (mine.size == 1) onMiss(mine.single().id) else choosing.value = goal.goal.id
             }
         }
+        // What was finished: only where the stretch shown is the one it was worked out for.
+        done?.takeIf { !it.isEmpty }?.let { finished -> item(key = "review-finished") { FinishedCard(finished, onGoal, onDoneList) } }
+        // Focus time for the stretch belongs here (see the focus timer).
         // The day view lists what was missed; each opens to change its reason or say it was a forgotten tick.
         if (period == Period.DAILY && shownMisses.isNotEmpty()) item { MissedCard(shownMisses, hideReasons, onMiss) }
         if (summary.categories.isNotEmpty()) item { CategoriesCard(summary) }
@@ -229,6 +245,8 @@ private fun GoalsCard(
     summary: ReviewSummary,
     /** The misses in the stretch that still stand: a goal's row with any opens them. */
     misses: List<io.github.randomtools3377.checklist.core.Lapse> = emptyList(),
+    /** Opens a goal's own page. */
+    onGoal: (Long) -> Unit = {},
     onMisses: (io.github.randomtools3377.checklist.core.GoalSummary) -> Unit = {},
 ) {
     ReviewCard("Each goal") {
@@ -246,19 +264,27 @@ private fun GoalsCard(
                 val opens = misses.any { it.goalId == goal.goal.id }
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    modifier = (if (opens) Modifier.clickable { onMisses(goal) } else Modifier).testTag("review-goal:${goal.goal.name}"),
+                    modifier = Modifier.clickable { onGoal(goal.goal.id) }.testTag("review-goal:${goal.goal.name}"),
                 ) {
                     Text("${goal.goal.icon} ${goal.goal.name}", maxLines = 1, modifier = Modifier.weight(1f))
                     Cell("${goal.done}/${goal.due}")
                     Cell("${goal.skipped}")
-                    Cell("${goal.missed}", if (goal.missed > 0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface)
+                    // Its misses open from their number, to change a reason or say it was a forgotten tick.
+                    Text(
+                        "${goal.missed}",
+                        textAlign = TextAlign.Center,
+                        color = if (goal.missed > 0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+                        fontWeight = if (opens) FontWeight.Bold else null,
+                        textDecoration = if (opens) androidx.compose.ui.text.style.TextDecoration.Underline else null,
+                        modifier = (if (opens) Modifier.clickable { onMisses(goal) }.testTag("review-goal-misses:${goal.goal.name}") else Modifier).width(56.dp),
+                    )
                     Cell("${goal.longestRun}")
                 }
             }
-            Text("Run: the most times in a row it was done in this stretch.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("Run: the most times in a row it was done in this stretch. Tap a goal for its own page.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (shown.any { goal -> misses.any { it.goalId == goal.goal.id } }) {
                 Text(
-                    "Tap a goal with a miss to change its reason, or to say you forgot to tick it.",
+                    "Tap a goal's misses to change a reason, or to say you forgot to tick it.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -378,7 +404,7 @@ private fun GapsCard(gaps: List<Gap>, hideNotes: Boolean) {
 
 /** The month as a calendar: how much of each day got done, with gap days marked. */
 @Composable
-private fun MonthCalendar(summary: ReviewSummary) {
+private fun MonthCalendar(summary: ReviewSummary, today: LocalDate? = null, onDay: (LocalDate) -> Unit = {}) {
     val colourBlind = LocalColourBlind.current
     val brightness = LocalBrightness.current
     val first = summary.from
@@ -416,8 +442,12 @@ private fun MonthCalendar(summary: ReviewSummary) {
                                 share > 0f -> "◐"
                                 else -> "✕"
                             }
+                            // A tap opens the day; a day still to come has nothing to open.
+                            val opens = today == null || record.day <= today
                             Column(
-                                Modifier.fillMaxSize().background(background, RoundedCornerShape(8.dp)),
+                                Modifier.fillMaxSize().background(background, RoundedCornerShape(8.dp))
+                                    .then(if (opens) Modifier.clickable(onClickLabel = "Open ${shortDate(record.day)}") { onDay(record.day) } else Modifier)
+                                    .testTag("review-day:${record.day.dayOfMonth}"),
                                 horizontalAlignment = Alignment.CenterHorizontally,
                                 verticalArrangement = Arrangement.Center,
                             ) {
@@ -438,7 +468,7 @@ private fun MonthCalendar(summary: ReviewSummary) {
             }
         }
         Text(
-            if (colourBlind) "✓ everything done · ◐ some · ✕ none · – a gap" else "Dark: everything done · light: some · red: none · purple: a gap",
+            (if (colourBlind) "✓ everything done · ◐ some · ✕ none · – a gap" else "Dark: everything done · light: some · red: none · purple: a gap") + ". Tap a day to open it.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.testTag("review-calendar-key"),
@@ -528,7 +558,7 @@ private fun StatsCard(
 
 /** Each day of a week or a month as bars: how much of what was due got done, and the points. */
 @Composable
-private fun DayCharts(summary: ReviewSummary, period: Period) {
+private fun DayCharts(summary: ReviewSummary, period: Period, onDay: (LocalDate) -> Unit = {}) {
     val days = summary.days
     if (days.isEmpty()) return
     val shares = days.map { if (it.due == 0) null else it.done * 100 / it.due }
@@ -550,8 +580,9 @@ private fun DayCharts(summary: ReviewSummary, period: Period) {
                 "${dayName(record.day, period)} " + (share?.let { "$it%" } ?: "nothing due")
             },
             tag = "chart:done",
+            onBar = { index -> days.getOrNull(index)?.let { onDay(it.day) } },
         )
-        DayLabels(days.map { it.day }, period)
+        DayLabels(days.map { it.day }, period, onDay)
         Spacer(Modifier.height(6.dp))
         Text(pointsTitle(), style = MaterialTheme.typography.labelLarge)
         BarChart(
@@ -565,6 +596,7 @@ private fun DayCharts(summary: ReviewSummary, period: Period) {
                 "${dayName(days[i].day, period)} +${earned[i]}" + if (lost[i] > 0) ", −${lost[i]} lost" else ""
             },
             tag = "chart:points",
+            onBar = { index -> days.getOrNull(index)?.let { onDay(it.day) } },
         )
         DayLabels(days.map { it.day }, period)
         val best = days.indices.filter { earned[it] > 0 }.maxByOrNull { earned[it] }
@@ -572,7 +604,7 @@ private fun DayCharts(summary: ReviewSummary, period: Period) {
             listOfNotNull(
                 best?.let { "Most ${pointsWord()}: ${shortDate(days[it].day)}, +${earned[it]}" },
                 if (lost.any { it > 0 }) "red below the line: ${pointsWord()} lost" else null,
-            ).joinToString(" · ").ifEmpty { "No ${pointsWord()} earned yet in this stretch." },
+            ).joinToString(" · ").ifEmpty { "No ${pointsWord()} earned yet in this stretch." } + " Tap a day to open it.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -595,12 +627,19 @@ private fun BarChart(
     description: String,
     tag: String,
     height: Dp = 88.dp,
+    /** A tap on a day's bar, or the space above it, by its place from the left. */
+    onBar: ((Int) -> Unit)? = null,
 ) {
     val upMost = (top ?: up.maxOrNull() ?: 0).coerceAtLeast(1)
     val downMost = down.maxOrNull() ?: 0
     Canvas(
         Modifier.fillMaxWidth().height(if (downMost > 0) height + 28.dp else height)
             .semantics { contentDescription = description }
+            .then(
+                if (onBar == null || up.isEmpty()) Modifier else Modifier.pointerInput(up.size, onBar) {
+                    detectTapGestures { at -> onBar((at.x / (size.width.toFloat() / up.size)).toInt().coerceIn(0, up.size - 1)) }
+                },
+            )
             .testTag(tag),
     ) {
         val slot = size.width / up.size
@@ -622,7 +661,7 @@ private fun BarChart(
 
 /** The days under a chart: each weekday for a week, every 7th date for a month. */
 @Composable
-private fun DayLabels(days: List<LocalDate>, period: Period) {
+private fun DayLabels(days: List<LocalDate>, period: Period, onDay: ((LocalDate) -> Unit)? = null) {
     Row(Modifier.fillMaxWidth()) {
         days.forEach { day ->
             val label = when {
@@ -630,7 +669,12 @@ private fun DayLabels(days: List<LocalDate>, period: Period) {
                 (day.dayOfMonth - 1) % 7 == 0 -> "${day.dayOfMonth}"
                 else -> ""
             }
-            Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
+            // Under the first chart each day's place opens that day, for a screen reader or a keyboard too.
+            val open = if (onDay == null) Modifier else Modifier
+                .clickable(onClickLabel = "Open ${shortDate(day)}") { onDay(day) }
+                .semantics { contentDescription = shortDate(day) }
+                .testTag("chart-day:$day")
+            Box(Modifier.weight(1f).then(open), contentAlignment = Alignment.Center) {
                 Text(
                     label,
                     style = MaterialTheme.typography.labelSmall,
@@ -660,5 +704,43 @@ private fun CategoriesCard(summary: ReviewSummary) {
             }
         }
         Text("${pointsTitle()} come from ticks and bonuses.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+/**
+ * What was finished in the stretch: projects achieved (and a deadline missed, against its
+ * project), to-dos done, and what each goal with an amount came to.
+ */
+@Composable
+private fun FinishedCard(done: io.github.randomtools3377.checklist.core.StretchDone, onGoal: (Long) -> Unit, onDoneList: () -> Unit) {
+    ReviewCard("Finished") {
+        Column(Modifier.testTag("review-finished")) {
+            done.projects.forEach { project ->
+                val finished = project.finishedOn
+                val missed = project.missedDeadline
+                Row(Modifier.fillMaxWidth().clickable { onGoal(project.goal.id) }.padding(vertical = 3.dp).testTag("review-project:${project.goal.name}")) {
+                    Text("${project.goal.icon} ${project.goal.name}", maxLines = 1, modifier = Modifier.weight(1f))
+                    Column(horizontalAlignment = Alignment.End) {
+                        if (finished != null) Text("Achieved ${shortDate(finished)}", color = goodColor(), fontWeight = FontWeight.Medium)
+                        if (missed != null) Text("Deadline missed ${shortDate(missed)}", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            }
+            done.todos.forEach { todo ->
+                Row(Modifier.fillMaxWidth().clickable { onGoal(todo.goal.id) }.padding(vertical = 3.dp).testTag("review-todo:${todo.goal.name}")) {
+                    Text("${todo.goal.icon} ${todo.goal.name}", maxLines = 1, modifier = Modifier.weight(1f))
+                    Text("Done ${shortDate(todo.day)}", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+            done.amounts.forEach { total ->
+                Text(
+                    "${total.goal.icon} ${total.text}",
+                    modifier = Modifier.fillMaxWidth().clickable { onGoal(total.goal.id) }.padding(vertical = 3.dp).testTag("review-amount:${total.goal.name}"),
+                )
+            }
+        }
+        if (done.projects.any { it.finishedOn != null } || done.todos.isNotEmpty()) {
+            androidx.compose.material3.TextButton(onClick = onDoneList, modifier = Modifier.testTag("review-done-list")) { Text("See the Done list") }
+        }
     }
 }

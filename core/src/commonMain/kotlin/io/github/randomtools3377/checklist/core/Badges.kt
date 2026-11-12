@@ -28,14 +28,35 @@ enum class Badge(val icon: String, val title: String, val how: String, val tier:
     LEVEL_10("⭐", "Level 10", "Reach level 10 with your character", Tier.BRONZE),
     LEVEL_25("🌠", "Level 25", "Reach level 25 with your character", Tier.SILVER),
     LEVEL_50("🌌", "Level 50", "Reach level 50 with your character", Tier.GOLD),
+    SAVED_UP("🐖", "Saved up", "Reach a saving goal in the Budget"),
+    MONEY_STREAK_7("💵", "A good money week", "Keep a money streak going for 7 days", Tier.BRONZE),
+    MONEY_STREAK_30("💸", "A good money month", "Keep a money streak going for 30 days", Tier.SILVER),
+    MONEY_MONTH("🧾", "Within every limit", "Stay within every spending limit for a whole month"),
+    MOOD_30("📔", "30 check-ins", "Answer the mood check-in on 30 days"),
     ;
 
     /** Shown only with the character on. */
     val forCharacter: Boolean get() = this == LEVEL_10 || this == LEVEL_25 || this == LEVEL_50
 
+    /** The extras that must all be on for it to show, and to be earned; none for most. */
+    val needs: Set<Feature>
+        get() = when (this) {
+            LEVEL_10, LEVEL_25, LEVEL_50 -> setOf(Feature.CHARACTER)
+            SAVED_UP -> setOf(Feature.BUDGET)
+            MONEY_STREAK_7, MONEY_STREAK_30, MONEY_MONTH -> setOf(Feature.BUDGET, Feature.BUDGET_GAME)
+            MOOD_30 -> setOf(Feature.MOOD)
+            else -> emptySet()
+        }
+
+    /** Whether it shows with the extras [on]. One earned and kept isn't listed while its extra is off. */
+    fun shownWith(on: Set<Feature>): Boolean = on.containsAll(needs)
+
     companion object {
-        /** The badges there are to earn, with or without the character's. */
-        fun shown(character: Boolean): List<Badge> = entries.filter { character || !it.forCharacter }
+        /** The badges there are to earn with no extra but, perhaps, the character. */
+        fun shown(character: Boolean): List<Badge> = shown(if (character) setOf(Feature.CHARACTER) else emptySet())
+
+        /** The badges there are to earn with the extras [on]. */
+        fun shown(on: Set<Feature>): List<Badge> = entries.filter { it.shownWith(on) }
     }
 }
 
@@ -59,6 +80,11 @@ object Badges {
         weeklyTarget: Int,
         /** Whether the character is on, for the level badges. */
         character: Boolean = false,
+        /** The extras turned on, for the badges of the Budget, the budget game and the mood check-in. */
+        on: Set<Feature> = emptySet(),
+        moods: List<Mood> = emptyList(),
+        money: List<MoneyEntry> = emptyList(),
+        savingGoals: List<SavingGoal> = emptyList(),
     ): List<EarnedBadge> {
         val found = mutableListOf<EarnedBadge>()
         fun add(badge: Badge, on: LocalDate?) { if (on != null) found += EarnedBadge(badge, on) }
@@ -115,7 +141,62 @@ object Badges {
         }
         add(Badge.WEEKLY_TARGET_4, fourth)
         add(Badge.WEEKLY_TARGET_12, twelfth)
+
+        if (Badge.SAVED_UP.shownWith(on)) add(Badge.SAVED_UP, savedUp(savingGoals, money, today))
+        if (Badge.MONEY_MONTH.shownWith(on)) {
+            val moneyStreak = moneyStreakReached(entries, today)
+            add(Badge.MONEY_STREAK_7, moneyStreak[7])
+            add(Badge.MONEY_STREAK_30, moneyStreak[30])
+            add(Badge.MONEY_MONTH, entries.filter { it.kind == EntryKind.BONUS && it.label == MoneyGame.LABEL_MONTH && it.day <= today }.minOfOrNull { it.day })
+        }
+        if (Badge.MOOD_30.shownWith(on)) {
+            add(Badge.MOOD_30, moods.map { it.day }.filter { it <= today }.distinct().sorted().getOrNull(MOOD_DAYS - 1))
+        }
         return found.sortedBy { it.badge.ordinal }
+    }
+
+    /** Days with a mood check-in, in all, for the mood badge. */
+    const val MOOD_DAYS = 30
+
+    /**
+     * The first day a saving goal held all it was saving up for, from the money put in and taken
+     * out. A goal removed since still counts: it was reached.
+     */
+    private fun savedUp(goals: List<SavingGoal>, money: List<MoneyEntry>, today: LocalDate): LocalDate? {
+        val targets = goals.filter { it.targetCents > 0 }.associate { it.id to it.targetCents }
+        val saved = HashMap<Long, Long>()
+        for (entry in money.filter { it.savingId != null && it.day <= today }.sortedWith(compareBy({ it.day }, { it.at }, { it.id }))) {
+            val id = entry.savingId!!
+            val target = targets[id] ?: continue
+            val now = (saved[id] ?: 0L) + when (entry.kind) {
+                MoneyKind.SAVED -> entry.cents
+                MoneyKind.TAKEN_OUT -> -entry.cents
+                else -> 0L
+            }
+            saved[id] = now
+            if (now >= target) return entry.day
+        }
+        return null
+    }
+
+    /**
+     * The day the money streak first reached each length: good money days in a row, read off
+     * what the budget game paid for each day in the points history. A day it paid nothing for
+     * (over its share, or the game was off) starts the count again.
+     */
+    private fun moneyStreakReached(entries: List<Entry>, today: LocalDate): Map<Int, LocalDate> {
+        val good = entries.filter {
+            it.kind == EntryKind.BONUS && it.day <= today && (it.label == MoneyGame.LABEL_NO_SPEND || it.label == MoneyGame.LABEL_WITHIN)
+        }.map { it.day }.distinct().sorted()
+        val reached = HashMap<Int, LocalDate>()
+        var length = 0
+        var previous: LocalDate? = null
+        for (day in good) {
+            length = if (previous != null && previous.plusDays(1) == day) length + 1 else 1
+            previous = day
+            if (length !in reached) reached[length] = day
+        }
+        return reached
     }
 
     /**

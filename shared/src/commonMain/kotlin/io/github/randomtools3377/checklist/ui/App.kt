@@ -397,6 +397,17 @@ fun ChecklistApp(vm: MainViewModel) {
             "planner" -> PlannerPage(planDays, vm, onTimeline = { index -> push("timeline/$index") }, onBack = ::pop)
             "mood-goals" -> MoodGoalsScreen(vm, onEdit = { goalId -> push("habit/$goalId") }, onBack = ::pop, onJournal = { push("mood-journal") })
             "mood-journal" -> MoodJournalScreen(vm, onBack = ::pop)
+            // A goal's own page. Edit takes its place, so saving or removing goes back to where the page was opened.
+            "goal" -> androidx.compose.runtime.key(route) {
+                GoalPageScreen(
+                    id, vm,
+                    hideReasons = settings.locks.reasons && !unlocked,
+                    onUnlock = unlock,
+                    onEdit = { goal -> pop(); push(editRoute(goal)) },
+                    onMiss = { vm.openMiss.value = it },
+                    onBack = ::pop,
+                )
+            }
             "done" -> DoneListScreen(doneList, onOpen = { goal -> push(editRoute(goal)) }, onBack = ::pop)
             "removed" -> RemovedGoalsScreen(removedGoals, onRestore = { vm.restoreGoal(it.id) }, onBack = ::pop)
             "reward" -> androidx.compose.runtime.key(route) { RewardEditor(id, vm, onClose = ::pop) }
@@ -425,7 +436,7 @@ fun ChecklistApp(vm: MainViewModel) {
             "features" -> FeaturesScreen(vm, onAppearance = { push("appearance") }, onBack = ::pop, focus = parts.getOrNull(1))
             "appearance" -> AppearanceScreen(appearance, vm, onAnyColour = { push("colour") }, onBack = ::pop, focus = parts.getOrNull(1))
             "colour" -> AppColourScreen(appearance, onUse = { vm.setColor(it); pop() }, onBack = ::pop)
-            "badges" -> BadgesScreen(badges, onSeen = vm::badgesSeen, onBack = ::pop, character = io.github.randomtools3377.checklist.core.Feature.CHARACTER in features)
+            "badges" -> BadgesScreen(badges, onSeen = vm::badgesSeen, onBack = ::pop, on = features)
             "history" -> HistoryScreen(
                 history,
                 gaps = if (settings.locks.gaps && !unlocked) emptyList() else allGaps,
@@ -477,7 +488,7 @@ fun ChecklistApp(vm: MainViewModel) {
                         AppTab.TODAY -> androidx.compose.runtime.CompositionLocalProvider(
                             LocalBoosted provides today?.boostedGoalId,
                             LocalStreakPercent provides (today?.streakPercent ?: 100),
-                            LocalTodayExtras provides TodayExtras(today?.quitDays.orEmpty(), today?.challenges.orEmpty(), vm::slip, vm::takeBackSkip),
+                            LocalTodayExtras provides TodayExtras(today?.quitDays.orEmpty(), today?.challenges.orEmpty(), vm::slip, vm::takeBackSkip, onHistory = { goalId -> push("goal/$goalId") }),
                         ) {
                             TodayScreen(
                                 today, vm, celebrations,
@@ -503,6 +514,7 @@ fun ChecklistApp(vm: MainViewModel) {
                             goals,
                             reordering = reorderGoals,
                             onEdit = { goal -> push(editRoute(goal)) },
+                            onOpen = { goal -> push("goal/${goal.id}") },
                             onMove = { goal, beside -> vm.moveGoalTo(goal.id, beside.id) },
                             onUnlock = unlock,
                             padding = padding,
@@ -522,15 +534,21 @@ fun ChecklistApp(vm: MainViewModel) {
                             // Best streaks look through every day there is, so only while the review is open.
                             val bestStreaks by vm.bestStreaks.collectAsStateWithLifecycle()
                             val reviewFocus by vm.reviewFocus.collectAsStateWithLifecycle()
+                            val reviewDone by vm.reviewDone.collectAsStateWithLifecycle()
                             ReviewScreen(
                                 summary = review,
                                 period = reviewPeriod,
                                 streaks = today?.streaks,
                                 hideReasons = settings.locks.reasons && !unlocked,
                                 hideGapNotes = settings.locks.gaps && !unlocked,
-                                onPeriod = { vm.reviewPeriod.value = it; vm.reviewDay.value = null },
+                                onPeriod = vm::reviewShow,
                                 onStep = vm::reviewStep,
-                                badges = badges.keys.count { io.github.randomtools3377.checklist.core.Feature.CHARACTER in features || !it.forCharacter },
+                                badges = badges.keys.count { it.shownWith(features) },
+                                badgeTotal = io.github.randomtools3377.checklist.core.Badge.shown(features).size,
+                                onDay = vm::reviewOpenDay,
+                                onGoal = { goalId -> push("goal/$goalId") },
+                                done = reviewDone,
+                                onDoneList = { push("done") },
                                 onBadges = { push("badges") },
                                 padding = padding,
                                 moods = moods,
@@ -720,7 +738,7 @@ internal fun lockedPage(route: String, locks: Locks, privateGoals: Set<Long>): S
     return when (parts[0]) {
         "budget-pay", "money", "budget-categories", "work-day", "budget-bills", "bill", "budget-report" -> "The budget".takeIf { locks.budget }
         "reward", "balance-check" -> "The shop".takeIf { locks.shop }
-        "habit", "project", "todo" -> "This private goal".takeIf { locks.privateGoals && parts.getOrNull(1)?.toLongOrNull()?.let { it in privateGoals } == true }
+        "habit", "project", "todo", "goal" -> "This private goal".takeIf { locks.privateGoals && parts.getOrNull(1)?.toLongOrNull()?.let { it in privateGoals } == true }
         // Moods sit behind the lock with reasons and notes, and they are part of the review.
         "mood-goals" -> "Mood and your goals".takeIf { locks.reasons || locks.review }
         // The journal holds the notes, so it is locked the same way.

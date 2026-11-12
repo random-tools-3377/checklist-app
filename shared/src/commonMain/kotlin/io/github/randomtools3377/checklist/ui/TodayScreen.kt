@@ -1325,6 +1325,15 @@ private fun HabitCard(
                         }
                     }
                 }
+                // Its own page: the calendar, runs and reasons.
+                extras.onHistory?.let { open ->
+                    Text(
+                        "History",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.secondary,
+                        modifier = Modifier.clickable { open(goal.id) }.padding(vertical = 4.dp).testTag("history:${goal.name}"),
+                    )
+                }
                 if (counted) {
                     Spacer(Modifier.height(6.dp))
                     LinearProgressIndicator(
@@ -1498,6 +1507,15 @@ private fun ProjectCard(project: ProjectRow, paceLine: String?, onTick: (StepRow
             }
             for (step in project.steps) {
                 StepLine(step, onTick = { onTick(step, it) }, onUndo = { onUndo(step) })
+            }
+            // Its own page: the calendar, and its steps with the day each was done.
+            LocalTodayExtras.current.onHistory?.let { open ->
+                Text(
+                    "History",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.secondary,
+                    modifier = Modifier.clickable { open(goal.id) }.padding(vertical = 4.dp).testTag("history:${goal.name}"),
+                )
             }
         }
     }
