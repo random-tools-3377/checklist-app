@@ -503,6 +503,14 @@ interface ChecklistDao {
     @Query("UPDATE purchases SET usedAt = :at WHERE id = :id")
     suspend fun markUsed(id: Long, at: Long)
 
+    /** Takes "used" back, for Undo: the reward waits under Bought again. */
+    @Query("UPDATE purchases SET usedAt = NULL WHERE id = :id")
+    suspend fun unmarkUsed(id: Long)
+
+    /** Rewards already used, latest first. */
+    @Query("SELECT * FROM purchases WHERE usedAt IS NOT NULL AND returnedAt IS NULL ORDER BY usedAt DESC, id DESC LIMIT 50")
+    fun observeUsedPurchases(): Flow<List<PurchaseEntity>>
+
     @Query("UPDATE purchases SET returnedAt = :at WHERE id = :id")
     suspend fun markReturned(id: Long, at: Long)
 

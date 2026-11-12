@@ -1752,8 +1752,34 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
     }
 
     fun use(purchaseId: Long) {
-        viewModelScope.launch { book.use(purchaseId) }
+        viewModelScope.launch {
+            if (!book.use(purchaseId)) return@launch
+            val name = dao.purchase(purchaseId)?.name ?: return@launch
+            offerUndo("Used $name") { dao.unmarkUsed(purchaseId) }
+        }
     }
+
+    /** Rewards already used, latest first, for the list under Bought. */
+    val usedRewards: StateFlow<List<io.github.randomtools3377.checklist.core.Purchase>> =
+        dao.observeUsedPurchases().map { rows -> rows.map { it.toCore() } }.state(emptyList())
+
+    /**
+     * What is left this month of the Rewards category's limit, in cents (below zero once over);
+     * null without the Budget, or while that category has no limit.
+     */
+    val rewardsLimitLeft: StateFlow<Long?> = today.flatMapLatest { day ->
+        val first = io.github.randomtools3377.checklist.core.Budget.monthOf(day)
+        val last = io.github.randomtools3377.checklist.core.Pay.monthDays(day).last()
+        combine(dao.observeMoneyCategories(), dao.observeMoney(first.toEpochDay(), last.toEpochDay()), dao.observeSetting(Feature.BUDGET.key)) { categories, money, on ->
+            val rewards = categories.firstOrNull { it.role == io.github.randomtools3377.checklist.core.CategoryRole.REWARDS.name && !it.archived }
+            val limit = rewards?.limitCents
+            if (!Feature.BUDGET.isOn(on) || rewards == null || limit == null) {
+                null
+            } else {
+                limit - money.filter { it.kind == io.github.randomtools3377.checklist.core.MoneyKind.SPENT.name && it.categoryId == rewards.id }.sumOf { it.cents }
+            }
+        }
+    }.state(null)
 
     fun returnPurchase(purchaseId: Long) {
         viewModelScope.launch { returnAndUncount(purchaseId) }

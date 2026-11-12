@@ -87,6 +87,9 @@ fun ShopScreen(
     var buying by remember { mutableStateOf<Reward?>(null) }
     var using by remember { mutableStateOf<Purchase?>(null) }
     var returning by remember { mutableStateOf<Purchase?>(null) }
+    val used by vm.usedRewards.collectAsStateWithLifecycle()
+    val limitLeft by vm.rewardsLimitLeft.collectAsStateWithLifecycle()
+    val shopFeatures by vm.features.collectAsStateWithLifecycle()
 
     Column(Modifier.fillMaxSize().padding(top = padding.calculateTopPadding())) {
         BalanceCard(
@@ -155,6 +158,23 @@ fun ShopScreen(
                     BoughtCard(purchase, onUse = { using = purchase }, onReturn = { returning = purchase })
                     Spacer(Modifier.height(10.dp))
                 }
+                // Rewards already enjoyed, latest first.
+                if (used.isNotEmpty()) {
+                    item(key = "used-title") {
+                        Text("Used", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 12.dp, bottom = 6.dp).testTag("used-title"))
+                    }
+                    items(used, key = { "used:${it.id}" }) { purchase ->
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp).testTag("used:${purchase.name}")) {
+                            Text(purchase.icon, modifier = Modifier.width(36.dp), textAlign = TextAlign.Center)
+                            Text(purchase.name, modifier = Modifier.weight(1f))
+                            Text(
+                                "Enjoyed ${shortDate((purchase.usedAt ?: purchase.at).toLocalDateTime().date)}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
             }
         }
     }
@@ -163,7 +183,27 @@ fun ShopScreen(
         AlertDialog(
             onDismissRequest = { buying = null },
             title = { Text("Buy ${reward.name}?") },
-            text = { Text("It costs ${pointsText(reward.price)}. Your balance will be ${pointsText(view.balance - reward.price)}.") },
+            text = {
+                Column {
+                    Text("It costs ${pointsText(reward.price)}. Your balance will be ${pointsText(view.balance - reward.price)}.")
+                    // With the Budget on, what it costs in money, and what that leaves of the Rewards limit.
+                    val cost = reward.value?.takeIf { io.github.randomtools3377.checklist.core.Feature.BUDGET in shopFeatures && it > 0 }
+                    if (cost != null) {
+                        val left = limitLeft
+                        val after = left?.minus(io.github.randomtools3377.checklist.core.Budget.cents(cost))
+                        Text(
+                            when {
+                                after == null -> "In money: ${moneyText(cost)}. It counts as spent in your budget."
+                                after >= 0 -> "In money: ${moneyText(cost)}. That leaves ${centsText(after)} for rewards this month."
+                                else -> "In money: ${moneyText(cost)}. That is ${centsText(-after)} over your rewards limit this month."
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (after != null && after < 0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 8.dp).testTag("buy-money"),
+                        )
+                    }
+                }
+            },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -205,7 +245,7 @@ fun ShopScreen(
         AlertDialog(
             onDismissRequest = { using = null },
             title = { Text("Used ${purchase.name}?") },
-            text = { Text("It leaves your Bought list.") },
+            text = { Text("It moves to Used, under your Bought list.") },
             confirmButton = {
                 TextButton(onClick = { vm.use(purchase.id); using = null }, modifier = Modifier.testTag("confirm-use")) { Text("Yes, used it") }
             },
@@ -355,7 +395,7 @@ private fun MoneyField(
         "Price follows what it costs",
         follows,
         "field:follows-money",
-        hint = "The price in ${pointsWord()} works itself out from this, and keeps in step as your goals change.",
+        hint = "Turn this on to link them: the price in ${pointsWord()} then works itself out from this, and keeps in step as your goals change.",
         onChange = onFollows,
     )
     if (budget == null) {
@@ -614,14 +654,18 @@ fun RewardEditor(id: Long, vm: MainViewModel, onClose: () -> Unit) {
             supportingText = if (showErrors && nameError != null) ({ Text(nameError) }) else null,
             modifier = Modifier.fillMaxWidth().testTag("field:name"),
         )
-        // An extra: shown when turned on, or when this reward already has a value.
-        val worth = io.github.randomtools3377.checklist.core.Feature.SUGGESTIONS in features || size != null || money.isNotBlank()
+        // An extra: shown with suggested prices or the Budget on, or when this reward already has a value.
+        val suggesting = io.github.randomtools3377.checklist.core.Feature.SUGGESTIONS in features
+        val budgeting = io.github.randomtools3377.checklist.core.Feature.BUDGET in features
+        val worth = suggesting || budgeting || size != null || money.isNotBlank()
         if (worth) {
             MoneyField(
                 money = money,
                 onMoney = { text ->
-                    // Typing a money value for the first time makes the price follow it.
-                    if (money.isBlank() && text.isNotBlank()) follows = true
+                    // With suggested prices on, typing a money value for the first time makes the
+                    // price follow it. With only the Budget on, the value just counts as spending
+                    // when the reward is bought, and the price follows only if the user links them.
+                    if (suggesting && money.isBlank() && text.isNotBlank()) follows = true
                     money = text
                 },
                 follows = follows,
@@ -666,7 +710,7 @@ fun RewardEditor(id: Long, vm: MainViewModel, onClose: () -> Unit) {
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        if (worth && autoPrice == null && !(follows && moneyValue != null)) {
+        if ((suggesting || size != null) && autoPrice == null && !(follows && moneyValue != null)) {
             SizeField(
                 size = size?.let { RewardSize.valueOf(it) },
                 onSize = { size = it?.name },
