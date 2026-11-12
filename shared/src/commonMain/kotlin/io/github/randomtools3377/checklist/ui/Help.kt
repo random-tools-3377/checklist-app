@@ -165,6 +165,10 @@ private fun reminderSteps(device: GuideDevice): List<String> {
         if (device.plan) {
             add("\"Morning plan\" comes when your day starts, with today's list and the pace. \"Weekly summary\" comes on Sunday at 6 pm. Turn each on or off in Settings → Notifications.")
         }
+        if (device.buttons) {
+            add("A late nudge has \"Done\" and \"Stop for today\", which ends that goal's nudges until tomorrow. A \"Make it smaller\" nudge for a goal with a length also has \"Focus\", which starts its focus timer.")
+            add("Nudges have their own notification type, \"Late nudges\", so you can make them quiet in the phone's settings.")
+        }
         if (device.buttons) add("If reminders come late, tap \"Allow exact times\" in Settings → Notifications, when it shows there.")
         if (device.computer) add("On a computer, reminders come while Checklist is running, also with the window closed. Quit from the icon by the clock.")
         device.missing?.let { add(if (" and " in it) "$it aren't on this device yet." else "$it isn't on this device yet.") }
@@ -205,6 +209,9 @@ private fun ruleNumbers(rules: Rules): Map<String, Int> = mapOf(
     "noSpendDay" to rules.noSpendDay,
     "monthBonus" to rules.moneyMonthBonus,
     "savedUp" to rules.savedUp,
+    "nudgeLate" to rules.nudgeLateMinutes,
+    "nudgeEvery" to rules.nudgeEveryMinutes,
+    "nudgeMost" to rules.nudgeMost,
 )
 
 /** All of a guide's words on [device], for the search in Help. */

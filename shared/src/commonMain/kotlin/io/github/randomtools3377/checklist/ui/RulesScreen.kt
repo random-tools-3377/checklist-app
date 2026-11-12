@@ -47,6 +47,7 @@ import io.github.randomtools3377.checklist.core.Rules
 fun RulesScreen(vm: MainViewModel, onBack: () -> Unit) {
     val rules by vm.rules.collectAsStateWithLifecycle()
     val features by vm.features.collectAsStateWithLifecycle()
+    val nudgesOn by vm.nudgesOn.collectAsStateWithLifecycle()
     var resetting by remember { mutableStateOf(false) }
     val usual = remember { Rules() }
     Scaffold(
@@ -73,7 +74,7 @@ fun RulesScreen(vm: MainViewModel, onBack: () -> Unit) {
                     modifier = Modifier.padding(bottom = 8.dp),
                 )
             }
-            Offered.rules(Rules.FIELDS, features, rules, usual).groupBy { it.group }.forEach { (group, fields) ->
+            Offered.rules(Rules.FIELDS, features, rules, usual, nudges = nudgesOn).groupBy { it.group }.forEach { (group, fields) ->
                 item(key = "group-$group") { SectionTitle(group) }
                 items(fields, key = { it.key }) { field -> RuleRow(field, rules, usual) { vm.setRules(field.set(rules, it)) } }
             }

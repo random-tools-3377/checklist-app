@@ -21,6 +21,8 @@ import io.github.randomtools3377.checklist.data.deadlineReminders
 import io.github.randomtools3377.checklist.data.eveningChecks
 import io.github.randomtools3377.checklist.data.moodReminders
 import io.github.randomtools3377.checklist.data.nowLocal
+import io.github.randomtools3377.checklist.data.nudgePlan
+import io.github.randomtools3377.checklist.data.nudgeWriter
 import io.github.randomtools3377.checklist.data.nowMillis
 import io.github.randomtools3377.checklist.data.parseDayEndHour
 import io.github.randomtools3377.checklist.data.toCore
@@ -111,7 +113,9 @@ internal object IosReminders {
         } else {
             emptyMap()
         }
-        val alerts = Alerts.between(goals, from, to, dayEnd, defaultFinish, usual).sortedBy { it.at }
+        // Late nudges are handed over with the rest, already in words. Everything is handed over
+        // again on every change, so a tick, a skip or "No more nudges today" removes what is left.
+        val alerts = Alerts.between(goals, from, to, dayEnd, defaultFinish, usual, nudgePlan(dao)).sortedBy { it.at }
         // Leave out what is already done for its time.
         val earliest = alerts.minOfOrNull { it.day }?.minusDays(366)
         val ticks = earliest?.let { dao.habitTicksSince(it.toEpochDay()).map { tick -> tick.toCore() } }.orEmpty()
@@ -136,14 +140,23 @@ internal object IosReminders {
         val moods = moodReminders(dao, from, to).take((MOST - evenings.size - deadlines.size).coerceAtLeast(0))
         val waiting = Alerts.keep(stillToDo, (MOST - evenings.size - deadlines.size - moods.size).coerceAtLeast(0))
 
+        // What each late nudge says, worked out before anything waiting is taken back.
+        val writer = if (waiting.any { it.kind == AlertKind.NUDGE }) nudgeWriter(dao, parts.book) else null
+        val nudgeWords = waiting.filter { it.kind == AlertKind.NUDGE }.mapNotNull { alert ->
+            val goal = goals.find { it.id == alert.goalId } ?: return@mapNotNull null
+            val window = goal.repeat?.window(alert.day) ?: return@mapNotNull null
+            writer?.words(goal, alert, Alerts.timesDone(goal, window, ticks))?.let { alert to it }
+        }.toMap()
+
         center.removeAllPendingNotificationRequests()
         for (alert in waiting) {
             val goal = goals.find { it.id == alert.goalId } ?: continue
             val hidden = hidePrivate && goal.private
+            val nudge = nudgeWords[alert]
             // The text is set through its setters: Kotlin sees the read-only parent's properties.
             val content = UNMutableNotificationContent()
-            content.setTitle(if (hidden) "🔒 A private goal" else "${goal.icon} ${goal.name}")
-            content.setBody(if (hidden) Alerts.lockedWords(alert) else words(alert))
+            content.setTitle(nudge?.title ?: if (hidden) "🔒 A private goal" else "${goal.icon} ${goal.name}")
+            content.setBody(nudge?.text ?: if (hidden) Alerts.lockedWords(alert) else words(alert))
             content.setSound(UNNotificationSound.defaultSound)
             val request = UNNotificationRequest.requestWithIdentifier(
                 "goal-${alert.goalId}-${alert.at}-${alert.kind}",
@@ -225,6 +238,7 @@ internal object IosReminders {
         AlertKind.NEXT -> "Next up"
         AlertKind.DEADLINE -> "Due soon"
         AlertKind.BILL -> "Due soon"
+        AlertKind.NUDGE -> "Still to do"
     }
 
     private fun components(at: LocalDateTime): NSDateComponents = NSDateComponents().apply {

@@ -20,6 +20,8 @@ import io.github.randomtools3377.checklist.data.moodReminders
 import io.github.randomtools3377.checklist.data.nowLocal
 import io.github.randomtools3377.checklist.data.nowMillis
 import io.github.randomtools3377.checklist.data.nextInChain
+import io.github.randomtools3377.checklist.data.nudgePlan
+import io.github.randomtools3377.checklist.data.nudgeWriter
 import io.github.randomtools3377.checklist.data.parseDayEndHour
 import io.github.randomtools3377.checklist.data.toCore
 import io.github.randomtools3377.checklist.data.toEpochDay
@@ -190,7 +192,8 @@ class DesktopReminders(private val phone: DesktopPhone) {
             } else {
                 emptyMap()
             }
-            val alerts = Alerts.between(goals, from, to, dayEnd, defaultFinish, usual).sortedBy { it.at }
+            // Late nudges come with the rest, in the same words as on a phone.
+            val alerts = Alerts.between(goals, from, to, dayEnd, defaultFinish, usual, nudgePlan(dao)).sortedBy { it.at }
             // A project's deadline, the day before and on the day, while it isn't finished.
             // And a bill, or regular money in, coming up: some days before it is due, as set on it.
             val deadlines = (deadlineReminders(dao, from, to) + billReminders(dao, from, to)).map { DueReminder(it.goalId, it.title, it.text) }
@@ -198,12 +201,18 @@ class DesktopReminders(private val phone: DesktopPhone) {
             val earliest = alerts.minOf { it.day }.minusDays(366)
             val ticks = dao.habitTicksSince(earliest.toEpochDay()).map { it.toCore() }
             val hidePrivate = dao.setting(LOCK_PRIVATE) == "1"
+            val nudges = if (alerts.any { it.kind == AlertKind.NUDGE }) nudgeWriter(dao, parts.book) else null
             return alerts.mapNotNull { alert ->
                 val goal = goals.find { it.id == alert.goalId } ?: return@mapNotNull null
                 val window = goal.repeat?.window(alert.day) ?: return@mapNotNull null
                 val lapses = dao.lapses(goal.id, window.start.toEpochDay(), window.end.toEpochDay()).map { it.toCore() }
                 if (!Alerts.stillToDo(goal, window, ticks, lapses, alert.number)) return@mapNotNull null
                 val hidden = hidePrivate && goal.private
+                if (alert.kind == AlertKind.NUDGE && nudges != null) {
+                    // A late nudge: the goal and how late it is, then the words whose turn it is.
+                    val words = nudges.words(goal, alert, Alerts.timesDone(goal, window, ticks))
+                    return@mapNotNull DueReminder(goal.id, words.title, words.text)
+                }
                 DueReminder(
                     goalId = goal.id,
                     title = if (hidden) "🔒 A private goal" else "${goal.icon} ${goal.name}",
@@ -243,6 +252,7 @@ class DesktopReminders(private val phone: DesktopPhone) {
             AlertKind.NEXT -> "Next up"
             AlertKind.DEADLINE -> "Due soon"
             AlertKind.BILL -> "Due soon"
+            AlertKind.NUDGE -> "Still to do"
         }
     }
 }

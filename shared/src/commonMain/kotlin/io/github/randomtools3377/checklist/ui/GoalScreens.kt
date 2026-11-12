@@ -667,6 +667,8 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Long)
     var alertBefore by rememberSaveable { mutableStateOf<Int?>(null) }
     var remindAtMinute by rememberSaveable { mutableStateOf<Int?>(null) }
     var keepReminding by rememberSaveable { mutableStateOf(false) }
+    // "Nudge me when it's late": on for every goal until turned off here.
+    var nudge by rememberSaveable { mutableStateOf(true) }
     var allowance by rememberSaveable { mutableStateOf(Goal.DEFAULT_ALLOWANCE.toString()) }
     var allowancePer by rememberSaveable { mutableStateOf(Period.WEEKLY) }
     var isPrivate by rememberSaveable { mutableStateOf(false) }
@@ -704,7 +706,7 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Long)
         minutes, atMinute, eachTimeOn, eachTimes, items.filter { it.id != 0L || it.name.isNotBlank() }.map { it.id to it.name },
         finishByMinute, finishDay, notifyOnTime, alertBefore, remindAtMinute, keepReminding, allowance, allowancePer, isPrivate,
         celebration, sound, category, color, amountText, unit, effort, quit, challengeOn, challengeDays, challengeBonus, after, skill,
-        atMost, limitText,
+        atMost, limitText, nudge,
     )
     val phone = LocalPhone.current
     val askPermission = rememberAsk(Ask.NOTIFICATIONS) { onClose() }
@@ -760,6 +762,7 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Long)
                     alertBefore = r.minutesBefore
                     remindAtMinute = r.at?.toMinuteOfDay()
                     keepReminding = r.againEvery != null
+                    nudge = r.nudge
                 }
                 goal.repeat?.let { r ->
                     startDay = r.start.toEpochDay()
@@ -929,6 +932,7 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Long)
                         minutesBefore = if (atMinute != null || eachTimesSet.isNotEmpty()) alertBefore else null,
                         at = if (atMinute == null && eachTimesSet.isEmpty()) remindAtMinute?.toTime() else null,
                         againEvery = if (keepReminding) Reminder.AGAIN_EVERY else null,
+                        nudge = nudge,
                     ),
                     allowance = allowance.toIntOrNull() ?: Goal.DEFAULT_ALLOWANCE,
                     allowancePer = allowancePer,
@@ -1303,6 +1307,19 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Long)
                 "field:keep-reminding",
                 hint = "Again every ${Reminder.AGAIN_EVERY} minutes, until it's done or its finish time passes.",
             ) { keepReminding = it }
+        }
+        // Late nudges: for a goal with something to be late for, while they are on in Settings.
+        val nudgesOn by vm.nudgesOn.collectAsStateWithLifecycle()
+        val hasLateTime = clock != null || eachTimesSet.isNotEmpty() || finishByMinute != null
+        if (nudgesOn && hasLateTime && !atMost && !quit && choice != RepeatChoice.TIMES_PER) {
+            val rules by vm.rules.collectAsStateWithLifecycle()
+            SwitchRow(
+                "Nudge me when it's late",
+                nudge,
+                "field:nudge",
+                hint = "A friendly nudge once it's ${minutesText(rules.nudgeLateMinutes)} late, then every ${minutesText(rules.nudgeEveryMinutes)} " +
+                    "until it's done, skipped or the day ends. They take over from \"Keep reminding\" once it's late.",
+            ) { nudge = it }
         }
         // A goal to quit, and a challenge: extras, shown when turned on or already in use here.
         if (Feature.QUIT in features || quit || Feature.CHALLENGES in features || challengeOn) HorizontalDivider()

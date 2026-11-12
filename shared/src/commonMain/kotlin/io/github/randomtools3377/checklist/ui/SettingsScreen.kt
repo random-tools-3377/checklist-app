@@ -249,7 +249,7 @@ private fun SwitchLine(title: String, hint: String, on: Boolean, tag: String, on
 
 /** The words a Settings search finds the Notifications part by. */
 internal fun notificationWords(phone: Phone): String =
-    "Notifications notification reminders reminder alarm exact weekly summary snooze morning plan evening check still open light up screen edge lighting mood reminder how are you feeling" +
+    "Notifications notification reminders reminder alarm exact weekly summary snooze morning plan evening check still open light up screen edge lighting mood reminder how are you feeling late nudges nudge encouraging playful gain smaller motivate" +
         (if (phone.hasWidgets) " widget widgets home screen calendar" else "") +
         if (phone.canKeepRunning) " keep running window closed quit start sign in windows startup" else ""
 
@@ -845,6 +845,43 @@ fun SettingsScreen(
                     }
                 } else {
                     NotOnThisDevice("Light up the screen for reminders", Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
+                }
+                // Late nudges: one switch for all of them, and the kinds of message that take turns.
+                val nudgesOn by vm.nudgesOn.collectAsState()
+                val nudgeRules by vm.rules.collectAsState()
+                SwitchRow(
+                    "Nudges when something is late",
+                    nudgesOn,
+                    "setting:late-nudges",
+                    hint = "For goals with a set time or their own finish-by time: a friendly nudge once one is ${minutesText(nudgeRules.nudgeLateMinutes)} late, " +
+                        "then every ${minutesText(nudgeRules.nudgeEveryMinutes)} until it's done, skipped or the day ends. " +
+                        "Each goal has its own switch in its editor, and \"No more nudges today\" on its card on Today.",
+                    padding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+                ) { vm.setNudgesOn(it) }
+                if (nudgesOn) {
+                    val tones by vm.nudgeTones.collectAsState()
+                    Text(
+                        "Kinds of nudge",
+                        style = MaterialTheme.typography.bodyLarge,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                    )
+                    io.github.randomtools3377.checklist.core.NudgeTone.entries.forEach { tone ->
+                        SwitchRow(
+                            tone.label,
+                            tone in tones,
+                            "setting:nudge-tone:${tone.name}",
+                            hint = tone.hint,
+                            padding = PaddingValues(start = 32.dp, end = 16.dp, top = 2.dp, bottom = 2.dp),
+                        ) { vm.setNudgeTone(tone, it) }
+                    }
+                    if (tones.isEmpty()) {
+                        Text(
+                            "With every kind off, nudges are Encouraging ones.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 32.dp, vertical = 2.dp).testTag("nudge-tones-none"),
+                        )
+                    }
                 }
                 val evening by vm.eveningCheck.collectAsState()
                 EveningCheckSetting(evening, settings.dayEndHour, vm::setEveningCheck, Modifier.padding(horizontal = 16.dp, vertical = 4.dp))

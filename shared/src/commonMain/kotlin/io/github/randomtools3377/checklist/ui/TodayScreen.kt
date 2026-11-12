@@ -1400,6 +1400,15 @@ private fun HabitCard(
                             )
                         }
                     }
+                    // Late, with nudges still to come: they can be stopped for the rest of the day.
+                    if (goal.id in extras.nudging) {
+                        Text(
+                            "No more nudges today",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.secondary,
+                            modifier = Modifier.clickable { extras.onStopNudges(goal.id) }.padding(vertical = 4.dp).testTag("stop-nudges:${goal.name}"),
+                        )
+                    }
                 }
                 // Its own page: the calendar, runs and reasons.
                 extras.onHistory?.let { open ->

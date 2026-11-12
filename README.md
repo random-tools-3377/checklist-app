@@ -128,6 +128,7 @@ on one and import the file on the other. Reminders show only while the app is op
 - 0.67.1: the Money game says its daily figure is a line to stay under, and takes the user's own daily amount.
 - 0.67.2: the calendar widget is 4 by 4 when added, with switches for what it shows.
 - 0.68.0: quick Spent, bill reminders, pay from a date; a reward to save for on Today; a passphrase for backups and Erase everything; Windows backup folder and reminders with the window closed; at most goals.
+- 0.69.0: nudges when a goal is late, worded differently each time, with Stop for today.
 
 Every step in CLAUDE.md's build order is built. The iPhone app is installed with SideStore or
 AltStore (see the 0.55.0 release notes).

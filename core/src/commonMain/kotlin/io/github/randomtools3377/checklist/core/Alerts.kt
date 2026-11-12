@@ -38,11 +38,16 @@ enum class AlertKind {
 
     /** A bill, or regular money in, is due: some days before, as set on it (see [Alerts.bills]). */
     BILL,
+
+    /** A late nudge: the goal's time has passed and it isn't done (see [Nudges]). */
+    NUDGE,
 }
 
 /**
  * One notification due at [at], for [goalId] on the user's [day]. For a habit done several times
- * a day with a time for each, [number] is which one (1 for the first); otherwise 0.
+ * a day with a time for each, [number] is which one (1 for the first); otherwise 0. A late
+ * nudge says how many minutes [late] the goal is by then, and which nudge of the day it is ([nth],
+ * from 1).
  */
 data class Alert(
     val goalId: Long,
@@ -51,13 +56,17 @@ data class Alert(
     val kind: AlertKind,
     val minutesBefore: Int = 0,
     val number: Int = 0,
+    val late: Int = 0,
+    val nth: Int = 0,
 )
 
 object Alerts {
     /**
      * Every notification from [from] (included) to [to] (not included). A habit counted per
      * week, month or year is reminded each day until its window is done; whether it is done is
-     * checked when the alert fires.
+     * checked when the alert fires. With [nudges], goals that are nudged when late get their
+     * late nudges too (see [Nudges]), and from the moment such a goal is late its "keep
+     * reminding" repeats are left out, so the two never come together.
      */
     fun between(
         goals: List<Goal>,
@@ -66,6 +75,7 @@ object Alerts {
         dayEndHour: Int,
         defaultFinish: LocalTime? = null,
         usual: Map<Long, LocalTime> = emptyMap(),
+        nudges: NudgePlan? = null,
     ): List<Alert> {
         val alerts = mutableListOf<Alert>()
         for (goal in goals) {
@@ -101,6 +111,17 @@ object Alerts {
                     }
                     reminder.againEvery?.takeIf { it > 0 }?.let { every ->
                         alerts += again(goal, day, alerts.subList(firstOfDay, alerts.size).toList(), every, dayEndHour, defaultFinish)
+                    }
+                    if (nudges != null && Nudges.applies(goal, nudges)) {
+                        // Once it is late the nudges take over from "keep reminding", also on a
+                        // day they were stopped for: "Stop for today" asks for quiet.
+                        val due = Nudges.dueMoments(goal, day, dayEndHour).toMap()
+                        val kept = alerts.subList(firstOfDay, alerts.size).filter { alert ->
+                            alert.kind != AlertKind.AGAIN || due[alert.number]?.let { alert.at < it } ?: true
+                        }
+                        while (alerts.size > firstOfDay) alerts.removeAt(alerts.size - 1)
+                        alerts += kept
+                        alerts += Nudges.on(goal, day, dayEndHour, nudges)
                     }
                 }
                 day = day.plusDays(1)
@@ -306,11 +327,11 @@ object Alerts {
 
     /**
      * At most [most] of [alerts], for a phone that keeps only so many waiting: every first
-     * reminder, earliest first, before any "keep reminding" repeat, so one day's repeats never
-     * crowd out the next days' reminders. In time order.
+     * reminder, earliest first, before any "keep reminding" repeat or late nudge, so one day's
+     * repeats never crowd out the next days' reminders. In time order.
      */
     fun keep(alerts: List<Alert>, most: Int): List<Alert> {
-        val (repeats, firsts) = alerts.sortedBy { it.at }.partition { it.kind == AlertKind.AGAIN }
+        val (repeats, firsts) = alerts.sortedBy { it.at }.partition { it.kind == AlertKind.AGAIN || it.kind == AlertKind.NUDGE }
         val kept = firsts.take(most)
         return (kept + repeats.take(most - kept.size)).sortedBy { it.at }
     }
@@ -319,6 +340,7 @@ object Alerts {
     fun lockedWords(alert: Alert): String = when (alert.kind) {
         AlertKind.BEFORE -> "In ${alert.minutesBefore} min"
         AlertKind.FOCUS_DONE -> "Time's up"
+        AlertKind.NUDGE -> "Still to do"
         else -> "Due now"
     }
 

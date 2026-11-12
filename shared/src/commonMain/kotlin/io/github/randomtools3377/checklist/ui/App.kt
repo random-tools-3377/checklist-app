@@ -164,6 +164,7 @@ fun ChecklistApp(vm: MainViewModel) {
     val penaltyTasks by vm.penaltyTasks.collectAsStateWithLifecycle()
     val unlocked by vm.unlocked.collectAsStateWithLifecycle()
     val skipRequest by vm.skipRequest.collectAsStateWithLifecycle()
+    val nudging by vm.nudging.collectAsStateWithLifecycle()
     val unlock = rememberUnlock(vm)
     val privateIds by vm.privateGoalIds.collectAsStateWithLifecycle()
     // Goals marked private, while the lock is on for them: left out or not named.
@@ -534,7 +535,10 @@ fun ChecklistApp(vm: MainViewModel) {
                         AppTab.TODAY -> androidx.compose.runtime.CompositionLocalProvider(
                             LocalBoosted provides today?.boostedGoalId,
                             LocalStreakPercent provides (today?.streakPercent ?: 100),
-                            LocalTodayExtras provides TodayExtras(today?.quitDays.orEmpty(), today?.challenges.orEmpty(), vm::slip, vm::takeBackSkip, onHistory = { goalId -> push("goal/$goalId") }),
+                            LocalTodayExtras provides TodayExtras(
+                                today?.quitDays.orEmpty(), today?.challenges.orEmpty(), vm::slip, vm::takeBackSkip, onHistory = { goalId -> push("goal/$goalId") },
+                                nudging = nudging, onStopNudges = vm::stopNudges,
+                            ),
                         ) {
                             TodayScreen(
                                 today, vm, celebrations,

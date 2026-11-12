@@ -109,6 +109,14 @@ data class Rules(
     val moodMinDays: Int = 3,
     /** A difference in mood counts from this many tenths of a point (5 is half a point). */
     val moodNotableTenths: Int = 5,
+
+    // Late nudges (see Nudges)
+    /** A goal is nudged once it is this many minutes late. */
+    val nudgeLateMinutes: Int = 30,
+    /** Then again every this many minutes, until it is done, skipped or the day ends. */
+    val nudgeEveryMinutes: Int = 30,
+    /** The most nudges for one time of a goal in a day, so a forgotten goal doesn't buzz all night. */
+    val nudgeMost: Int = 12,
 ) {
     /** Every value brought into its range (see [FIELDS]), and a lucky chest's least no more than its most. */
     fun sane(): Rules {
@@ -168,6 +176,9 @@ data class Rules(
         private const val BALANCE = "Balance check"
         private const val SUGGESTIONS = "Suggestions"
         private const val MOOD = "Mood and your goals"
+
+        /** The group of the late nudges' numbers, shown while nudges are on (see [Nudges.SETTING]). */
+        const val NUDGES = "Late nudges"
 
         private const val PERCENT = "percent"
         private const val POINTS = "points"
@@ -245,6 +256,10 @@ data class Rules(
 
             field("moodMinDays", MOOD, "Days with a mood needed with a goal done or a thing noted, and without, before it is compared", DAYS, 1, 90, { it.moodMinDays }) { r, v -> r.copy(moodMinDays = v) },
             field("moodNotableTenths", MOOD, "A goal or thing goes with a better or lower mood from a difference of this many tenths (out of 5)", "tenths", 1, 40, { it.moodNotableTenths }) { r, v -> r.copy(moodNotableTenths = v) },
+
+            field("nudgeLateMinutes", NUDGES, "The first nudge comes once a goal is this late", "minutes", 0, 720, { it.nudgeLateMinutes }) { r, v -> r.copy(nudgeLateMinutes = v) },
+            field("nudgeEveryMinutes", NUDGES, "Then a nudge comes every", "minutes", 5, 720, { it.nudgeEveryMinutes }) { r, v -> r.copy(nudgeEveryMinutes = v) },
+            field("nudgeMost", NUDGES, "Nudges at most, for each time of a goal in a day", "nudges", 1, 48, { it.nudgeMost }) { r, v -> r.copy(nudgeMost = v) },
         )
     }
 }

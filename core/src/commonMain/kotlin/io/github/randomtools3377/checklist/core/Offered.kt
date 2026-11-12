@@ -95,11 +95,13 @@ object Offered {
 
     /**
      * The numbers "Points and rules" shows: those for extras that are [on], those that belong to
-     * no extra, and any already changed from its usual value.
+     * no extra, and any already changed from its usual value. The late nudges' numbers show
+     * while nudges are on in Settings ([nudges]).
      */
-    fun rules(fields: List<RuleField>, on: Set<Feature>, rules: Rules, usual: Rules = Rules()): List<RuleField> =
+    fun rules(fields: List<RuleField>, on: Set<Feature>, rules: Rules, usual: Rules = Rules(), nudges: Boolean = true): List<RuleField> =
         fields.filter { field ->
             val feature = RULE_FEATURES[field.key]
-            feature == null || feature in on || field.get(rules) != field.get(usual)
+            val offered = if (field.group == Rules.NUDGES) nudges else feature == null || feature in on
+            offered || field.get(rules) != field.get(usual)
         }
 }

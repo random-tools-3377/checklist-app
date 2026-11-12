@@ -145,6 +145,8 @@ data class Reminder(
     val at: LocalTime? = null,
     /** Keep reminding every this many minutes until it is done, or its finish time passes. Null for once. */
     val againEvery: Int? = null,
+    /** "Nudge me when it's late": late nudges for this goal (see [Nudges]). On unless turned off. */
+    val nudge: Boolean = true,
 ) {
     companion object {
         /** "Keep reminding" starts at every 30 minutes. */

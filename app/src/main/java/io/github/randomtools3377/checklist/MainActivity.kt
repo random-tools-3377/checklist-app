@@ -56,6 +56,13 @@ class MainActivity : FragmentActivity() {
             vm.openTab.value = tab
             intent.removeExtra(EXTRA_OPEN)
         }
+        val focus = intent?.getLongExtra(EXTRA_FOCUS, -1) ?: -1
+        if (focus >= 0) {
+            val minutes = intent?.getIntExtra(EXTRA_FOCUS_MINUTES, 0) ?: 0
+            vm.openTab.value = "today"
+            if (minutes > 0) vm.startFocus(focus, minutes)
+            intent?.removeExtra(EXTRA_FOCUS)
+        }
         val timed = intent?.getLongExtra(EXTRA_STOP_TIMING, -1) ?: -1
         if (timed >= 0) {
             vm.openTab.value = "today"
@@ -70,6 +77,10 @@ class MainActivity : FragmentActivity() {
 
         /** Opens a tab, like "review" from the weekly summary. */
         const val EXTRA_OPEN = "open_tab"
+
+        /** Focus on a late nudge: starts this goal's focus timer, for [EXTRA_FOCUS_MINUTES] minutes. */
+        const val EXTRA_FOCUS = "focus_goal"
+        const val EXTRA_FOCUS_MINUTES = "focus_minutes"
 
         /** Stop on the timing notification: asks how much of this goal was done. */
         const val EXTRA_STOP_TIMING = "stop_timing"

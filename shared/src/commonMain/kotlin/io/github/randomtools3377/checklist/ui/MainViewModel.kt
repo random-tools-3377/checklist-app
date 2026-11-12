@@ -764,6 +764,55 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
         viewModelScope.launch { repository.setSetting(io.github.randomtools3377.checklist.data.SETTING_REMINDER_LIGHT, if (on) "1" else "0") }
     }
 
+    // Late nudges (see Nudges)
+
+    /** "Nudges when something is late" in Settings: on unless turned off. */
+    val nudgesOn: StateFlow<Boolean> =
+        dao.observeSetting(io.github.randomtools3377.checklist.core.Nudges.SETTING).map { io.github.randomtools3377.checklist.core.Nudges.isOn(it) }.state(true)
+
+    fun setNudgesOn(on: Boolean) {
+        viewModelScope.launch { repository.setSetting(io.github.randomtools3377.checklist.core.Nudges.SETTING, if (on) "1" else "0") }
+    }
+
+    /** The kinds of nudge message that are switched on (all of them to start). */
+    val nudgeTones: StateFlow<Set<io.github.randomtools3377.checklist.core.NudgeTone>> =
+        dao.observeSetting(io.github.randomtools3377.checklist.core.Nudges.TONES).map { text ->
+            if (text == null) io.github.randomtools3377.checklist.core.NudgeTone.entries.toSet()
+            else text.split(",").mapNotNull { name -> io.github.randomtools3377.checklist.core.NudgeTone.entries.firstOrNull { it.name == name.trim() } }.toSet()
+        }.state(io.github.randomtools3377.checklist.core.NudgeTone.entries.toSet())
+
+    fun setNudgeTone(tone: io.github.randomtools3377.checklist.core.NudgeTone, on: Boolean) {
+        val tones = if (on) nudgeTones.value + tone else nudgeTones.value - tone
+        viewModelScope.launch {
+            repository.setSetting(io.github.randomtools3377.checklist.core.Nudges.TONES, io.github.randomtools3377.checklist.core.Nudges.encodeTones(tones))
+        }
+    }
+
+    /** Late nudges as they are set up now: the switch, the numbers from "Points and rules", and the goals stopped for today. */
+    private val nudgePlan: Flow<io.github.randomtools3377.checklist.core.NudgePlan> = combine(
+        dao.observeSetting(io.github.randomtools3377.checklist.core.Nudges.SETTING),
+        dao.observeSetting(io.github.randomtools3377.checklist.core.Nudges.STOPPED),
+        dao.observeSetting(io.github.randomtools3377.checklist.core.Rules.SETTING),
+    ) { on, stopped, rules ->
+        io.github.randomtools3377.checklist.core.Nudges.plan(on, stopped, io.github.randomtools3377.checklist.core.Rules.decode(rules))
+    }
+
+    /** The goals on Today that are late with nudges still to come, whose cards offer "No more nudges today". */
+    val nudging: StateFlow<Set<Long>> = combine(todayState, nudgePlan, settings) { screen, plan, s ->
+        if (screen == null || !plan.on) return@combine emptySet()
+        screen.view.dueToday.filter { row ->
+            !row.settled && io.github.randomtools3377.checklist.core.Nudges.canStop(row.goal, screen.view.day, screen.now, row.count, s.dayEndHour, plan)
+        }.map { it.goal.id }.toSet()
+    }.state(emptySet())
+
+    /** "No more nudges today": this goal's late nudges stop until the day ends. */
+    fun stopNudges(goalId: Long) {
+        viewModelScope.launch {
+            io.github.randomtools3377.checklist.data.stopNudges(dao, goalId, currentDay())
+            runCatching { phone.rescheduleReminders() }
+        }
+    }
+
     /**
      * The goal whose tick was just handed back to the screen, for the celebration that follows:
      * its own sound, and its colour for the glow round the edges.

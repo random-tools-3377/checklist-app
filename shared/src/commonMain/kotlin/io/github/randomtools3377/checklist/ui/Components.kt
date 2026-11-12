@@ -68,6 +68,9 @@ class TodayExtras(
     val onTakeBackSkip: (Long) -> Unit = {},
     /** Opens a goal's own page, from "History" on its card; null where there is no page to open. */
     val onHistory: ((Long) -> Unit)? = null,
+    /** The goals that are late with nudges still to come today, and "No more nudges today" for one. */
+    val nudging: Set<Long> = emptySet(),
+    val onStopNudges: (Long) -> Unit = {},
 )
 
 val LocalTodayExtras = androidx.compose.runtime.compositionLocalOf { TodayExtras() }

@@ -26,6 +26,9 @@ import io.github.randomtools3377.checklist.core.Chains
 import io.github.randomtools3377.checklist.core.UsualTimes
 import io.github.randomtools3377.checklist.core.Feature
 import io.github.randomtools3377.checklist.core.MoodReminder
+import io.github.randomtools3377.checklist.core.NudgeTone
+import io.github.randomtools3377.checklist.core.NudgeWords
+import io.github.randomtools3377.checklist.core.Nudges
 import io.github.randomtools3377.checklist.core.Goal
 import io.github.randomtools3377.checklist.core.Pace
 import io.github.randomtools3377.checklist.core.SkipCheck
@@ -54,6 +57,8 @@ import io.github.randomtools3377.checklist.data.eveningChecks
 import io.github.randomtools3377.checklist.data.eveningList
 import io.github.randomtools3377.checklist.data.eveningTimes
 import io.github.randomtools3377.checklist.data.moodReminders
+import io.github.randomtools3377.checklist.data.nudgePlan
+import io.github.randomtools3377.checklist.data.nudgeWriter
 import io.github.randomtools3377.checklist.data.toTime
 import io.github.randomtools3377.checklist.ui.minutesText
 import io.github.randomtools3377.checklist.data.nowLocal
@@ -76,7 +81,8 @@ import kotlinx.datetime.toLocalDateTime
  * next notification, or at the end of the user's day (so the widget turns over), whichever is
  * first. When it goes off, the notifications due are shown and the next alarm is set. The evening
  * check, when it is on, is one of them: one notification listing what is still open today. So is
- * a project's deadline reminder. The morning plan and the weekly summary have channels of their own.
+ * a project's deadline reminder. The morning plan and the weekly summary have channels of their own,
+ * and so do late nudges (see Nudges in the shared code).
  */
 object Reminders {
     const val CHANNEL = "reminders"
@@ -84,6 +90,12 @@ object Reminders {
     /** The morning plan and the weekly summary each have their own, to silence or change in the phone's settings. */
     const val CHANNEL_MORNING = "morning_plan"
     const val CHANNEL_WEEKLY = "weekly_summary"
+
+    /** Late nudges have their own too, so they can be made quiet apart from the reminders. */
+    const val CHANNEL_NUDGES = "late_nudges"
+
+    /** Marks a goal's notification as a late nudge, to take it away once its nudges are stopped. */
+    private const val EXTRA_NUDGE = "late_nudge"
     private const val PREFS = "reminders"
     private const val LAST_FIRED = "last_fired"
     private const val LOOK_AHEAD_DAYS = 2
@@ -108,6 +120,11 @@ object Reminders {
             .setDescription("How your week went, on Sunday")
             .build()
         NotificationManagerCompat.from(context).createNotificationChannel(weekly)
+        val nudges = NotificationChannelCompat.Builder(CHANNEL_NUDGES, NotificationManagerCompat.IMPORTANCE_DEFAULT)
+            .setName("Late nudges")
+            .setDescription("Friendly nudges when a goal is late, until it's done")
+            .build()
+        NotificationManagerCompat.from(context).createNotificationChannel(nudges)
     }
 
     fun canNotify(context: Context): Boolean =
@@ -141,7 +158,7 @@ object Reminders {
         val to = Pace.plusMinutes(now, LOOK_AHEAD_DAYS * 24 * 60L)
         val defaultFinish = dao.setting(SETTING_DEFAULT_FINISH)?.toIntOrNull()?.toTime()
         val nextAlert = (
-            Alerts.between(goals, from, to, dayEnd, defaultFinish, usualTimes(dao)) + mornings(dao, from, to, dayEnd) +
+            Alerts.between(goals, from, to, dayEnd, defaultFinish, usualTimes(dao), nudgePlan(dao)) + mornings(dao, from, to, dayEnd) +
                 weeklies(dao, from, to, dayEnd) + deadlineTimes(dao, from, to) + billTimes(dao, from, to)
             ).minOfOrNull { it.at }
         // The evening check, when it is on.
@@ -193,7 +210,7 @@ object Reminders {
             val at = snooze.at.local()
             Alert(snooze.goalId, Days.dayOf(at, dayEnd), at, AlertKind.AGAIN, number = snooze.number)
         }
-        val due = (Alerts.between(goals, since.local(), until.local(), dayEnd, defaultFinish, usualTimes(dao)).filter { it.at.millis() > since } + snoozed)
+        val due = (Alerts.between(goals, since.local(), until.local(), dayEnd, defaultFinish, usualTimes(dao), nudgePlan(dao)).filter { it.at.millis() > since } + snoozed)
             .sortedBy { it.at }
         if (mornings(dao, since.local(), until.local(), dayEnd).any { it.at.millis() > since }) {
             showMorningPlan(context, dayEnd)
@@ -230,12 +247,19 @@ object Reminders {
             val hidePrivate = dao.setting(LOCK_PRIVATE) == "1"
             val light = dao.setting(SETTING_REMINDER_LIGHT) == "1"
             val container = (context.applicationContext as ChecklistApplication).container
+            // Late nudges are worded with what there is to gain right now.
+            val nudges = if (due.any { it.kind == AlertKind.NUDGE }) nudgeWriter(dao, container.book) else null
             for (alert in due) {
                 val goal = goals.find { it.id == alert.goalId } ?: continue
                 val window = goal.repeat?.window(alert.day) ?: continue
                 // Done or skipped as Today counts it; one of several a day until that one is done.
                 val lapses = dao.lapses(goal.id, window.start.toEpochDay(), window.end.toEpochDay()).map { it.toCore() }
                 if (!Alerts.stillToDo(goal, window, ticks, lapses, alert.number)) continue
+                if (alert.kind == AlertKind.NUDGE && nudges != null) {
+                    val count = Alerts.timesDone(goal, window, ticks)
+                    showNudge(context, goal, alert, nudges.words(goal, alert, count), hidden = nudges.hidden(goal), dayEnd = dayEnd, light = light)
+                    continue
+                }
                 val skip = container.lapses.checkSkip(goal.id) as? SkipCheck.Allowed
                 show(context, goal, alert, Alerts.timesDone(goal, window, ticks), hidden = hidePrivate && goal.private, skip = skip, dayEnd = dayEnd, light = light)
             }
@@ -639,6 +663,7 @@ object Reminders {
         if (shown.isEmpty()) return
         val days = shown.map { it.notification.extras.getLong(DoneReceiver.EXTRA_DAY).toDay() }
         val ticks = dao.habitTicksSince(days.min().startOfYear().toEpochDay()).map { it.toCore() }
+        val nudges = nudgePlan(dao)
         shown.forEachIndexed { i, notice ->
             val extras = notice.notification.extras
             val goal = goals.find { it.id == extras.getLong(DoneReceiver.EXTRA_GOAL, -1) }
@@ -648,7 +673,10 @@ object Reminders {
                 dao.lapses(goal.id, window.start.toEpochDay(), window.end.toEpochDay()).map { it.toCore() },
                 extras.getInt(SnoozeReceiver.EXTRA_NUMBER, 0),
             )
-            if (!toDo) manager.cancel(notice.id)
+            // A late nudge also goes once nudges are stopped: for today on the goal's card, or turned off.
+            val stopped = goal != null && extras.getBoolean(EXTRA_NUDGE, false) &&
+                (!Nudges.applies(goal, nudges) || nudges.stoppedOn(goal.id, days[i]))
+            if (!toDo || stopped) manager.cancel(notice.id)
         }
     }
 
@@ -674,6 +702,7 @@ object Reminders {
             AlertKind.NEXT -> "Next up"
             AlertKind.DEADLINE -> "Due soon"
             AlertKind.BILL -> "Due soon"
+            AlertKind.NUDGE -> "Still to do"
         }
         val details = buildList {
             add(whenText)
@@ -756,6 +785,85 @@ object Reminders {
         val notification = builder.build()
         try {
             NotificationManagerCompat.from(context).notify(id, notification)
+        } catch (e: SecurityException) {
+            // Notifications were turned off in the meantime.
+        }
+    }
+
+    /**
+     * Shows a late nudge in place of the goal's reminder or its earlier nudge: the goal and how
+     * late it is, then [words], different each time. Its buttons are "Done" ("+1" for a goal
+     * done several times), "Stop for today", which ends this goal's nudges until tomorrow, and on
+     * a "Make it smaller" nudge for a goal with a length, "Focus", which opens the app with its
+     * focus timer started. [hidden] names nothing (privacy lock), and then there is no "Focus".
+     * It comes on its own channel, or with [light] like a message, as goal reminders do.
+     */
+    fun showNudge(context: Context, goal: Goal, alert: Alert, words: NudgeWords, hidden: Boolean, dayEnd: Int, light: Boolean = false) {
+        if (!canNotify(context)) return
+        val endsIn = LocalDateTime(alert.day.plusDays(1), LocalTime(dayEnd, 0)).millis() - System.currentTimeMillis()
+        if (endsIn <= 0) return
+        val id = notificationId(goal.id)
+        val open = PendingIntent.getActivity(
+            context,
+            id,
+            Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+        val done = PendingIntent.getBroadcast(
+            context,
+            id,
+            Intent(context, DoneReceiver::class.java)
+                .putExtra(DoneReceiver.EXTRA_GOAL, goal.id)
+                .putExtra(DoneReceiver.EXTRA_NOTIFICATION, id)
+                .putExtra(DoneReceiver.EXTRA_DAY, alert.day.toEpochDay()),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+        val stop = PendingIntent.getBroadcast(
+            context,
+            id + 1_500_000,
+            Intent(context, StopNudgesReceiver::class.java)
+                .putExtra(DoneReceiver.EXTRA_GOAL, goal.id)
+                .putExtra(DoneReceiver.EXTRA_NOTIFICATION, id)
+                .putExtra(DoneReceiver.EXTRA_DAY, alert.day.toEpochDay()),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+        if (light) EdgeLights.createChannels(context)
+        val builder = NotificationCompat.Builder(context, if (light) EdgeLights.REMINDER_CHANNEL else CHANNEL_NUDGES)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle(words.title)
+            .setContentText(words.text)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(words.text))
+            .setContentIntent(open)
+            .addAction(0, if (goal.target > 1) "+1" else "Done", done)
+            .addAction(0, "Stop for today", stop)
+            .setAutoCancel(true)
+            .setTimeoutAfter(endsIn)
+            // Which goal, day and time it is for, to take it away once that is done (see clearDone).
+            .addExtras(
+                Bundle().apply {
+                    putLong(DoneReceiver.EXTRA_GOAL, goal.id)
+                    putLong(DoneReceiver.EXTRA_DAY, alert.day.toEpochDay())
+                    putInt(SnoozeReceiver.EXTRA_NUMBER, alert.number)
+                    putBoolean(EXTRA_NUDGE, true)
+                },
+            )
+            .setCategory(NotificationCompat.CATEGORY_REMINDER)
+        if (light) EdgeLights.asMessage(builder)
+        val minutes = goal.minutes
+        if (words.tone == NudgeTone.SMALLER && !hidden && minutes != null && minutes > 0 && !goal.hasAmount) {
+            val focus = PendingIntent.getActivity(
+                context,
+                id + 2_000_000,
+                Intent(context, MainActivity::class.java)
+                    .putExtra(MainActivity.EXTRA_FOCUS, goal.id)
+                    .putExtra(MainActivity.EXTRA_FOCUS_MINUTES, minutes)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+            )
+            builder.addAction(0, "Focus", focus)
+        }
+        try {
+            NotificationManagerCompat.from(context).notify(id, builder.build())
         } catch (e: SecurityException) {
             // Notifications were turned off in the meantime.
         }

@@ -127,6 +127,22 @@ class HelpTopicsTest {
     }
 
     @Test
+    fun theRemindersGuideExplainsLateNudgesWithTheNumbersSet() {
+        val rules = Rules(nudgeLateMinutes = 20, nudgeEveryMinutes = 45, nudgeMost = 6)
+        val steps = HelpTopic.REMINDERS.stepsOn(android).map { guideWords(it, rules) }.joinToString("\n")
+        assertTrue("first once it's 20 minutes late, then every 45 minutes" in steps && "(6 at most)" in steps, steps)
+        for (said in listOf("\"No more nudges today\"", "\"Nudge me when it's late\"", "\"Nudges when something is late\"", "\"Stop for today\"", "\"Focus\"", "\"Late nudges\"")) {
+            assertTrue(said in steps, said)
+        }
+        // Where a nudge has no buttons, its buttons aren't described.
+        val onIphone = HelpTopic.REMINDERS.text(iphone)
+        assertTrue("\"No more nudges today\"" in onIphone)
+        assertFalse("\"Stop for today\"" in onIphone)
+        assertTrue(HelpTopic.REMINDERS in listed(computer, "nudges late"))
+        assertTrue("\"Nudge me when it's late\"" in HelpTopic.HABIT_EDITOR.text(android))
+    }
+
+    @Test
     fun thePrivacyGuideCoversMoodsAndTheBudget() {
         val text = HelpTopic.PRIVACY.text(android)
         assertTrue("mood journal" in text && "moods" in text && "The budget" in text)

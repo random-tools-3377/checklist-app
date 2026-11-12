@@ -125,6 +125,22 @@ class SkipReceiver : BroadcastReceiver() {
     }
 }
 
+/**
+ * "Stop for today" on a late nudge: no more nudges for that goal until the day ends. The nudge
+ * goes, and the alarm is set again without the rest of them.
+ */
+class StopNudgesReceiver : BroadcastReceiver() {
+    override fun onReceive(context: Context, intent: Intent) = work {
+        val goalId = intent.getLongExtra(DoneReceiver.EXTRA_GOAL, -1)
+        val container = (context.applicationContext as ChecklistApplication).container
+        if (goalId >= 0 && !forPastDay(context, intent)) {
+            io.github.randomtools3377.checklist.data.stopNudges(container.db.dao(), goalId, container.book.today())
+        }
+        NotificationManagerCompat.from(context).cancel(intent.getIntExtra(DoneReceiver.EXTRA_NOTIFICATION, 0))
+        Reminders.reschedule(context)
+    }
+}
+
 /** After a restart, an update, or a change of clock or time zone, the alarm is set again. */
 class SystemEventsReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) = work {
