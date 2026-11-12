@@ -66,7 +66,11 @@ class EditorsAndTodoCategoryTest {
     private val container get() = (InstrumentationRegistry.getInstrumentation().targetContext.applicationContext as ChecklistApplication).container
     private fun gone(tag: String) = app.onAllNodesWithTag(tag, useUnmergedTree = true).fetchSemanticsNodes().isEmpty()
     private fun goals() = runBlocking { container.db.dao().allGoals() }
-    private fun systemBack() = app.activityRule.scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
+    /** The system's back, once the screen has taken in what was just typed. */
+    private fun systemBack() {
+        app.waitForIdle()
+        app.activityRule.scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
+    }
 
     @Test
     fun leavingAHabitWithChangesAsksFirst() {
