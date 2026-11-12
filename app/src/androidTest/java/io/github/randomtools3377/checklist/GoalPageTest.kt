@@ -135,11 +135,14 @@ class GoalPageTest {
         app.waitFor { gone("review-day:${day.dayOfMonth}") && textOf("review:range") == longDate(day) }
 
         // Week keeps the date being looked at: the week that day is in.
+        // The view chips are at the top of the list, which was scrolled down to the calendar.
+        app.waitFor { app.shownIn("review", "review:Week") }
         app.tap("review:Week")
         val monday = Days.periodStart(day, Period.WEEKLY)
         val sunday = Days.periodEnd(day, Period.WEEKLY)
         app.waitFor { textOf("review:range") == "${shortDate(monday)} to ${shortDate(sunday)}" }
         // And Day again is still that day.
+        app.waitFor { app.shownIn("review", "review:Day") }
         app.tap("review:Day")
         app.waitFor { textOf("review:range") == longDate(day) }
     }
