@@ -48,6 +48,22 @@ class GapsTest {
     }
 
     @Test
+    fun daysWhereEverythingWasSkippedAreNotAGap() = runTest {
+        val run = habit()
+        lapses.closeDays()
+        book.tickHabit(run.id) // Monday done
+        at(10)
+        lapses.skip(run.id, reason = null, note = null) // Tuesday skipped
+        at(11)
+        lapses.skip(run.id, reason = Reason.NO_TIME, note = null) // Wednesday skipped, over the limit
+        at(12)
+
+        lapses.closeDays()
+
+        assertTrue(gaps.find().none { it.kind == GapKind.NOTHING_TICKED })
+    }
+
+    @Test
     fun oneDayAloneIsNotAGapUnlessTheUserSetsItSo() = runTest {
         val run = habit()
         lapses.closeDays()

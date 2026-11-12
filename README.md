@@ -121,6 +121,7 @@ on one and import the file on the other. Reminders show only while the app is op
 - 0.61.0: a mood journal: notes and what's behind each mood, and what goes with better days; every card on Today and the tabs can be put in any order.
 - 0.62.0: a check of the whole app, with 58 fixes: streaks, reminders, the review, privacy, the budget, backups, and iPhone and Windows.
 - 0.63.0: a short setup for new users, guides only when asked for, in groups with search; bets removed; Completed goals; a Settings search that finds everything.
+- 0.64.0: a skip is never done and never held against the day, and can be taken back; misses put right later; an evening check; best streaks.
 
 Every step in CLAUDE.md's build order is built. The iPhone app is installed with SideStore or
 AltStore (see the 0.55.0 release notes).

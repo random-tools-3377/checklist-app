@@ -143,6 +143,13 @@ The app has no network access unless the owner decides otherwise for this app.
   **(default)**.
 - The main streak's target starts at 90%. Days with nothing due neither count nor break a streak.
   A skip, or going over the limit, breaks its streak the same day **(default)**.
+- A skip is never counted as done, and is never held against the day either (decided after the
+  whole-app review): a skipped goal is left out of what its day counts. **Details (default):**
+  a day where everything due was skipped is like one with nothing due, for the main streak and
+  for gaps; a day with a skip is never a perfect day, and it ends the Skip-free streak. In the
+  review "done" means really ticked, and a skip shows only under Skipped. The review's Stats
+  show the best run of every streak beside the current one, and for a past stretch the longest
+  within it.
 
 ## Skips, misses and the limit
 
@@ -171,7 +178,11 @@ The app has no network access unless the owner decides otherwise for this app.
 - **There is no pause button.**
 - **Details (default):** each goal starts with 1 skip or miss allowed per week, changeable per
   goal, per week or month. Skipping a single-day goal skips that day; skipping a "so many times a
-  week" goal skips one of its times. A skipped goal can still be ticked. A project's missed
+  week" goal skips one of its times. A skipped goal can still be ticked, which takes the skip
+  back by itself; a skip made today can be taken back until the day ends ("Take back the skip"
+  on its card, Undo right after, or on the penalty screen), putting everything back as if it
+  never happened: the allowance, any penalty points and an open penalty task, also for a later
+  skip or miss that only went over the limit because of it. A project's missed
   deadline counts against its allowance in the week of the deadline and, over the limit, costs
   half its finishing bonus; "I forgot to tick it" isn't offered for it. A penalty can be paid off
   by making up any goal skipped or missed in the last two weeks. Misses are first looked for from
@@ -829,6 +840,21 @@ Build order **(default)**, each step a Release the owner can try:
       lighting where the phone has it; celebrations glow around the edges inside the app, scaled
       with the win, and on Android can also set off the phone's edge lighting with a short
       notification that goes away by itself. Each is a switch, under Celebrations or Reminders.
+    - **0.64.0 settled these details (default):** the gap check-in lists each miss with its
+      own "I forgot to tick it", and a gap whose misses were all forgotten ticks goes away, with
+      its penalty task if still open, and isn't flagged again. A past miss opens from the
+      Review's Day view, a goal's row there, or its penalty's line in the points history: its
+      reason and note can always be changed, and "I forgot to tick it" is offered for 14 days.
+      A forgotten tick that makes its day perfect after all pays that day's perfect-day bonus
+      then, and the combo carries on as if the day had always been perfect; nothing is paid
+      twice. "Same reason for all" shows with two or more misses waiting. A slip on a goal to
+      quit is worded as a slip, with "Undo, I didn't slip". The evening check is off until a
+      time is picked in Settings → Notifications (from noon on, before the day ends; the clock
+      opens at 9 pm): one notification, "N still open today", lists goals and dated to-dos not
+      done or skipped, goals counted per week, month or year still short on their last day, and
+      projects due today; nothing comes on a done day; locked private goals are only counted.
+      On Android it has "Open Today" and a button for the first goal, and updates as things get
+      done; the iPhone gets it with the other reminders; Windows shows it while the app is open.
     - Not chosen: a note when a money-priced reward's price moves, celebrations for game wins,
       and carrying money over into the next month.
     - **The 0.62.0 fixes settled these details (default):** a goal counts in streaks, records,

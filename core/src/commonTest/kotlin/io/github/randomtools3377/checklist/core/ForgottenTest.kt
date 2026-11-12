@@ -117,16 +117,16 @@ class ForgottenTest {
         book.tickHabit(run.id) // Monday
         at(10)
         open()
-        lapses.skip(run.id, null, null) // Tuesday is skipped: nothing ticked that day
+        lapses.skip(run.id, null, null) // Tuesday is skipped: left out, so it is no part of a gap
         at(12) // and Wednesday is missed
         open()
         val gap = store.gapList.single()
-        assertEquals(tuesday to wednesday, gap.from to gap.to)
+        assertEquals(wednesday to wednesday, gap.from to gap.to)
 
         assertTrue(lapses.forgotToTick(gaps.misses(gap).single().id))
 
         assertTrue(store.gapList.isEmpty())
-        assertEquals(listOf(tuesday to wednesday), Gaps.cleared(store.setting(Gaps.CLEARED)))
+        assertEquals(listOf(wednesday to wednesday), Gaps.cleared(store.setting(Gaps.CLEARED)))
         assertTrue(gaps.find().isEmpty(), "the skipped Tuesday isn't a new gap of its own")
         assertTrue(store.openPenalties().isEmpty())
     }
