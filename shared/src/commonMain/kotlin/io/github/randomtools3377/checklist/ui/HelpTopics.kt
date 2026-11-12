@@ -20,6 +20,8 @@ enum class HelpTopic(val title: String, val intro: String, val steps: List<Strin
             "Set \"Finish each day's goals by\" in Settings, and Today shows how fast to go.",
             "Tap your balance to see your {points} history, and the gear at the top for Settings.",
             "Choose, hide and reorder Today's sections in Settings → Appearance.",
+            "A to-do with a date opens from its name or \"Change date\". In the grid, hold a tile for its card with Skip, Move and Focus; tap a done tile to open its card.",
+            "Today, the Today widget, the quick settings tile and the morning plan all show the same goal first.",
         ),
     ),
     PLAN(
@@ -123,6 +125,7 @@ enum class HelpTopic(val title: String, val intro: String, val steps: List<Strin
             "Tap \"Reset all\" at the top to put every number back at once.",
             "Changes apply from now on; anything already paid or taken stays as it was.",
             "Some numbers only matter when their extra is on in Settings → Features, like quests or bosses.",
+            "A number outside what is allowed shows its range in red, and the last good number stays in use.",
         ),
     ),
     APPEARANCE(
@@ -136,6 +139,8 @@ enum class HelpTopic(val title: String, val intro: String, val steps: List<Strin
             "Tick Today's sections to show them, and use the arrows to put them in any order: the mood check-in, your character, quests and the rest each move on their own.",
             "Choose which tabs show, use the arrows to put them in your order, and pick the one the app opens on.",
             "Rename {points}, and pick a font, an app icon, the widgets' style and your celebrations.",
+            "Under Celebrations, \"Choose a sound…\" uses your own sound file (up to 5 MB) for a tick, finishing a project or buying a reward. \"▶ Play\" tries it, and \"Use the app's sound\" puts the usual one back.",
+            "\"Edge glow\" runs a soft glow round the edges of the screen when you finish something. On Android, \"Also light the edges when the app isn't on screen\" does it after a tick from a widget or a reminder.",
         ),
     ),
     HABIT_EDITOR(
@@ -149,6 +154,8 @@ enum class HelpTopic(val title: String, val intro: String, val steps: List<Strin
             "Give it a length, a set time or a \"Finish by\" time for pacing, and a reminder if you like.",
             "Choose how many skips and misses are free each week or month, and turn on \"Private\" to lock it.",
             "With extras on in Settings → Features, it can be a goal to quit, a challenge, or a habit chain.",
+            "\"Sound when it's ticked\" gives this goal its own sound. A routine's items move with the up and down arrows.",
+            "Leaving with changes you haven't saved asks \"Discard your changes?\" first.",
         ),
     ),
     PROJECT_EDITOR(
@@ -162,6 +169,8 @@ enum class HelpTopic(val title: String, val intro: String, val steps: List<Strin
             "Tick the steps one by one in the Projects section of Today.",
             "With the AI helper on, \"Suggest steps\" offers steps from the project's name.",
             "Tap \"Save\". \"Make a copy of this project\" starts a new one like it.",
+            "Steps move with the up and down arrows, and a ticked step keeps its tick. \"Make a copy\" saves your changes first.",
+            "With a deadline, \"Remind me of the deadline\" reminds you the day before and on the day, at a time you pick or when your day starts.",
         ),
     ),
     TODO_EDITOR(
@@ -175,6 +184,8 @@ enum class HelpTopic(val title: String, val intro: String, val steps: List<Strin
             "With a date, not doing it by the end of that day is a miss, like any goal.",
             "To-dos share one allowance, usually 1 free skip or miss a week between them.",
             "For a quick one, type in the \"Add a to-do\" box on Today.",
+            "Give it a category like any goal. One typed on Today while a category is picked takes that category.",
+            "To move a to-do with a date, tap it on Today or in the planner and change the date.",
         ),
     ),
     REWARD_EDITOR(
@@ -370,6 +381,8 @@ enum class HelpTopic(val title: String, val intro: String, val steps: List<Strin
             "Changes are for this day only; reminders, pacing and the order follow them.",
             "A goal done several times a day sits at each of its times and keeps them.",
             "With \"Phone calendar\" on, your calendar's events show here too.",
+            "Each box is as tall as the goal takes, and goals close together sit side by side.",
+            "On today's timeline a line marks the time now, and each goal has its own button: Done, +1 or Avoided.",
         ),
     ),
     WEEK_PLAN(
@@ -382,6 +395,7 @@ enum class HelpTopic(val title: String, val intro: String, val steps: List<Strin
             "\"The days ahead\" shows what's due each day until Sunday.",
             "Tap \"Move things in the planner\" to spread things out.",
             "Tap \"Done planning\" when you're happy, and the card goes away until next week.",
+            "It also lists goals you can do any day this week with how many are left, this week's deadlines and to-dos, and your calendar's events when the phone calendar is on.",
         ),
     ),
     REMINDERS(
@@ -393,6 +407,8 @@ enum class HelpTopic(val title: String, val intro: String, val steps: List<Strin
             "Turn on \"Keep reminding until it's done\" to be reminded every 30 minutes until it's done or its finish time passes.",
             "With \"Reminders at your usual time\" on in Settings → Features, goals with no reminder remind you around when you usually tick them.",
             "For one check in the evening, set a time under \"Evening check\" in Settings → Notifications. One notification then lists what's still open today, so you can do it before it counts as a miss. Nothing comes on a day when everything is done.",
+            "A project with a deadline reminds you the day before and on the day. Pick its time, or turn it off, in the project's editor.",
+            "On Android, the morning plan and the weekly summary have their own notification types, so you can make them quiet in the phone's settings. \"Light up the screen for reminders\" in Settings → Notifications makes goal reminders come like a message.",
             "While private goals are locked, their reminders say \"A private goal\".",
         ),
     ),
@@ -638,11 +654,12 @@ enum class HelpTopic(val title: String, val intro: String, val steps: List<Strin
         listOf(
             "Add one from your phone's widget list, usually by holding an empty spot on the home screen.",
             "\"Checklist today\" shows your day as a timeline, with what's next and a big Done button.",
-            "\"Checklist calendar\" shows today's goals with tick boxes. Make it wider for the week, taller for the month.",
+            "\"Checklist calendar\" shows today's goals with tick boxes. Make it wider for the days ahead, taller for the month.",
             "\"Checklist balance and streaks\" shows your balance, your streak and how much of today is done.",
             "\"Checklist quick to-do\" adds a to-do in one tap.",
             "\"Checklist budget\" shows today's pay filling up, while Budget is on.",
             "Pick a solid or see-through look in Settings → Appearance, under Widgets.",
+            "The calendar widget, made wider, shows the days ahead with deadlines, to-dos and your calendar's events; taller, it shows the month. \"+\" adds a to-do or a goal.",
         ),
     ),
 }

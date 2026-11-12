@@ -855,6 +855,26 @@ Build order **(default)**, each step a Release the owner can try:
       projects due today; nothing comes on a done day; locked private goals are only counted.
       On Android it has "Open Today" and a button for the first goal, and updates as things get
       done; the iPhone gets it with the other reminders; Windows shows it while the app is open.
+    - **0.65.0 settled these details (default):** one shared function decides today's order
+      and the next goal for Today, the Today widget, the tile and the morning plan; a locked
+      private goal is never next outside the app. On the timeline an hour is a fixed height, a
+      box is as long as its goal (at least half an hour), overlapping goals and calendar events
+      share the width, and only today's has the "now" line and tick buttons. The calendar
+      widget shows 7 days of agenda when wide and the month when tall, with deadlines (🚩),
+      dated to-dos and the phone's calendar events; a locked private goal shows there as "A
+      private goal". Deadline reminders are on for every project with a deadline until turned
+      off in its editor, the day before and on the day, at a picked time or when the day starts.
+      The morning plan and weekly summary have their own Android notification types at default
+      importance. Picked sounds are at most 5 MB, kept and backed up like picked GIFs (the
+      backup format is unchanged); the order is the goal's own sound, then the one picked for
+      that kind of celebration, then the app's. The edge glow is on to start: one pass for a
+      tick, two brighter ones for a project or a reward, in the goal's colour or the accent,
+      and left out when the phone has animations off. Two Android switches, off to start:
+      "Also light the edges when the app isn't on screen" (a short, silent "Done" notification
+      after a tick from a widget or a reminder) and "Light up the screen for reminders" (goal
+      reminders arrive like a message; the phone's own edge lighting setting decides the look).
+      No new permissions. Editors ask "Discard your changes?" only when something changed, and
+      "Make a copy" saves first.
     - Not chosen: a note when a money-priced reward's price moves, celebrations for game wins,
       and carrying money over into the next month.
     - **The 0.62.0 fixes settled these details (default):** a goal counts in streaks, records,
