@@ -304,7 +304,7 @@ fun BillsScreen(vm: MainViewModel, onBill: (Long) -> Unit, onBack: () -> Unit) {
                     Column(Modifier.weight(1f)) {
                         Text(bill.name, style = MaterialTheme.typography.bodyLarge)
                         Text(
-                            bill.howOften.replaceFirstChar { it.uppercase() } + (Bills.next(bill, today)?.let { " · next ${shortDate(it)}" } ?: " · ended"),
+                            bill.howOften.replaceFirstChar { it.uppercase() } + (Bills.next(bill, today)?.let { " · next ${shortDate(it)}" } ?: " · completed"),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -455,8 +455,8 @@ fun BudgetReportScreen(vm: MainViewModel, onBack: () -> Unit) {
                 navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") } },
                 actions = { HelpAction()
 
-                    TextButton(onClick = { vm.showBudgetMonth(-1) }, modifier = Modifier.testTag("report-earlier")) { Text("◀") }
-                    TextButton(onClick = { vm.showBudgetMonth(1) }, enabled = shown?.thisMonth == false, modifier = Modifier.testTag("report-later")) { Text("▶") }
+                    TextButton(onClick = { vm.showBudgetMonth(-1) }, modifier = Modifier.testTag("report-earlier")) { Text("◀", modifier = Modifier.spoken("Month before")) }
+                    TextButton(onClick = { vm.showBudgetMonth(1) }, enabled = shown?.thisMonth == false, modifier = Modifier.testTag("report-later")) { Text("▶", modifier = Modifier.spoken("Month after")) }
                 },
             )
         },

@@ -70,6 +70,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.border
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.contentDescription
@@ -81,6 +82,8 @@ import io.github.randomtools3377.checklist.core.Colors
 import io.github.randomtools3377.checklist.core.Amounts
 import androidx.compose.runtime.produceState
 import io.github.randomtools3377.checklist.core.Categories
+import io.github.randomtools3377.checklist.core.Completed
+import io.github.randomtools3377.checklist.core.CompletedGoal
 import io.github.randomtools3377.checklist.core.Goal
 import io.github.randomtools3377.checklist.core.GoalKind
 import io.github.randomtools3377.checklist.core.Period
@@ -134,6 +137,8 @@ fun GoalsScreen(
     vm: MainViewModel? = null,
     /** Opens the choice of a new habit, project or to-do. */
     onNew: () -> Unit = {},
+    /** The day each finished project was finished, which puts it under Completed. */
+    finishedProjects: Map<Long, LocalDate> = emptyMap(),
 ) {
     if (view == null) return
     // Goals chosen while selecting, to change or remove together.
@@ -142,7 +147,11 @@ fun GoalsScreen(
     var asking by remember { mutableStateOf<String?>(null) }
     // Search: every word typed has to be in a goal's name or category. Not while reordering.
     var query by rememberSaveable { mutableStateOf("") }
-    val found = if (reordering) view.goals else GoalSearch.filter(view.goals, query)
+    // Habits whose last day has passed and finished projects go under Completed, at the bottom.
+    val (going, completed) = view.today?.let { Completed.split(view.goals, finishedProjects, it) } ?: (view.goals to emptyList())
+    var completedOpen by rememberSaveable { mutableStateOf(false) }
+    val completedFound = if (reordering) emptyList() else completed.filter { GoalSearch.matches(it.goal, query) }
+    val found = if (reordering) going else GoalSearch.filter(going, query)
     val habits = found.filter { it.kind == GoalKind.HABIT }
     val projects = found.filter { it.kind == GoalKind.PROJECT }
     // Open to-dos: ones without a date, and ones due today or later. Past ones stay in the history.
@@ -199,7 +208,7 @@ fun GoalsScreen(
                     modifier = Modifier.fillMaxWidth().padding(top = 8.dp).testTag("goal-search"),
                 )
             }
-            if (habits.isEmpty() && projects.isEmpty() && todos.isEmpty()) {
+            if (habits.isEmpty() && projects.isEmpty() && todos.isEmpty() && completedFound.isEmpty()) {
                 item(key = "no-match") {
                     Text(
                         "No goals match \"${query.trim()}\".",
@@ -219,9 +228,27 @@ fun GoalsScreen(
             }
         }
         val pick: ((Goal) -> Unit)? = if (selecting) ({ goal -> selected = if (goal.id in selected) selected - goal.id else selected + goal.id }) else null
+        // Everything still going is completed: a word of that, and the way to more.
+        if (going.isEmpty() && completed.isNotEmpty() && query.isBlank()) {
+            item(key = "all-completed") {
+                Text(
+                    "Everything here is completed. 🎉 Tap New goal for the next one.",
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth().padding(top = 32.dp).testTag("all-completed"),
+                )
+            }
+        }
         goalSection("Habits", habits, view, reordering, onEdit, onMove, pick, selected)
         goalSection("Projects", projects, view, reordering, onEdit, onMove, pick, selected)
         goalSection("To-dos", todos, view, reordering, onEdit, onMove, pick, selected)
+        completedSection(
+            completedFound,
+            // Open while searching, so what is found shows.
+            open = completedOpen || query.isNotBlank(),
+            onToggle = { completedOpen = !completedOpen },
+            onEdit = onEdit,
+            onRemove = { goal -> vm?.removeGoal(goal.id) {} },
+        )
         if (doneCount > 0 && !reordering) {
             item {
                 TextButton(onClick = onDoneList, modifier = Modifier.padding(top = 8.dp).testTag("done-list")) {
@@ -285,6 +312,94 @@ fun GoalsScreen(
     }
 }
 
+/**
+ * Habits whose last day has passed and finished projects, under a heading at the bottom of the
+ * list, closed until tapped. Open, each one can be looked back on (tap it), a habit carried on
+ * with Extend, which opens it to move its end date on, or removed.
+ */
+private fun LazyListScope.completedSection(
+    completed: List<CompletedGoal>,
+    open: Boolean,
+    onToggle: () -> Unit,
+    onEdit: (Goal) -> Unit,
+    onRemove: (Goal) -> Unit,
+) {
+    if (completed.isEmpty()) return
+    item(key = "completed") {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 16.dp)
+                .clickable(onClickLabel = if (open) "Close" else "Open", onClick = onToggle)
+                .testTag("completed-goals")
+                .padding(vertical = 6.dp),
+        ) {
+            Text(
+                "Completed · ${completed.size}",
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.weight(1f).asHeading(),
+            )
+            Icon(if (open) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown, contentDescription = null)
+        }
+    }
+    if (!open) return
+    item(key = "completed-hint") {
+        Text(
+            "Tap one to look back on it. Extend opens a habit to move its end date on.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(bottom = 8.dp),
+        )
+    }
+    items(completed, key = { "completed-${it.goal.id}" }) { done -> CompletedCard(done, onEdit, onRemove) }
+}
+
+@Composable
+private fun CompletedCard(done: CompletedGoal, onEdit: (Goal) -> Unit, onRemove: (Goal) -> Unit) {
+    val goal = done.goal
+    var asking by remember { mutableStateOf(false) }
+    OutlinedCard(Modifier.fillMaxWidth().padding(bottom = 10.dp).testTag("completed:${goal.name}")) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth().clickable { onEdit(goal) }.goalStrip(goal.color).padding(12.dp),
+        ) {
+            Text(goal.icon, fontSize = 28.sp, modifier = Modifier.width(44.dp), textAlign = TextAlign.Center)
+            Spacer(Modifier.width(8.dp))
+            Column(Modifier.weight(1f)) {
+                Text(goal.name, style = MaterialTheme.typography.titleMedium)
+                Text(
+                    if (goal.kind == GoalKind.PROJECT) "Achieved · ${shortDate(done.day)}" else "Completed · its last day was ${shortDate(done.day)}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
+        }
+        Row(Modifier.padding(start = 8.dp, bottom = 4.dp)) {
+            if (goal.kind == GoalKind.HABIT) {
+                TextButton(onClick = { onEdit(goal) }, modifier = Modifier.testTag("extend:${goal.name}")) { Text("Extend") }
+            }
+            TextButton(onClick = { asking = true }, modifier = Modifier.testTag("remove-completed:${goal.name}")) {
+                Text("Remove", color = MaterialTheme.colorScheme.error)
+            }
+        }
+    }
+    if (asking) {
+        AlertDialog(
+            onDismissRequest = { asking = false },
+            title = { Text("Remove ${goal.name}?") },
+            text = { Text("It moves to your removed goals, where it can be brought back. ${pointsTitle()} it earned stay in your balance.") },
+            confirmButton = {
+                TextButton(onClick = { asking = false; onRemove(goal) }, modifier = Modifier.testTag("confirm-remove-completed")) {
+                    Text("Remove", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = { TextButton(onClick = { asking = false }) { Text("Cancel") } },
+        )
+    }
+}
+
 /** Finished projects and done to-dos, newest first. Tap one to open it. */
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
@@ -304,7 +419,7 @@ fun DoneListScreen(items: List<io.github.randomtools3377.checklist.core.DoneItem
             modifier = Modifier.fillMaxSize().testTag("done-items"),
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = padding.calculateTopPadding() + 8.dp, bottom = padding.calculateBottomPadding() + 24.dp),
         ) {
-            if (items.isEmpty()) item { Text("Nothing finished yet.", modifier = Modifier.padding(top = 24.dp)) }
+            if (items.isEmpty()) item { Text("Projects you complete and to-dos you do show up here.", modifier = Modifier.padding(top = 24.dp)) }
             items(items, key = { it.goal.id }) { done ->
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -1065,14 +1180,11 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Long)
         Text("Reminders", style = MaterialTheme.typography.titleSmall)
         val clock = if (severalADay) null else atMinute
         if (clock != null || eachTimesSet.isNotEmpty()) {
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                Text(
-                    if (clock != null) "Notify at ${timeText(clock.toTime())}" else "Notify at each time",
-                    style = MaterialTheme.typography.bodyLarge,
-                    modifier = Modifier.weight(1f),
-                )
-                Switch(checked = notifyOnTime, onCheckedChange = { notifyOnTime = it }, modifier = Modifier.testTag("field:notify-on-time"))
-            }
+            SwitchRow(
+                if (clock != null) "Notify at ${timeText(clock.toTime())}" else "Notify at each time",
+                notifyOnTime,
+                "field:notify-on-time",
+            ) { notifyOnTime = it }
             Text("Also alert before", style = MaterialTheme.typography.bodyLarge)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 listOf(null, 5, 10, 15, 30, 60).forEach { minutes ->
@@ -1095,50 +1207,31 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Long)
         }
         val hasReminder = (clock != null && notifyOnTime) || (eachTimesSet.isNotEmpty() && notifyOnTime) || (clock == null && eachTimesSet.isEmpty() && remindAtMinute != null)
         if (hasReminder) {
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                Column(Modifier.weight(1f)) {
-                    Text("Keep reminding until it's done", style = MaterialTheme.typography.bodyLarge)
-                    Text(
-                        "Again every ${Reminder.AGAIN_EVERY} minutes, until it's done or its finish time passes.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                Switch(checked = keepReminding, onCheckedChange = { keepReminding = it }, modifier = Modifier.testTag("field:keep-reminding"))
-            }
+            SwitchRow(
+                "Keep reminding until it's done",
+                keepReminding,
+                "field:keep-reminding",
+                hint = "Again every ${Reminder.AGAIN_EVERY} minutes, until it's done or its finish time passes.",
+            ) { keepReminding = it }
         }
         // A goal to quit, and a challenge: extras, shown when turned on or already in use here.
         val features by vm.features.collectAsStateWithLifecycle()
         if (Feature.QUIT in features || quit || Feature.CHALLENGES in features || challengeOn) HorizontalDivider()
-        if (Feature.QUIT in features || quit) Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-            Column(Modifier.weight(1f)) {
-                Text("A goal to quit", style = MaterialTheme.typography.bodyLarge)
-                Text(
-                    "For something to stop, like no sugar. Tick \"Avoided\" each day; a day not ticked is a miss, and \"I slipped\" records it straight away.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            Switch(checked = quit, onCheckedChange = { quit = it }, modifier = Modifier.testTag("field:quit"))
-        }
+        if (Feature.QUIT in features || quit) SwitchRow(
+            "A goal to quit",
+            quit,
+            "field:quit",
+            hint = "For something to stop, like no sugar. Tick \"Avoided\" each day; a day not ticked is a miss, and \"I slipped\" records it straight away.",
+        ) { quit = it }
         if (choice != RepeatChoice.TIMES_PER && (Feature.CHALLENGES in features || challengeOn)) {
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                Column(Modifier.weight(1f)) {
-                    Text("Challenge", style = MaterialTheme.typography.bodyLarge)
-                    Text(
-                        "So many days in a row, with a bonus at the end. A missed day starts it again from day 1; a skip doesn't count either way.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                Switch(
-                    checked = challengeOn,
-                    onCheckedChange = { on ->
-                        challengeOn = on
-                        if (on && challengeFrom == null) challengeFrom = vm.currentDay().toEpochDay()
-                    },
-                    modifier = Modifier.testTag("field:challenge"),
-                )
+            SwitchRow(
+                "Challenge",
+                challengeOn,
+                "field:challenge",
+                hint = "So many days in a row, with a bonus at the end. A missed day starts it again from day 1; a skip doesn't count either way.",
+            ) { on ->
+                challengeOn = on
+                if (on && challengeFrom == null) challengeFrom = vm.currentDay().toEpochDay()
             }
             if (challengeOn) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1524,17 +1617,13 @@ fun ProjectEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Lon
  */
 @Composable
 private fun EachTimeSetting(dayStart: LocalTime?, count: Int, on: Boolean, onOn: (Boolean) -> Unit, times: List<Int>, onTimes: (List<Int>) -> Unit) {
-    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.weight(1f)) {
-            Text("A time for each one", style = MaterialTheme.typography.bodyLarge)
-            Text(
-                if (on) "Each gets its own reminder." else "Off: they're spread out evenly from when your day starts to the finish time, and Today shows when the next one is due.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        Switch(checked = on, onCheckedChange = onOn, modifier = Modifier.testTag("field:each-time"))
-    }
+    SwitchRow(
+        "A time for each one",
+        on,
+        "field:each-time",
+        hint = if (on) "Each gets its own reminder." else "Off: they're spread out evenly from when your day starts to the finish time, and Today shows when the next one is due.",
+        onChange = onOn,
+    )
     if (!on) return
     val shown = minOf(count, MAX_EACH_TIMES)
     // A quick fill: every few hours from the first time set, or when the day starts.
@@ -1695,7 +1784,7 @@ fun TodoEditor(id: Long, vm: MainViewModel, onClose: () -> Unit) {
         }
         Text(
             if (date == null) {
-                "Without a date it waits on Today until it's done, and is never missed."
+                "Without a date it waits on Today, with all the time it needs, until it's done. It never counts as a miss."
             } else {
                 "With a date it is due that day. Not done by the end of it, it's a miss, like any goal. To-dos share one allowance: " +
                     "${Goal.DEFAULT_ALLOWANCE} skip or miss a week between them before it costs ${pointsWord()}."
@@ -1835,17 +1924,13 @@ private fun AllowanceAndPrivacy(
 
 @Composable
 private fun PrivateSwitch(isPrivate: Boolean, onPrivate: (Boolean) -> Unit) {
-    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.weight(1f)) {
-            Text("Private", style = MaterialTheme.typography.bodyLarge)
-            Text(
-                "Hidden behind the privacy lock, if it's on for private goals (Settings → Privacy).",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        Switch(checked = isPrivate, onCheckedChange = onPrivate, modifier = Modifier.testTag("field:private"))
-    }
+    SwitchRow(
+        "Private",
+        isPrivate,
+        "field:private",
+        hint = "Hidden behind the privacy lock, if it's on for private goals (Settings → Privacy).",
+        onChange = onPrivate,
+    )
 }
 
 /** An optional category for a goal, typed or picked from the ones already in use. */
@@ -1886,13 +1971,14 @@ private fun GoalColourField(value: Int?, onValue: (Int?) -> Unit, vm: MainViewMo
         val palette = if (LocalColourBlind.current) io.github.randomtools3377.checklist.core.ColourBlind.GOAL_COLORS else Colors.GOAL_COLORS
         val offered = (palette + listOfNotNull(value)).distinct()
         ColourDot(null, value == null, "No colour", "goal-colour:none") { onValue(null) }
-        offered.forEach { c -> ColourDot(c, value == c, "Colour ${Colors.hex(c)}", "goal-colour:${Colors.hex(c)}") { onValue(c) } }
+        // Each named for screen readers, like "Ocean blue".
+        offered.forEach { c -> ColourDot(c, value == c, io.github.randomtools3377.checklist.core.ColourNames.of(c), "goal-colour:${Colors.hex(c)}") { onValue(c) } }
         Box(
             Modifier
-                .size(40.dp)
+                .size(48.dp)
                 .background(androidx.compose.ui.graphics.Brush.sweepGradient(listOf(Color.Red, Color.Yellow, Color.Green, Color.Cyan, Color.Blue, Color.Magenta, Color.Red)), CircleShape)
                 .clickable { picking = true }
-                .semantics { contentDescription = "Any colour" }
+                .semantics { contentDescription = "Any colour, from the colour picker" }
                 .testTag("goal-colour:any"),
         )
     }
@@ -1916,17 +2002,19 @@ private fun GoalColourField(value: Int?, onValue: (Int?) -> Unit, vm: MainViewMo
 
 @Composable
 private fun ColourDot(color: Int?, selected: Boolean, description: String, tag: String, onClick: () -> Unit) {
+    // The whole 48 dp takes the tap, with or without the ring around the one picked.
     Box(
         contentAlignment = Alignment.Center,
         modifier = Modifier
-            .size(40.dp)
-            .then(if (selected) Modifier.border(3.dp, MaterialTheme.colorScheme.onSurface, CircleShape).padding(4.dp) else Modifier)
-            .background(if (color == null) MaterialTheme.colorScheme.surfaceVariant else Color(color), CircleShape)
+            .size(48.dp)
+            .clip(CircleShape)
             .clickable(onClick = onClick)
             .semantics {
                 contentDescription = description
                 this.selected = selected
             }
-            .testTag(tag),
+            .testTag(tag)
+            .then(if (selected) Modifier.border(3.dp, MaterialTheme.colorScheme.onSurface, CircleShape).padding(4.dp) else Modifier)
+            .background(if (color == null) MaterialTheme.colorScheme.surfaceVariant else Color(color), CircleShape),
     ) { if (color == null) Text("–", color = MaterialTheme.colorScheme.onSurfaceVariant) }
 }

@@ -197,6 +197,11 @@ class DesktopPhone(
     override val hasRecentsPreview: Boolean = false
     override val canBuzz: Boolean = false
 
+    // It is a computer, whose own backups are its owner's business, and whose lock the app can't ask for.
+    override val deviceWord: String = "computer"
+    override val outOfDeviceBackups: Boolean = false
+    override val canAskForLock: Boolean = false
+
     override fun toast(text: String) {
         messages.value = text
     }

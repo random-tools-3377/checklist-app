@@ -17,6 +17,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
@@ -81,3 +83,9 @@ internal fun TickBoxRow(
 
 /** A section's title, marked as a heading so a screen reader can jump from one to the next. */
 internal fun Modifier.asHeading(): Modifier = semantics { heading() }
+
+/**
+ * What a screen reader says for something shown as a symbol, like "◀" or "🎙", in place of the
+ * symbol itself. Inside a button, the button reads it out with its role.
+ */
+internal fun Modifier.spoken(label: String): Modifier = clearAndSetSemantics { contentDescription = label }

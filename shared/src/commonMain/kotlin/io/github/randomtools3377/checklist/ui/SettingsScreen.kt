@@ -1,8 +1,15 @@
-@file:OptIn(ExperimentalMaterial3Api::class)
+@file:OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 
 package io.github.randomtools3377.checklist.ui
 
 import io.github.randomtools3377.checklist.core.Feature
+import io.github.randomtools3377.checklist.core.Offered
+import io.github.randomtools3377.checklist.core.Rules
+import io.github.randomtools3377.checklist.core.SettingsSearch
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.material3.AssistChip
+import kotlinx.datetime.LocalTime
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -78,8 +85,8 @@ fun hourText(hour: Int): String = when (hour) {
 
 /**
  * How easy rewards are to earn: a level by hand, or getting harder (or easier) a level at a time
- * on a schedule. Also the weekly treat budget, which links money and points for rewards priced in
- * money (see MoneyPrices).
+ * on a schedule. Also, with suggested prices on, the weekly treat budget, which links money and
+ * points for rewards priced in money (see MoneyPrices).
  */
 @Composable
 private fun DifficultySettings(vm: MainViewModel) {
@@ -87,6 +94,8 @@ private fun DifficultySettings(vm: MainViewModel) {
     val now by vm.currentDifficulty.collectAsState()
     val budget by vm.treatBudget.collectAsState()
     val moneyRate by vm.moneyRate.collectAsState()
+    val features by vm.features.collectAsState()
+    val treatShown = treatBudgetShown(features, budget)
     var rampFrom by rememberSaveable { mutableStateOf(Difficulty.EASY) }
     var rampTo by rememberSaveable { mutableStateOf(Difficulty.NORMAL) }
     var weeks by rememberSaveable { mutableStateOf("6") }
@@ -148,7 +157,8 @@ private fun DifficultySettings(vm: MainViewModel) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        // The treat budget is for suggested prices: shown while they're on, or once it is set.
+        if (treatShown) Row(verticalAlignment = Alignment.CenterVertically) {
             OutlinedTextField(
                 value = budgetText,
                 onValueChange = { text -> budgetText = text.filter { it.isDigit() || it == '.' || it == ',' }.take(9) },
@@ -160,7 +170,7 @@ private fun DifficultySettings(vm: MainViewModel) {
             )
             TextButton(onClick = { vm.setTreatBudget(Amounts.parse(budgetText)) }, modifier = Modifier.testTag("save-treat-budget")) { Text("Set") }
         }
-        Text(
+        if (treatShown) Text(
             "Links money and ${pointsWord()} for rewards with a price in money: doing everything due in a week earns this much in rewards." +
                 (moneyRate?.let { " Now ${moneyText(1.0)} is about ${io.github.randomtools3377.checklist.core.Suggest.nice(it.pointsPerUnit)} ${pointsWord()}." } ?: ""),
             style = MaterialTheme.typography.bodySmall,
@@ -168,6 +178,9 @@ private fun DifficultySettings(vm: MainViewModel) {
         )
     }
 }
+
+/** Whether Settings → Difficulty shows the weekly treat budget: with suggested prices on, or once it is set. */
+internal fun treatBudgetShown(features: Set<Feature>, budget: Double?): Boolean = Feature.SUGGESTIONS in features || budget != null
 
 /**
  * Showing the phone's own calendar in the planner and on Today, read on the phone only. Turning
@@ -193,7 +206,7 @@ private fun CalendarSettings(vm: MainViewModel) {
     Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         SwitchLine(
             "Show my calendar",
-            "Events from your phone's calendar in the planner, the timeline and Today, and pacing leaves their time out. It is only read, on the phone.",
+            "Events from your ${phone.deviceWord}'s calendar in the planner, the timeline and Today, and pacing leaves their time out. It is only read, on the ${phone.deviceWord}.",
             choice.first && allowed,
             "calendar",
         ) { on ->
@@ -253,10 +266,13 @@ private fun NotOnThisDevice(title: String, modifier: Modifier = Modifier) {
 /**
  * The Features page: every optional feature with a switch. They start off so the app stays
  * simple; one already in use stays shown wherever it is used, even when turned off here.
+ * Opened from a Settings search, it scrolls to [focus], the name of the feature found.
  */
 @Composable
-fun FeaturesScreen(vm: MainViewModel, onAppearance: () -> Unit, onBack: () -> Unit) {
+fun FeaturesScreen(vm: MainViewModel, onAppearance: () -> Unit, onBack: () -> Unit, focus: String? = null) {
     val phone = LocalPhone.current
+    val scroll = rememberScrollState()
+    val target = rememberScrollTarget(focus, scroll)
     val features by vm.features.collectAsState()
     val interest by vm.interestPercent.collectAsState()
     val boosts by vm.boosts.collectAsState()
@@ -275,7 +291,7 @@ fun FeaturesScreen(vm: MainViewModel, onAppearance: () -> Unit, onBack: () -> Un
             Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .verticalScroll(rememberScrollState())
+                .verticalScroll(scroll)
                 .testTag("features"),
         ) {
             Text(
@@ -285,15 +301,18 @@ fun FeaturesScreen(vm: MainViewModel, onAppearance: () -> Unit, onBack: () -> Un
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
             )
             // The AI helper is left out where there is no Checklist AI to use.
-            Feature.entries.filter { it != Feature.AI || phone.hasAi }.groupBy { it.group }.forEach { (group, inGroup) ->
+            featuresOn(phone).groupBy { it.group }.forEach { (group, inGroup) ->
                 HorizontalDivider(Modifier.padding(top = 8.dp))
                 Section(group)
                 inGroup.forEach { feature ->
                     if (feature == Feature.CALENDAR) {
-                        CalendarSettings(vm)
+                        Column(Modifier.scrollPlace(target, feature.name)) { CalendarSettings(vm) }
                         return@forEach
                     }
-                    Column(Modifier.padding(horizontal = 16.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Column(
+                        Modifier.scrollPlace(target, feature.name).padding(horizontal = 16.dp, vertical = 6.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
                         SwitchLine(feature.title, feature.about, feature in features, "feature:${feature.name}") { vm.setFeature(feature, it) }
                         if (feature == Feature.AI && feature in features) AiStatusPanel(vm)
                         // How much, for the two that pay an amount.
@@ -349,6 +368,20 @@ private fun DifficultyChips(selected: Difficulty?, tagPrefix: String, onPick: (D
     }
 }
 
+/** What a Settings search found on another page: a chip for each, which opens that page at it. */
+@Composable
+private fun <T> SearchHits(hits: List<T>, label: (T) -> String, tag: (T) -> String, onOpen: (T) -> Unit) {
+    if (hits.isEmpty()) return
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 8.dp),
+    ) {
+        hits.forEach { hit ->
+            AssistChip(onClick = { onOpen(hit) }, label = { Text(label(hit)) }, modifier = Modifier.testTag(tag(hit)))
+        }
+    }
+}
+
 @Composable
 private fun Section(title: String) {
     Text(
@@ -370,6 +403,10 @@ fun SettingsScreen(
     onHelp: () -> Unit = {},
     onOpenTab: (io.github.randomtools3377.checklist.core.AppTabKind) -> Unit,
     onBack: () -> Unit,
+    /** Opens Appearance at a place a search found (see LookPlace). */
+    onLook: (String) -> Unit = { onAppearance() },
+    /** Opens Features at an extra a search found. */
+    onFeature: (Feature) -> Unit = { onFeatures() },
 ) {
     val phone = LocalPhone.current
     var choosingHour by remember { mutableStateOf(false) }
@@ -378,8 +415,53 @@ fun SettingsScreen(
 
     fun toast(message: String) = phone.toast(message)
 
+    // Search: every word typed has to start a word of a part's name or contents (see SettingsSearch).
     var query by rememberSaveable { mutableStateOf("") }
-    fun shows(words: String): Boolean = query.isBlank() || query.trim().split(Regex("\\s+")).all { words.contains(it, ignoreCase = true) }
+    val searched = query.trim()
+    val searching = searched.isNotEmpty()
+    fun shows(words: String): Boolean = !searching || SettingsSearch.matches(searched, words)
+    val features by vm.features.collectAsState()
+    val rules by vm.rules.collectAsState()
+    val treatBudget by vm.treatBudget.collectAsState()
+    val look by vm.appearance.collectAsState()
+    val budgetLockShown = Feature.BUDGET in features || settings.locks.budget
+    // What it finds on the Appearance and Features pages, each opening that page at it.
+    val lookHits = if (searching) lookParts(phone, canMatchWallpaper).filter { SettingsSearch.matches(searched, "appearance look ${it.title} ${it.words}") } else emptyList()
+    val featureHits = if (searching) featuresOn(phone).filter { SettingsSearch.matches(searched, "features extras ${featureWords(it)}") } else emptyList()
+    val showAppearance = shows("Appearance look") || lookHits.isNotEmpty()
+    val showFeatures = shows("Features extras optional") || featureHits.isNotEmpty()
+    // Points and rules is found by the groups it shows, which leave out extras that are off.
+    val ruleGroups = Offered.rules(Rules.FIELDS, features, rules).map { it.group }.distinct()
+    val showRules = shows("Points and rules numbers penalty penalties bonus bonuses percent quest combo boss lucky shield path budget game prices balance check suggested difficulty " + ruleGroups.joinToString(" "))
+    val showHelp = shows("Help and tips guides how to what does info search reminders game")
+    val showGuide = shows("How the app works guide tour examples help")
+    // Tabs hidden from the bottom bar are still here.
+    val hiddenTabs = look.tabs.hidden.filter { it != io.github.randomtools3377.checklist.core.AppTabKind.BUDGET || Feature.BUDGET in features }.sortedBy { it.ordinal }
+    val showTabs = hiddenTabs.isNotEmpty() && shows("open hidden tabs tab " + hiddenTabs.joinToString(" ") { it.label })
+    val showDifficulty = shows("Difficulty easy hard harder easier level levels ramp pay" + if (treatBudgetShown(features, treatBudget)) " treat budget money" else "")
+    val showDay = shows("Your day day ends starts start finish time late night pace morning")
+    val showStreaks = shows("Streaks streak target percent days in a row")
+    val showWeekly = shows("Weekly target weekly points week")
+    val showPenalties = shows("Penalty tasks penalty limit")
+    val showReasons = shows("Reasons for skips and misses reason skip miss own")
+    val showGaps = shows("Gaps gap stopped break days loss")
+    val showNotifications = shows(
+        "Notifications notification reminders reminder alarm exact weekly summary snooze morning plan" +
+            if (phone.hasWidgets) " widget widgets home screen calendar" else "",
+    )
+    val showBackup = shows(
+        "Backup back up backups export import file restore reminder spreadsheet csv excel sheets history move ${phone.deviceWord}" +
+            if (phone.canPickFolder) " automatic folder" else "",
+    )
+    val showPrivacy = shows(
+        "Privacy lock locked unlock fingerprint private hide screenshots reasons notes skips misses moods mood journal review stats " +
+            "history shop rewards gap check-ins internet" +
+            (if (phone.canAskForLock) " face pin pattern passcode" else "") +
+            (if (phone.hasRecentsPreview) " recents recent apps preview" else "") +
+            if (budgetLockShown) " budget money" else "",
+    )
+    val anything = showAppearance || showFeatures || showRules || showHelp || showGuide || showTabs || showDifficulty || showDay ||
+        showStreaks || showWeekly || showPenalties || showReasons || showGaps || showNotifications || showBackup || showPrivacy
     val backups by vm.backupState.collectAsState()
     androidx.compose.runtime.LaunchedEffect(Unit) { vm.refreshBackup() }
     val folderLauncher = rememberPickFolder { file ->
@@ -451,33 +533,37 @@ fun SettingsScreen(
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp).testTag("settings-search"),
             )
-            if (shows("Appearance colours colors theme dark layout sections tabs font text size icon widget style colour-blind color-blind colourblind colorblind accessibility"))
-            Column(
-                Modifier
-                    .fillMaxWidth()
-                    .clickable(onClick = onAppearance)
-                    .testTag("setting:appearance")
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
-            ) {
-                Text("Appearance", style = MaterialTheme.typography.bodyLarge)
-                Text("Colours, Today's layout and sections, and the tabs", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+            if (showAppearance) {
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .clickable(onClick = onAppearance)
+                        .testTag("setting:appearance")
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                ) {
+                    Text("Appearance", style = MaterialTheme.typography.bodyLarge)
+                    Text("Colours, text size, Today's layout and sections, and the tabs", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                }
+                SearchHits(lookHits, { it.title }, { "search-hit:look:${it.title}" }) { onLook(it.key) }
             }
-            if (shows("Features extras to-dos todos timeline mood calendar suggested points prices balance interest boost perfect day streak bonus repeat quit challenges"))
-            Column(
-                Modifier
-                    .fillMaxWidth()
-                    .clickable(onClick = onFeatures)
-                    .testTag("setting:features")
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
-            ) {
-                Text("Features", style = MaterialTheme.typography.bodyLarge)
-                Text(
-                    "Turn extras on or off: to-dos, the timeline, bonuses and more. They start off, to keep the app simple.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.primary,
-                )
+            if (showFeatures) {
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .clickable(onClick = onFeatures)
+                        .testTag("setting:features")
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                ) {
+                    Text("Features", style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        "Turn extras on or off: to-dos, the timeline, bonuses and more. They start off, to keep the app simple.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
+                SearchHits(featureHits, { it.title }, { "search-hit:feature:${it.name}" }) { onFeature(it) }
             }
-            if (shows("Points and rules penalty bonus quest combo boss lucky shield path budget game prices balance check suggested difficulty percent"))
+            if (showRules)
             Column(
                 Modifier
                     .fillMaxWidth()
@@ -492,7 +578,7 @@ fun SettingsScreen(
                     color = MaterialTheme.colorScheme.primary,
                 )
             }
-            if (shows("Help tips guides how to what does search reminders game"))
+            if (showHelp)
             Column(
                 Modifier
                     .fillMaxWidth()
@@ -507,7 +593,7 @@ fun SettingsScreen(
                     color = MaterialTheme.colorScheme.primary,
                 )
             }
-            if (shows("How the app works guide examples help"))
+            if (showGuide)
             Column(
                 Modifier
                     .fillMaxWidth()
@@ -518,23 +604,35 @@ fun SettingsScreen(
                 Text("How the app works", style = MaterialTheme.typography.bodyLarge)
                 Text("A short guide, and example goals to try", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
             }
-            // Tabs hidden from the bottom bar are still here.
-            val look by vm.appearance.collectAsState()
-            val budgetOn = io.github.randomtools3377.checklist.core.Feature.BUDGET in vm.features.collectAsState().value
-            val hiddenTabs = look.tabs.hidden.filter { it != io.github.randomtools3377.checklist.core.AppTabKind.BUDGET || budgetOn }
-            if (hiddenTabs.isNotEmpty()) {
-                Row(Modifier.padding(horizontal = 8.dp)) {
-                    hiddenTabs.sortedBy { it.ordinal }.forEach { tab ->
+            // Tabs hidden from the bottom bar, each a button that wraps onto the next line when they don't fit.
+            if (showTabs) {
+                FlowRow(Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
+                    hiddenTabs.forEach { tab ->
                         TextButton(onClick = { onOpenTab(tab) }, modifier = Modifier.testTag("open-tab:${tab.name}")) { Text("Open ${tab.label}") }
                     }
                 }
             }
-            if (shows("Difficulty difficulty easy hard level ramp harder treat budget money points pay")) {
+            // Nothing matches: a way on to Help and tips, which has its own guides.
+            if (searching && !anything) {
+                Column(
+                    Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 16.dp).testTag("settings-nothing-found"),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text("Nothing found", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        "Try another word, or look in Help and tips.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    FilledTonalButton(onClick = onHelp, modifier = Modifier.testTag("settings-nothing-help")) { Text("Help and tips") }
+                }
+            }
+            if (showDifficulty) {
                 HorizontalDivider()
                 Section("Difficulty")
                 DifficultySettings(vm)
             }
-            if (shows("Your day day ends starts finish time late night pace")) {
+            if (showDay) {
                 HorizontalDivider()
                 Section("Your day")
                 Column(
@@ -558,6 +656,7 @@ fun SettingsScreen(
                         onChange = { vm.setDayStart(it) },
                         tag = "setting:day-start",
                         emptyText = "Not set",
+                        pickFrom = LocalTime(7, 0),
                         hint = "Goals done several times a day are spread out from then to the finish time" +
                             if (phone.hasPlanNotifications) ", and the morning plan comes then." else ".",
                     )
@@ -571,32 +670,32 @@ fun SettingsScreen(
                     )
                 }
             }
-            if (shows("Streaks streak target percent days in a row")) {
+            if (showStreaks) {
                 HorizontalDivider(Modifier.padding(top = 8.dp))
                 Section("Streaks")
                 StreakSettingsRow(settings.streak) { vm.setStreakSettings(it) }
             }
-            if (shows("Weekly target weekly target points week")) {
+            if (showWeekly) {
                 HorizontalDivider(Modifier.padding(top = 8.dp))
                 Section("Weekly target")
                 WeeklyTargetSetting(vm)
             }
-            if (shows("Penalty tasks penalty tasks limit")) {
+            if (showPenalties) {
                 HorizontalDivider(Modifier.padding(top = 8.dp))
                 Section("Penalty tasks")
                 PenaltyTaskList(vm)
             }
-            if (shows("Reasons for skips and misses reasons skips misses own")) {
+            if (showReasons) {
                 HorizontalDivider(Modifier.padding(top = 8.dp))
                 Section("Reasons for skips and misses")
                 OwnReasons(vm)
             }
-            if (shows("Gaps gaps stopped days loss")) {
+            if (showGaps) {
                 HorizontalDivider(Modifier.padding(top = 8.dp))
                 Section("Gaps")
                 GapSettingsRow(settings.gaps) { vm.setGapSettings(it) }
             }
-            if (shows("Notifications notifications reminders weekly summary snooze morning plan alarm")) {
+            if (showNotifications) {
                 HorizontalDivider(Modifier.padding(top = 8.dp))
                 Section("Notifications")
                 NotificationSettings()
@@ -645,13 +744,13 @@ fun SettingsScreen(
                 val missing = notificationsNotHere(phone)
                 if (missing != null) NotOnThisDevice(missing, Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
             }
-            if (shows("Backup backup export import file automatic folder restore reminder spreadsheet csv excel sheets history")) {
+            if (showBackup) {
                 HorizontalDivider(Modifier.padding(top = 8.dp))
                 Section("Backup")
                 Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
                     Text(
-                        "Phone backup is off for this app, so this file is your backup. Keep it somewhere safe. " +
-                            "It also moves your data to another phone, Android or iPhone.",
+                        (if (phone.outOfDeviceBackups) "${phone.deviceTitle} backup is off for this app, so this file is your backup. " else "This file is your backup. ") +
+                            "Keep it somewhere safe. It also moves your data to another phone or computer: Android, iPhone or Windows.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -729,26 +828,44 @@ fun SettingsScreen(
                     ) { vm.setBackupReminder(it) }
                 }
             }
-            if (shows("Privacy privacy lock fingerprint private hide recents screenshots")) {
+            if (showPrivacy) {
                 HorizontalDivider(Modifier.padding(top = 8.dp))
                 Section("Privacy")
                 Text(
-                    "Pick what sits behind the lock. Unlocking uses your phone's own lock, and stays open until you leave the app.",
+                    if (phone.canAskForLock) "Pick what sits behind the lock. Unlocking uses your ${phone.deviceWord}'s own lock, and stays open until you leave the app."
+                    else "Pick what sits behind the lock. Once open, it stays open until you leave the app.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
                 )
+                // A computer has no lock of its own for the app to ask for.
+                if (!phone.canAskForLock) {
+                    Text(
+                        "On a computer the lock can't ask for a fingerprint, so it opens with a note.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp).testTag("privacy-no-own-lock"),
+                    )
+                }
                 // Turning a lock on hides more, so it needs no unlock; turning one off asks first.
                 fun setLock(name: String, on: Boolean) = if (on) vm.setLock(name, true) else unlockFirst { vm.setLock(name, false) }
                 LockSwitch("Points history", settings.locks.history, "lock:history") { setLock(LOCK_HISTORY, it) }
                 LockSwitch("The shop and bought rewards", settings.locks.shop, "lock:shop") { setLock(LOCK_SHOP, it) }
                 LockSwitch("Goals marked private", settings.locks.privateGoals, "lock:private") { setLock(LOCK_PRIVATE, it) }
-                LockSwitch("Reasons and notes for skips and misses", settings.locks.reasons, "lock:reasons") { setLock(LOCK_REASONS, it) }
+                LockSwitch("Reasons and notes for skips, misses and moods", settings.locks.reasons, "lock:reasons") { setLock(LOCK_REASONS, it) }
                 LockSwitch("Gap check-ins", settings.locks.gaps, "lock:gaps") { setLock(LOCK_GAPS, it) }
                 LockSwitch("The review and stats", settings.locks.review, "lock:review") { setLock(LOCK_REVIEW, it) }
-                if (io.github.randomtools3377.checklist.core.Feature.BUDGET in vm.features.collectAsState().value || settings.locks.budget) {
+                if (budgetLockShown) {
                     LockSwitch("The budget", settings.locks.budget, "lock:budget") { setLock(io.github.randomtools3377.checklist.data.LOCK_BUDGET, it) }
                 }
+                // What the moods and the budget sit behind.
+                Text(
+                    "The mood journal is locked by \"Reasons and notes for skips, misses and moods\" or by \"The review and stats\"" +
+                        if (budgetLockShown) ", and the budget by its own switch." else ".",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp).testTag("privacy-moods"),
+                )
                 if (settings.locks.privateGoals) {
                     Text(
                         "While locked, private goals are left off the widget, and their notifications don't name them.",
@@ -769,7 +886,7 @@ fun SettingsScreen(
                         "Hide in recent apps",
                         hideInRecents,
                         "setting:hide-recents",
-                        hint = "On this phone, hiding the preview also blocks screenshots of the app.",
+                        hint = "On this ${phone.deviceWord}, hiding the preview also blocks screenshots of the app.",
                         padding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
                     ) {
                         hideInRecents = it
@@ -777,7 +894,8 @@ fun SettingsScreen(
                     }
                 }
                 Text(
-                    "This app has no internet access and is left out of phone backups. Everything stays on this phone.",
+                    "This app has no internet access" + (if (phone.outOfDeviceBackups) " and is left out of ${phone.deviceWord} backups" else "") +
+                        ". Everything stays on this ${phone.deviceWord}.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
@@ -856,7 +974,7 @@ fun SettingsScreen(
                     "This backup is from ${dateText(backup.exportedAt.toLocalDateTime().date)}. It has $habits habits, " +
                         "$projects projects, ${backup.rewards.count { !it.archived }} rewards and ${backup.ticks.size} ticks, " +
                         "with a balance of ${pointsText(backup.entries.sumOf { it.amount })}.\n\n" +
-                        "Importing replaces everything on this phone with it. Export first if you want to keep what is here now.",
+                        "Importing replaces everything on this ${phone.deviceWord} with it. Export first if you want to keep what is here now.",
                 )
             },
             confirmButton = {
@@ -900,7 +1018,7 @@ private fun NotificationSettings() {
         if (!phone.exactAlarmsAllowed()) {
             Spacer(Modifier.height(8.dp))
             Text(
-                "This phone lets reminders arrive only roughly on time.",
+                "This ${phone.deviceWord} lets reminders arrive only roughly on time.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -909,7 +1027,7 @@ private fun NotificationSettings() {
             }
         }
         if (phone.hasWidgets) Text(
-            "Add the Checklist calendar to your home screen from the phone's widget list. Make it wider for the week, taller for the month.",
+            "Add the Checklist calendar to your home screen from the ${phone.deviceWord}'s widget list. Make it wider for the week, taller for the month.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = 8.dp),

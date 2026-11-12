@@ -805,7 +805,7 @@ private fun MoodCheckIn(onMood: (Int) -> Unit, onLater: () -> Unit) {
                         fontSize = 30.sp,
                         modifier = Modifier
                             .clickable { onMood(index + 1) }
-                            .semantics { contentDescription = "Mood ${index + 1} of 5" }
+                            .semantics { contentDescription = io.github.randomtools3377.checklist.core.Moods.spoken(index + 1) }
                             .padding(6.dp)
                             .testTag("mood:${index + 1}"),
                     )
@@ -836,7 +836,7 @@ private fun MoodAfterCheckIn(morning: Int, onMood: (Int) -> Unit, onLater: () ->
                         fontSize = 30.sp,
                         modifier = Modifier
                             .clickable { onMood(index + 1) }
-                            .semantics { contentDescription = "Mood now ${index + 1} of 5" }
+                            .semantics { contentDescription = io.github.randomtools3377.checklist.core.Moods.spoken(index + 1).replaceFirst("Mood", "Mood now") }
                             .padding(6.dp)
                             .testTag("mood-after:${index + 1}"),
                     )
@@ -957,6 +957,7 @@ private fun MoodAfterAnswer(
 /** Phone backup is off for this app, so a reminder when the last backup is getting old. */
 @Composable
 private fun BackupReminderCard(days: Int, onBackUp: () -> Unit, onLater: () -> Unit) {
+    val phone = LocalPhone.current
     Card(
         modifier = Modifier.fillMaxWidth().testTag("backup-reminder"),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer),
@@ -965,7 +966,8 @@ private fun BackupReminderCard(days: Int, onBackUp: () -> Unit, onLater: () -> U
             Text("Time for a backup", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onTertiaryContainer)
             Text(
                 (if (days < 0) "You haven't backed up yet." else "Your last backup was $days days ago.") +
-                    " Phone backup is off for this app, so your backup file is the only copy.",
+                    if (phone.outOfDeviceBackups) " ${phone.deviceTitle} backup is off for this app, so your backup file is the only copy."
+                    else " A backup keeps a copy of everything somewhere safe.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onTertiaryContainer,
             )
@@ -1044,7 +1046,7 @@ private fun PaceCard(screen: TodayState, onSettings: () -> Unit) {
         Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
             val color = MaterialTheme.colorScheme.onSecondaryContainer
             when {
-                left == 0 && screen.plan.any { it.row.skipped } -> Text("Nothing left to do today.", color = color, style = MaterialTheme.typography.titleSmall)
+                left == 0 && screen.plan.any { it.row.skipped } -> Text("That's everything for today.", color = color, style = MaterialTheme.typography.titleSmall)
                 left == 0 -> Text("Everything due today is done. 🎉", color = color, style = MaterialTheme.typography.titleSmall)
                 pace == null -> {
                     Text("$left left today", color = color, style = MaterialTheme.typography.titleSmall)
@@ -1430,7 +1432,7 @@ private fun ProjectCard(project: ProjectRow, paceLine: String?, onTick: (StepRow
                     }
                 }
                 if (project.finished) {
-                    Text("Finished", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                    Text("Achieved", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
                 }
             }
             if (project.steps.isNotEmpty()) {

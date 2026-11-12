@@ -28,7 +28,7 @@ object Spreadsheet {
         EntryKind.REFUND -> "Penalty given back"
         EntryKind.INTEREST -> "Savings interest"
         EntryKind.PERFECT_DAY -> "Perfect day"
-        EntryKind.CHALLENGE -> "Challenge finished"
+        EntryKind.CHALLENGE -> "Challenge completed"
         EntryKind.BET -> "Bet"
     }
 

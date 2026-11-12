@@ -351,17 +351,13 @@ private fun MoneyField(
         modifier = Modifier.fillMaxWidth().testTag("field:money"),
     )
     if (Amounts.parse(money)?.takeIf { it > 0 } == null) return
-    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.weight(1f)) {
-            Text("Price follows what it costs", style = MaterialTheme.typography.bodyLarge)
-            Text(
-                "The price in ${pointsWord()} works itself out from this, and keeps in step as your goals change.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        Switch(checked = follows, onCheckedChange = onFollows, modifier = Modifier.testTag("field:follows-money"))
-    }
+    SwitchRow(
+        "Price follows what it costs",
+        follows,
+        "field:follows-money",
+        hint = "The price in ${pointsWord()} works itself out from this, and keeps in step as your goals change.",
+        onChange = onFollows,
+    )
     if (budget == null) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             OutlinedTextField(
@@ -494,7 +490,7 @@ fun BalanceCheckScreen(view: BalanceCheckView?, vm: MainViewModel, onBack: () ->
             if (view.goals.none { it.hint != null }) {
                 item {
                     Text(
-                        "Nothing to change: no goal has been done nearly every time or missed half the time or more over the last 4 weeks.",
+                        "All in balance: over the last 4 weeks, every goal was done more than half the time, and none nearly every time.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -674,17 +670,12 @@ fun RewardEditor(id: Long, vm: MainViewModel, onClose: () -> Unit) {
                 vm = vm,
             )
         }
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-            Column(Modifier.weight(1f)) {
-                Text("Mystery reward", style = MaterialTheme.typography.bodyLarge)
-                Text(
-                    "Write what could come out of it. Each time it's bought, one is drawn at random.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            Switch(checked = mystery, onCheckedChange = { mystery = it }, modifier = Modifier.testTag("field:mystery"))
-        }
+        SwitchRow(
+            "Mystery reward",
+            mystery,
+            "field:mystery",
+            hint = "Write what could come out of it. Each time it's bought, one is drawn at random.",
+        ) { mystery = it }
         if (mystery) {
             prizes.forEachIndexed { index, prize ->
                 Row(verticalAlignment = Alignment.CenterVertically) {

@@ -240,7 +240,7 @@ private fun FacePicker(score: Int, tag: String, onPick: (Int) -> Unit) {
                 fontSize = if (value == score) 30.sp else 22.sp,
                 modifier = Modifier
                     .clickable { onPick(value) }
-                    .semantics { contentDescription = "Mood $value of 5" + if (value == score) ", picked" else "" }
+                    .semantics { contentDescription = Moods.spoken(value) + if (value == score) ", picked" else "" }
                     .padding(4.dp)
                     .testTag("$tag:$value"),
             )

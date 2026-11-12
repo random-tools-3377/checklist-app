@@ -395,9 +395,12 @@ fun ChecklistApp(vm: MainViewModel) {
                 onHelp = { push("help") },
                 onOpenTab = { kind -> goTo(AppTab.entries[kind.ordinal]) },
                 onBack = ::pop,
+                onLook = { place -> push("appearance/$place") },
+                onFeature = { feature -> push("features/${feature.name}") },
             )
-            "features" -> FeaturesScreen(vm, onAppearance = { push("appearance") }, onBack = ::pop)
-            "appearance" -> AppearanceScreen(appearance, vm, onAnyColour = { push("colour") }, onBack = ::pop)
+            // From a Settings search, these open at what was found: "features/QUESTS", "appearance/theme".
+            "features" -> FeaturesScreen(vm, onAppearance = { push("appearance") }, onBack = ::pop, focus = parts.getOrNull(1))
+            "appearance" -> AppearanceScreen(appearance, vm, onAnyColour = { push("colour") }, onBack = ::pop, focus = parts.getOrNull(1))
             "colour" -> AppColourScreen(appearance, onUse = { vm.setColor(it); pop() }, onBack = ::pop)
             "badges" -> BadgesScreen(badges, onSeen = vm::badgesSeen, onBack = ::pop, character = io.github.randomtools3377.checklist.core.Feature.CHARACTER in features)
             "history" -> HistoryScreen(
@@ -423,7 +426,7 @@ fun ChecklistApp(vm: MainViewModel) {
                             IconButton(
                                 onClick = listen,
                                 modifier = Modifier.testTag("voice"),
-                            ) { Text("🎙") }
+                            ) { Text("🎙", modifier = Modifier.spoken("Speak to tick a goal or add a to-do")) }
                         }
                         if (tab == AppTab.GOALS && (goals?.goals?.size ?: 0) > 1 && !reorderGoals) {
                             TextButton(onClick = { selectGoals = !selectGoals }, modifier = Modifier.testTag("select")) {
@@ -487,6 +490,7 @@ fun ChecklistApp(vm: MainViewModel) {
                             selecting = selectGoals,
                             vm = vm,
                             onNew = { newGoal = true },
+                            finishedProjects = doneList.filter { it.goal.kind == io.github.randomtools3377.checklist.core.GoalKind.PROJECT }.associate { it.goal.id to it.day },
                         )
                         AppTab.PLAN -> PlanScreen(planDays, vm, padding, onTimeline = { index -> push("timeline/$index") })
                         AppTab.REVIEW -> if (settings.locks.review && !unlocked) {

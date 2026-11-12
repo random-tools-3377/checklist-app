@@ -356,8 +356,8 @@ fun StreakCard(streaks: Streaks, settings: StreakSettings) {
             }
             Spacer(Modifier.height(6.dp))
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                StreakChip("No misses", streaks.noMisses)
-                StreakChip("No skips", streaks.noSkips)
+                StreakChip("Miss-free", streaks.noMisses)
+                StreakChip("Skip-free", streaks.noSkips)
                 StreakChip("Within the limit", streaks.withinLimit)
                 StreakChip("Perfect days", streaks.perfect)
             }

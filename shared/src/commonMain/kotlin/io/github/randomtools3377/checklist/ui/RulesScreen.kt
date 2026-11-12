@@ -33,17 +33,20 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import io.github.randomtools3377.checklist.core.Offered
 import io.github.randomtools3377.checklist.core.RuleField
 import io.github.randomtools3377.checklist.core.Rules
 
 /**
  * Points and rules: every number that decides what's paid, taken or suggested, grouped, each
- * with its usual value and a way back to it. Changes apply from now on.
+ * with its usual value and a way back to it. Changes apply from now on. The numbers for extras
+ * that are off stay hidden until the extra is on, unless already changed (see Offered).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RulesScreen(vm: MainViewModel, onBack: () -> Unit) {
     val rules by vm.rules.collectAsStateWithLifecycle()
+    val features by vm.features.collectAsStateWithLifecycle()
     var resetting by remember { mutableStateOf(false) }
     val usual = remember { Rules() }
     Scaffold(
@@ -64,12 +67,13 @@ fun RulesScreen(vm: MainViewModel, onBack: () -> Unit) {
         ) {
             item {
                 Text(
-                    "Every number the app uses for ${pointsWord()}, prices and the game. Changes apply from now on; what's already paid stays.",
+                    "Every number the app uses for ${pointsWord()}, prices and the game. Changes apply from now on; what's already paid stays. " +
+                        "The numbers for an extra show here once it's turned on in Features.",
                     style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.padding(bottom = 8.dp),
                 )
             }
-            Rules.FIELDS.groupBy { it.group }.forEach { (group, fields) ->
+            Offered.rules(Rules.FIELDS, features, rules, usual).groupBy { it.group }.forEach { (group, fields) ->
                 item(key = "group-$group") { SectionTitle(group) }
                 items(fields, key = { it.key }) { field -> RuleRow(field, rules, usual) { vm.setRules(field.set(rules, it)) } }
             }

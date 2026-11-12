@@ -30,6 +30,13 @@ object Moods {
 
     fun face(score: Int): String = FACES[(score - 1).coerceIn(0, FACES.lastIndex)]
 
+    /** What a screen reader says for the face of [score]: "Mood 1 of 5, the lowest" up to "Mood 5 of 5, the highest". */
+    fun spoken(score: Int): String = "Mood $score of ${FACES.size}" + when (score) {
+        1 -> ", the lowest"
+        FACES.size -> ", the highest"
+        else -> ""
+    }
+
     /** A note is kept short. */
     const val NOTE_LENGTH = 200
 

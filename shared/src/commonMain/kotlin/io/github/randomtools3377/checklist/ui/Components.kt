@@ -193,7 +193,10 @@ fun SectionTitle(text: String, modifier: Modifier = Modifier) {
     )
 }
 
-/** A row showing a time, or [emptyText] when there is none. Tapping it opens a clock to pick one. */
+/**
+ * A row showing a time, or [emptyText] when there is none. Tapping it opens a clock to pick one,
+ * at the time set, or at [pickFrom] while there is none.
+ */
 @Composable
 fun TimeSetting(
     label: String,
@@ -202,6 +205,7 @@ fun TimeSetting(
     tag: String,
     emptyText: String = "Not set",
     hint: String? = null,
+    pickFrom: LocalTime = LocalTime(18, 0),
 ) {
     var open by remember { mutableStateOf(false) }
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
@@ -214,7 +218,7 @@ fun TimeSetting(
         if (time != null) TextButton(onClick = { onChange(null) }) { Text("Clear") }
     }
     if (open) {
-        val start = time ?: LocalTime(18, 0)
+        val start = time ?: pickFrom
         val state = rememberTimePickerState(
             initialHour = start.hour,
             initialMinute = start.minute,

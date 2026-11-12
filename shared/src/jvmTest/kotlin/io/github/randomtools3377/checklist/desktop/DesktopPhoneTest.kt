@@ -10,7 +10,11 @@ import io.github.randomtools3377.checklist.data.LOCK_PRIVATE
 import io.github.randomtools3377.checklist.data.SettingEntity
 import io.github.randomtools3377.checklist.data.nowLocal
 import io.github.randomtools3377.checklist.data.nextInChain
+import io.github.randomtools3377.checklist.core.SettingsSearch
 import io.github.randomtools3377.checklist.ui.HelpTopic
+import io.github.randomtools3377.checklist.ui.LookPlace
+import io.github.randomtools3377.checklist.ui.deviceTitle
+import io.github.randomtools3377.checklist.ui.lookParts
 import io.github.randomtools3377.checklist.ui.canShowEmoji
 import io.github.randomtools3377.checklist.ui.notificationsNotHere
 import io.github.randomtools3377.checklist.ui.shownOn
@@ -174,6 +178,20 @@ class DesktopPhoneTest {
         val backup = HelpTopic.BACKUP.stepsOn(phone)
         assertEquals(HelpTopic.BACKUP.steps.size - 2, backup.size)
         assertTrue(backup.none { "folder" in it || "automatic" in it })
+    }
+
+    @Test
+    fun aComputerIsCalledAComputerAndItsLockSaysSo() {
+        assertEquals("computer", phone.deviceWord)
+        assertEquals("Computer", phone.deviceTitle)
+        assertFalse(phone.outOfDeviceBackups)
+        assertFalse(phone.canAskForLock)
+        // A Settings search finds only what Appearance shows on a computer: no buzz, icon or widgets.
+        val parts = lookParts(phone, matchWallpaper = false)
+        assertTrue(parts.none { it.title == "App icon" || it.title == "Widgets" })
+        assertTrue(parts.none { SettingsSearch.matches("buzz", it.words) })
+        assertTrue(parts.any { it.key == LookPlace.CELEBRATIONS && SettingsSearch.matches("sounds", it.words) })
+        assertTrue(parts.any { it.key == LookPlace.THEME && SettingsSearch.matches("dark mode", it.words) })
     }
 
     @Test

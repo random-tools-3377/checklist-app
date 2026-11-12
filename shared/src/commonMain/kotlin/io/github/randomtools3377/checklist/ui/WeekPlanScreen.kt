@@ -87,7 +87,8 @@ fun WeekPlanScreen(vm: MainViewModel, onOpenPlan: () -> Unit, onBack: () -> Unit
                     style = MaterialTheme.typography.bodyLarge,
                 )
                 summary.mostMissed?.let { Text("Missed most: ${it.goal.icon} ${it.goal.name}, ${it.missed} times. Worth a better day or time?", style = MaterialTheme.typography.bodyMedium) }
-                summary.mostConsistent?.let { Text("Best: ${it.goal.icon} ${it.goal.name}.", style = MaterialTheme.typography.bodyMedium) }
+                // Praise only a goal that got done, as the weekly summary does.
+                summary.mostConsistent?.takeIf { it.done > 0 }?.let { Text("Most consistent: ${it.goal.icon} ${it.goal.name}. Well done!", style = MaterialTheme.typography.bodyMedium) }
             }
             SectionTitle("This week's target")
             Row(verticalAlignment = Alignment.CenterVertically) {

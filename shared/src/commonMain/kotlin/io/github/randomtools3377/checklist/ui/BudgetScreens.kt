@@ -544,15 +544,9 @@ fun PayEditor(vm: MainViewModel, onClose: () -> Unit) {
         WEEKDAYS.forEachIndexed { i, name ->
             val hours = week[i]
             Column(Modifier.fillMaxWidth()) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(name, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
-                    Switch(
-                        checked = hours != null,
-                        onCheckedChange = { on ->
-                            week = week.toMutableList().also { it[i] = if (on) week.firstOrNull { h -> h != null } ?: WorkHours(9 * 60, 17 * 60, 30) else null }
-                        },
-                        modifier = Modifier.testTag("workday:$i"),
-                    )
+                // The whole row turns the day on or off, read out as "Monday, on".
+                SwitchRow(name, hours != null, "workday:$i") { on ->
+                    week = week.toMutableList().also { it[i] = if (on) week.firstOrNull { h -> h != null } ?: WorkHours(9 * 60, 17 * 60, 30) else null }
                 }
                 if (hours != null) HoursRow(hours, { changed -> week = week.toMutableList().also { it[i] = changed } }, "hours:$i")
             }
@@ -953,7 +947,7 @@ private fun MoneyGameCard(game: MoneyGameView) {
             Text(
                 when {
                     over -> "Over today's share: no points for today, and the streak starts again tomorrow."
-                    game.spentCents == 0L -> "Nothing spent yet: +${io.github.randomtools3377.checklist.core.MoneyGame.NO_SPEND_DAY} if it stays that way, +${io.github.randomtools3377.checklist.core.MoneyGame.GOOD_DAY} within the share."
+                    game.spentCents == 0L -> "A no-spend day so far: +${io.github.randomtools3377.checklist.core.MoneyGame.NO_SPEND_DAY} if it stays that way, +${io.github.randomtools3377.checklist.core.MoneyGame.GOOD_DAY} within the share."
                     else -> "${centsText(shareCents - game.spentCents)} left today: +${io.github.randomtools3377.checklist.core.MoneyGame.GOOD_DAY} if it stays within."
                 },
                 style = MaterialTheme.typography.bodySmall,

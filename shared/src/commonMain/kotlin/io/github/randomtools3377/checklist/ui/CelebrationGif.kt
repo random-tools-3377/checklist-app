@@ -61,7 +61,7 @@ fun CelebrationPicker(value: String?, onChange: (String?) -> Unit) {
     }
     val chosen = value?.takeIf { Celebration.isValid(it) }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-        Text("Celebration when it's finished", style = MaterialTheme.typography.titleSmall)
+        Text("Celebration when it's done", style = MaterialTheme.typography.titleSmall)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             FilterChip(
                 selected = chosen == null,

@@ -26,6 +26,18 @@ class NotSavedException : Exception("Not saved.")
 interface Phone {
     val parts: SharedParts
 
+    /**
+     * The device's own word for itself, for the app's wording: "phone" on Android, "iPhone" on
+     * an iPhone and "computer" on Windows, as in "Everything stays on this computer".
+     */
+    val deviceWord: String get() = "phone"
+
+    /** Whether the device's own backups leave the app out, so the export file is the only copy (not said on a computer). */
+    val outOfDeviceBackups: Boolean get() = true
+
+    /** Whether the privacy lock can ask for the device's own lock (a computer's can't, so it opens with a note). */
+    val canAskForLock: Boolean get() = true
+
     /** Whether the device has a recent-apps screen showing the app's preview (a computer doesn't). */
     val hasRecentsPreview: Boolean get() = true
 
@@ -167,3 +179,10 @@ interface Phone {
 
 /** The phone the screens run on. */
 val LocalPhone = staticCompositionLocalOf<Phone> { error("No phone given") }
+
+/** [Phone.deviceWord] to start a sentence: "Phone", "iPhone" or "Computer". */
+val Phone.deviceTitle: String get() = startOfSentence(deviceWord)
+
+/** [word] with a capital, to start a sentence, unless it has its own already inside, like "iPhone". */
+internal fun startOfSentence(word: String): String =
+    if (word.length > 1 && word[1].isUpperCase()) word else word.replaceFirstChar { it.uppercase() }

@@ -54,14 +54,14 @@ private fun kindText(entry: Entry): String = when {
 
 private fun kindText(kind: EntryKind): String = when (kind) {
     EntryKind.TICK -> "Ticked"
-    EntryKind.BONUS -> "Bonus for finishing"
+    EntryKind.BONUS -> "Bonus for completing"
     EntryKind.PURCHASE -> "Bought"
     EntryKind.RETURN -> "Returned"
     EntryKind.PENALTY -> "Over the limit"
     EntryKind.REFUND -> "Penalty given back"
     EntryKind.INTEREST -> "Savings interest"
     EntryKind.PERFECT_DAY -> "Perfect-day bonus"
-    EntryKind.CHALLENGE -> "Challenge finished"
+    EntryKind.CHALLENGE -> "Challenge completed"
     EntryKind.BET -> "Bet on yourself"
 }
 

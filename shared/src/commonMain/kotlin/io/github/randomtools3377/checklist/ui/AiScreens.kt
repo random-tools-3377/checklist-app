@@ -181,10 +181,12 @@ fun AiStepsCard(vm: MainViewModel, projectName: String, onSteps: (List<String>) 
                 ) { Text("Suggest steps") }
             } else {
                 suggestions.forEachIndexed { index, step ->
-                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.testTag("ai-step:$index")) {
-                        Checkbox(checked = index in picked, onCheckedChange = { on -> picked = if (on) picked + index else picked - index })
-                        Text(step, style = MaterialTheme.typography.bodyMedium)
-                    }
+                    TickBoxRow(
+                        checked = index in picked,
+                        tag = "ai-step:$index",
+                        modifier = Modifier.fillMaxWidth(),
+                        onChange = { on -> picked = if (on) picked + index else picked - index },
+                    ) { Text(step, style = MaterialTheme.typography.bodyMedium) }
                 }
                 Row {
                     Button(

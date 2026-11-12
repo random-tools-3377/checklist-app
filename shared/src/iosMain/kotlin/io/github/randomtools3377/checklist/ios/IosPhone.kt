@@ -68,6 +68,9 @@ class IosPhone : Phone {
     override val appVersion: String =
         NSBundle.mainBundle.objectForInfoDictionaryKey("CFBundleShortVersionString") as? String ?: ""
 
+    /** The app's wording calls it an iPhone. */
+    override val deviceWord: String = "iPhone"
+
     private val scope = MainScope()
 
     /** A short message to show at the bottom of the screen; the iPhone has no toasts of its own. */

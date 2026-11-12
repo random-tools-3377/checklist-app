@@ -297,7 +297,11 @@ private fun ReasonsCard(summary: ReviewSummary, hidden: Boolean) {
     ReviewCard("Reasons that came up most") {
         when {
             hidden -> Text("🔒 Behind the privacy lock", style = MaterialTheme.typography.bodyMedium)
-            summary.reasons.isEmpty() -> Text("No skips or misses with a reason.", style = MaterialTheme.typography.bodyMedium)
+            // "All clear" only when nothing was skipped or missed: a skip needs no reason.
+            summary.reasons.isEmpty() -> Text(
+                if (summary.goals.none { it.skipped > 0 || it.missed > 0 }) "All clear: no skips or misses." else "No skips or misses with a reason.",
+                style = MaterialTheme.typography.bodyMedium,
+            )
             else -> summary.reasons.forEach { (reason, count) ->
                 Row {
                     Text(reason, modifier = Modifier.weight(1f))

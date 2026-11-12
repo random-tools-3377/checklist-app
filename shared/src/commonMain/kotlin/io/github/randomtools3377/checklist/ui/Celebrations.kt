@@ -238,7 +238,7 @@ private fun BigEffect(celebration: BigCelebration, amount: Float, onEnd: () -> U
                         Text(celebration.icon, fontSize = 96.sp)
                     }
                     Spacer(Modifier.height(16.dp))
-                    Text("Project finished!", color = Color.White, fontSize = 32.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+                    Text("Project achieved!", color = Color.White, fontSize = 32.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
                     Spacer(Modifier.height(8.dp))
                     Text(celebration.name, color = Color.White, fontSize = 22.sp, textAlign = TextAlign.Center)
                     if (celebration.points > 0) {

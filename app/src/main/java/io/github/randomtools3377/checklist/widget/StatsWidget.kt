@@ -194,8 +194,8 @@ private fun StatsContent(data: StatsData) {
                     style = TextStyle(color = colors.onSurfaceVariant, fontSize = 12.sp),
                 )
                 StreakLine("Done", data.streaks.done)
-                StreakLine("No misses", data.streaks.noMisses)
-                StreakLine("No skips", data.streaks.noSkips)
+                StreakLine("Miss-free", data.streaks.noMisses)
+                StreakLine("Skip-free", data.streaks.noSkips)
                 StreakLine("In the limit", data.streaks.withinLimit)
                 StreakLine("Perfect days", data.streaks.perfect)
             }

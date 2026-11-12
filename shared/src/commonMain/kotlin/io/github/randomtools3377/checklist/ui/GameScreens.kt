@@ -249,7 +249,7 @@ fun LevelCard(
                                 fontSize = 26.sp,
                                 modifier = Modifier
                                     .clickable { onMood(index + 1) }
-                                    .semantics { contentDescription = "Mood ${index + 1} of 5" }
+                                    .semantics { contentDescription = io.github.randomtools3377.checklist.core.Moods.spoken(index + 1) }
                                     .padding(4.dp)
                                     .testTag("companion-mood:${index + 1}"),
                             )

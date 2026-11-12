@@ -71,16 +71,23 @@ import io.github.randomtools3377.checklist.core.Colors
 import io.github.randomtools3377.checklist.core.AppTabKind
 import io.github.randomtools3377.checklist.core.PointsName
 import io.github.randomtools3377.checklist.core.Schemes
+import io.github.randomtools3377.checklist.core.Offered
 import io.github.randomtools3377.checklist.core.SectionChoice
 import io.github.randomtools3377.checklist.core.Sections
+import io.github.randomtools3377.checklist.core.TodaySection
 import io.github.randomtools3377.checklist.core.TabChoice
 
 private val Rainbow = listOf(Color.Red, Color.Yellow, Color.Green, Color.Cyan, Color.Blue, Color.Magenta, Color.Red)
 
-/** Settings → Appearance: light, dark, phone or black, and the colour the app is built from. */
+/**
+ * Settings → Appearance: light, dark, phone or black, and the colour the app is built from.
+ * Opened from a Settings search, it scrolls to [focus], one of the places in LookPlace.
+ */
 @Composable
-fun AppearanceScreen(appearance: Appearance, vm: MainViewModel, onAnyColour: () -> Unit, onBack: () -> Unit) {
+fun AppearanceScreen(appearance: Appearance, vm: MainViewModel, onAnyColour: () -> Unit, onBack: () -> Unit, focus: String? = null) {
     val phone = LocalPhone.current
+    val scroll = rememberScrollState()
+    val target = rememberScrollTarget(focus, scroll)
     Scaffold(
         topBar = {
             TopAppBar(
@@ -91,10 +98,10 @@ fun AppearanceScreen(appearance: Appearance, vm: MainViewModel, onAnyColour: () 
         },
     ) { padding ->
         Column(
-            Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp),
+            Modifier.fillMaxSize().padding(padding).verticalScroll(scroll).padding(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Title("Theme")
+            Title("Theme", Modifier.scrollPlace(target, LookPlace.THEME))
             SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
                 ThemeMode.entries.forEachIndexed { index, mode ->
                     SegmentedButton(
@@ -102,17 +109,17 @@ fun AppearanceScreen(appearance: Appearance, vm: MainViewModel, onAnyColour: () 
                         onClick = { vm.setTheme(mode) },
                         shape = SegmentedButtonDefaults.itemShape(index = index, count = ThemeMode.entries.size),
                         modifier = Modifier.testTag("theme:${mode.name}"),
-                    ) { Text(mode.label) }
+                    ) { Text(if (mode == ThemeMode.PHONE) phone.deviceTitle else mode.label) }
                 }
             }
             Text(
-                "Phone follows the phone's own dark mode. Black is dark on a pure black background, which saves power on many screens.",
+                "${phone.deviceTitle} follows the ${phone.deviceWord}'s own dark mode. Black is dark on a pure black background, which saves power on many screens.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
             Spacer(Modifier.height(4.dp))
-            Title("Colour")
+            Title("Colour", Modifier.scrollPlace(target, LookPlace.COLOUR))
             FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Colors.PRESETS.forEach { (name, color) ->
                     Swatch(name, appearance.color == color, Modifier.background(Color(color), CircleShape)) { vm.setColor(color) }
@@ -129,7 +136,7 @@ fun AppearanceScreen(appearance: Appearance, vm: MainViewModel, onAnyColour: () 
             }
             Text(
                 "The whole app takes its colours from the one you pick, and keeps text readable." +
-                    if (canMatchWallpaper) " Wallpaper matches the colours of your phone's wallpaper." else "",
+                    if (canMatchWallpaper) " Wallpaper matches the colours of your ${phone.deviceWord}'s wallpaper." else "",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -137,13 +144,24 @@ fun AppearanceScreen(appearance: Appearance, vm: MainViewModel, onAnyColour: () 
                 "Colour-blind friendly",
                 appearance.colourBlind,
                 "switch:colour-blind",
+                modifier = Modifier.scrollPlace(target, LookPlace.COLOUR_BLIND),
                 hint = "Good things in blue and bad things in orange, like points earned and lost, whatever the app's colour. " +
                     "The review calendar marks each day with ✓ or ✕ too, and goals get colours that stay apart.",
                 onChange = vm::setColourBlind,
             )
 
+            // Text size changes the whole app, so it has a place of its own.
             Spacer(Modifier.height(4.dp))
-            Title("Today")
+            Title("Text", Modifier.scrollPlace(target, LookPlace.TEXT))
+            Choice("Text size", TextSize.entries, appearance.textSize, { it.label }, "text-size") { vm.setTextSize(it) }
+            Text(
+                "For the whole app, on top of the ${phone.deviceWord}'s own text size.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
+            Spacer(Modifier.height(4.dp))
+            Title("Today", Modifier.scrollPlace(target, LookPlace.TODAY))
             Choice("Layout", TodayLayout.entries, appearance.layout, { it.label }, "layout") { vm.setTodayLayout(it) }
             Text(
                 if (appearance.layout == TodayLayout.GRID) "Big tiles, two to a row. Tap a tile to tick it; hold it for its details, skip or focus." else "A card for each goal, with its buttons.",
@@ -151,25 +169,19 @@ fun AppearanceScreen(appearance: Appearance, vm: MainViewModel, onAnyColour: () 
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Choice("Card size", CardSize.entries, appearance.cardSize, { it.label }, "card-size") { vm.setCardSize(it) }
-            Choice("Text size", TextSize.entries, appearance.textSize, { it.label }, "text-size") { vm.setTextSize(it) }
-            Text(
-                "On top of the phone's own text size.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
             BackdropSetting(appearance, vm)
 
             Spacer(Modifier.height(4.dp))
-            Title("Today's sections")
-            SectionsEditor(appearance.sections) { change -> vm.changeSections(change) }
+            Title("Today's sections", Modifier.scrollPlace(target, LookPlace.SECTIONS))
+            SectionsEditor(appearance.sections, offeredSections(vm)) { change -> vm.changeSections(change) }
             Spacer(Modifier.height(4.dp))
-            Title("Tabs")
+            Title("Tabs", Modifier.scrollPlace(target, LookPlace.TABS))
             TabsEditor(appearance.tabs, vm)
 
             Spacer(Modifier.height(4.dp))
-            Title("Personal")
+            Title("Personal", Modifier.scrollPlace(target, LookPlace.PERSONAL))
             PointsNameSetting(vm)
-            Choice("Font", FontChoice.entries, appearance.font, { it.label }, "font") { vm.setFont(it) }
+            Choice("Font", FontChoice.entries, appearance.font, { if (it == FontChoice.PHONE) "${phone.deviceTitle}'s" else it.label }, "font") { vm.setFont(it) }
             // The app's icon and the widgets' look only where there are icon choices and widgets.
             if (phone.canChangeIcon) AppIconSetting(appearance.icon) { vm.setAppIcon(it) }
             if (phone.hasWidgets) {
@@ -178,13 +190,13 @@ fun AppearanceScreen(appearance: Appearance, vm: MainViewModel, onAnyColour: () 
                     if (appearance.widgetStyle == io.github.randomtools3377.checklist.widget.WidgetStyle.SEE_THROUGH) {
                         "White text on a see-through background, over your wallpaper."
                     } else {
-                        "In the app's colours, light or dark with the phone."
+                        "In the app's colours, light or dark with the ${phone.deviceWord}."
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            CelebrationSettings(appearance.celebrate, vm)
+            CelebrationSettings(appearance.celebrate, vm, Modifier.scrollPlace(target, LookPlace.CELEBRATIONS))
         }
     }
 }
@@ -271,8 +283,8 @@ private fun AppIconSetting(current: io.github.randomtools3377.checklist.AppIcon,
 
 /** Celebrations: sound, buzz, how much confetti, and a GIF for every goal without its own. */
 @Composable
-private fun CelebrationSettings(style: CelebrationStyle, vm: MainViewModel) {
-    Text("Celebrations", style = MaterialTheme.typography.bodyLarge)
+private fun CelebrationSettings(style: CelebrationStyle, vm: MainViewModel, modifier: Modifier = Modifier) {
+    Text("Celebrations", style = MaterialTheme.typography.bodyLarge, modifier = modifier)
     SwitchRow("Sound", style.sound, "celebrate:sound") { vm.setCelebrationSound(it) }
     // A computer has nothing to buzz.
     if (LocalPhone.current.canBuzz) SwitchRow("Buzz", style.buzz, "celebrate:buzz") { vm.setCelebrationBuzz(it) }
@@ -295,16 +307,40 @@ private fun CelebrationSettings(style: CelebrationStyle, vm: MainViewModel) {
         }
     }
     Text(
-        "With a GIF chosen, finishing any goal without its own fills the screen with it. Sound plays at your phone's sound volume.",
+        "With a GIF chosen, finishing any goal without its own fills the screen with it. Sound plays at your ${LocalPhone.current.deviceWord}'s sound volume.",
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
 }
 
-/** Today's sections: tick to show, arrows to move. */
+/**
+ * Which of Today's sections can show: an extra's only once it is on, or already in use, like
+ * to-dos that exist or a mood given today (see Offered).
+ */
 @Composable
-private fun SectionsEditor(sections: List<SectionChoice>, onChange: ((List<SectionChoice>) -> List<SectionChoice>) -> Unit) {
-    sections.forEachIndexed { index, choice ->
+private fun offeredSections(vm: MainViewModel): (TodaySection) -> Boolean {
+    val features by vm.features.collectAsState()
+    val goals by vm.goalsView.collectAsState()
+    val mood by vm.todayMood.collectAsState()
+    val week by vm.weekProgress.collectAsState()
+    val inUse = Offered.InUse(
+        todos = goals?.goals?.any { it.kind == io.github.randomtools3377.checklist.core.GoalKind.TODO } == true,
+        moodToday = mood != null,
+        weeklyTarget = week != null,
+    )
+    return { section -> Offered.section(section, features, inUse) }
+}
+
+/** Today's sections that can show: tick to show, arrows to move. The others keep their places. */
+@Composable
+private fun SectionsEditor(
+    sections: List<SectionChoice>,
+    offered: (TodaySection) -> Boolean,
+    onChange: ((List<SectionChoice>) -> List<SectionChoice>) -> Unit,
+) {
+    val listed = sections.filter { offered(it.section) }
+    val listedSections = listed.map { it.section }
+    listed.forEachIndexed { index, choice ->
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
             TickBoxRow(
                 checked = choice.shown,
@@ -312,14 +348,20 @@ private fun SectionsEditor(sections: List<SectionChoice>, onChange: ((List<Secti
                 modifier = Modifier.weight(1f),
                 onChange = { onChange { now -> Sections.toggle(now, choice.section) } },
             ) { Text(choice.section.label) }
-            IconButton(onClick = { onChange { now -> Sections.move(now, now.indexOfFirst { it.section == choice.section }, -1) } }, enabled = index > 0, modifier = Modifier.testTag("section-up:${choice.section.name}")) {
+            IconButton(onClick = { onChange { now -> Offered.move(now, choice.section, -1, listedSections) } }, enabled = index > 0, modifier = Modifier.testTag("section-up:${choice.section.name}")) {
                 Icon(Icons.Filled.KeyboardArrowUp, contentDescription = "Move ${choice.section.label} up")
             }
-            IconButton(onClick = { onChange { now -> Sections.move(now, now.indexOfFirst { it.section == choice.section }, 1) } }, enabled = index < sections.lastIndex, modifier = Modifier.testTag("section-down:${choice.section.name}")) {
+            IconButton(onClick = { onChange { now -> Offered.move(now, choice.section, 1, listedSections) } }, enabled = index < listed.lastIndex, modifier = Modifier.testTag("section-down:${choice.section.name}")) {
                 Icon(Icons.Filled.KeyboardArrowDown, contentDescription = "Move ${choice.section.label} down")
             }
         }
     }
+    // Said only while some are left out.
+    if (listed.size < sections.size) Text(
+        "More sections show here once their extra is turned on in Features, and Weekly target once a target is set.",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
 }
 
 /** Which tabs show along the bottom, and the one the app opens on. Today always shows. */
@@ -367,8 +409,8 @@ private fun TabsEditor(tabs: TabChoice, vm: MainViewModel) {
 
 /** A section's title on the Appearance page, marked as a heading for screen readers. */
 @Composable
-private fun Title(text: String) {
-    Text(text, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.asHeading())
+private fun Title(text: String, modifier: Modifier = Modifier) {
+    Text(text, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary, modifier = modifier.asHeading())
 }
 
 /** A labelled row of choices, one of which is picked. */
