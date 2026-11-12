@@ -18,6 +18,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -90,6 +91,9 @@ fun ShopScreen(
     val used by vm.usedRewards.collectAsStateWithLifecycle()
     val limitLeft by vm.rewardsLimitLeft.collectAsStateWithLifecycle()
     val shopFeatures by vm.features.collectAsStateWithLifecycle()
+    val savingGoals by vm.savings.collectAsStateWithLifecycle()
+    // The saving goal a reward is paid from, picked in the Buy box; null for this month's budget.
+    var payFrom by remember { mutableStateOf<Long?>(null) }
 
     Column(Modifier.fillMaxSize().padding(top = padding.calculateTopPadding())) {
         BalanceCard(
@@ -190,9 +194,11 @@ fun ShopScreen(
                     val cost = reward.value?.takeIf { io.github.randomtools3377.checklist.core.Feature.BUDGET in shopFeatures && it > 0 }
                     if (cost != null) {
                         val left = limitLeft
-                        val after = left?.minus(io.github.randomtools3377.checklist.core.Budget.cents(cost))
+                        // Paid from savings, it takes nothing from the month's rewards limit.
+                        val after = if (payFrom != null) null else left?.minus(io.github.randomtools3377.checklist.core.Budget.cents(cost))
                         Text(
                             when {
+                                payFrom != null -> "In money: ${moneyText(cost)}."
                                 after == null -> "In money: ${moneyText(cost)}. It counts as spent in your budget."
                                 after >= 0 -> "In money: ${moneyText(cost)}. That leaves ${centsText(after)} for rewards this month."
                                 else -> "In money: ${moneyText(cost)}. That is ${centsText(-after)} over your rewards limit this month."
@@ -201,6 +207,26 @@ fun ShopScreen(
                             color = if (after != null && after < 0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(top = 8.dp).testTag("buy-money"),
                         )
+                        // Saving goals that hold enough can pay for it instead.
+                        val able = savingGoals.filter { it.savedCents >= io.github.randomtools3377.checklist.core.Budget.cents(cost) }
+                        if (able.isNotEmpty()) {
+                            Text("Pay from", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 10.dp))
+                            ChoiceRow("This month's budget", payFrom == null, "pay-from:budget") { payFrom = null }
+                            able.forEach { saving ->
+                                ChoiceRow(
+                                    "${saving.goal.icon} ${saving.goal.name} (${centsText(saving.savedCents)} saved)",
+                                    payFrom == saving.goal.id,
+                                    "pay-from:${saving.goal.name}",
+                                ) { payFrom = saving.goal.id }
+                            }
+                            if (payFrom != null) {
+                                Text(
+                                    "It comes out of your savings, so it doesn't count as this month's spending.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
                     }
                 }
             },
@@ -208,7 +234,9 @@ fun ShopScreen(
                 TextButton(
                     onClick = {
                         buying = null
-                        vm.buy(reward.id) { result ->
+                        val from = payFrom
+                        payFrom = null
+                        vm.buy(reward.id, from) { result ->
                             when (result) {
                                 is BuyResult.Bought -> {
                                     celebrations.buzz(haptics)
@@ -767,5 +795,23 @@ fun RewardEditor(id: Long, vm: MainViewModel, onClose: () -> Unit) {
                 )
             }
         }
+    }
+}
+
+
+/** One choice of a few, with a radio button; the whole row picks it. */
+@Composable
+private fun ChoiceRow(label: String, picked: Boolean, tag: String, onPick: () -> Unit) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .selectable(selected = picked, role = androidx.compose.ui.semantics.Role.RadioButton, onClick = onPick)
+            .padding(vertical = 4.dp)
+            .testTag(tag),
+    ) {
+        androidx.compose.material3.RadioButton(selected = picked, onClick = null)
+        Spacer(Modifier.width(8.dp))
+        Text(label)
     }
 }

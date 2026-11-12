@@ -232,6 +232,7 @@ fun BudgetScreen(
                 }
             }
         }
+        if (shown.thisMonth) item { LeftoverCard(savings, vm) }
         item { MonthSums(month, shown.thisMonth, onReceived) }
         if (shown.thisMonth) {
             item { BillsCard(bills, onBills) }

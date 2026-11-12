@@ -131,7 +131,8 @@ fun SavingsCard(savings: List<SavingProgress>, hourly: Double?, vm: MainViewMode
                         Text(saving.goal.icon, fontSize = 22.sp, modifier = Modifier.width(36.dp))
                         Text(saving.goal.name, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
                         Text(
-                            "${centsText(saving.savedCents)} of ${centsText(saving.goal.targetCents)}",
+                            // A plain savings account has no target: just what is in it.
+                            if (saving.goal.targetCents > 0) "${centsText(saving.savedCents)} of ${centsText(saving.goal.targetCents)}" else "${centsText(saving.savedCents)} saved",
                             style = MaterialTheme.typography.bodyMedium,
                             modifier = Modifier.testTag("saving-amounts:${saving.goal.name}"),
                         )
@@ -559,5 +560,57 @@ private fun DayBars(values: List<Long>, modifier: Modifier) {
             drawRect(color, topLeft = Offset(i * slot + (slot - bar) / 2, size.height - h), size = Size(bar, h))
         }
         drawRect(base, topLeft = Offset(0f, size.height - 1f), size = Size(size.width, 1f))
+    }
+}
+
+/**
+ * Last month's money left over, with where to put it: a saving goal, or a plain Savings account
+ * when there is none to pick. Nothing carries over into this month by itself.
+ */
+@Composable
+fun LeftoverCard(savings: List<SavingProgress>, vm: MainViewModel) {
+    val leftover by vm.leftover.collectAsStateWithLifecycle()
+    val (first, cents) = leftover ?: return
+    var choosing by remember { mutableStateOf(false) }
+    Card(Modifier.fillMaxWidth().testTag("leftover-card")) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("🎉 ${centsText(cents)} left from ${MONTH_NAMES[first.monthNumber - 1]}", style = MaterialTheme.typography.titleSmall)
+            Text(
+                "You kept it. Move it into savings and watch it grow.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Row {
+                TextButton(
+                    onClick = { if (savings.isEmpty()) vm.saveLeftover(null) else choosing = true },
+                    modifier = Modifier.testTag("leftover-save"),
+                ) { Text("Move to savings") }
+                TextButton(onClick = vm::dismissLeftover, modifier = Modifier.testTag("leftover-dismiss")) { Text("Not now") }
+            }
+        }
+    }
+    if (choosing) {
+        AlertDialog(
+            onDismissRequest = { choosing = false },
+            title = { Text("Move ${centsText(cents)} into") },
+            text = {
+                Column {
+                    savings.forEach { saving ->
+                        TextButton(
+                            onClick = { choosing = false; vm.saveLeftover(saving.goal.id) },
+                            modifier = Modifier.fillMaxWidth().testTag("leftover-into:${saving.goal.name}"),
+                        ) { Text("${saving.goal.icon} ${saving.goal.name}") }
+                    }
+                    if (savings.none { it.goal.name == io.github.randomtools3377.checklist.data.SAVINGS_ACCOUNT }) {
+                        TextButton(
+                            onClick = { choosing = false; vm.saveLeftover(null) },
+                            modifier = Modifier.fillMaxWidth().testTag("leftover-into:account"),
+                        ) { Text("💰 Savings") }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = { TextButton(onClick = { choosing = false }) { Text("Cancel") } },
+        )
     }
 }

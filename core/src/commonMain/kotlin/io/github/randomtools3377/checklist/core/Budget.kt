@@ -213,7 +213,13 @@ data class MoneyEntry(
     val purchaseId: Long? = null,
     val billId: Long? = null,
     val savingId: Long? = null,
-)
+) {
+    /**
+     * A reward paid for from a saving goal: the money leaves the goal, and since it was set aside
+     * earlier it is no part of this month's spending, limits or budget game.
+     */
+    val paidFromSavings: Boolean get() = kind == MoneyKind.TAKEN_OUT && purchaseId != null
+}
 
 /** A category's spending in a month, against its limit. */
 data class CategorySpend(val category: MoneyCategory, val cents: Long) {
@@ -278,7 +284,8 @@ object Budget {
             receivedCents = inMonth.filter { it.kind == MoneyKind.RECEIVED }.sumOf { it.cents },
             spentCents = spent.sumOf { it.cents },
             categories = shown.map { CategorySpend(it, byCategory[it.id] ?: 0) },
-            savedCents = inMonth.sumOf { if (it.kind == MoneyKind.SAVED) it.cents else if (it.kind == MoneyKind.TAKEN_OUT) -it.cents else 0 },
+            // Money taken out to pay for a reward was spent, not put back in the pocket (see MoneyEntry.paidFromSavings).
+            savedCents = inMonth.sumOf { if (it.kind == MoneyKind.SAVED) it.cents else if (it.kind == MoneyKind.TAKEN_OUT && !it.paidFromSavings) -it.cents else 0 },
         )
     }
 }

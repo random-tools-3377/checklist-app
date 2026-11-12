@@ -1345,6 +1345,20 @@ class Repository(private val db: AppDatabase, private val celebrations: GifStore
         dao.putSetting(SettingEntity(MoneyGame.TO, yesterday.toEpochDay().toString()))
     }
 
+    /**
+     * Moves what was left at the end of a month into savings, dated [day] (that month's last day):
+     * into [goalId], or with none into a plain "Savings" account, made the first time, so the
+     * money can be seen growing while it isn't spent.
+     */
+    suspend fun saveLeftover(goalId: Long?, cents: Long, day: LocalDate, note: String): Unit = db.withTransaction {
+        if (cents <= 0) return@withTransaction
+        val into = goalId
+            ?: dao.allSavingGoals().firstOrNull { !it.archived && it.name == SAVINGS_ACCOUNT && it.targetCents == 0L }?.id
+            ?: dao.insertSavingGoal(SavingGoal(name = SAVINGS_ACCOUNT, icon = "💰", targetCents = 0, position = dao.allSavingGoals().size, createdAt = nowMillis()).toEntity())
+        dao.insertMoney(MoneyEntry(kind = MoneyKind.SAVED, cents = cents, note = note, day = day, at = nowMillis(), savingId = into).toEntity())
+        Unit
+    }
+
     /** Puts [cents] into a saving goal, or takes it out when [out], never more than is in it. */
     suspend fun moveSaving(goalId: Long, cents: Long, out: Boolean, day: LocalDate, name: String) {
         val amount = if (out) minOf(cents, savedIn(goalId)) else cents
@@ -1404,10 +1418,21 @@ class Repository(private val db: AppDatabase, private val celebrations: GifStore
      * A reward bought in the shop with a money value counts as spent, under Rewards, on the day
      * it was bought. Returning it takes it off again (see [rewardReturned]).
      */
-    suspend fun rewardBought(purchaseId: Long, name: String, value: Double, day: LocalDate): Unit = db.withTransaction {
+    suspend fun rewardBought(purchaseId: Long, name: String, value: Double, day: LocalDate, fromSaving: Long? = null): Unit = db.withTransaction {
         startBudget()
         val rewards = dao.moneyCategories().firstOrNull { it.role == CategoryRole.REWARDS.name }
         dao.deleteMoneyForPurchase(purchaseId)
+        // Paid from a saving goal that holds enough: the money comes out of the goal instead of
+        // counting as this month's spending. Returning the reward puts it back.
+        if (fromSaving != null && savedIn(fromSaving) >= Budget.cents(value)) {
+            dao.insertMoney(
+                MoneyEntry(
+                    kind = MoneyKind.TAKEN_OUT, cents = Budget.cents(value), note = name, day = day,
+                    at = nowMillis(), purchaseId = purchaseId, savingId = fromSaving,
+                ).toEntity(),
+            )
+            return@withTransaction
+        }
         dao.insertMoney(
             MoneyEntry(
                 kind = MoneyKind.SPENT, cents = Budget.cents(value), categoryId = rewards?.id, note = name, day = day,
@@ -1419,3 +1444,9 @@ class Repository(private val db: AppDatabase, private val celebrations: GifStore
 
     suspend fun rewardReturned(purchaseId: Long) = dao.deleteMoneyForPurchase(purchaseId)
 }
+
+/** The plain savings account that money left over goes into when no saving goal is picked. */
+const val SAVINGS_ACCOUNT = "Savings"
+
+/** The setting holding the last month (its first day) whose leftover was moved into savings or let go. */
+const val SETTING_LEFTOVER_DONE = "budget_leftover_done"

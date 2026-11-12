@@ -1739,13 +1739,13 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
         viewModelScope.launch { book.undoStep(stepId) }
     }
 
-    fun buy(rewardId: Long, onResult: (BuyResult) -> Unit = {}) {
+    fun buy(rewardId: Long, fromSaving: Long? = null, onResult: (BuyResult) -> Unit = {}) {
         viewModelScope.launch {
             val result = book.buy(rewardId)
             onResult(result)
             if (result is BuyResult.Bought) {
                 val name = result.prize ?: repository.reward(rewardId)?.name ?: return@launch
-                countRewardSpending(result.purchaseId, rewardId, name)
+                countRewardSpending(result.purchaseId, rewardId, name, fromSaving)
                 offerUndo("Bought $name · −${result.price}") { returnAndUncount(result.purchaseId) }
             }
         }
@@ -2631,6 +2631,42 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
             }
         }.state(null)
 
+    /**
+     * What was left at the end of last month and hasn't been moved into savings or let go yet:
+     * that month's first day, and the amount in cents. Null when nothing was left, when that
+     * month had no money typed in, or once it has been dealt with.
+     */
+    val leftover: StateFlow<Pair<LocalDate, Long>?> = today.flatMapLatest { day ->
+        val lastFirst = Budget.monthOf(Budget.monthOf(day).minusDays(1))
+        val days = Pay.monthDays(lastFirst)
+        combine(
+            payPlan,
+            dao.observeWorkDays(lastFirst.toEpochDay(), days.last().toEpochDay()),
+            dao.observeMoney(lastFirst.toEpochDay(), days.last().toEpochDay()),
+            moneyCategories,
+            dao.observeSetting(io.github.randomtools3377.checklist.data.SETTING_LEFTOVER_DONE),
+        ) { plan, changed, money, categories, done ->
+            if (done == lastFirst.toString() || money.isEmpty()) return@combine null
+            val month = Budget.month(lastFirst, plan, changed.map { it.toCore() }.associateBy { it.day }, money.map { it.toCore() }, categories, nowLocal())
+            Budget.cents(month.leftAtEnd).takeIf { it > 0 }?.let { lastFirst to it }
+        }
+    }.state(null)
+
+    /** Moves last month's leftover into [goalId], or into the plain Savings account with none. */
+    fun saveLeftover(goalId: Long?) {
+        val (first, cents) = leftover.value ?: return
+        viewModelScope.launch {
+            repository.saveLeftover(goalId, cents, Pay.monthDays(first).last(), "Left over")
+            repository.setSetting(io.github.randomtools3377.checklist.data.SETTING_LEFTOVER_DONE, first.toString())
+        }
+    }
+
+    /** Leaves last month's leftover where it is, and stops asking about it. */
+    fun dismissLeftover() {
+        val first = leftover.value?.first ?: return
+        viewModelScope.launch { repository.setSetting(io.github.randomtools3377.checklist.data.SETTING_LEFTOVER_DONE, first.toString()) }
+    }
+
     /** Every changed work day, whatever month the Budget tab shows; null while loading. */
     val workDays: StateFlow<Map<LocalDate, WorkDay>?> = dao.observeWorkDays(Long.MIN_VALUE, Long.MAX_VALUE)
         .map { rows -> rows.map { it.toCore() }.associateBy { it.day } }.state(null)
@@ -2777,10 +2813,10 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
     }
 
     /** A reward bought with a money value counts as spent while Budget is on. */
-    private suspend fun countRewardSpending(purchaseId: Long, rewardId: Long, name: String) {
+    private suspend fun countRewardSpending(purchaseId: Long, rewardId: Long, name: String, fromSaving: Long? = null) {
         if (Feature.BUDGET !in features.value) return
         val value = repository.reward(rewardId)?.value?.takeIf { it > 0 } ?: return
-        repository.rewardBought(purchaseId, name, value, nowLocal().date)
+        repository.rewardBought(purchaseId, name, value, nowLocal().date, fromSaving)
     }
 
     private suspend fun returnAndUncount(purchaseId: Long): Boolean {
