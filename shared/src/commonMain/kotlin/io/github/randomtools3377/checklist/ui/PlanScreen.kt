@@ -20,6 +20,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.FilterChip
@@ -142,6 +144,25 @@ fun PlanScreen(days: List<TodayView>, vm: MainViewModel, padding: PaddingValues,
     moving?.let { (goal, from) ->
         MoveDialog(goal, from, today, onMove = { to -> vm.moveGoal(goal.id, from, to) }, onDismiss = { moving = null })
     }
+}
+
+/** The planner as a page of its own, with Back: opened from "Plan your week". */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+fun PlannerPage(days: List<TodayView>, vm: MainViewModel, onTimeline: (Int) -> Unit, onBack: () -> Unit) {
+    androidx.compose.material3.Scaffold(
+        topBar = {
+            androidx.compose.material3.TopAppBar(
+                title = { Text("Planner") },
+                navigationIcon = {
+                    androidx.compose.material3.IconButton(onClick = onBack, modifier = Modifier.testTag("planner-back")) {
+                        androidx.compose.material3.Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                actions = { HelpAction() },
+            )
+        },
+    ) { padding -> PlanScreen(days, vm, padding, onTimeline) }
 }
 
 private fun dayLabel(day: LocalDate, today: LocalDate): String = when (day) {

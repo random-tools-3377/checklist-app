@@ -57,7 +57,7 @@ object ShownRoute {
 /** Which guide goes with each screen, by the first part of its route. */
 fun helpTopicFor(route: String): HelpTopic? = when (route.substringBefore("/")) {
     "today" -> HelpTopic.TODAY
-    "plan" -> HelpTopic.PLAN
+    "plan", "planner" -> HelpTopic.PLAN
     "goals" -> HelpTopic.GOALS
     "shop" -> HelpTopic.SHOP
     "review" -> HelpTopic.REVIEW

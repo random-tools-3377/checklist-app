@@ -22,7 +22,6 @@ import io.github.randomtools3377.checklist.core.ChallengeProgress
 import io.github.randomtools3377.checklist.core.Challenges
 import io.github.randomtools3377.checklist.core.Quit
 import io.github.randomtools3377.checklist.core.Check
-import io.github.randomtools3377.checklist.core.BusyTime
 import io.github.randomtools3377.checklist.core.Busy
 import io.github.randomtools3377.checklist.core.payFor
 import io.github.randomtools3377.checklist.core.PerfectDays
@@ -83,7 +82,6 @@ import io.github.randomtools3377.checklist.core.Categories
 import io.github.randomtools3377.checklist.core.Goal
 import io.github.randomtools3377.checklist.core.GoalKind
 import io.github.randomtools3377.checklist.core.LongPace
-import io.github.randomtools3377.checklist.core.Order
 import io.github.randomtools3377.checklist.core.Pace
 import io.github.randomtools3377.checklist.core.PaceSettings
 import io.github.randomtools3377.checklist.core.Planned
@@ -97,7 +95,6 @@ import io.github.randomtools3377.checklist.core.TodayView
 import io.github.randomtools3377.checklist.core.Usual
 import io.github.randomtools3377.checklist.core.countsToward
 import io.github.randomtools3377.checklist.core.minusDays
-import io.github.randomtools3377.checklist.core.usualMinuteOfDay
 import io.github.randomtools3377.checklist.core.Gap
 import io.github.randomtools3377.checklist.core.GapSettings
 import io.github.randomtools3377.checklist.core.Gaps
@@ -474,12 +471,7 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
             dao.observeBalance(),
         ) { goals, steps, habitTicks, stepTicks, balance ->
             val ticks = (habitTicks + stepTicks).map { it.toCore() }
-            val usual = habitTicks
-                .filter { it.day >= day.minusDays(Usual.WINDOW_DAYS).toEpochDay() }
-                .groupBy { it.goalId }
-                .mapValues { (_, list) -> usualMinuteOfDay(list.map { it.at.toLocalDateTime().let { t -> t.hour * 60 + t.minute } }) }
-                .filterValues { it != null }
-                .mapValues { it.value!! }
+            val usual = io.github.randomtools3377.checklist.data.DayOrders.usualMinutes(habitTicks, day)
             Raw(goals.map { it.toCore() }, steps.map { it.toCore() }, ticks, balance, usual)
         }
         val lapsesFlow = combine(
@@ -490,25 +482,26 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
             dao.observeSetting(StreakBonus.SETTING),
         ) { lapses, checks, boost, events, streakBonus -> Extras(lapses, checks, Feature.BOOST.isOn(boost), events, Feature.STREAK_BONUS.isOn(streakBonus)) }
         combine(view, lapsesFlow, now, settings, unlocked) { raw, (lapses, checks, boostOn, events, streakBonusOn), moment, s, isUnlocked ->
-            val busy = BusyTime.on(events, day, s.dayEndHour)
             val hidePrivate = s.locks.privateGoals && !isUnlocked
             val shownGoals = if (hidePrivate) raw.goals.filter { !it.private } else raw.goals
-            // Goals with an amount get the time what is left takes, from a typed time or the
-            // usual speed learned from their timings, so pacing and the order can plan for it.
-            val todayView = TodayList.build(day, shownGoals, raw.steps, raw.ticks, raw.balance, lapses, checks).let { built ->
-                val rates = shownGoals.filter { it.hasAmount }.associate { goal ->
-                    goal.id to Amounts.minutesPerUnit(raw.ticks.filter { it.goalId == goal.id && it.stepId == null })
-                }
-                fun timed(row: HabitRow) =
-                    if (row.goal.hasAmount) row.copy(goal = row.goal.copy(minutes = Amounts.minutesFor(row.goal, row.amountLeft, rates[row.goal.id]))) else row
-                built.copy(
-                    dueToday = built.dueToday.map(::timed),
-                    thisWeek = built.thisWeek.map(::timed),
-                    thisMonth = built.thisMonth.map(::timed),
-                    thisYear = built.thisYear.map(::timed),
-                )
-            }
-            val usual = raw.usual
+            // The order, the pace and what's next come from the one place the widgets, the tile
+            // and the morning plan ask too (DayOrder). It also gives goals with an amount the
+            // time what is left takes, so pacing and the order can plan for it.
+            val built = TodayList.build(day, shownGoals, raw.steps, raw.ticks, raw.balance, lapses, checks)
+            val paceSettings = PaceSettings(s.dayEndHour, s.defaultFinish, s.dayStart)
+            val recommended = s.order == ORDER_RECOMMENDED
+            val ordered = io.github.randomtools3377.checklist.core.DayOrder.of(
+                moment, day, built.dueToday, paceSettings, own = !recommended, usualMinute = raw.usual, busy = events, ticks = raw.ticks,
+            )
+            val todayView = built.copy(
+                dueToday = ordered.rows,
+                thisWeek = io.github.randomtools3377.checklist.core.DayOrder.timed(built.thisWeek, raw.ticks),
+                thisMonth = io.github.randomtools3377.checklist.core.DayOrder.timed(built.thisMonth, raw.ticks),
+                thisYear = io.github.randomtools3377.checklist.core.DayOrder.timed(built.thisYear, raw.ticks),
+            )
+            val busy = ordered.busy
+            val pace = ordered.pace
+            val plan = ordered.planned
             val records = StreakCounter.records(day.minusDays(STREAK_DAYS), day, raw.goals, raw.ticks.filter { it.stepId == null }, lapses)
             // Streak shields, while on, can keep the main streak going.
             val shieldsFrom = if (Feature.SHIELDS.isOn(dao.setting(Feature.SHIELDS.key))) {
@@ -520,18 +513,6 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
             fun mainStreak(on: LocalDate): Int = shieldsFrom?.let { io.github.randomtools3377.checklist.core.Shields.of(records, it, on, s.streak).main }
                 ?: StreakCounter.count(records, on, s.streak).done
             val streaks = StreakCounter.count(records, day, s.streak).let { plain -> shielded?.let { plain.copy(done = it.main) } ?: plain }
-            val paceSettings = PaceSettings(s.dayEndHour, s.defaultFinish, s.dayStart)
-            val pace = Pace.today(moment, day, todayView.dueToday, paceSettings, busy)
-            val recommended = s.order == ORDER_RECOMMENDED
-            val plan = if (recommended) {
-                Order.recommend(moment, day, todayView.dueToday, paceSettings, usual, pace)
-            } else {
-                todayView.dueToday.map { row ->
-                    val at = row.goal.at?.let { Pace.on(day, it, s.dayEndHour) }
-                        ?: Pace.nextSlot(row, day, paceSettings)?.takeIf { it.fixed }?.at
-                    Planned(row, at, fixed = at != null, late = at != null && !row.settled && at < moment)
-                }
-            }
             val longPaces = buildMap {
                 (todayView.thisWeek + todayView.thisMonth + todayView.thisYear).forEach { row ->
                     Pace.forHabit(row, day)?.let { put(row.goal.id, it) }

@@ -7,6 +7,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -17,8 +18,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -37,34 +40,51 @@ import androidx.compose.material3.TimePicker
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import io.github.randomtools3377.checklist.core.DayHours
 import io.github.randomtools3377.checklist.core.HabitRow
 import io.github.randomtools3377.checklist.core.Pace
 import io.github.randomtools3377.checklist.core.PaceSettings
 import io.github.randomtools3377.checklist.core.Retimes
+import io.github.randomtools3377.checklist.core.TimelineLayout
 import io.github.randomtools3377.checklist.core.TodayView
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.LocalTime
 import kotlin.math.roundToInt
 
-/** How tall an hour is on the timeline. */
-private val HOUR = 64.dp
+/** How tall an hour is on the timeline: the shortest box, half an hour, still fits a name and a button. */
+private val HOUR = 80.dp
+
+/** The room on the left for the hour labels. */
+private val GUTTER = 60.dp
+
+/** From this height a box has room for its button under its name; below it they sit side by side. */
+private val TALL = 76.dp
+
+/** Below this width a box's button is only a mark ("✓"), so the name still fits. */
+private val NARROW = 132.dp
 
 /**
  * A goal on the timeline at [minute] (see [DayHours.minuteOf]). [number] is which of its times,
@@ -79,6 +99,18 @@ private class Block(val row: HabitRow, val minute: Int, val number: Int = 0) {
 
     /** " ✓" once done; a skipped one is never done, and says so. */
     val mark: String get() = if (done) " ✓" else if (row.settled) " · skipped" else ""
+
+    /** The one to tick next: the goal itself, or the next of its times. */
+    val isNext: Boolean get() = !settled && (number == 0 || number == row.count + 1)
+
+    val tag: String get() = if (movable) row.goal.name else "${row.goal.name}:$number"
+}
+
+/** What a goal's button says, as on Today: "Done", "+1" for one done several times, "Avoided" for one to quit. */
+internal fun tickLabel(row: HabitRow): String = when {
+    row.goal.quit -> "Avoided"
+    row.goal.target > 1 && !row.goal.hasAmount && !row.isRoutine -> "+1"
+    else -> "Done"
 }
 
 /**
@@ -86,7 +118,9 @@ private class Block(val row: HabitRow, val minute: Int, val number: Int = 0) {
  * later): goals with a clock time sit at it, the rest wait above under "Any time". Hold a goal and
  * drag it to another time, or tap it to pick one; either changes its time for this day only.
  * Times snap to quarter hours. A goal done several times a day sits at each of its times, set or
- * spread over the day, and keeps them.
+ * spread over the day, and keeps them. Each box is as tall as the goal takes, and boxes close
+ * together (calendar events too) sit side by side. With [now] (today's timeline) a line marks the
+ * time and the page opens scrolled to it; with [onTick] each goal still to do has its button.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -98,8 +132,13 @@ fun TimelineScreen(
     onBack: () -> Unit,
     events: List<io.github.randomtools3377.checklist.core.Busy> = emptyList(),
     pace: PaceSettings = PaceSettings(dayEndHour = 0, defaultFinish = null),
+    now: LocalDateTime? = null,
+    onTick: ((HabitRow) -> Unit)? = null,
 ) {
     var picking by remember { mutableStateOf<HabitRow?>(null) }
+    val scroll = rememberScrollState()
+    var hoursTop by remember { mutableStateOf<Int?>(null) }
+    var scrolledToNow by remember { mutableStateOf(false) }
     Scaffold(
         topBar = {
             TopAppBar(
@@ -121,12 +160,14 @@ fun TimelineScreen(
         val anyTime = rows.filter { !Retimes.keepsTimes(it.goal) && it.goal.at == null }
         // Done several times a day with no times to show (not set, and not spread without a day start and finish).
         val severalAnyTime = several.filter { it.second.isEmpty() }.map { it.first }
-        val startHour = DayHours.startHour(firstHour, blocks.map { it.minute }, dayEnd)
+        // Today's hours start early enough to hold the current time too.
+        val nowAt = now?.let { Pace.minutesBetween(LocalDateTime(view.day, LocalTime(0, 0)), it).toInt() }
+        val startHour = DayHours.startHour(firstHour, blocks.map { it.minute } + listOfNotNull(nowAt?.takeIf { it >= 0 }), dayEnd)
         Column(
             Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .verticalScroll(rememberScrollState())
+                .verticalScroll(scroll)
                 .padding(horizontal = 16.dp, vertical = 8.dp)
                 .testTag("timeline"),
         ) {
@@ -148,6 +189,11 @@ fun TimelineScreen(
                         AssistChip(
                             onClick = { picking = row },
                             label = { Text("${row.goal.icon} ${row.goal.name}" + if (row.done) " ✓" else if (row.settled) " · skipped" else "") },
+                            trailingIcon = if (onTick != null && !row.settled) {
+                                { TickButton(tickLabel(row), short = false, tag = "timeline-tick:${row.goal.name}", name = row.goal.name) { onTick(row) } }
+                            } else {
+                                null
+                            },
                             modifier = Modifier.testTag("anytime:${row.goal.name}"),
                         )
                     }
@@ -156,6 +202,11 @@ fun TimelineScreen(
                             onClick = {},
                             enabled = false,
                             label = { Text("${row.goal.icon} ${row.goal.name} · ${row.count} of ${row.goal.target}" + if (row.done) " ✓" else if (row.settled) " · skipped" else "") },
+                            trailingIcon = if (onTick != null && !row.settled) {
+                                { TickButton(tickLabel(row), short = false, tag = "timeline-tick:${row.goal.name}", name = row.goal.name) { onTick(row) } }
+                            } else {
+                                null
+                            },
                             modifier = Modifier.testTag("anytime:${row.goal.name}"),
                         )
                     }
@@ -164,22 +215,56 @@ fun TimelineScreen(
             }
             Text(
                 "Hold a goal and drag it to another time, or tap it. It changes this day only." +
+                    (if (onTick != null) " Its button ticks it." else "") +
                     if (several.isNotEmpty()) " Goals done several times a day keep their times." else "",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(vertical = 8.dp),
             )
             events.filter { it.allDay }.forEach { EventLine(it) }
-            Hours(
-                view.day, startHour, dayEnd, blocks, events.filter { !it.allDay },
-                onTap = { picking = it },
-                onDrop = { row, minute -> onRetime(row.goal.id, minute) },
-            )
+            // Where "now" is on this day's hours, in minutes from its midnight; null on another day or outside them.
+            val nowMinute = nowAt?.takeIf { it >= startHour * 60 && it <= DayHours.endHour(dayEnd) * 60 }
+            val density = LocalDensity.current
+            Box(Modifier.onGloballyPositioned { hoursTop = it.positionInParent().y.roundToInt() }) {
+                Hours(
+                    view.day, startHour, dayEnd, blocks, events.filter { !it.allDay }, nowMinute,
+                    onTap = { picking = it },
+                    onDrop = { row, minute -> onRetime(row.goal.id, minute) },
+                    onTick = onTick,
+                )
+            }
+            // Today's timeline opens at the current time, a little above it, once.
+            LaunchedEffect(hoursTop, nowMinute != null) {
+                val top = hoursTop
+                if (!scrolledToNow && top != null && nowMinute != null) {
+                    val y = with(density) { (HOUR * ((nowMinute - startHour * 60) / 60f) - 96.dp).toPx() }
+                    scroll.scrollTo((top + y).roundToInt().coerceAtLeast(0))
+                    scrolledToNow = true
+                }
+            }
         }
     }
     picking?.let { row ->
         RetimeDialog(row, onPick = { minute -> onRetime(row.goal.id, minute); picking = null }, onDismiss = { picking = null })
     }
+}
+
+/** A goal's small button on the timeline. [short] shows only a mark where there is little room; it still reads as [label]. */
+@Composable
+private fun TickButton(label: String, short: Boolean, tag: String, name: String, onClick: () -> Unit) {
+    Text(
+        if (short && label != "+1") "✓" else label,
+        style = MaterialTheme.typography.labelMedium,
+        color = MaterialTheme.colorScheme.onPrimary,
+        maxLines = 1,
+        modifier = Modifier
+            .testTag(tag)
+            .clip(CircleShape)
+            .background(MaterialTheme.colorScheme.primary)
+            .clickable(role = Role.Button, onClickLabel = "$label: $name", onClick = onClick)
+            .semantics { contentDescription = "$label: $name" }
+            .padding(horizontal = 10.dp, vertical = 6.dp),
+    )
 }
 
 /** "7:15 am" for [minute] as from [DayHours.minuteOf], past midnight too. */
@@ -192,13 +277,17 @@ private fun Hours(
     dayEnd: Int,
     blocks: List<Block>,
     events: List<io.github.randomtools3377.checklist.core.Busy>,
+    nowMinute: Int?,
     onTap: (HabitRow) -> Unit,
     onDrop: (HabitRow, Int) -> Unit,
+    onTick: ((HabitRow) -> Unit)?,
 ) {
     val hours = DayHours.endHour(dayEnd) - startHour
+    val first = startHour * 60
+    val end = DayHours.endHour(dayEnd) * 60
     val density = LocalDensity.current
     val hourPx = with(density) { HOUR.toPx() }
-    Box(Modifier.fillMaxWidth().height(HOUR * hours)) {
+    BoxWithConstraints(Modifier.fillMaxWidth().height(HOUR * hours + 16.dp)) {
         // The hour lines and labels.
         for (i in 0 until hours) {
             Row(Modifier.offset(y = HOUR * i).fillMaxWidth()) {
@@ -211,16 +300,28 @@ private fun Hours(
                 HorizontalDivider(Modifier.padding(top = 8.dp))
             }
         }
-        // Events from the phone's calendar, as grey blocks on the right.
+        // Goals and calendar events share the width: ones that overlap in time sit side by side.
+        val sorted = blocks.sortedBy { it.minute }
         val midnight = LocalDateTime(day, LocalTime(0, 0))
-        events.forEach { event ->
-            val from = (Pace.minutesBetween(midnight, event.start).toInt() - startHour * 60).coerceIn(0, hours * 60 - 15)
-            val to = (Pace.minutesBetween(midnight, event.end).toInt() - startHour * 60).coerceAtMost(hours * 60).coerceAtLeast(from + 15)
+        val eventSpans = events.map { event ->
+            val from = Pace.minutesBetween(midnight, event.start).toInt().coerceIn(first, end - 15)
+            io.github.randomtools3377.checklist.core.TimelineSpan(from, Pace.minutesBetween(midnight, event.end).toInt().coerceAtMost(end).coerceAtLeast(from + 15))
+        }
+        val goalSpans = sorted.map { TimelineLayout.span(it.minute, it.row.goal.minutes, first, end) }
+        val slots = TimelineLayout.place(goalSpans + eventSpans)
+        val lane = maxWidth - GUTTER
+        fun x(slot: io.github.randomtools3377.checklist.core.TimelineSlot) = GUTTER + lane * (slot.column.toFloat() / slot.columns)
+        fun wide(slot: io.github.randomtools3377.checklist.core.TimelineSlot) = (lane / slot.columns - 4.dp).coerceAtLeast(24.dp)
+        // The 8 dp the hour lines sit below their labels' tops, so a box starts on its line.
+        val lineY = 8.dp
+        events.forEachIndexed { index, event ->
+            val span = eventSpans[index]
+            val slot = slots[sorted.size + index]
             Box(
                 Modifier
-                    .offset(x = 220.dp, y = HOUR * (from / 60f))
-                    .width(88.dp)
-                    .height(HOUR * ((to - from) / 60f))
+                    .offset(x = x(slot), y = lineY + HOUR * ((span.start - first) / 60f))
+                    .width(wide(slot))
+                    .height(HOUR * ((span.end - span.start) / 60f) - 2.dp)
                     .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(6.dp))
                     .padding(4.dp)
                     .testTag("timeline-event:${event.title}"),
@@ -228,66 +329,101 @@ private fun Hours(
                 Text("📅 ${event.title}", style = MaterialTheme.typography.labelSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
             }
         }
-        // Goals at their time; ones at the same time sit side by side.
-        val placed = blocks.sortedBy { it.minute }.groupBy { it.minute }
-        val last = DayHours.endHour(dayEnd) * 60 - 1
-        placed.forEach { (minute, sameTime) ->
-            sameTime.forEachIndexed { index, block ->
-                val row = block.row
-                key(row.goal.id, block.number) {
-                    var dragY by remember { mutableFloatStateOf(0f) }
-                    val baseY = (minute - startHour * 60) / 60f * hourPx
-                    val of = if (block.movable) "" else " · ${block.number} of ${row.goal.target}"
-                    Box(
-                        Modifier
-                            .offset { IntOffset(with(density) { (64 + index * 110).dp.roundToPx() }, (baseY + dragY).roundToInt()) }
-                            .width(146.dp)
-                            .background(
-                                if (block.settled) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.primaryContainer,
-                                RoundedCornerShape(8.dp),
-                            )
-                            .then(
-                                if (!block.movable) {
-                                    Modifier
-                                } else {
-                                    Modifier
-                                        .pointerInput(row.goal.id, minute, startHour, dayEnd) {
-                                            detectDragGesturesAfterLongPress(
-                                                onDrag = { change, delta ->
-                                                    change.consume()
-                                                    dragY += delta.y
-                                                },
-                                                onDragEnd = {
-                                                    val moved = minute + (dragY / hourPx * 60).roundToInt()
-                                                    val snapped = DayHours.drop(moved, startHour, dayEnd)
-                                                    dragY = 0f
-                                                    if (snapped != minute % (24 * 60)) onDrop(row, snapped)
-                                                },
-                                                onDragCancel = { dragY = 0f },
-                                            )
-                                        }
-                                        .clickable { onTap(row) }
-                                },
-                            )
-                            .semantics { contentDescription = "${row.goal.name}$of at ${minuteText(minute)}" }
-                            .testTag(if (block.movable) "timeline-goal:${row.goal.name}" else "timeline-goal:${row.goal.name}:${block.number}")
-                            .padding(horizontal = 8.dp, vertical = 6.dp),
-                    ) {
-                        Column {
-                            Text(
-                                "${row.goal.icon} ${row.goal.name}" + block.mark,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                style = MaterialTheme.typography.bodyMedium,
-                            )
-                            val extra = (dragY / hourPx * 60).roundToInt()
-                            Text(
-                                minuteText((minute + extra).coerceIn(0, last)) + of,
-                                style = MaterialTheme.typography.labelSmall,
-                            )
+        val last = end - 1
+        sorted.forEachIndexed { index, block ->
+            val row = block.row
+            val minute = block.minute
+            val span = goalSpans[index]
+            val slot = slots[index]
+            key(row.goal.id, block.number) {
+                var dragY by remember { mutableFloatStateOf(0f) }
+                val baseY = with(density) { lineY.toPx() } + (span.start - first) / 60f * hourPx
+                val of = if (block.movable) "" else " · ${block.number} of ${row.goal.target}"
+                val boxWidth = wide(slot)
+                val boxHeight = HOUR * ((span.end - span.start) / 60f) - 2.dp
+                val xPx = with(density) { x(slot).roundToPx() }
+                val extra = (dragY / hourPx * 60).roundToInt()
+                val timeLine = minuteText((minute + extra).coerceIn(0, last)) + of
+                val button: (@Composable () -> Unit)? = if (onTick != null && block.isNext) {
+                    { TickButton(tickLabel(row), short = boxWidth < NARROW, tag = "timeline-tick:${block.tag}", name = row.goal.name) { onTick(row) } }
+                } else {
+                    null
+                }
+                Box(
+                    Modifier
+                        .zIndex(if (dragY != 0f) 1f else 0f)
+                        .offset { IntOffset(xPx, (baseY + dragY).roundToInt()) }
+                        .width(boxWidth)
+                        .height(boxHeight)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(if (block.settled) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.primaryContainer)
+                        .then(
+                            if (!block.movable) {
+                                Modifier
+                            } else {
+                                Modifier
+                                    .pointerInput(row.goal.id, minute, startHour, dayEnd) {
+                                        detectDragGesturesAfterLongPress(
+                                            onDrag = { change, delta ->
+                                                change.consume()
+                                                dragY += delta.y
+                                            },
+                                            onDragEnd = {
+                                                val moved = minute + (dragY / hourPx * 60).roundToInt()
+                                                val snapped = DayHours.drop(moved, startHour, dayEnd)
+                                                dragY = 0f
+                                                if (snapped != minute % (24 * 60)) onDrop(row, snapped)
+                                            },
+                                            onDragCancel = { dragY = 0f },
+                                        )
+                                    }
+                                    .clickable { onTap(row) }
+                            },
+                        )
+                        .semantics { contentDescription = "${row.goal.name}$of at ${minuteText(minute)}" }
+                        .testTag("timeline-goal:${block.tag}")
+                        // No padding above and below: the shortest box (half an hour) only just fits its two lines.
+                        .padding(horizontal = 8.dp),
+                ) {
+                    val name = "${row.goal.icon} ${row.goal.name}" + block.mark
+                    if (boxHeight >= TALL) {
+                        // Room to stack: the name, the time, and the button under them.
+                        Column(Modifier.padding(vertical = 4.dp)) {
+                            Text(name, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium)
+                            Text(timeLine, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelSmall)
+                            button?.let {
+                                Spacer(Modifier.size(4.dp))
+                                it()
+                            }
+                        }
+                    } else {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxSize()) {
+                            Column(Modifier.weight(1f)) {
+                                Text(name, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium)
+                                Text(timeLine, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelSmall)
+                            }
+                            button?.let {
+                                Spacer(Modifier.width(4.dp))
+                                it()
+                            }
                         }
                     }
                 }
+            }
+        }
+        // Today: a line at the current time, over everything.
+        nowMinute?.let { minute ->
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .zIndex(2f)
+                    .offset(x = GUTTER - 8.dp, y = lineY + HOUR * ((minute - first) / 60f) - 4.dp)
+                    .width(lane + 8.dp)
+                    .semantics { contentDescription = "Now, ${minuteText(minute)}" }
+                    .testTag("timeline-now"),
+            ) {
+                Box(Modifier.size(8.dp).background(MaterialTheme.colorScheme.error, CircleShape))
+                Box(Modifier.weight(1f).height(2.dp).background(MaterialTheme.colorScheme.error))
             }
         }
     }

@@ -34,8 +34,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import io.github.randomtools3377.checklist.core.HabitRow
+import io.github.randomtools3377.checklist.core.WeekAhead
 import io.github.randomtools3377.checklist.core.weekdayShort
 import io.github.randomtools3377.checklist.core.plusDays
+import kotlinx.datetime.LocalDate
 import kotlinx.datetime.isoDayNumber
 
 /** The card on Today from Monday: a few minutes to plan the week, or not this week. */
@@ -53,15 +56,36 @@ fun WeekPlanCard(onPlan: () -> Unit, onLater: () -> Unit) {
     }
 }
 
+/** "2 of 3 left" for a goal due so many times this week, or that it's done. */
+internal fun flexibleLeft(row: HabitRow): String = when {
+    row.done -> "all ${row.goal.target} done ✓"
+    row.left == 0 -> "none left this week"
+    else -> "${row.left} of ${row.goal.target} left"
+}
+
+/** "today", "tomorrow" or "Fri 14". */
+internal fun dayWord(day: LocalDate, today: LocalDate): String = when (day) {
+    today -> "today"
+    today.plusDays(1) -> "tomorrow"
+    else -> "${weekdayShort(day.dayOfWeek.isoDayNumber)} ${day.dayOfMonth}"
+}
+
 /**
- * Weekly planning: last week summed up, this week's target, and the days left in the week. Last
- * week shows the lock instead while [lastWeekLocked] (the review is locked).
+ * Weekly planning: last week summed up, this week's target, and the days left in the week, with
+ * the week's flexible goals, deadlines, dated to-dos and calendar events (see [WeekAhead]). Last
+ * week shows the lock instead while [lastWeekLocked] (the review is locked). [onOpenPlan] opens
+ * the planner on top, so Back returns here.
  */
 @Composable
 fun WeekPlanScreen(vm: MainViewModel, onOpenPlan: () -> Unit, onBack: () -> Unit, lastWeekLocked: Boolean = false, onUnlock: () -> Unit = {}) {
     val last by vm.lastWeek.collectAsStateWithLifecycle()
     val target by vm.weeklyTarget.collectAsStateWithLifecycle()
     val days by vm.planDays.collectAsStateWithLifecycle()
+    // The phone's calendar, only read: empty unless it is turned on in Settings and allowed.
+    val events by vm.calendarEvents.collectAsStateWithLifecycle()
+    val calendarChoice by vm.calendarChoice.collectAsStateWithLifecycle()
+    val calendarOn = calendarChoice.first
+    val settings by vm.settings.collectAsStateWithLifecycle()
     var text by remember(target) { mutableStateOf(if (target > 0) target.toString() else "") }
     Scaffold(
         topBar = {
@@ -97,15 +121,57 @@ fun WeekPlanScreen(vm: MainViewModel, onOpenPlan: () -> Unit, onBack: () -> Unit
             }
             SectionTitle("The days ahead")
             // From today to Sunday.
-            val nextMonday = days.firstOrNull()?.day?.let { io.github.randomtools3377.checklist.core.YearReview.weekOf(it) }?.plusDays(7)
-            val rest = days.filter { nextMonday == null || it.day < nextMonday }
-            rest.forEach { day ->
+            val week = WeekAhead.of(days, if (calendarOn) events else emptyList(), settings.dayEndHour)
+            week.days.forEach { day ->
                 Row(Modifier.fillMaxWidth()) {
                     Text(weekdayShort(day.day.dayOfWeek.isoDayNumber), modifier = Modifier.width(48.dp))
                     Text(
-                        if (day.dueToday.isEmpty()) "Nothing due" else day.dueToday.joinToString(" ") { it.goal.icon } + "  ·  ${day.dueToday.size}",
+                        if (day.due.isEmpty()) "Nothing due" else day.due.joinToString(" ") { it.goal.icon } + "  ·  ${day.due.size}",
                         style = MaterialTheme.typography.bodyMedium,
                     )
+                }
+            }
+            if (week.flexible.isNotEmpty()) {
+                SectionTitle("Any day this week")
+                week.flexible.forEach { row ->
+                    Text(
+                        "${row.goal.icon} ${row.goal.name} · " + flexibleLeft(row),
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.testTag("week-plan-flexible:${row.goal.name}"),
+                    )
+                }
+            }
+            if (week.deadlines.isNotEmpty()) {
+                SectionTitle("Deadlines this week")
+                week.deadlines.forEach { project ->
+                    val on = project.goal.deadline!!
+                    Text(
+                        "${project.goal.icon} ${project.goal.name} · ${dayWord(on, week.days.first().day)} · ${project.doneCount} of ${project.steps.size} steps done",
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.testTag("week-plan-deadline:${project.goal.name}"),
+                    )
+                }
+            }
+            if (week.todos.isNotEmpty()) {
+                SectionTitle("To-dos this week")
+                week.todos.forEach { (on, row) ->
+                    Text(
+                        "${row.goal.icon} ${row.goal.name} · ${dayWord(on, week.days.first().day)}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.testTag("week-plan-todo:${row.goal.name}"),
+                    )
+                }
+            }
+            if (week.hasEvents) {
+                SectionTitle("In your calendar")
+                week.days.filter { it.events.isNotEmpty() }.forEach { day ->
+                    Text(
+                        dayWord(day.day, week.days.first().day),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.testTag("week-plan-events:${day.day.dayOfWeek.isoDayNumber}"),
+                    )
+                    day.events.forEach { EventLine(it) }
                 }
             }
             OutlinedButton(onClick = onOpenPlan, modifier = Modifier.testTag("week-plan-open")) { Text("Move things in the planner") }

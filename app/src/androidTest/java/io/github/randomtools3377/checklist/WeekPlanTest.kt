@@ -1,5 +1,6 @@
 package io.github.randomtools3377.checklist
 
+import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
@@ -7,6 +8,7 @@ import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import io.github.randomtools3377.checklist.core.Feature
+import io.github.randomtools3377.checklist.core.Period
 import io.github.randomtools3377.checklist.core.Repeat
 import io.github.randomtools3377.checklist.data.HabitDraft
 import io.github.randomtools3377.checklist.data.SettingEntity
@@ -32,6 +34,13 @@ class WeekPlanTest {
                     minutes = null, at = null, finishBy = null, finishDay = null,
                 ),
             )
+            // A flexible goal: three times this week, on any days.
+            c.repository.saveHabit(
+                HabitDraft(
+                    id = 0, name = "Swim", icon = "🏊", points = 5, repeat = Repeat.timesPer(Period.WEEKLY, nowLocal().date), target = 3, bonus = 0,
+                    minutes = null, at = null, finishBy = null, finishDay = null,
+                ),
+            )
         }
     }
 
@@ -46,6 +55,14 @@ class WeekPlanTest {
     fun planTheWeekThenSeeTheYear() {
         app.waitFor { shown("week-plan-card") }
         app.tap("week-plan")
+        app.waitFor { shown("week-plan-screen") }
+        // The week's flexible goal is listed with how many are left.
+        app.waitFor { shown("week-plan-flexible:Swim") }
+        app.onNodeWithTag("week-plan-flexible:Swim", useUnmergedTree = true).assertTextContains("3 of 3 left", substring = true)
+        // The planner opens on top, and Back returns to planning and its "Done planning".
+        app.tap("week-plan-open")
+        app.waitFor { shown("plan") }
+        app.tap("planner-back")
         app.waitFor { shown("week-plan-screen") }
         app.tap("week-plan-done")
         app.waitFor { shown("today-list") }

@@ -244,24 +244,9 @@ object Reminders {
     /** The morning plan: what is due today, what to do first, and the pace. Nothing on a day with nothing due. */
     private suspend fun showMorningPlan(context: Context, dayEnd: Int) {
         if (!canNotify(context)) return
-        val container = (context.applicationContext as ChecklistApplication).container
-        val dao = container.db.dao()
-        val now = nowLocal()
-        val day = Days.dayOf(now, dayEnd)
-        val hidePrivate = dao.setting(LOCK_PRIVATE) == "1"
-        val goals = dao.activeGoals().map { it.toCore() }.filter { !(hidePrivate && it.private) }
-        val since = Days.earliestOpenDay(day)
-        val ticks = dao.habitTicksSince(since.toEpochDay()).map { it.toCore() } +
-            dao.allTicks().filter { it.stepId != null }.map { it.toCore() }
-        val steps = dao.allSteps().map { it.toCore() }
-        val lapses = dao.lapsesSince(since.toEpochDay()).map { it.toCore() }
-        val view = TodayList.build(day, goals, steps, ticks, 0, lapses)
-        val settings = PaceSettings(
-            dayEndHour = dayEnd,
-            defaultFinish = dao.setting(SETTING_DEFAULT_FINISH)?.toIntOrNull()?.toTime(),
-            dayStart = dao.setting(SETTING_DAY_START)?.toIntOrNull()?.toTime(),
-        )
-        val plan = MorningPlan.of(now, view, settings) ?: return
+        // What comes first is what Today, the Today widget and the tile show first.
+        val today = io.github.randomtools3377.checklist.widget.DayPlans.today(context)
+        val plan = MorningPlan.of(today.view, today.order) ?: return
         val title = when {
             plan.goals == 0 && plan.alsoOpen == 0 -> "Today: nothing due"
             plan.goals == 0 -> "Today: nothing due, ${plan.alsoOpen} still open this week"

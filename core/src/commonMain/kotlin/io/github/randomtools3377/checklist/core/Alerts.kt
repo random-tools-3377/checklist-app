@@ -209,14 +209,30 @@ data class MorningPlan(
     val todos: Int = 0,
 ) {
     companion object {
-        /** The plan for [view] at [now], or null when there's nothing to plan today. */
-        fun of(now: LocalDateTime, view: TodayView, settings: PaceSettings, usual: Map<Long, Int> = emptyMap()): MorningPlan? {
+        /**
+         * The plan for [view] at [now], or null when there's nothing to plan today. What comes
+         * first is what Today shows first (see [DayOrder]): in the user's [own] order or the
+         * recommended one, with their usual times, the calendar's [busy] time and [ticks] for
+         * how long goals with an amount take.
+         */
+        fun of(
+            now: LocalDateTime,
+            view: TodayView,
+            settings: PaceSettings,
+            usual: Map<Long, Int> = emptyMap(),
+            own: Boolean = false,
+            busy: List<Busy> = emptyList(),
+            ticks: List<Tick> = emptyList(),
+        ): MorningPlan? = of(view, DayOrder.of(now, view.day, view.dueToday, settings, own, usual, busy, ticks))
+
+        /** The plan for [view] with today's goals already in [order]. */
+        fun of(view: TodayView, order: DayOrdered): MorningPlan? {
             val left = view.dueToday.filter { !it.settled }
             val open = (view.thisWeek + view.thisMonth + view.thisYear).count { !it.settled } + view.projects.count { !it.finished }
             val todos = view.todos.count { !it.done }
             if (left.isEmpty() && open == 0 && todos == 0) return null
-            val pace = Pace.today(now, view.day, view.dueToday, settings)
-            val first = Order.recommend(now, view.day, view.dueToday, settings, usual, pace).firstOrNull { !it.row.settled }
+            val pace = order.pace
+            val first = order.next
             return MorningPlan(left.size, first, open, pace, todos)
         }
     }

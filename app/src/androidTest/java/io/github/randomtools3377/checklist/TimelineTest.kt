@@ -18,7 +18,7 @@ import org.junit.rules.ExternalResource
 import org.junit.rules.RuleChain
 import org.junit.runner.RunWith
 
-/** A goal on the timeline gets a time for today only, and back to its usual one. */
+/** A goal on the timeline gets a time for today only, and back to its usual one; today's can be ticked there. */
 @RunWith(AndroidJUnit4::class)
 class TimelineTest {
     class RunAtSeven : ExternalResource() {
@@ -57,5 +57,20 @@ class TimelineTest {
         app.waitFor { shown("retime-usual") }
         app.onNodeWithTag("retime-usual").performClick()
         app.waitFor { retimes().isEmpty() }
+    }
+
+    @Test
+    fun todayShowsTheTimeAndAGoalIsTickedFromItsBox() {
+        app.waitFor { shown("open-timeline") }
+        app.tap("open-timeline")
+        app.waitFor { shown("timeline-goal:Run") }
+        // A line marks the current time, and the goal's box has its own button.
+        app.waitFor { shown("timeline-now") }
+        app.waitFor { shown("timeline-tick:Run") }
+        app.tap("timeline-tick:Run")
+        app.waitFor { runBlocking { container.book.balance() } == 5 }
+        // Done, its button goes; the box stays, to give it another time.
+        app.waitFor { !shown("timeline-tick:Run") }
+        app.waitFor { shown("timeline-goal:Run") }
     }
 }

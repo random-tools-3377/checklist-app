@@ -349,6 +349,9 @@ fun ChecklistApp(vm: MainViewModel) {
                     onBack = ::pop,
                     events = day?.let { io.github.randomtools3377.checklist.core.BusyTime.on(calendarEvents, it.day, settings.dayEndHour) }.orEmpty(),
                     pace = io.github.randomtools3377.checklist.core.PaceSettings(settings.dayEndHour, settings.defaultFinish, settings.dayStart),
+                    // Today's timeline marks the time and ticks; another day's only plans.
+                    now = today?.now?.takeIf { id == 0L },
+                    onTick = if (id == 0L) { row -> if (row.isRoutine) vm.finishRoutine(row.goal.id) else vm.tickHabit(row.goal.id) } else null,
                 )
             }
             "character" -> {
@@ -372,9 +375,11 @@ fun ChecklistApp(vm: MainViewModel) {
             )
             // Last week's figures are part of the review, so they sit behind its lock.
             "plan-week" -> WeekPlanScreen(
-                vm, onOpenPlan = { goTo(AppTab.PLAN) }, onBack = ::pop,
+                vm, onOpenPlan = { push("planner") }, onBack = ::pop,
                 lastWeekLocked = settings.locks.review && !unlocked, onUnlock = unlock,
             )
+            // The planner on top of weekly planning, so Back returns to it and its "Done planning".
+            "planner" -> PlannerPage(planDays, vm, onTimeline = { index -> push("timeline/$index") }, onBack = ::pop)
             "mood-goals" -> MoodGoalsScreen(vm, onEdit = { goalId -> push("habit/$goalId") }, onBack = ::pop, onJournal = { push("mood-journal") })
             "mood-journal" -> MoodJournalScreen(vm, onBack = ::pop)
             "done" -> DoneListScreen(doneList, onOpen = { goal -> push(editRoute(goal)) }, onBack = ::pop)
