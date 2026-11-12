@@ -534,6 +534,7 @@ enum class HelpTopic(val title: String, val intro: String, val steps: List<Strin
             "The {points} come the next day. Good days in a row make a money streak.",
             "A month within every category's limit pays +{monthBonus}, and reaching a saving goal +{savedUp}.",
             "Change what it pays in Settings → Points and rules.",
+            "Rather pick the figure yourself? Tap \"Set my own daily amount\" on the card. \"Work it out from my pay\" puts it back.",
         ),
     ),
     SKIPS_AND_MISSES(

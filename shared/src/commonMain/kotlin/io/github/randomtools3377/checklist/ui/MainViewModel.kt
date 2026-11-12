@@ -304,7 +304,7 @@ data class Stopwatch(val goalId: Long, val startedAt: Long)
 
 /** What the privacy lock covers, as chosen in Settings. */
 /** Today in the budget game: its share, what's spent, and good money days in a row with and without today. */
-data class MoneyGameView(val share: Double?, val spentCents: Long, val streak: Int, val streakBefore: Int)
+data class MoneyGameView(val share: Double?, val spentCents: Long, val streak: Int, val streakBefore: Int, /** The user's own daily amount in cents, when set. */ val ownCents: Long? = null)
 
 /** First-time tips: whether they're on, and the guides (by name) already shown. */
 data class TipsState(val on: Boolean, val seen: Set<String>)
@@ -2652,6 +2652,11 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
         }
     }.state(null)
 
+    /** Sets the Money game's daily line to the user's own amount, or back to the worked-out share with null. */
+    fun setMoneyGameDaily(cents: Long?) {
+        viewModelScope.launch { repository.setSetting(MoneyGame.DAILY, cents?.takeIf { it > 0 }?.toString().orEmpty()) }
+    }
+
     /** Moves last month's leftover into [goalId], or into the plain Savings account with none. */
     fun saveLeftover(goalId: Long?) {
         val (first, cents) = leftover.value ?: return
@@ -2753,13 +2758,13 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
     }
 
     /** Today in the budget game: the day's share, what's spent, and the money streak; null while it's off. */
-    val moneyGame: StateFlow<MoneyGameView?> = combine(features, budget, savings, bills, workDays) { on, view, _, _, _ ->
+    val moneyGame: StateFlow<MoneyGameView?> = combine(features, budget, combine(savings, dao.observeSetting(MoneyGame.DAILY)) { _, own -> own?.toLongOrNull()?.takeIf { it > 0 } }, bills, workDays) { on, view, own, _, _ ->
         if (Feature.BUDGET !in on || Feature.BUDGET_GAME !in on || view == null || !view.thisMonth) return@combine null
         // From the same money, work days and bills as the days paid, back to the day the game started.
         val game = repository.moneyGameToday(nowLocal().date)
         val share = game.share
         val before = game.streakBefore
-        MoneyGameView(share, game.spentCents, if (share != null && MoneyGame.day(game.spentCents, share) != MoneyGame.Day.OVER) before + 1 else before, before)
+        MoneyGameView(share, game.spentCents, if (share != null && MoneyGame.day(game.spentCents, share) != MoneyGame.Day.OVER) before + 1 else before, before, own)
     }.state(null)
 
     /** Puts in the starting categories the first time the budget is opened. */

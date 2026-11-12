@@ -207,7 +207,7 @@ fun BudgetScreen(
             val todayPay = Pay.current(plan, now, workDays ?: shown.changes)
             item { TodayPayCard(todayPay, now, onChange = { onChangeDay(todayPay.day) }) }
         }
-        game?.let { today -> item { MoneyGameCard(today) } }
+        game?.let { today -> item { MoneyGameCard(today, vm) } }
         month.pay?.let { pay ->
             item {
                 Card(Modifier.fillMaxWidth().testTag("month-pay")) {
@@ -916,7 +916,43 @@ fun TodayMoneyCard(vm: MainViewModel, onOpen: () -> Unit) {
 
 /** The budget game today: the day's share, what's spent against it, and the money streak. */
 @Composable
-private fun MoneyGameCard(game: MoneyGameView) {
+private fun MoneyGameCard(game: MoneyGameView, vm: MainViewModel) {
+    var settingOwn by remember { mutableStateOf(false) }
+    if (settingOwn) {
+        var text by remember { mutableStateOf(game.ownCents?.let { Amounts.format(it / 100.0) }.orEmpty()) }
+        val value = Amounts.parse(text)?.takeIf { it > 0 }
+        AlertDialog(
+            onDismissRequest = { settingOwn = false },
+            title = { Text("Your daily amount") },
+            text = {
+                Column {
+                    Text("Spend less than this in a day and it counts as a good money day. Bills and savings aren't counted.", style = MaterialTheme.typography.bodySmall)
+                    OutlinedTextField(
+                        value = text,
+                        onValueChange = { typed -> text = typed.filter { it.isDigit() || it == '.' || it == ',' }.take(9) },
+                        label = { Text("A day") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp).testTag("field:money-game-own"),
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = { vm.setMoneyGameDaily(Budget.cents(value!!)); settingOwn = false },
+                    enabled = value != null,
+                    modifier = Modifier.testTag("money-game-own-save"),
+                ) { Text("Save") }
+            },
+            dismissButton = {
+                if (game.ownCents != null) {
+                    TextButton(onClick = { vm.setMoneyGameDaily(null); settingOwn = false }, modifier = Modifier.testTag("money-game-own-clear")) { Text("Work it out from my pay") }
+                } else {
+                    TextButton(onClick = { settingOwn = false }) { Text("Cancel") }
+                }
+            },
+        )
+    }
     Card(Modifier.fillMaxWidth().testTag("money-game")) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -947,11 +983,18 @@ private fun MoneyGameCard(game: MoneyGameView) {
             )
             // The line the game draws for the day, with where it comes from: it is no target to spend.
             Text(
-                "Stay under ${centsText(shareCents)} for a good money day. That is this month's pay, less bills, spread over its days.",
+                if (game.ownCents != null) {
+                    "Stay under ${centsText(shareCents)} for a good money day. That is the daily amount you set."
+                } else {
+                    "Stay under ${centsText(shareCents)} for a good money day. That is this month's pay, less bills, spread over its days."
+                },
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.testTag("money-game-line"),
             )
+            TextButton(onClick = { settingOwn = true }, modifier = Modifier.testTag("money-game-own")) {
+                Text(if (game.ownCents != null) "Change my daily amount" else "Set my own daily amount")
+            }
             Text(
                 when {
                     over -> "Over today's line: no points for today, and the streak starts again tomorrow."

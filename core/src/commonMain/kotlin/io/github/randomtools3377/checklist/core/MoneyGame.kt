@@ -15,6 +15,9 @@ object MoneyGame {
     const val TO = "money_game_to"
     const val GOALS = "money_game_goals"
 
+    /** The user's own daily amount, in cents, in place of the share worked out from the pay; empty for none. */
+    const val DAILY = "money_game_daily"
+
     /** What the game pays: the user's to change (see [Rules]). */
     val GOOD_DAY: Int get() = Rules.current.goodMoneyDay
     val NO_SPEND_DAY: Int get() = Rules.current.noSpendDay

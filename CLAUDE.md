@@ -900,6 +900,10 @@ Build order **(default)**, each step a Release the owner can try:
       tab, when that month had money typed in and something was left; moved, it is dated that
       month's last day; with no goal picked it goes into a plain "Savings" account with no
       target. The pace card never counts a goal that is already late as a shortage of time.
+    - Decided after 0.67.0: the budget game's daily figure is worded as a line to stay under,
+      never as an amount to spend, and says where it comes from; the user can set their own
+      daily amount in its place (setting money_game_daily), or go back to the share worked out
+      from the pay.
     - Not chosen: a note when a money-priced reward's price moves, celebrations for game wins,
       and carrying money over into the next month.
     - **The 0.62.0 fixes settled these details (default):** a goal counts in streaks, records,

@@ -1312,6 +1312,8 @@ class Repository(private val db: AppDatabase, private val celebrations: GifStore
      * changed work day and the bills, the same way for the days paid and for the streak shown.
      */
     private suspend fun moneyGameShares(entries: List<MoneyEntry>): (LocalDate) -> Double? {
+        // The user's own daily amount, when set, is the line for every day still to be paid.
+        dao.setting(MoneyGame.DAILY)?.toLongOrNull()?.takeIf { it > 0 }?.let { own -> return { _: LocalDate -> own / 100.0 } }
         val plan = PayPlan.decode(dao.setting(PayPlan.SETTING))
         val changes = dao.allWorkDays().map { it.toCore() }.associateBy { it.day }
         val bills = dao.allBills().map { it.toCore() }
