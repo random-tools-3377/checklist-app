@@ -545,6 +545,7 @@ private fun describe(goal: Goal, stepCount: Int): String = when (goal.kind) {
         goal.repeat?.let { add(it.describe(goal.target)) }
         if (goal.repeat?.kind != RepeatKind.TIMES_PER && goal.target > 1) add("${goal.target} times")
         goal.amount?.let { add(Amounts.format(it) + (goal.unit?.let { u -> " $u" } ?: "")) }
+        if (goal.atMost) add("at most ${io.github.randomtools3377.checklist.core.AtMost.limitText(goal)} a day")
         goal.at?.let { add("at ${timeText(it)}") }
         if (goal.times.isNotEmpty()) add("at " + goal.times.sorted().joinToString(", ") { timeText(it) })
         goal.minutes?.let { add(minutesText(it)) }
@@ -680,6 +681,12 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Long)
     var effort by rememberSaveable { mutableStateOf<String?>(null) }
     // A goal to quit, and a challenge on it.
     var quit by rememberSaveable { mutableStateOf(false) }
+    // An "at most" goal, like no more than 2 coffees: its limit, in the unit above if it has one.
+    var atMost by rememberSaveable { mutableStateOf(false) }
+    var limitText by rememberSaveable { mutableStateOf("") }
+    // What the goal was when it opened: an "at most" goal stays one, and one with an amount can't become one.
+    var wasAtMost by rememberSaveable { mutableStateOf(false) }
+    var hadAmount by rememberSaveable { mutableStateOf(false) }
     var challengeOn by rememberSaveable { mutableStateOf(false) }
     var challengeDays by rememberSaveable { mutableStateOf("30") }
     var challengeBonus by rememberSaveable { mutableStateOf("50") }
@@ -697,6 +704,7 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Long)
         minutes, atMinute, eachTimeOn, eachTimes, items.filter { it.id != 0L || it.name.isNotBlank() }.map { it.id to it.name },
         finishByMinute, finishDay, notifyOnTime, alertBefore, remindAtMinute, keepReminding, allowance, allowancePer, isPrivate,
         celebration, sound, category, color, amountText, unit, effort, quit, challengeOn, challengeDays, challengeBonus, after, skill,
+        atMost, limitText,
     )
     val phone = LocalPhone.current
     val askPermission = rememberAsk(Ask.NOTIFICATIONS) { onClose() }
@@ -735,6 +743,10 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Long)
                 unit = goal.unit.orEmpty()
                 effort = goal.effort?.name
                 quit = goal.quit
+                atMost = goal.atMost
+                wasAtMost = goal.atMost
+                hadAmount = goal.hasAmount
+                limitText = goal.limit?.let { Amounts.format(it) }.orEmpty()
                 after = goal.after
                 skill = goal.skill?.name
                 goal.challenge?.let { c ->
@@ -852,35 +864,39 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Long)
     val pointsError = if (points.toIntOrNull() == null) "How many ${pointsWord()} it pays" else null
     val targetValue = target.toIntOrNull()
     val amountValue = Amounts.parse(amountText)
-    val hasAmount = amountText.isNotBlank()
+    val hasAmount = amountText.isNotBlank() && !atMost
+    val limitValue = Amounts.parse(limitText)
+    val limitError = if (atMost && limitValue == null) "A number above 0, like 2 or 120" else null
     val amountError = when {
         !hasAmount -> null
         amountValue == null -> "A number above 0, like 20 or 1.5"
         unit.isBlank() -> "Name the unit, like pages or miles"
         else -> null
     }
-    val routine = !hasAmount && items.any { it.name.isNotBlank() }
-    val targetError = if (!routine && (targetValue == null || targetValue !in 1..999)) "From 1 to 999" else null
+    val routine = !hasAmount && !atMost && items.any { it.name.isNotBlank() }
+    val targetError = if (!routine && !atMost && (targetValue == null || targetValue !in 1..999)) "From 1 to 999" else null
     val end = endDay
     val repeatError = when {
         repeat == null -> "Finish choosing how often"
         // A day already gone would never come round, so the goal would never show.
+        // An "at most" goal's limit is for a day.
+        atMost && (choice == RepeatChoice.TIMES_PER || choice == RepeatChoice.AFTER_DONE) -> "An at most goal counts by the day: pick the days it's for"
         choice == RepeatChoice.AFTER_DONE && startDay < firstDay -> "Next due can't be before today"
         end != null && end < startDay -> "The end date is before the start"
         else -> null
     }
     // A challenge is only on habits not counted per week, month or year.
-    val hasChallenge = challengeOn && choice != RepeatChoice.TIMES_PER
+    val hasChallenge = challengeOn && !atMost && choice != RepeatChoice.TIMES_PER
     val challengeError = if (hasChallenge && challengeDays.toIntOrNull()?.takeIf { it in 2..3650 } == null) "From 2 to 3650 days" else null
     val minutesValue = minutes.toIntOrNull()?.takeIf { it > 0 }
-    val counted = !routine && (targetValue ?: 1) > 1
+    val counted = !routine && !atMost && (targetValue ?: 1) > 1
     // Done several times on each day it's due: it can have a time for each one.
     val severalADay = counted && choice != RepeatChoice.TIMES_PER
     val eachTimesSet = if (severalADay && eachTimeOn) eachTimes.filter { it >= 0 }.distinct().sorted().take(targetValue ?: 1) else emptyList()
 
     // Saving, from Save or from "Make a copy", which saves the changes first and then does [then].
     val save: ((() -> Unit)?) -> Unit = { then ->
-        if (nameError != null || pointsError != null || targetError != null || repeatError != null || amountError != null || challengeError != null || repeat == null) {
+        if (nameError != null || pointsError != null || targetError != null || repeatError != null || amountError != null || limitError != null || challengeError != null || repeat == null) {
             showErrors = true
         } else {
             vm.saveHabit(
@@ -897,9 +913,10 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Long)
                     times = eachTimesSet.map { it.toTime() },
                     items = if (hasAmount) emptyList() else items.filter { it.name.isNotBlank() }.map { StepDraft(it.id, it.name.trim(), 0) },
                     amount = if (hasAmount) amountValue else null,
-                    unit = if (hasAmount) unit.trim() else null,
+                    unit = if (hasAmount || atMost) unit.trim() else null,
                     effort = effort?.let { Effort.valueOf(it) },
-                    quit = quit,
+                    quit = quit && !atMost,
+                    limit = if (atMost) limitValue else null,
                     after = after,
                     skill = skill?.let { io.github.randomtools3377.checklist.core.SkillArea.valueOf(it) },
                     challenge = challengeDays.toIntOrNull()?.takeIf { hasChallenge && it in 2..3650 }?.let { days ->
@@ -1063,6 +1080,53 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Long)
             Text(repeatError, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
         }
 
+        // An "at most" goal: an extra, shown when turned on or already one. It stays one once
+        // saved, and a goal with an amount can't become one, so what was entered keeps its meaning.
+        val features by vm.features.collectAsStateWithLifecycle()
+        if (wasAtMost) {
+            HorizontalDivider()
+            Text("At most (stay under a limit)", style = MaterialTheme.typography.titleSmall, modifier = Modifier.testTag("at-most-on"))
+        } else if ((Feature.AT_MOST in features || atMost) && !hadAmount) {
+            HorizontalDivider()
+            SwitchRow(
+                "At most (stay under a limit)",
+                atMost,
+                "field:at-most",
+                hint = "For something to keep down, like no more than 2 coffees. Add each one on Today; a day at or under the limit is done.",
+            ) { atMost = it }
+        }
+        if (atMost) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = limitText,
+                    onValueChange = { typed -> limitText = typed.filter { it.isDigit() || it == '.' || it == ',' }.take(9) },
+                    label = { Text("At most") },
+                    placeholder = { Text("2") },
+                    singleLine = true,
+                    isError = showErrors && limitError != null,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    modifier = Modifier.weight(1f).testTag("field:limit"),
+                )
+                OutlinedTextField(
+                    value = unit,
+                    onValueChange = { unit = it.take(Amounts.UNIT_LENGTH) },
+                    label = { Text("Unit (optional)") },
+                    placeholder = { Text("minutes") },
+                    singleLine = true,
+                    modifier = Modifier.weight(1f).testTag("field:limit-unit"),
+                )
+            }
+            Text(
+                if (showErrors && limitError != null) limitError
+                else "A day that ends at or under this is done and pays its ${pointsWord()}, when the day ends or when you tap \"That's all for today\". " +
+                    "Going over is a miss straight away, like any miss. Add each one on Today with \"+1\", or with a unit, like minutes, type how much." +
+                    if (wasAtMost) " An at most goal stays one: for another kind, make a new goal." else "",
+                style = MaterialTheme.typography.bodySmall,
+                color = if (showErrors && limitError != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        // Times, an amount, a checklist, a time and reminders are for goals to do, not to stay under.
+        if (!atMost) {
         HorizontalDivider()
         val perWord = when (per) {
             Period.MONTHLY -> "month"
@@ -1241,7 +1305,6 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Long)
             ) { keepReminding = it }
         }
         // A goal to quit, and a challenge: extras, shown when turned on or already in use here.
-        val features by vm.features.collectAsStateWithLifecycle()
         if (Feature.QUIT in features || quit || Feature.CHALLENGES in features || challengeOn) HorizontalDivider()
         if (Feature.QUIT in features || quit) SwitchRow(
             "A goal to quit",
@@ -1280,6 +1343,7 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Long)
         // A habit chain: an extra, shown when turned on or already set here.
         if (Feature.CHAINS in features || after != null) {
             ChainField(id, after, vm) { after = it }
+        }
         }
         AllowanceAndPrivacy(
             allowance = allowance,

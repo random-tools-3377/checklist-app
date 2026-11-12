@@ -61,7 +61,7 @@ object DayOrders {
         val day = Days.dayOf(now, dayEnd)
         // Private goals stay off the home screen and out of notifications while the privacy lock covers them.
         val hidePrivate = dao.setting(LOCK_PRIVATE) == "1"
-        val goals = dao.activeGoals().map { it.toCore() }.filter { !(hidePrivate && it.private) }
+        val goals = dao.activeCoreGoals().filter { !(hidePrivate && it.private) }
         val since = minOf(Days.earliestOpenDay(day), day.minusDays(LOOK_BACK_DAYS))
         val tickRows = dao.habitTicksSince(since.toEpochDay())
         val habitTicks = tickRows.map { it.toCore() }

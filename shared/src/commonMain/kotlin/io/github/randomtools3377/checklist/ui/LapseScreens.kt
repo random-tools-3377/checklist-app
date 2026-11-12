@@ -103,6 +103,8 @@ fun MissesScreen(misses: List<Lapse>, vm: MainViewModel, hiddenGoals: Set<Long> 
     val notes = remember { mutableStateMapOf<Long, String>() }
     // A miss made by "I slipped" on a goal to quit is worded as a slip.
     val quit by vm.quitGoals.collectAsStateWithLifecycle()
+    // A miss of an "at most" goal is worded as going over, and has no tick to forget.
+    val atMost by vm.atMostGoals.collectAsStateWithLifecycle()
     val settings by vm.settings.collectAsStateWithLifecycle()
     fun slipped(miss: Lapse) = Lapses.isSlip(miss, miss.goalId in quit, settings.dayEndHour)
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).safeDrawingPadding().testTag("misses")) {
@@ -110,6 +112,7 @@ fun MissesScreen(misses: List<Lapse>, vm: MainViewModel, hiddenGoals: Set<Long> 
             GuideTitle("What happened?", HelpTopic.SKIPS_AND_MISSES)
             Text(
                 when {
+                    misses.size == 1 && misses[0].goalId in atMost -> "This one went over what you set for the day. Give it a reason to carry on."
                     misses.size == 1 && slipped(misses[0]) -> "You said you slipped on this one. Give it a reason to carry on."
                     misses.size == 1 -> "This one wasn't done or skipped in time. Give it a reason to carry on."
                     else -> "These weren't done or skipped in time. Give each a reason to carry on."
@@ -141,6 +144,7 @@ fun MissesScreen(misses: List<Lapse>, vm: MainViewModel, hiddenGoals: Set<Long> 
             }
             items(misses, key = { it.id }) { miss ->
                 val slip = slipped(miss)
+                val over = miss.goalId in atMost
                 Card(Modifier.fillMaxWidth().testTag("miss:${miss.label}")) {
                     Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         if (miss.goalId in hiddenGoals) {
@@ -153,7 +157,13 @@ fun MissesScreen(misses: List<Lapse>, vm: MainViewModel, hiddenGoals: Set<Long> 
                         }
                         Text(
                             buildString {
-                                append(if (slip) "You slipped on ${shortDate(miss.day)}" else "Missed ${shortDate(miss.day)}")
+                                append(
+                                    when {
+                                        over -> "Went over on ${shortDate(miss.day)}"
+                                        slip -> "You slipped on ${shortDate(miss.day)}"
+                                        else -> "Missed ${shortDate(miss.day)}"
+                                    },
+                                )
                                 if (miss.overLimit) append(" · over the limit: −${pointsText(miss.cost)} and a penalty task")
                             },
                             style = MaterialTheme.typography.bodyMedium,
@@ -166,7 +176,14 @@ fun MissesScreen(misses: List<Lapse>, vm: MainViewModel, hiddenGoals: Set<Long> 
                             label = { Text("Note (optional)") },
                             modifier = Modifier.fillMaxWidth(),
                         )
-                        if (miss.period != null) {
+                        if (over) {
+                            // Added one too many by mistake: taking it back takes the miss back too, while it is still that day.
+                            if (miss.day == vm.currentDay()) {
+                                TextButton(onClick = { vm.undoUse(miss.goalId) }, modifier = Modifier.testTag("miss-undo-use:${miss.label}")) {
+                                    Text("Take back the last one added")
+                                }
+                            }
+                        } else if (miss.period != null) {
                             TextButton(onClick = { vm.forgotToTick(miss.id) }, modifier = Modifier.testTag("forgot:${miss.label}:${miss.day}")) {
                                 Text(if (slip) "Undo, I didn't slip" else "I did it, I forgot to tick it")
                             }
@@ -469,6 +486,7 @@ fun GapCheckInScreen(
     var note by remember { mutableStateOf("") }
     val misses by vm.gapMisses.collectAsStateWithLifecycle()
     val quit by vm.quitGoals.collectAsStateWithLifecycle()
+    val atMost by vm.atMostGoals.collectAsStateWithLifecycle()
     val settings by vm.settings.collectAsStateWithLifecycle()
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).safeDrawingPadding().padding(16.dp).testTag("gap")) {
         LazyColumn(Modifier.weight(1f).testTag("gap-list"), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -547,7 +565,8 @@ fun GapCheckInScreen(
                                         style = MaterialTheme.typography.bodyLarge,
                                     )
                                     val details = listOfNotNull(
-                                        "You slipped".takeIf { slip },
+                                        "Went over".takeIf { miss.goalId in atMost },
+                                        "You slipped".takeIf { slip && miss.goalId !in atMost },
                                         "Its deadline passed".takeIf { miss.period == null },
                                         "−${pointsText(miss.cost)}".takeIf { miss.cost > 0 },
                                     )
@@ -561,6 +580,8 @@ fun GapCheckInScreen(
                                 }
                                 when {
                                     hidden -> TextButton(onClick = onUnlock) { Text("Unlock") }
+                                    // More was added than an "at most" goal's limit: nothing to tick.
+                                    miss.goalId in atMost -> Unit
                                     // A project's missed deadline has no tick to forget.
                                     miss.period != null -> TextButton(
                                         onClick = { vm.forgotToTick(miss.id) },

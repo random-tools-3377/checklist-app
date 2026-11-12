@@ -59,6 +59,7 @@ import io.github.randomtools3377.checklist.ui.minutesText
 import io.github.randomtools3377.checklist.data.nowLocal
 import io.github.randomtools3377.checklist.data.toLocalDateTime
 import io.github.randomtools3377.checklist.data.parseDayEndHour
+import io.github.randomtools3377.checklist.data.activeCoreGoals
 import io.github.randomtools3377.checklist.data.toCore
 import io.github.randomtools3377.checklist.data.toDay
 import io.github.randomtools3377.checklist.data.toEpochDay
@@ -126,7 +127,7 @@ object Reminders {
      */
     suspend fun reschedule(context: Context) {
         val dao = (context.applicationContext as ChecklistApplication).container.db.dao()
-        val goals = dao.activeGoals().map { it.toCore() }
+        val goals = dao.activeCoreGoals()
         runCatching { clearDone(context, dao, goals) }
         runCatching { refreshEvening(context) }
         runCatching { clearMoodReminder(context, dao) }
@@ -184,7 +185,7 @@ object Reminders {
         val until = nowMillis + 30_000
 
         val dao = (context.applicationContext as ChecklistApplication).container.db.dao()
-        val goals = dao.activeGoals().map { it.toCore() }
+        val goals = dao.activeCoreGoals()
         val dayEnd = parseDayEndHour(dao.setting(SETTING_DAY_END_HOUR))
         val defaultFinish = dao.setting(SETTING_DEFAULT_FINISH)?.toIntOrNull()?.toTime()
         // Snoozed reminders come back as "still to do".
@@ -264,7 +265,7 @@ object Reminders {
     suspend fun afterDone(context: Context, goalId: Long) {
         val container = (context.applicationContext as ChecklistApplication).container
         val dao = container.db.dao()
-        val goals = dao.activeGoals().map { it.toCore() }
+        val goals = dao.activeCoreGoals()
         if (goals.none { it.after == goalId }) return
         val dayEnd = parseDayEndHour(dao.setting(SETTING_DAY_END_HOUR))
         val now = nowLocal()

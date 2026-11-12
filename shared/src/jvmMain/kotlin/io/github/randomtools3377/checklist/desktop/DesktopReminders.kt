@@ -12,6 +12,7 @@ import io.github.randomtools3377.checklist.data.LOCK_PRIVATE
 import io.github.randomtools3377.checklist.data.SETTING_DAY_END_HOUR
 import io.github.randomtools3377.checklist.data.SETTING_DEFAULT_FINISH
 import io.github.randomtools3377.checklist.data.SharedParts
+import io.github.randomtools3377.checklist.data.activeCoreGoals
 import io.github.randomtools3377.checklist.data.billReminders
 import io.github.randomtools3377.checklist.data.deadlineReminders
 import io.github.randomtools3377.checklist.data.eveningChecks
@@ -177,7 +178,7 @@ class DesktopReminders(private val phone: DesktopPhone) {
          */
         suspend fun due(parts: SharedParts, from: LocalDateTime, to: LocalDateTime): List<DueReminder> {
             val dao = parts.db.dao()
-            val goals = dao.activeGoals().map { it.toCore() }
+            val goals = dao.activeCoreGoals()
             val dayEnd = parseDayEndHour(dao.setting(SETTING_DAY_END_HOUR))
             val defaultFinish = dao.setting(SETTING_DEFAULT_FINISH)?.toIntOrNull()?.toTime()
             val usual = if (Feature.USUAL_REMINDERS.isOn(dao.setting(Feature.USUAL_REMINDERS.key))) {

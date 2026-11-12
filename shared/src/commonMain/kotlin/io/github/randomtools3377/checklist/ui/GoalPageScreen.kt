@@ -233,10 +233,15 @@ private fun GoalNumbers(view: GoalPageView) {
                 view.last30?.let { add(Triple("Done in the last 30 days", rateText(it), "goal-page:30")) }
                 view.last90?.let { add(Triple("Done in the last 90 days", rateText(it), "goal-page:90")) }
             }
-            add(Triple(if (goal.kind == GoalKind.PROJECT) "Steps ticked" else "Ticks in all", "${view.ticks}", "goal-page:ticks"))
+            add(
+                Triple(
+                    if (goal.kind == GoalKind.PROJECT) "Steps ticked" else if (goal.atMost) "Days at or under the limit" else "Ticks in all",
+                    "${view.ticks}", "goal-page:ticks",
+                ),
+            )
             add(Triple("${pointsTitle()} earned", "+${view.points}", "goal-page:points"))
             view.amount?.let { amount ->
-                add(Triple("In all", GoalPage.amountText(amount, goal.unit), "goal-page:amount"))
+                add(Triple(if (goal.atMost) "Added in all" else "In all", GoalPage.amountText(amount, goal.unit), "goal-page:amount"))
                 if (view.seconds > 0) add(Triple("Timed in all", GoalPage.timeText(view.seconds), "goal-page:time"))
             }
         }

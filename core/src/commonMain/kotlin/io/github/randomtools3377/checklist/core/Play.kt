@@ -89,6 +89,8 @@ object Quests {
      */
     fun progress(quest: Quest, rows: List<HabitRow>, ticks: List<Tick>, timeOf: (Long) -> LocalTime, earned: Int, dayEndHour: Int = 0): QuestProgress {
         fun second(at: Long) = Days.secondOfDay(timeOf(at), dayEndHour)
+        // Adding to an "at most" goal isn't a tick.
+        @Suppress("NAME_SHADOWING") val ticks = AtMost.withoutUses(ticks)
         val by = quest.by?.let { Days.secondOfDay(it, dayEndHour) }
         val inArea = rows.filter { SkillArea.of(it.goal) == quest.area }
         val done = when (quest.kind) {

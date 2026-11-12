@@ -89,7 +89,7 @@ object Badges {
         val found = mutableListOf<EarnedBadge>()
         fun add(badge: Badge, on: LocalDate?) { if (on != null) found += EarnedBadge(badge, on) }
 
-        val byTime = ticks.filter { it.day <= today }.sortedWith(compareBy({ it.at }, { it.id }))
+        val byTime = ticks.filter { it.day <= today && !it.isUse }.sortedWith(compareBy({ it.at }, { it.id }))
         add(Badge.FIRST_TICK, byTime.getOrNull(0)?.day)
         add(Badge.TICKS_100, byTime.getOrNull(99)?.day)
         add(Badge.TICKS_1000, byTime.getOrNull(999)?.day)

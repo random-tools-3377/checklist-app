@@ -364,6 +364,17 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
     private val book = parts.book
     private val repository = parts.repository
 
+    /**
+     * The goals in the lists. The limits of "at most" goals aren't kept in the goals themselves
+     * (see AtMostLimits), so the goals are read again whenever a limit changes, with the limits
+     * in place first.
+     */
+    private val goalRows: Flow<List<io.github.randomtools3377.checklist.data.GoalEntity>> =
+        combine(dao.observeGoals(), dao.observeSetting(io.github.randomtools3377.checklist.core.AtMost.SETTING)) { rows, limits ->
+            io.github.randomtools3377.checklist.data.AtMostLimits.current = io.github.randomtools3377.checklist.core.AtMost.decode(limits)
+            rows
+        }
+
     private fun <T> Flow<T>.state(initial: T): StateFlow<T> =
         stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), initial)
 
@@ -433,7 +444,7 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
     private val hidingPrivate: Flow<Boolean> = combine(settings, unlocked) { s, open -> s.locks.privateGoals && !open }.distinctUntilChanged()
 
     /** The goals marked private, removed ones too, to leave out or unname while they are locked. */
-    private val privateIds: Flow<Set<Long>> = combine(dao.observeGoals(), dao.observeRemovedGoals()) { shown, removed ->
+    private val privateIds: Flow<Set<Long>> = combine(goalRows, dao.observeRemovedGoals()) { shown, removed ->
         io.github.randomtools3377.checklist.core.PrivateGoals.ids((shown + removed).map { it.toCore() })
     }
     val privateGoalIds: StateFlow<Set<Long>> = privateIds.state(emptySet())
@@ -484,7 +495,7 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
         // Streaks look back up to a year and a bit; that also covers every open window.
         val since = minOf(Days.earliestOpenDay(day), day.minusDays(STREAK_DAYS))
         val view = combine(
-            dao.observeGoals(),
+            goalRows,
             dao.observeSteps(),
             dao.observeHabitTicksSince(since.toEpochDay()),
             dao.observeStepTicks(),
@@ -568,7 +579,7 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
         }
     }.state(null)
 
-    val goalsView: StateFlow<GoalsView?> = combine(dao.observeGoals(), dao.observeSteps(), settings, unlocked, today) { goals, steps, s, isUnlocked, day ->
+    val goalsView: StateFlow<GoalsView?> = combine(goalRows, dao.observeSteps(), settings, unlocked, today) { goals, steps, s, isUnlocked, day ->
         val all = goals.map { it.toCore() }
         val shown = if (s.locks.privateGoals && !isUnlocked) all.filter { !it.private } else all
         GoalsView(shown, steps.map { it.toCore() }.groupBy { it.goalId }, hiddenPrivate = all.size - shown.size, today = day)
@@ -933,7 +944,7 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
 
     /** Goals skipped or missed in the last two weeks, which a penalty can be paid off by making up. */
     val makeUpChoices: StateFlow<List<Goal>> = today.flatMapLatest { day ->
-        combine(dao.observeLapsesSince(day.minusDays(14).toEpochDay()), dao.observeGoals()) { recent, goals ->
+        combine(dao.observeLapsesSince(day.minusDays(14).toEpochDay()), goalRows) { recent, goals ->
             val ids = recent.filter { !it.forgotten }.map { it.goalId }.toSet()
             goals.map { it.toCore() }.filter { it.id in ids && it.isHabitLike }
         }
@@ -1067,7 +1078,7 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
      */
     val bestStreaks: StateFlow<Streaks?> = today.flatMapLatest { day ->
         combine(
-            dao.observeGoals(),
+            goalRows,
             dao.observeHabitTicksSince(Long.MIN_VALUE),
             dao.observeLapsesSince(Long.MIN_VALUE),
             settings.map { it.streak }.distinctUntilChanged(),
@@ -1229,7 +1240,7 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
         val windowsFrom = Days.earliestOpenDay(from).minusDays(7)
         combine(
             // Removed goals too, so their points keep their category; they aren't counted as due.
-            combine(dao.observeGoals(), dao.observeRemovedGoals(), hidingPrivate) { active, removed, hide -> (active + removed) to hide },
+            combine(goalRows, dao.observeRemovedGoals(), hidingPrivate) { active, removed, hide -> (active + removed) to hide },
             dao.observeHabitTicksSince(windowsFrom.toEpochDay()),
             dao.observeLapsesSince(windowsFrom.toEpochDay()),
             dao.observeEntries(from.toEpochDay(), to.toEpochDay()),
@@ -1265,7 +1276,7 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
     }.distinctUntilChanged().flatMapLatest { (from, to) ->
         combine(
             dao.observeFocusSessions(from.toEpochDay(), to.toEpochDay()),
-            dao.observeGoals(),
+            goalRows,
             dao.observeRemovedGoals(),
             hidingPrivate,
         ) { rows, active, removed, hide ->
@@ -1298,7 +1309,7 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
         Review.range(day ?: todayDay, period)
     }.distinctUntilChanged().flatMapLatest { (from, to) ->
         combine(
-            combine(dao.observeGoals(), hidingPrivate) { goals, hide -> goals to hide },
+            combine(goalRows, hidingPrivate) { goals, hide -> goals to hide },
             dao.observeSteps(),
             dao.observeStepTicks(),
             dao.observeHabitTicksSince(Days.earliestOpenDay(from).toEpochDay()),
@@ -1323,7 +1334,7 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
      */
     fun goalPage(goalId: Long): Flow<GoalPageView?> = today.flatMapLatest { day ->
         combine(
-            combine(dao.observeGoals(), dao.observeRemovedGoals()) { shown, removed -> (shown + removed).firstOrNull { it.id == goalId }?.toCore() },
+            combine(goalRows, dao.observeRemovedGoals()) { shown, removed -> (shown + removed).firstOrNull { it.id == goalId }?.toCore() },
             dao.observeSteps(),
             combine(dao.observeHabitTicksSince(Long.MIN_VALUE), dao.observeStepTicks()) { habit, step -> habit + step },
             dao.observeLapsesSince(Long.MIN_VALUE),
@@ -1477,8 +1488,13 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
     // Misses put right later, from the review and the points history
 
     /** The goals to quit, removed ones too: a miss made by "I slipped" on one is worded as a slip. */
-    val quitGoals: StateFlow<Set<Long>> = combine(dao.observeGoals(), dao.observeRemovedGoals()) { shown, removed ->
+    val quitGoals: StateFlow<Set<Long>> = combine(goalRows, dao.observeRemovedGoals()) { shown, removed ->
         (shown + removed).filter { it.quit }.map { it.id }.toSet()
+    }.state(emptySet())
+
+    /** The "at most" goals, removed ones too: a miss of one is worded as going over its limit. */
+    val atMostGoals: StateFlow<Set<Long>> = combine(goalRows, dao.observeRemovedGoals()) { shown, removed ->
+        (shown + removed).map { it.toCore() }.filter { it.atMost }.map { it.id }.toSet()
     }.state(emptySet())
 
     /**
@@ -1506,7 +1522,9 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
             lapse = lapse,
             private = goal?.private == true,
             slip = io.github.randomtools3377.checklist.core.Lapses.isSlip(lapse, goal?.quit == true, settings.value.dayEndHour),
-            canForget = io.github.randomtools3377.checklist.core.Lapses.canForgetLater(lapse, currentDay()),
+            // An "at most" goal that went over its limit wasn't a forgotten tick.
+            canForget = io.github.randomtools3377.checklist.core.Lapses.canForgetLater(lapse, currentDay()) && goal?.atMost != true,
+            over = goal?.atMost == true && lapse.kind == io.github.randomtools3377.checklist.core.LapseKind.MISS,
         )
     }
 
@@ -1648,6 +1666,36 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
         }
     }
 
+    /**
+     * Adds to an "at most" goal as it happens: one, or [amount] of its unit. Going over its
+     * limit makes today a miss now, and the misses screen asks why. Undo takes it back, and the
+     * miss with it once the day is back at or under the limit.
+     */
+    fun addUse(goalId: Long, amount: Double = 1.0) {
+        viewModelScope.launch {
+            val result = lapses.use(goalId, amount) as? io.github.randomtools3377.checklist.core.UseResult.Added ?: return@launch
+            val goal = repository.goal(goalId) ?: return@launch
+            offerUndo("${goal.name} · ${io.github.randomtools3377.checklist.core.AtMost.text(result.used, goal)}") { lapses.undoUse(goalId) }
+        }
+    }
+
+    /** Takes back the latest thing added to an "at most" goal today. */
+    fun undoUse(goalId: Long) {
+        viewModelScope.launch { lapses.undoUse(goalId) }
+    }
+
+    /**
+     * "That's all for today" on an "at most" goal still within its limit: the day is done now,
+     * and pays its points. It can be taken back, and going over afterwards takes it back too.
+     */
+    fun confirmAtMost(goalId: Long) {
+        viewModelScope.launch {
+            val result = book.tickHabit(goalId)
+            celebrating(goalId)
+            offerTickUndo(goalId, result) { book.undoHabitTick(goalId) }
+        }
+    }
+
     /** "I slipped" on a goal to quit: today is a miss now, and the misses screen asks why. */
     fun slip(goalId: Long) {
         viewModelScope.launch {
@@ -1691,7 +1739,7 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
     val planDays: StateFlow<List<TodayView>> = today.flatMapLatest { day ->
         val since = Days.earliestOpenDay(day)
         combine(
-            dao.observeGoals(),
+            goalRows,
             dao.observeSteps(),
             // Step ticks too, so projects and to-dos show the steps already done, and a finished
             // project isn't listed as if nothing was done.
@@ -1889,7 +1937,7 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
         combine(
             dao.observeEarnedByDay(day.minusDays(Usual.WINDOW_DAYS).toEpochDay()),
             dao.observeFirstEarningDay(),
-            dao.observeGoals(),
+            goalRows,
             currentDifficulty,
         ) { earned, first, goals, rate ->
             val earnedPerDay = Usual.pointsPerDay(earned.associate { it.day.toDay() to it.amount }, first?.toDay(), day)
@@ -1903,7 +1951,7 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
      * treat budget or a repeating goal that pays.
      */
     val moneyRate: StateFlow<MoneyPrices.Rate?> = combine(
-        dao.observeSetting(MoneyPrices.RATE), dao.observeGoals(), treatBudget, today,
+        dao.observeSetting(MoneyPrices.RATE), goalRows, treatBudget, today,
     ) { stored, goals, budget, day ->
         MoneyPrices.next(MoneyPrices.decode(stored), MoneyPrices.fresh(goals.map { it.toCore() }, day, budget))
     }.state(null)
@@ -1911,7 +1959,7 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
     init {
         // Prices that follow money keep in step with what the goals pay, and with the budget.
         viewModelScope.launch {
-            combine(dao.observeGoals(), treatBudget, dao.observeRewards(), today) { _, _, _, day -> day }
+            combine(goalRows, treatBudget, dao.observeRewards(), today) { _, _, _, day -> day }
                 .collectLatest { day -> repository.keepMoneyPricesInStep(day) }
         }
     }
@@ -1984,7 +2032,7 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
     /** The balance check in the shop: prices against earnings, and goals against how often they get done. */
     val balanceCheck: StateFlow<BalanceCheckView?> = today.flatMapLatest { day ->
         val perDay = usualPerDay
-        val shown = combine(dao.observeGoals(), settings, unlocked) { goals, s, isUnlocked ->
+        val shown = combine(goalRows, settings, unlocked) { goals, s, isUnlocked ->
             val all = goals.map { it.toCore() }
             if (s.locks.privateGoals && !isUnlocked) all.filter { !it.private } else all
         }
@@ -2041,7 +2089,7 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
 
     /** Finished projects and done to-dos, newest first; private ones hidden while locked. */
     val doneList: StateFlow<List<DoneItem>> = combine(
-        dao.observeGoals(), dao.observeSteps(), dao.observeStepTicks(), dao.observeTodoTicks(), combine(settings, unlocked) { s, u -> s to u },
+        goalRows, dao.observeSteps(), dao.observeStepTicks(), dao.observeTodoTicks(), combine(settings, unlocked) { s, u -> s to u },
     ) { goals, steps, stepTicks, todoTicks, (s, isUnlocked) ->
         val all = goals.map { it.toCore() }
         val shown = if (s.locks.privateGoals && !isUnlocked) all.filter { !it.private } else all
@@ -2061,7 +2109,7 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
 
     /** The character's level and skills, while the character is on; null when it is off. */
     val character: StateFlow<io.github.randomtools3377.checklist.core.CharacterSheet?> =
-        combine(features, dao.observeBalance(), dao.observeGoals(), dao.observeSetting(io.github.randomtools3377.checklist.core.Paths.SETTING)) { on, _, _, path ->
+        combine(features, dao.observeBalance(), goalRows, dao.observeSetting(io.github.randomtools3377.checklist.core.Paths.SETTING)) { on, _, _, path ->
             if (Feature.CHARACTER in on) io.github.randomtools3377.checklist.core.Paths.decode(path) to true else null to false
         }.mapLatest { (path, on) ->
             if (!on) null else withContext(Dispatchers.Default) {
@@ -2086,8 +2134,10 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
                     val goals = dao.allGoals().map { it.toCore() }
                     val ticks = dao.allTicks().map { it.toCore() }
                     val records = StreakCounter.records(from, day, goals.filter { !it.archived }, ticks.filter { it.stepId == null }, dao.allLapses().map { it.toCore() })
+                    // An "at most" goal isn't ticked at a time of day: its day is done when it ends.
+                    val limited = goals.filter { it.atMost }.map { it.id }.toSet()
                     val now = T.earned(
-                        ticks, dao.allEntries().map { it.toCore() }, records, sheet, s.streak, { at -> at.toLocalDateTime().time }, s.dayEndHour,
+                        ticks.filter { it.goalId !in limited }, dao.allEntries().map { it.toCore() }, records, sheet, s.streak, { at -> at.toLocalDateTime().time }, s.dayEndHour,
                     )
                     val kept = T.decodeKept(dao.setting(T.EARNED))
                     val all = T.keep(kept, now, day)
@@ -2117,7 +2167,9 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
                     val day = state.view.day
                     combine(dao.observeHabitTicksSince(day.toEpochDay()), dao.observeEntries(day.toEpochDay(), day.toEpochDay())) { ticks, entries ->
                         val rows = state.view.dueToday
-                        val todays = ticks.map { it.toCore() }.filter { it.day == day }
+                        // An "at most" goal isn't one of the day's goals to tick.
+                        val limited = state.view.limits.map { it.goal.id }.toSet()
+                        val todays = ticks.map { it.toCore() }.filter { it.day == day && it.goalId !in limited }
                         val earned = entries.map { it.toCore() }
                             .filter { it.kind in io.github.randomtools3377.checklist.core.Experience.KINDS && it.goalId != null }
                             .sumOf { it.amount }
@@ -2153,7 +2205,7 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
 
     /** This week's boss and the items in hand, while items and bosses are on; null when off. */
     val boss: StateFlow<io.github.randomtools3377.checklist.core.BossView?> =
-        combine(features, today, dao.observeBalance(), dao.observeSetting(io.github.randomtools3377.checklist.core.Bosses.FIGHT), dao.observeGoals()) { on, day, _, _, _ ->
+        combine(features, today, dao.observeBalance(), dao.observeSetting(io.github.randomtools3377.checklist.core.Bosses.FIGHT), goalRows) { on, day, _, _, _ ->
             if (Feature.BOSSES in on) day else null
         }.mapLatest { day -> day?.let { repository.bossView(it) } }.state(null)
 
@@ -2229,7 +2281,7 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
     val moodFindings: StateFlow<MoodFindings> = today.flatMapLatest { day ->
         val from = day.minusDays(MoodInsights.DAYS)
         combine(
-            dao.observeGoals(),
+            goalRows,
             // Back to the start of every window those days fall in, for goals counted over a week or more.
             dao.observeHabitTicksSince(Days.earliestOpenDay(from).toEpochDay()),
             dao.observeMoodsSince(from.toEpochDay()),
@@ -2361,7 +2413,7 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
 
     /** The raises made from "Mood and your goals" that still stand, by goal (see MoodRaises). */
     val moodRaises: StateFlow<Map<Long, io.github.randomtools3377.checklist.core.MoodRaise>> =
-        combine(dao.observeSetting(io.github.randomtools3377.checklist.core.MoodRaises.SETTING), dao.observeGoals()) { text, goals ->
+        combine(dao.observeSetting(io.github.randomtools3377.checklist.core.MoodRaises.SETTING), goalRows) { text, goals ->
             io.github.randomtools3377.checklist.core.MoodRaises
                 .standing(io.github.randomtools3377.checklist.core.MoodRaises.decode(text), goals.map { it.toCore() })
                 .associateBy { it.goalId }
@@ -2405,7 +2457,7 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
     // Ideas to level up a skill area
 
     /** Every goal not removed, for the ideas: what the user does already. */
-    val currentGoals: StateFlow<List<Goal>> = dao.observeGoals().map { rows -> rows.map { it.toCore() }.filter { !it.archived } }.state(emptyList())
+    val currentGoals: StateFlow<List<Goal>> = goalRows.map { rows -> rows.map { it.toCore() }.filter { !it.archived } }.state(emptyList())
 
     /** Ideas the user said aren't for them. */
     val hiddenIdeas: StateFlow<Set<String>> =
@@ -2481,7 +2533,7 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
         val (from, to) = Review.range(day.minusDays(7), Period.WEEKLY)
         val windowsFrom = Days.earliestOpenDay(from).minusDays(7)
         combine(
-            combine(dao.observeGoals(), hidingPrivate) { goals, hide -> goals to hide },
+            combine(goalRows, hidingPrivate) { goals, hide -> goals to hide },
             dao.observeHabitTicksSince(windowsFrom.toEpochDay()),
             dao.observeLapsesSince(windowsFrom.toEpochDay()),
             dao.observeEntries(from.toEpochDay(), to.toEpochDay()),
@@ -2517,7 +2569,7 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
      * until it is done or skipped. Under the app's own tests only when a test starts it.
      */
     val setupStep: StateFlow<SetupStep?> = combine(
-        dao.observeSetting(FirstRun.SETTING), dao.observeSetting(SETTING_GUIDE), dao.observeGoals(), dao.observeRemovedGoals(),
+        dao.observeSetting(FirstRun.SETTING), dao.observeSetting(SETTING_GUIDE), goalRows, dao.observeRemovedGoals(),
     ) { setup, guide, goals, removed ->
         FirstRun.step(setup, guide, nothingYet = goals.isEmpty() && removed.isEmpty(), underTest = phone.underTest)
     }.state(null)
@@ -2590,7 +2642,7 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
     }.state(emptyList())
 
     /** The categories the goals use, offered in the goal editor. */
-    val categories: StateFlow<List<String>> = dao.observeGoals().map { rows -> Categories.of(rows.map { it.toCore() }) }.state(emptyList())
+    val categories: StateFlow<List<String>> = goalRows.map { rows -> Categories.of(rows.map { it.toCore() }) }.state(emptyList())
 
     fun duplicateGoal(id: Long, onDone: (Long) -> Unit) {
         viewModelScope.launch { repository.duplicateGoal(id, currentDay())?.let(onDone) }

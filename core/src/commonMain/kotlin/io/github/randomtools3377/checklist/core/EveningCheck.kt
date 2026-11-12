@@ -27,7 +27,15 @@ data class EveningTime(val day: LocalDate, val at: LocalDateTime)
  * What the evening check says on [day]: everything still open, as Today lists it (the day's goals
  * in the user's own order, then goals counted per week, month or year, then projects). Never empty.
  */
-data class EveningList(val day: LocalDate, val items: List<EveningItem>) {
+data class EveningList(
+    val day: LocalDate,
+    val items: List<EveningItem>,
+    /**
+     * "At most" goals still under their limit, like "☕ Coffee · still under your limit (1 of 2
+     * used, 1 left)": good news, said after what is open, and never counted as open.
+     */
+    val under: List<String> = emptyList(),
+) {
     /** "3 still open today". */
     val title: String get() = if (items.size == 1) "1 still open today" else "${items.size} still open today"
 
@@ -41,8 +49,8 @@ data class EveningList(val day: LocalDate, val items: List<EveningItem>) {
             0 -> emptyList()
             1 -> listOf("🔒 ${PrivateGoals.NAME}")
             else -> listOf("🔒 $hidden private goals")
-        }
-        return if (all.size <= most) all else all.take(most) + "and ${items.size - most} more"
+        } + under
+        return if (all.size <= most) all else all.take(most) + "and ${items.size + under.size - most} more"
     }
 
     /** The first one a button on the notification can tick: never a private goal that isn't named. */
@@ -121,7 +129,12 @@ object EveningCheck {
         }
         val deadlines = view.projects.filter { !it.finished && it.goal.deadline == day }
         val items = (today + lastDay).map { item(it, hidePrivate) } + deadlines.map { item(it, hidePrivate) }
-        return if (items.isEmpty()) null else EveningList(day, items)
+        if (items.isEmpty()) return null
+        // An "at most" goal has nothing to do, so it never makes the check come by itself.
+        val under = view.limits
+            .filter { it.count < it.goal.target && it.skips == 0 && !it.slipped && !it.overLimit && !(hidePrivate && it.goal.private) }
+            .map { "${it.goal.icon} ${it.goal.name} · ${AtMost.STILL_UNDER} (${AtMost.text(it.progress, it.goal)})" }
+        return EveningList(day, items, under)
     }
 
     /** How many of a "times per" goal's times are neither done nor skipped. */

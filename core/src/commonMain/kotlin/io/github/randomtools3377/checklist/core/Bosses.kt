@@ -127,7 +127,8 @@ object Bosses {
     /** Items in hand: one for every tick since items started, less those used. */
     fun inventory(ticks: List<Tick>, goals: List<Goal>, since: Long, used: Map<Item, Int>): Map<Item, Int> {
         val byId = goals.associateBy { it.id }
-        val earned = ticks.filter { it.at >= since }
+        // Adding to an "at most" goal isn't a tick, so it earns nothing; a day under its limit does.
+        val earned = ticks.filter { it.at >= since && !it.isUse }
             .mapNotNull { tick -> byId[tick.goalId]?.let { Item.of(SkillArea.of(it)) } }
             .groupingBy { it }.eachCount()
         return Item.entries.associateWith { ((earned[it] ?: 0) - (used[it] ?: 0)).coerceAtLeast(0) }.filterValues { it > 0 }

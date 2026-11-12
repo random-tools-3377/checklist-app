@@ -341,7 +341,8 @@ object CalendarView {
      */
     fun agenda(day: LocalDate, goals: List<Goal>, ticks: List<Tick>): List<AgendaItem> {
         val items = goals
-            .filter { !it.archived && it.isHabitLike }
+            // An "at most" goal isn't something to do at a time, so it isn't on the agenda.
+            .filter { !it.archived && it.isHabitLike && !it.atMost }
             .mapNotNull { goal ->
                 val window = goal.repeat?.window(day) ?: return@mapNotNull null
                 val count = goal.timesDone(ticks.filter { it.countsToward(goal, window.start) })

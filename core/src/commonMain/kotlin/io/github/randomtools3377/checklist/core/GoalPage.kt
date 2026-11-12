@@ -150,7 +150,7 @@ object GoalPage {
             own.filter { it.stepId != null }.forEach { marks[it.day] = GoalDayMark.DONE }
         } else {
             val daily = goal.period == Period.DAILY
-            own.filter { it.stepId == null }.groupBy { it.periodStart to it.period }.forEach { (key, group) ->
+            own.filter { it.stepId == null && !it.isUse }.groupBy { it.periodStart to it.period }.forEach { (key, group) ->
                 // A day's ticks count once they make it done; a week's, month's or year's each show on their day.
                 if (key.second == Period.DAILY && daily) {
                     if (goal.timesDone(group) >= goal.target) marks[key.first] = GoalDayMark.DONE
@@ -187,7 +187,7 @@ object GoalPage {
         val runs = if (habit) runs(times, today) else null
         val project = goal.kind == GoalKind.PROJECT
         // A project's ticks are its steps; a habit's or a to-do's are its own (a to-do's steps pay nothing).
-        val counted = ownTicks.filter { (it.stepId != null) == project }
+        val counted = ownTicks.filter { (it.stepId != null) == project && !it.isUse }
         val active = if (project) steps.filter { it.goalId == goal.id && !it.archived }.sortedWith(compareBy({ it.position }, { it.id })) else emptyList()
         val stepDays = ownTicks.filter { it.stepId != null }.associate { it.stepId to it.day }
         val stepsDone = active.map { StepDone(it, stepDays[it.id]) }
@@ -205,7 +205,12 @@ object GoalPage {
             points = entries.filter { it.goalId == goal.id && it.kind in Experience.KINDS }.sumOf { it.amount },
             lapses = ownLapses.sortedWith(compareByDescending<Lapse> { it.day }.thenByDescending { it.at }),
             notes = ownTicks.filter { !it.note.isNullOrBlank() }.sortedByDescending { it.at },
-            amount = if (goal.hasAmount) counted.sumOf { it.amount ?: goal.amount ?: 0.0 } else null,
+            amount = when {
+                goal.hasAmount -> counted.sumOf { it.amount ?: goal.amount ?: 0.0 }
+                // An "at most" goal: everything added, whatever the day came to.
+                goal.atMost -> ownTicks.filter { it.isUse }.sumOf { it.amount ?: 1.0 }
+                else -> null
+            },
             seconds = counted.sumOf { it.seconds ?: 0 },
             steps = stepsDone,
             finishedOn = stepsDone.takeIf { it.isNotEmpty() && it.all { s -> s.day != null } }?.maxOf { it.day!! },

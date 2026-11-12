@@ -48,6 +48,26 @@ class Gaps(private val store: Store, private val book: Book) {
     }
 
     /**
+     * Days whose only tick is an "at most" goal's, made by the app when the day ended at or
+     * under its limit (see [Book.payUnderLimit]). The user ticked nothing on such a day, so it
+     * can still be part of a gap. A day with anything the user ticked or added isn't one.
+     */
+    private suspend fun paidOnly(goals: List<Goal>, habitTicks: List<Tick>): Set<LocalDate> {
+        val atMost = goals.filter { it.atMost }.map { it.id }.toSet()
+        if (atMost.isEmpty()) return emptySet()
+        val ends = mutableMapOf<LocalDate, Long>()
+        val auto = mutableSetOf<LocalDate>()
+        val own = mutableSetOf<LocalDate>()
+        for (tick in habitTicks) {
+            val byApp = tick.goalId in atMost && !tick.isUse && tick.at == ends.getOrPut(tick.day) { book.endOf(tick.day) }
+            if (byApp) auto += tick.day else own += tick.day
+        }
+        if (auto.isEmpty()) return emptySet()
+        goals.filter { it.kind != GoalKind.HABIT }.forEach { goal -> own += store.stepTicks(goal.id).map { it.day } }
+        return auto - own
+    }
+
+    /**
      * Days from [from] to [to] when at least one habit was due or a project deadline fell. A goal
      * due so many times a week, month or year counts on the days it was ticked, and on the last
      * day of its window when that ended with times still to do. On its other days nothing of it
@@ -63,6 +83,8 @@ class Gaps(private val store: Store, private val book: Book) {
         val firstDays = goals.associate { it.id to it.addedOn() }
         fun due(goal: Goal, day: LocalDate): Boolean {
             if (!goal.isHabitLike) return goal.deadline == day
+            // An "at most" goal has nothing to tick, so a quiet day with only one of those isn't a day the user stopped.
+            if (goal.atMost) return false
             if (firstDays[goal.id]?.let { day < it } == true) return false
             val repeat = goal.repeat ?: return false
             if (repeat.kind != RepeatKind.TIMES_PER) return repeat.isDueOn(day) && (goal.id to day) !in skipped
@@ -96,7 +118,8 @@ class Gaps(private val store: Store, private val book: Book) {
         if (from > yesterday) return@transaction emptyList()
         val goals = store.activeGoals()
         val due = dueDays(from, yesterday, goals, store.habitTicksSince(Days.earliestOpenDay(from)), store.allLapses(from, yesterday))
-        val ticked = store.tickedDays(from, yesterday)
+        val habitTicks = store.habitTicksSince(Days.earliestOpenDay(from))
+        val ticked = store.tickedDays(from, yesterday) - paidOnly(goals, habitTicks)
         val existing = store.gaps().toMutableList()
         // A stretch that was a gap until every miss in it turned out to be a forgotten tick isn't flagged again.
         val cleared = cleared(store.setting(CLEARED))

@@ -347,6 +347,11 @@ class Lapses(
                     if (settled) continue
                     // A first or last week, month or year only partly in the goal's dates isn't missed.
                     if (repeat.isPartial(window)) continue
+                    // An "at most" goal whose day ended at or under its limit is done, and paid now.
+                    if (goal.atMost && !AtMost.over(AtMost.used(goal, ticks, window.start), goal.limit!!)) {
+                        book.payUnderLimit(goal, day, window)
+                        continue
+                    }
                     val over = used(goal, day) >= book.difficulty(day).allowed(goal.allowed)
                     found += record(goal, LapseKind.MISS, day, window.period, window.start, over, null, null).lapse
                 } else if (goal.deadline == day) {
@@ -390,6 +395,8 @@ class Lapses(
         val lapse = store.lapse(lapseId)
         if (lapse == null || lapse.kind != LapseKind.MISS || lapse.forgotten || lapse.period == null) return@transaction false
         val goal = store.goal(lapse.goalId) ?: return@transaction false
+        // An "at most" goal that went over its limit wasn't forgotten: what was added says so.
+        if (wentOver(goal, lapse)) return@transaction false
         val now = book.millis()
         if (lapse.cost > 0) {
             store.addEntry(
@@ -431,6 +438,83 @@ class Lapses(
         }
         val over = used(goal, today) >= book.difficulty(today).allowed(goal.allowed)
         record(goal, LapseKind.MISS, today, window.period, window.start, over, null, null).lapse
+    }
+
+    /**
+     * Whether [lapse] is a miss of the "at most" goal [goal] with more added on its day than the
+     * limit allows. "I forgot to tick it" doesn't fit such a miss; taking back what was added
+     * too much does, on the day itself (see [undoUse]).
+     */
+    suspend fun wentOver(goal: Goal, lapse: Lapse): Boolean {
+        val limit = goal.limit?.takeIf { goal.atMost } ?: return false
+        return AtMost.over(AtMost.used(goal, store.habitTicks(goal.id, lapse.periodStart), lapse.periodStart), limit)
+    }
+
+    /**
+     * Adds to an "at most" goal as it happens: one, or [amount] of its unit. It pays nothing by
+     * itself. Going over the limit makes today a miss straight away, like [slip]: a reason is
+     * asked for like any miss, and over the allowance it costs points and owes a penalty task.
+     * A "That's all for today" made earlier is taken back, with its points. A day that was
+     * skipped stays skipped, and a day already missed isn't missed twice.
+     */
+    suspend fun use(goalId: Long, amount: Double = 1.0): UseResult = store.transaction {
+        Rules.load(store)
+        val goal = store.goal(goalId)
+        val limit = goal?.limit
+        if (goal == null || goal.archived || !goal.atMost || limit == null) return@transaction UseResult.NotFound
+        val today = book.today()
+        val window = goal.repeat?.window(today) ?: return@transaction UseResult.NotDue
+        val entered = Amounts.tidy(amount) ?: return@transaction UseResult.NotFound
+        val tickId = store.addTick(
+            Tick(goalId = goal.id, stepId = null, at = book.millis(), day = today, period = null, periodStart = window.start, amount = entered),
+        )
+        val used = AtMost.used(goal, store.habitTicks(goal.id, window.start), window.start)
+        if (!AtMost.over(used, limit)) return@transaction UseResult.Added(tickId, used, limit)
+        // Over: the day isn't done after all.
+        var tookBack = 0
+        while (true) {
+            val confirmed = store.habitTicks(goal.id, window.start).filter { it.countsToward(goal, window.start) }
+            if (confirmed.isEmpty()) break
+            val paid = store.entriesForTicks(confirmed.map { it.id }).sumOf { it.amount }
+            if (!book.undoHabitTick(goal.id)) break
+            tookBack += paid
+        }
+        val lapses = store.lapses(goal.id, window.start, window.end).filter { it.periodStart == window.start && !it.forgotten }
+        if (lapses.isNotEmpty()) return@transaction UseResult.Added(tickId, used, limit, tookBack = tookBack)
+        val over = used(goal, today) >= book.difficulty(today).allowed(goal.allowed)
+        val recorded = record(goal, LapseKind.MISS, today, window.period, window.start, over, null, null)
+        UseResult.Added(tickId, used, limit, recorded.lapse, recorded.penaltyId, tookBack)
+    }
+
+    /**
+     * Takes back the latest thing added to an "at most" goal today. When that puts the day back
+     * at or under its limit, the miss going over made today goes too, as if it never happened:
+     * its penalty points come back, its penalty task is dropped if it wasn't done yet, and the
+     * allowance it used is free again. False when nothing was added today.
+     */
+    suspend fun undoUse(goalId: Long): Boolean = store.transaction {
+        Rules.load(store)
+        val goal = store.goal(goalId)
+        val limit = goal?.limit
+        if (goal == null || !goal.atMost || limit == null) return@transaction false
+        val today = book.today()
+        val window = goal.repeat?.window(today) ?: return@transaction false
+        val last = store.habitTicks(goal.id, window.start).filter { it.isUse }.maxByOrNull { it.id } ?: return@transaction false
+        store.removeTick(last.id)
+        if (AtMost.over(AtMost.used(goal, store.habitTicks(goal.id, window.start), window.start), limit)) return@transaction true
+        val now = book.millis()
+        store.lapses(goal.id, window.start, window.end)
+            .filter { it.kind == LapseKind.MISS && it.periodStart == window.start && it.day == today && !it.forgotten }
+            .forEach { miss ->
+                store.entriesForLapse(miss.id).forEach { store.removeEntry(it.id) }
+                store.penaltyForLapse(miss.id)?.let { penalty ->
+                    val open = penalty.doneAt == null && penalty.cancelledAt == null
+                    store.updatePenalty(penalty.copy(lapseId = null, cancelledAt = if (open) now else penalty.cancelledAt))
+                }
+                store.removeLapse(miss.id)
+                store.freeAllowance(miss, now)
+            }
+        true
     }
 
     /** The penalty task to do now, if any. */

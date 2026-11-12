@@ -19,7 +19,12 @@ data class HabitRow(
     val progress: Double = 0.0,
     /** Of [skips], those made on the day shown, which can still be taken back (see [Lapses.takeBackSkip]). */
     val skipsToday: Int = 0,
+    /** For an "at most" goal: it went over its limit in this window, which is a miss already. */
+    val slipped: Boolean = false,
 ) {
+    /** For an "at most" goal: [progress], what was used, is over the limit. */
+    val overLimit: Boolean get() = goal.limit?.let { AtMost.over(progress, it) } == true
+
     /** For a goal with an amount: how much is left to do in this window, every time of it. */
     val amountLeft: Double get() = ((goal.amount ?: 0.0) * goal.target - progress).coerceAtLeast(0.0)
 
@@ -59,9 +64,15 @@ data class TodayView(
     val projects: List<ProjectRow>,
     /** To-dos without a date: open ones, and ones done today. */
     val todos: List<TodoRow> = emptyList(),
+    /**
+     * "At most" goals due on this day (see [AtMost]), with what was used as [HabitRow.progress].
+     * They are kept apart from [dueToday]: there is nothing to do for one, so it is never what's
+     * next, never paced or reminded of, and never holds back "everything done".
+     */
+    val limits: List<HabitRow> = emptyList(),
 ) {
     val isEmpty: Boolean
-        get() = dueToday.isEmpty() && thisWeek.isEmpty() && thisMonth.isEmpty() && thisYear.isEmpty() && projects.isEmpty() && todos.isEmpty()
+        get() = limits.isEmpty() && dueToday.isEmpty() && thisWeek.isEmpty() && thisMonth.isEmpty() && thisYear.isEmpty() && projects.isEmpty() && todos.isEmpty()
 }
 
 /** An undated to-do on Today: open, or done today, with its steps if it has any. */
@@ -83,7 +94,7 @@ object TodayList {
         checks: List<Check> = emptyList(),
     ): TodayView {
         val active = goals.filter { !it.archived }.sortedWith(compareBy({ it.position }, { it.id }))
-        val habits = active.filter { it.isHabitLike }.map { Retimes.on(it, day) }.mapNotNull { goal ->
+        val all = active.filter { it.isHabitLike }.map { Retimes.on(it, day) }.mapNotNull { goal ->
             val window = goal.repeat?.window(day) ?: doneTodayAfterDone(goal, day, ticks) ?: return@mapNotNull null
             val skipped = lapses.filter { it.goalId == goal.id && it.kind == LapseKind.SKIP && it.periodStart == window.start && !it.forgotten }
             val skips = skipped.size
@@ -101,10 +112,17 @@ object TodayList {
                 .map { StepRow(it, it.id in ticked || count >= goal.target) }
             HabitRow(
                 goal, count, window, skips, items,
-                progress = if (goal.hasAmount) goal.progressOf(windowTicks) else 0.0,
+                progress = when {
+                    goal.atMost -> AtMost.used(goal, ticks, window.start)
+                    goal.hasAmount -> goal.progressOf(windowTicks)
+                    else -> 0.0
+                },
                 skipsToday = skipped.count { it.day == day },
+                slipped = goal.atMost &&
+                    lapses.any { it.goalId == goal.id && it.kind == LapseKind.MISS && it.periodStart == window.start && !it.forgotten },
             )
         }
+        val (limits, habits) = all.partition { it.goal.atMost }
         val stepTicks = ticks.filter { it.stepId != null }.associateBy { it.stepId }
         val projects = active.filter { it.kind == GoalKind.PROJECT }.map { goal ->
             val rows = steps.filter { it.goalId == goal.id && !it.archived }
@@ -133,6 +151,7 @@ object TodayList {
                     .map { StepRow(it, stepTicks.containsKey(it.id) || done) }
                 TodoRow(goal, done, items)
             },
+            limits = limits,
         )
     }
 }

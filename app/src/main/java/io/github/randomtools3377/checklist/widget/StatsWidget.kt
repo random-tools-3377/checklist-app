@@ -55,6 +55,7 @@ import io.github.randomtools3377.checklist.data.SETTING_STREAK_VALUE
 import io.github.randomtools3377.checklist.data.SETTING_WEEKLY_TARGET
 import io.github.randomtools3377.checklist.data.nowLocal
 import io.github.randomtools3377.checklist.data.parseDayEndHour
+import io.github.randomtools3377.checklist.data.activeCoreGoals
 import io.github.randomtools3377.checklist.data.toCore
 import io.github.randomtools3377.checklist.data.toEpochDay
 import io.github.randomtools3377.checklist.ui.pointsText
@@ -98,7 +99,7 @@ class StatsWidget : GlanceAppWidget() {
             val today = Days.dayOf(nowLocal(), parseDayEndHour(dao.setting(SETTING_DAY_END_HOUR)))
             // Private goals stay off the home screen while the privacy lock covers them, counts included.
             val hidePrivate = dao.setting(LOCK_PRIVATE) == "1"
-            val goals = dao.activeGoals().map { it.toCore() }.filter { !(hidePrivate && it.private) }
+            val goals = dao.activeCoreGoals().filter { !(hidePrivate && it.private) }
             val since = minOf(today.minusDays(STREAK_DAYS), Days.earliestOpenDay(today))
             val ticks = dao.habitTicksSince(since.toEpochDay()).map { it.toCore() }
             val lapses = dao.lapsesSince(since.toEpochDay()).map { it.toCore() }

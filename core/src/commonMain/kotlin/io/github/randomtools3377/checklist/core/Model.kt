@@ -96,7 +96,20 @@ data class Goal(
     val archived: Boolean = false,
     val position: Int = 0,
     val createdAt: Long = 0,
+    /**
+     * For an "at most" goal, like no more than 2 coffees: the most a day can have, in [unit] if
+     * it has one (see [AtMost]). Null for every other goal. It isn't kept with the goal or in
+     * the backup's goals: it comes from the setting [AtMost.SETTING], by the goal's id.
+     */
+    @kotlinx.serialization.Transient
+    val limit: Double? = null,
 ) {
+    /**
+     * An "at most" goal: each one is added as it happens, a day that ends at or under [limit]
+     * is done, and going over is a miss straight away (see [AtMost]).
+     */
+    val atMost: Boolean get() = kind == GoalKind.HABIT && limit != null && limit > 0
+
     /** The kind of stretch its ticks count toward. Null for a project. */
     val period: Period? get() = repeat?.windowPeriod
 
@@ -177,7 +190,7 @@ data class Tick(
     val at: Long,
     /** The user's day the tick counts for, after the day-end setting is applied. */
     val day: LocalDate,
-    /** The kind of window it counted toward. Null for a project step. */
+    /** The kind of window it counted toward. Null for a project step, and for a use of an "at most" goal (see [isUse]). */
     val period: Period?,
     /** First day of that window. The same as [day] for a project step. */
     val periodStart: LocalDate,
@@ -187,7 +200,14 @@ data class Tick(
     val amount: Double? = null,
     /** How long it took, in seconds, when it was timed with Start and Stop. */
     val seconds: Int? = null,
-)
+) {
+    /**
+     * One use of an "at most" goal, like one coffee (see [AtMost]): a tick of the goal itself
+     * with no [period], so it never counts toward the goal being done. Only the tick that says
+     * the day stayed under the limit does.
+     */
+    val isUse: Boolean get() = stepId == null && period == null
+}
 
 /**
  * What a ledger entry is for. The balance is the sum of all entries.

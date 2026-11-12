@@ -1,5 +1,6 @@
 package io.github.randomtools3377.checklist.data
 
+import io.github.randomtools3377.checklist.core.AtMost
 import io.github.randomtools3377.checklist.core.Repeat
 import io.github.randomtools3377.checklist.core.RewardSize
 import io.github.randomtools3377.checklist.core.Effort
@@ -49,7 +50,7 @@ class RoomStore(private val db: AppDatabase) : Store {
 
     override suspend fun dayEndHour(): Int = parseDayEndHour(dao.setting(SETTING_DAY_END_HOUR))
 
-    override suspend fun goal(id: Long): Goal? = dao.goal(id)?.toCore()
+    override suspend fun goal(id: Long): Goal? = dao.goal(id)?.toCore(AtMostLimits.load(dao))
     override suspend fun step(id: Long): Step? = dao.step(id)?.toCore()
     override suspend fun activeSteps(goalId: Long): List<Step> = dao.activeSteps(goalId).map { it.toCore() }
 
@@ -82,7 +83,7 @@ class RoomStore(private val db: AppDatabase) : Store {
     override suspend fun markUsed(purchaseId: Long, at: Long) = dao.markUsed(purchaseId, at)
     override suspend fun markReturned(purchaseId: Long, at: Long) = dao.markReturned(purchaseId, at)
 
-    override suspend fun activeGoals(): List<Goal> = dao.activeGoals().map { it.toCore() }
+    override suspend fun activeGoals(): List<Goal> = dao.activeCoreGoals()
     override suspend fun setRepeat(goalId: Long, repeat: Repeat?) {
         val row = dao.goal(goalId) ?: return
         dao.updateGoal(row.copy(repeat = repeat?.let { RepeatText.encode(it) }, period = repeat?.windowPeriod?.name))
@@ -117,7 +118,26 @@ class RoomStore(private val db: AppDatabase) : Store {
     override suspend fun removeGap(id: Long) = dao.deleteGap(id)
 }
 
-fun GoalEntity.toCore() = Goal(
+/**
+ * The limits of the "at most" goals, by goal id, as last read from the setting they are kept in
+ * (see [AtMost]). A goal read from the database gets its limit from here (see [toCore]), since
+ * the goals table has no place for it. It is read again whenever goals are read to act on them
+ * ([RoomStore], [activeCoreGoals]), and kept up to date while the app is open.
+ */
+object AtMostLimits {
+    @kotlin.concurrent.Volatile
+    var current: Map<Long, Double> = emptyMap()
+
+    suspend fun load(dao: ChecklistDao): Map<Long, Double> = AtMost.decode(dao.setting(AtMost.SETTING)).also { current = it }
+}
+
+/** The goals still in the lists, each "at most" goal with its limit as it is now. */
+suspend fun ChecklistDao.activeCoreGoals(): List<Goal> {
+    val limits = AtMostLimits.load(this)
+    return activeGoals().map { it.toCore(limits) }
+}
+
+fun GoalEntity.toCore(limits: Map<Long, Double> = AtMostLimits.current) = Goal(
     id = id,
     kind = GoalKind.valueOf(kind),
     name = name,
@@ -149,6 +169,7 @@ fun GoalEntity.toCore() = Goal(
     archived = archived,
     position = position,
     createdAt = createdAt,
+    limit = limits[id]?.takeIf { kind == GoalKind.HABIT.name },
 )
 
 fun Goal.toEntity() = GoalEntity(

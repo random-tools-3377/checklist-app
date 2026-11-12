@@ -8,7 +8,7 @@ import kotlinx.datetime.LocalDateTime
 
 /** The projects that remind of their deadline, as they are now. */
 private suspend fun deadlineGoals(dao: ChecklistDao): List<Goal> =
-    dao.activeGoals().map { it.toCore() }.filter { Alerts.remindsOfDeadline(it) }
+    dao.activeCoreGoals().filter { Alerts.remindsOfDeadline(it) }
 
 /**
  * When deadline reminders come from [from] (included) to [to] (not included): the day before a

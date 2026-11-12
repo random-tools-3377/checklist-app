@@ -14,7 +14,7 @@ data class NextUp(val goalId: Long, val title: String)
  * way). A private goal isn't named while the privacy lock covers private goals.
  */
 suspend fun nextInChain(dao: ChecklistDao, goalId: Long, now: LocalDateTime = nowLocal()): List<NextUp> {
-    val goals = dao.activeGoals().map { it.toCore() }
+    val goals = dao.activeCoreGoals()
     if (goals.none { it.after == goalId }) return emptyList()
     val day = Days.dayOf(now, parseDayEndHour(dao.setting(SETTING_DAY_END_HOUR)))
     val since = Days.earliestOpenDay(day)

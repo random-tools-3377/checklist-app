@@ -69,7 +69,8 @@ object Alerts {
     ): List<Alert> {
         val alerts = mutableListOf<Alert>()
         for (goal in goals) {
-            if (goal.archived || !goal.isHabitLike) continue
+            // An "at most" goal has nothing to do, so nothing to remind of.
+            if (goal.archived || !goal.isHabitLike || goal.atMost) continue
             val repeat = goal.repeat ?: continue
             val reminder = goal.reminder ?: Reminder()
             var day = from.date.minusDays(1)
@@ -295,6 +296,8 @@ object Alerts {
      * until that one is done.
      */
     fun stillToDo(goal: Goal, window: Window, ticks: List<Tick>, lapses: List<Lapse>, number: Int = 0): Boolean {
+        // An "at most" goal is never something to do: staying under its limit needs no reminder.
+        if (goal.atMost) return false
         val times = timesDone(goal, window, ticks)
         if (number > 0 && times >= number) return false
         val skips = lapses.count { it.goalId == goal.id && it.kind == LapseKind.SKIP && it.periodStart == window.start && !it.forgotten }

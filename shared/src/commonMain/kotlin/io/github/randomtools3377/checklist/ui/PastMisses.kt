@@ -43,11 +43,14 @@ data class PastMiss(
     val slip: Boolean,
     /** "I forgot to tick it" is still offered: a habit's miss from the last two weeks. */
     val canForget: Boolean,
+    /** It is a miss of an "at most" goal: the day went over its limit. */
+    val over: Boolean = false,
 )
 
 /** What the box says first about a past skip or miss: what happened, and when. */
 internal fun pastMissLine(miss: PastMiss, date: String): String = when {
     miss.lapse.kind == LapseKind.SKIP -> "Skipped $date"
+    miss.over -> "Went over on $date"
     miss.slip -> "You slipped on $date"
     miss.lapse.period == null -> "Its deadline passed on $date"
     else -> "Missed $date"
@@ -146,6 +149,8 @@ fun PastMissDialog(lapseId: Long, vm: MainViewModel, onUnlock: () -> Unit, onDon
                         )
                     }
                     // A habit's miss from longer ago: its reason can still be changed.
+                    // More was added than an "at most" goal's limit: nothing to tick.
+                    miss.over -> Unit
                     lapse.kind == LapseKind.MISS && lapse.period != null -> Text(
                         "It's more than ${Lapses.FORGET_DAYS} days ago, so it can't be ${if (miss.slip) "undone" else "ticked"} from here any more.",
                         style = MaterialTheme.typography.bodySmall,

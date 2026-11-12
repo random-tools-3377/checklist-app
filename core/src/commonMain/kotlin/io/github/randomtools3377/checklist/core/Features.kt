@@ -15,6 +15,7 @@ enum class Feature(val key: String, val onValue: String, val title: String, val 
     WEEKLY_PLANNING("feature_weekly_planning", "1", "Weekly planning", "From Monday, a card on Today opens a few minutes of planning: last week, this week's target and the days ahead.", "Today"),
     SUGGESTIONS("feature_suggestions", "1", "Suggested points and prices", "\"How hard is it?\" on goals, with suggested points; and on rewards what they cost in money, which their price can follow, or how big they are.", "Goals and rewards"),
     QUIT("feature_quit", "1", "Goals to quit", "A habit can be something to stop, ticked \"Avoided\" each day, with \"I slipped\".", "Goals and rewards"),
+    AT_MOST("feature_at_most", "1", "At most goals", "A habit can be something to stay under, like no more than 2 coffees: add each one on Today, and a day at or under the limit is done.", "Goals and rewards"),
     CHALLENGES("feature_challenges", "1", "Challenges", "A habit can carry a challenge, like 30 days in a row with a bonus at the end.", "Goals and rewards"),
     CHAINS("feature_chains", "1", "Habit chains", "A goal can come after another, like journal after coffee: ticking the first reminds you of the next.", "Goals and rewards"),
     BALANCE_CHECK("feature_balance_check", "1", "Balance check", "A page in the shop comparing prices with what you earn, and goals with how often they get done.", "Goals and rewards"),

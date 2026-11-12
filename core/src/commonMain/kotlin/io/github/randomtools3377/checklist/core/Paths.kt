@@ -68,7 +68,7 @@ object Titles {
         dayEndHour: Int = 0,
     ): Set<Title> {
         val found = mutableSetOf<Title>()
-        val times = ticks.map { Days.secondOfDay(timeOf(it.at), dayEndHour) }
+        val times = ticks.filter { !it.isUse }.map { Days.secondOfDay(timeOf(it.at), dayEndHour) }
         if (times.count { it < 8 * 60 * 60 } >= 20) found += Title.EARLY_BIRD
         if (times.count { it >= 22 * 60 * 60 } >= 20) found += Title.NIGHT_OWL
         val weekendDays = records.count { r ->

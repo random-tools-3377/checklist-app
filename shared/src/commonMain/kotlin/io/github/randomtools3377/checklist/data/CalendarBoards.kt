@@ -54,7 +54,7 @@ suspend fun calendarBoard(
     val dayEnd = parseDayEndHour(dao.setting(SETTING_DAY_END_HOUR))
     val today = Days.dayOf(now, dayEnd)
     val shows = calendarShows(dao)
-    val goals = dao.activeGoals().map { it.toCore() }
+    val goals = dao.activeCoreGoals()
     val hidden = if (dao.setting(LOCK_PRIVATE) == "1") PrivateGoals.ids(goals) else emptySet()
     val monthFirst = month?.let { LocalDate(it.year, it.monthNumber, 1) } ?: LocalDate(today.year, today.monthNumber, 1)
     val gridStart = CalendarView.monthGridStart(monthFirst)

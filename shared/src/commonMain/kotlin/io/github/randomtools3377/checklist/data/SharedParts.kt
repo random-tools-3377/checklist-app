@@ -8,6 +8,9 @@ import io.github.randomtools3377.checklist.core.Gaps
 import io.github.randomtools3377.checklist.core.Interest
 import io.github.randomtools3377.checklist.core.Lapses
 import io.github.randomtools3377.checklist.core.PerfectDays
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.datetime.LocalDate
 
 /**
@@ -23,6 +26,12 @@ class SharedParts(val db: AppDatabase, val gifs: GifStore, val photo: PhotoStore
     val combos = Combos(RoomStore(db), book)
     val bets = Bets(RoomStore(db), book)
     val repository = Repository(db, gifs, photo)
+
+    init {
+        // The "at most" goals' limits (see AtMostLimits), read as soon as the database is there,
+        // so a widget or a reminder that reads goals straight away knows them too.
+        CoroutineScope(Dispatchers.Default).launch { runCatching { AtMostLimits.load(db.dao()) } }
+    }
 
     /**
      * Finds misses since the last check, then gaps, and pays what the day's end pays. When the

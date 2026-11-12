@@ -217,11 +217,24 @@ fun TodayScreen(
         }
     }
     skipping?.let { goal -> SkipDialog(goal, vm) { skipping = null } }
+    // Typing how much to add to an "at most" goal with a unit, like 45 minutes.
+    var using by remember { mutableStateOf<Long?>(null) }
+    using?.let { id ->
+        val row = view.limits.firstOrNull { it.goal.id == id }
+        if (row == null) {
+            using = null
+        } else {
+            UseDialog(row, onDismiss = { using = null }) { amount ->
+                using = null
+                vm.addUse(id, amount)
+            }
+        }
+    }
 
     // Showing one category at a time, when goals have them.
     var category by rememberSaveable { mutableStateOf<String?>(null) }
     val categories = Categories.of(
-        screen.plan.map { it.row.goal } + (view.thisWeek + view.thisMonth + view.thisYear).map { it.goal } + view.projects.map { it.goal } +
+        screen.plan.map { it.row.goal } + (view.limits + view.thisWeek + view.thisMonth + view.thisYear).map { it.goal } + view.projects.map { it.goal } +
             // To-dos take categories too, so one used only on to-dos has its chip.
             view.todos.map { it.goal },
     )
@@ -660,6 +673,23 @@ fun TodayScreen(
                                 onMove = if (Moves.choices(planned.row.goal, view.day, view.day).isNotEmpty()) ({ moving = planned.row.goal }) else null,
                                 // A to-do with a date opens its editor from here, to push it to another day.
                                 onEdit = if (planned.row.goal.kind == GoalKind.TODO) ({ onEditTodo(planned.row.goal.id) }) else null,
+                            )
+                            Spacer(Modifier.height(10.dp))
+                        }
+                    }
+                    // "At most" goals: nothing to do, only to stay under, so they come after the day's goals.
+                    val limits = shown(view.limits)
+                    if (limits.isNotEmpty()) {
+                        item(key = "title-limits") { SectionTitle("Stay under") }
+                        items(limits, key = { "limit-${it.goal.id}" }) { row ->
+                            AtMostCard(
+                                row = row,
+                                onAdd = { vm.addUse(row.goal.id) },
+                                onAmount = { using = row.goal.id },
+                                onUndo = { vm.undoUse(row.goal.id) },
+                                onConfirm = { vm.confirmAtMost(row.goal.id) },
+                                onUnconfirm = { vm.undoHabitTick(row.goal.id) },
+                                onSkip = { skipping = row.goal },
                             )
                             Spacer(Modifier.height(10.dp))
                         }
@@ -1763,6 +1793,148 @@ private fun TodayBackdrop(look: Appearance) {
 
 /** The box to enter how much of a goal's amount was done, opened by Add or by stopping a timing. */
 private class AmountRequest(val goalId: Long, val seconds: Int?, val spot: Spot)
+
+/**
+ * An "at most" goal on Today, like no more than 2 coffees: how much is used and left, "+1" for
+ * each one as it happens (or an amount, with a unit), and "That's all for today" to have the day
+ * done, and paid, before it ends. Over the limit it says so; the miss is asked about like any other.
+ */
+@Composable
+private fun AtMostCard(
+    row: HabitRow,
+    onAdd: () -> Unit,
+    onAmount: () -> Unit,
+    onUndo: () -> Unit,
+    onConfirm: () -> Unit,
+    onUnconfirm: () -> Unit,
+    onSkip: () -> Unit,
+) {
+    val goal = row.goal
+    val cardSize = LocalCardSize.current
+    val rate = LocalPayRate.current
+    val boosted = LocalBoosted.current == goal.id
+    val streakPercent = LocalStreakPercent.current
+    val extras = LocalTodayExtras.current
+    val over = row.overLimit || row.slipped
+    val hasUnit = !goal.unit.isNullOrBlank()
+    Card(Modifier.fillMaxWidth().testTag("limit:${goal.name}")) {
+        Column(Modifier.goalStrip(goal.color)) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(cardSize.padding)) {
+                Text(goal.icon, fontSize = cardSize.icon, modifier = Modifier.width(44.dp), textAlign = TextAlign.Center)
+                Spacer(Modifier.width(8.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(goal.name, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    Text(
+                        "At most ${io.github.randomtools3377.checklist.core.AtMost.limitText(goal)} a day · +${payFor(goal.points, rate, boosted, streakPercent)} for a day at or under it",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Text(
+                        io.github.randomtools3377.checklist.core.AtMost.text(row.progress, goal),
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium,
+                        color = if (over) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.testTag("used:${goal.name}"),
+                    )
+                    when {
+                        row.done -> Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text("✓ That's all for today", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary, modifier = Modifier.testTag("confirmed:${goal.name}"))
+                            Text(
+                                "Take it back",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.secondary,
+                                modifier = Modifier.clickable(onClick = onUnconfirm).padding(vertical = 4.dp).testTag("unconfirm:${goal.name}"),
+                            )
+                        }
+                        row.slipped -> Text(
+                            "Over for today, so today is a miss.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.testTag("over:${goal.name}"),
+                        )
+                        row.skips > 0 -> Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text("Skipped", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.secondary, modifier = Modifier.testTag("skipped:${goal.name}"))
+                            if (row.canTakeBackSkip) {
+                                Text(
+                                    "Take back the skip",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = MaterialTheme.colorScheme.secondary,
+                                    modifier = Modifier.clickable { extras.onTakeBackSkip(goal.id) }.padding(vertical = 4.dp).testTag("take-back-skip:${goal.name}"),
+                                )
+                            }
+                        }
+                        !row.overLimit -> Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                            Text(
+                                "That's all for today",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.clickable(onClick = onConfirm).padding(vertical = 4.dp).testTag("confirm:${goal.name}"),
+                            )
+                            Text(
+                                "Skip",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.secondary,
+                                modifier = Modifier.clickable(onClick = onSkip).padding(vertical = 4.dp).testTag("skip:${goal.name}"),
+                            )
+                        }
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                        if (hasUnit) {
+                            Text(
+                                "Add an amount",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.secondary,
+                                modifier = Modifier.clickable(onClick = onAmount).padding(vertical = 4.dp).testTag("use-amount:${goal.name}"),
+                            )
+                        }
+                        if (row.progress > 0) {
+                            Text(
+                                "Take back the last one",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.secondary,
+                                modifier = Modifier.clickable(onClick = onUndo).padding(vertical = 4.dp).testTag("undo-use:${goal.name}"),
+                            )
+                        }
+                    }
+                }
+                androidx.compose.material3.FilledTonalButton(
+                    onClick = onAdd,
+                    modifier = Modifier.testTag("use:${goal.name}").semantics { contentDescription = "Add one to ${goal.name}" },
+                ) { Text("+1") }
+            }
+        }
+    }
+}
+
+/** How much to add to an "at most" goal with a unit, like 45 minutes. */
+@Composable
+private fun UseDialog(row: HabitRow, onDismiss: () -> Unit, onSave: (Double) -> Unit) {
+    val goal = row.goal
+    val unit = goal.unit.orEmpty()
+    var text by remember { mutableStateOf("") }
+    val value = io.github.randomtools3377.checklist.core.Amounts.parse(text)
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("${goal.icon} ${goal.name}") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(io.github.randomtools3377.checklist.core.AtMost.text(row.progress, goal) + ". How much more?", style = MaterialTheme.typography.bodyMedium)
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { typed -> text = typed.filter { it.isDigit() || it == '.' || it == ',' }.take(9) },
+                    label = { Text(if (unit.isNotEmpty()) "How much ($unit)" else "How much") },
+                    singleLine = true,
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal),
+                    modifier = Modifier.fillMaxWidth().testTag("field:use"),
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { value?.let(onSave) }, enabled = value != null, modifier = Modifier.testTag("save-use")) { Text("Add") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
+}
 
 @Composable
 private fun AmountDialog(row: HabitRow, seconds: Int?, onDismiss: () -> Unit, onDiscardTiming: () -> Unit, onSave: (Double) -> Unit) {

@@ -27,7 +27,7 @@ suspend fun eveningTimes(dao: ChecklistDao, from: LocalDateTime, to: LocalDateTi
  * can't be unlocked.
  */
 suspend fun eveningList(dao: ChecklistDao, day: LocalDate): EveningList? {
-    val goals = dao.activeGoals().map { it.toCore() }
+    val goals = dao.activeCoreGoals()
     val since = Days.earliestOpenDay(day)
     // Steps only matter for a project whose deadline is that day.
     val deadlines = goals.filter { it.kind == GoalKind.PROJECT && it.deadline == day }

@@ -337,7 +337,7 @@ object MoodInsights {
 
     /** The numbers behind a goal, in plain words. A goal to quit is "done" on days it is avoided. */
     fun describe(m: GoalMood): String {
-        val doIt = if (m.goal.quit) "avoid it" else "do it"
+        val doIt = if (m.goal.atMost) "keep to it" else if (m.goal.quit) "avoid it" else "do it"
         val difference = m.difference
         val main = when {
             difference != null && difference >= 0.05 -> "On days you $doIt, your mood in the morning is about ${tenths(difference)} higher"
@@ -364,7 +364,8 @@ object MoodInsights {
 
     /** How many days the numbers come from. */
     fun basis(m: GoalMood): String =
-        if (m.goal.quit) "From ${days(m.doneDays)} avoided and ${days(m.notDoneDays)} not avoided."
+        if (m.goal.atMost) "From ${days(m.doneDays)} at or under the limit and ${days(m.notDoneDays)} not."
+        else if (m.goal.quit) "From ${days(m.doneDays)} avoided and ${days(m.notDoneDays)} not avoided."
         else "From ${days(m.doneDays)} done and ${days(m.notDoneDays)} not done."
 
     /** A noted thing's numbers, in plain words: "Slept well: your mood in the morning is about 1.1 higher on days you note it." */
@@ -403,9 +404,10 @@ object MoodInsights {
         val goal = weigh.goal
         val more = payMore(goal.points)
         val pay = Way(WayKind.PAY_MORE, "Pay more for it: ${PointsName.current.amount(more)} instead of ${goal.points}, so it feels worth it.", points = more)
-        if (goal.quit) return listOf(pay)
+        // An "at most" goal is kept to all day too.
+        if (goal.quit || goal.atMost) return listOf(pay)
         val ways = mutableListOf<Way>()
-        val lift = findings.lifts.firstOrNull { it.goal.id != goal.id && goal.after != it.goal.id && !it.goal.quit }?.goal
+        val lift = findings.lifts.firstOrNull { it.goal.id != goal.id && goal.after != it.goal.id && !it.goal.quit && !it.goal.atMost }?.goal
         if (lift != null) {
             ways += Way(
                 WayKind.AFTER,

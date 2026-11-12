@@ -92,7 +92,7 @@ object Ideas {
 
     /** The goals that build [area]: habits being done, not ones to quit. */
     private fun building(goals: List<Goal>, area: SkillArea): List<Goal> =
-        goals.filter { !it.archived && it.kind == GoalKind.HABIT && !it.quit && it.repeat != null && SkillArea.of(it) == area }
+        goals.filter { !it.archived && it.kind == GoalKind.HABIT && !it.quit && !it.atMost && it.repeat != null && SkillArea.of(it) == area }
 
     /**
      * The next step for each of the user's own goals in [area]: a little longer, a little more,

@@ -3,6 +3,7 @@ package io.github.randomtools3377.checklist.core
 import kotlinx.datetime.Clock
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toInstant
 import kotlinx.datetime.toLocalDateTime
 
 sealed interface TickResult {
@@ -131,6 +132,8 @@ class Book(
             return@transaction logAmount(goalId, Amounts.leftOfThisTime(progress, goal.amount))
         }
         if (ticks.size >= goal.target) return@transaction TickResult.AlreadyDone
+        // An "at most" goal: this is "That's all for today", which a day over its limit can't have.
+        if (goal.atMost && !underLimit(goal, window)) return@transaction TickResult.AlreadyDone
 
         val pay = payer(goal, day)
         val at = millis()
@@ -153,6 +156,36 @@ class Book(
         if (finished) nextAfterDone(goal, day)
         if (finished) bonus += payChallenge(goal, day, tickId, pay)
         TickResult.Ticked(points = pay(goal.points), bonus = bonus, finished = finished)
+    }
+
+    /**
+     * Whether [goal], an "at most" goal, is still within its limit in [window]: what was used is
+     * at or under it, and the window hasn't been missed already by going over (see [Lapses.use]).
+     */
+    suspend fun underLimit(goal: Goal, window: Window): Boolean {
+        val limit = goal.limit ?: return false
+        if (AtMost.over(AtMost.used(goal, store.habitTicks(goal.id, window.start), window.start), limit)) return false
+        return store.lapses(goal.id, window.start, window.end).none { it.kind == LapseKind.MISS && it.periodStart == window.start && !it.forgotten }
+    }
+
+    /** The last moment of the user's [day], in epoch milliseconds: when what a day's end pays is dated. */
+    suspend fun endOf(day: LocalDate): Long {
+        val hour = store.dayEndHour().coerceIn(0, Days.MAX_DAY_END_HOUR)
+        return kotlinx.datetime.LocalDateTime(day.plusDays(1), kotlinx.datetime.LocalTime(hour, 0)).toInstant(timeZone()).toEpochMilliseconds() - 1000
+    }
+
+    /**
+     * An "at most" goal's [day] ended at or under its limit, without "That's all for today":
+     * it is done, and pays its points as a tick then would have. The tick is dated the day's
+     * last moment (see [endOf]), which tells it from one the user made. Returns what it paid.
+     */
+    suspend fun payUnderLimit(goal: Goal, day: LocalDate, window: Window): Int {
+        useRules()
+        val at = endOf(day)
+        val points = payer(goal, day)(goal.points)
+        val tickId = store.addTick(Tick(goalId = goal.id, stepId = null, at = at, day = day, period = window.period, periodStart = window.start))
+        store.addEntry(Entry(at = at, day = day, kind = EntryKind.TICK, amount = points, goalId = goal.id, tickId = tickId, label = goal.name))
+        return points
     }
 
     /**

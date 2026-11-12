@@ -15,6 +15,7 @@ import io.github.randomtools3377.checklist.data.LOCK_PRIVATE
 import io.github.randomtools3377.checklist.data.SETTING_DAY_END_HOUR
 import io.github.randomtools3377.checklist.data.SETTING_DEFAULT_FINISH
 import io.github.randomtools3377.checklist.data.SharedParts
+import io.github.randomtools3377.checklist.data.activeCoreGoals
 import io.github.randomtools3377.checklist.data.billReminders
 import io.github.randomtools3377.checklist.data.deadlineReminders
 import io.github.randomtools3377.checklist.data.eveningChecks
@@ -93,7 +94,7 @@ internal object IosReminders {
      */
     suspend fun reschedule(parts: SharedParts, focus: FocusState? = null) {
         val dao = parts.db.dao()
-        val goals = dao.activeGoals().map { it.toCore() }
+        val goals = dao.activeCoreGoals()
         val dayEnd = parseDayEndHour(dao.setting(SETTING_DAY_END_HOUR))
         val now = nowLocal()
         // From now: everything waiting is taken back below, so one due within the minute is

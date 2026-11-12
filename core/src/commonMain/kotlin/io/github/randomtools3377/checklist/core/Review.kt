@@ -169,7 +169,7 @@ object Review {
                 }
                 day = day.plusDays(1)
             }
-            val goalTicks = ticks.filter { it.goalId == goal.id && it.stepId == null && it.day >= from && it.day <= to }
+            val goalTicks = ticks.filter { it.goalId == goal.id && it.stepId == null && !it.isUse && it.day >= from && it.day <= to }
             val points = inRange.filter { it.goalId == goal.id && (it.kind == EntryKind.TICK || it.kind == EntryKind.BONUS) }.sumOf { it.amount }
             GoalSummary(goal, due, done, skipped, missed, goalTicks.size, points, longest, if (to >= today) run else 0)
         }

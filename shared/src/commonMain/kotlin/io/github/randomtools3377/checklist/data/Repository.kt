@@ -4,6 +4,7 @@ import io.github.randomtools3377.checklist.core.Amounts
 import io.github.randomtools3377.checklist.core.Backup
 import io.github.randomtools3377.checklist.core.Categories
 import io.github.randomtools3377.checklist.core.Celebration
+import io.github.randomtools3377.checklist.core.AtMost
 import io.github.randomtools3377.checklist.core.CelebrationSounds
 import io.github.randomtools3377.checklist.core.Goal
 import io.github.randomtools3377.checklist.core.Moves
@@ -195,6 +196,11 @@ data class HabitDraft(
     val effort: Effort? = null,
     /** A goal to quit, ticked each day it was avoided. */
     val quit: Boolean = false,
+    /**
+     * An "at most" goal: the most a day can have, in [unit] if it has one (see AtMost in the
+     * shared code); null for every other habit.
+     */
+    val limit: Double? = null,
     /** A challenge on it, like 30 days in a row with a bonus at the end. */
     val challenge: Challenge? = null,
     /** The goal it comes after, in a habit chain. */
@@ -330,6 +336,14 @@ class Repository(private val db: AppDatabase, private val celebrations: GifStore
 
     suspend fun saveHabit(draft: HabitDraft, today: LocalDate = nowLocal().date): Unit = db.withTransaction {
         val existing = if (draft.id != 0L) dao.goal(draft.id) else null
+        // An "at most" goal: its limit is kept in a setting, by its id (see AtMost). It is for
+        // days only, and a goal with an amount can't become one (what was entered toward its
+        // amount would turn into what was used). It is nothing else at the same time.
+        val limit = draft.limit?.let { Amounts.tidy(it) }?.takeIf { AtMost.fits(draft.repeat) && existing?.amount == null }
+        @Suppress("NAME_SHADOWING") val draft = if (limit == null) draft else draft.copy(
+            target = 1, bonus = 0, minutes = null, at = null, times = emptyList(), finishBy = null, finishDay = null,
+            reminder = Reminder(onTime = false), items = emptyList(), amount = null, quit = false, challenge = null, after = null,
+        )
         val challenge = draft.challenge?.takeIf { draft.repeat.kind != RepeatKind.TIMES_PER }
         val base = existing ?: GoalEntity(
             kind = GoalKind.HABIT.name, name = "", icon = "", points = 0, period = null, target = 1, bonus = 0,
@@ -366,7 +380,7 @@ class Repository(private val db: AppDatabase, private val celebrations: GifStore
             category = category(draft.category, draft.id),
             color = draft.color,
             amount = draft.amount?.let { Amounts.tidy(it) },
-            unit = draft.unit?.trim()?.take(Amounts.UNIT_LENGTH)?.takeIf { it.isNotEmpty() && draft.amount != null },
+            unit = draft.unit?.trim()?.take(Amounts.UNIT_LENGTH)?.takeIf { it.isNotEmpty() && (draft.amount != null || limit != null) },
             effort = draft.effort?.name,
             quit = draft.quit,
             // A challenge is only on habits not counted per week, month or year.
@@ -387,7 +401,16 @@ class Repository(private val db: AppDatabase, private val celebrations: GifStore
         // A routine's checklist: removed items are archived, so their past ticks still make sense.
         if (draft.items.isNotEmpty() || dao.activeSteps(goalId).isNotEmpty()) saveSteps(goalId, draft.items)
         setGoalSound(goalId, draft.sound)
+        setLimit(goalId, limit)
         pruneCelebrations()
+    }
+
+    /** Sets, or with null takes away, [goalId]'s "at most" limit (see AtMost), where it differs. */
+    private suspend fun setLimit(goalId: Long, limit: Double?) {
+        val now = dao.setting(AtMost.SETTING)
+        val next = AtMost.with(now, goalId, limit)
+        if (next != now.orEmpty()) dao.putSetting(SettingEntity(AtMost.SETTING, next))
+        AtMostLimits.load(dao)
     }
 
     /** Gives [goalId]'s ticks and skips made on the days of [window] that window's period, so they count toward it. */
@@ -396,7 +419,8 @@ class Repository(private val db: AppDatabase, private val celebrations: GifStore
         val to = window.end.toEpochDay()
         val period = window.period.name
         dao.habitTicksSince(Days.earliestOpenDay(window.start).toEpochDay())
-            .filter { it.goalId == goalId && it.day in from..to && (it.period != period || it.periodStart != from) }
+            // What was added to an "at most" goal has no period, and stays that way.
+            .filter { it.goalId == goalId && it.period != null && it.day in from..to && (it.period != period || it.periodStart != from) }
             .forEach { dao.updateTick(it.copy(period = period, periodStart = from)) }
         dao.lapses(goalId, from, to)
             .filter { it.kind == LapseKind.SKIP.name && (it.period != period || it.periodStart != from) }
@@ -562,6 +586,7 @@ class Repository(private val db: AppDatabase, private val celebrations: GifStore
             if (dao.goalHistoryCount(id) == 0) {
                 dao.deleteStepsOf(id)
                 dao.deleteGoal(id)
+                setLimit(id, null)
             } else {
                 removeGoal(id)
             }
@@ -764,6 +789,8 @@ class Repository(private val db: AppDatabase, private val celebrations: GifStore
         dao.activeSteps(id).forEach { step -> dao.insertStep(step.copy(id = 0, goalId = copyId)) }
         // The copy celebrates like the one it was made from, its own sound included.
         goalSound(id)?.let { setGoalSound(copyId, it) }
+        // A copy of an "at most" goal is one too, with the same limit.
+        AtMost.decode(dao.setting(AtMost.SETTING))[id]?.let { setLimit(copyId, it) }
         copyId
     }
 
@@ -1178,6 +1205,12 @@ class Repository(private val db: AppDatabase, private val celebrations: GifStore
         dao.insertBills(backup.bills.map { it.toEntity() })
         dao.insertSavingGoals(backup.savingGoals.map { it.toEntity() })
         dao.insertFocusSessions(backup.focusSessions.filter { it.minutes > 0 }.map { it.toEntity() })
+        // "At most" limits only for goals that came with the backup.
+        dao.setting(AtMost.SETTING)?.let { text ->
+            val kept = AtMost.kept(text, backup.goals.map { it.id }.toSet())
+            if (kept != text) dao.putSetting(SettingEntity(AtMost.SETTING, kept))
+        }
+        AtMostLimits.load(dao)
     }
 
     /** Empties every table. Inside a transaction. */
@@ -1212,6 +1245,7 @@ class Repository(private val db: AppDatabase, private val celebrations: GifStore
         db.withTransaction { deleteEverything() }
         celebrations.keepOnly(emptySet())
         background?.delete()
+        AtMostLimits.load(dao)
     }
 
     // Focus time.

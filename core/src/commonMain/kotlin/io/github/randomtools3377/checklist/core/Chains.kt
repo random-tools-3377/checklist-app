@@ -13,7 +13,8 @@ object Chains {
      * loop back to it.
      */
     fun choices(goal: Goal, goals: List<Goal>): List<Goal> = goals.filter { other ->
-        other.id != goal.id && !other.archived && other.isHabitLike && !leadsTo(other, goal.id, goals)
+        // An "at most" goal isn't something done, so nothing comes after it.
+        other.id != goal.id && !other.archived && other.isHabitLike && !other.atMost && !leadsTo(other, goal.id, goals)
     }
 
     private fun leadsTo(start: Goal, target: Long, goals: List<Goal>): Boolean {

@@ -56,6 +56,7 @@ internal fun featureWords(feature: Feature): String = listOf(
         Feature.WEEKLY_PLANNING -> "plan planning"
         Feature.SUGGESTIONS -> "suggested suggestions prices money treat"
         Feature.CHAINS -> "habit chains chain after next"
+        Feature.AT_MOST -> "limit limits under less fewer no more than cut down"
         Feature.CHARACTER -> "character avatar game levels skills"
         Feature.QUESTS -> "quest game"
         Feature.BOSSES -> "boss items game"
