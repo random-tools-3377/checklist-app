@@ -892,6 +892,14 @@ Build order **(default)**, each step a Release the owner can try:
       the character's card carries the one suggestion, and may name a reward to look forward
       to; "Pay more" can be undone, and a switch marks findings that come only from days
       something was noted.
+    - **0.67.0 settled these details (default):** with only the Budget on, a reward's money
+      value doesn't make its price follow until the user turns that on; with suggested prices on
+      it still does. A reward paid from a saving goal is a "taken out" entry tied to the
+      purchase: it lowers the goal, is no part of the month's spending, limits or budget game,
+      and returning the reward removes it. Last month's leftover is offered once, on the Budget
+      tab, when that month had money typed in and something was left; moved, it is dated that
+      month's last day; with no goal picked it goes into a plain "Savings" account with no
+      target. The pace card never counts a goal that is already late as a shortage of time.
     - Not chosen: a note when a money-priced reward's price moves, celebrations for game wins,
       and carrying money over into the next month.
     - **The 0.62.0 fixes settled these details (default):** a goal counts in streaks, records,

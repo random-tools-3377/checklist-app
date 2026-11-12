@@ -124,6 +124,7 @@ on one and import the file on the other. Reminders show only while the app is op
 - 0.64.0: a skip is never done and never held against the day, and can be taken back; misses put right later; an evening check; best streaks.
 - 0.65.0: your own celebration sounds and an edge glow; a calendar widget with the days ahead and the month; deadline reminders; a clearer timeline and week plan; editors that ask before discarding.
 - 0.66.0: a page for each goal, a fuller review, more spreadsheets; a fuller mood journal with a reminder; focus time kept, with breaks.
+- 0.67.0: the pace card no longer takes a late goal for a shortage of time; a money value on any reward, paying from savings, last month's leftover into savings, and a Used list.
 
 Every step in CLAUDE.md's build order is built. The iPhone app is installed with SideStore or
 AltStore (see the 0.55.0 release notes).
