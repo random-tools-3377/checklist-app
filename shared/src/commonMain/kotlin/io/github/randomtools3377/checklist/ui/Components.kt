@@ -24,6 +24,9 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.LinearProgressIndicator
+import io.github.randomtools3377.checklist.core.SavingFor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -110,7 +113,14 @@ fun minutesText(minutes: Int): String = when {
 
 /** The balance, big. It turns red below zero. */
 @Composable
-fun BalanceCard(balance: Int, modifier: Modifier = Modifier, note: String? = null) {
+fun BalanceCard(
+    balance: Int,
+    modifier: Modifier = Modifier,
+    note: String? = null,
+    /** The reward the user starred to save for, shown under the balance; [onShop] opens the shop. */
+    saving: SavingFor? = null,
+    onShop: () -> Unit = {},
+) {
     Card(
         modifier = modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
@@ -127,6 +137,38 @@ fun BalanceCard(balance: Int, modifier: Modifier = Modifier, note: String? = nul
             if (note != null) {
                 Text(note, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onPrimaryContainer)
             }
+            if (saving != null) SavingForPart(saving, onShop)
+        }
+    }
+}
+
+/**
+ * The starred reward on Today's balance card: its icon and name, a bar of the balance against
+ * its price, and how many more days it takes at the user's usual pace, or "You can buy it now"
+ * with a button to the shop.
+ */
+@Composable
+private fun SavingForPart(saving: SavingFor, onShop: () -> Unit) {
+    val on = MaterialTheme.colorScheme.onPrimaryContainer
+    Column(Modifier.fillMaxWidth().padding(top = 12.dp).testTag("saving-for")) {
+        Text("★ Saving for ${saving.reward.icon} ${saving.reward.name}", style = MaterialTheme.typography.titleSmall, color = on, modifier = Modifier.testTag("saving-for-name"))
+        LinearProgressIndicator(
+            progress = { saving.progress.coerceIn(0f, 1f) },
+            modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+            trackColor = MaterialTheme.colorScheme.surface,
+        )
+        if (saving.canBuy) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("You can buy it now", style = MaterialTheme.typography.bodyMedium, color = on, modifier = Modifier.weight(1f).testTag("saving-for-line"))
+                FilledTonalButton(onClick = onShop, modifier = Modifier.testTag("saving-for-shop")) { Text("Go to the shop") }
+            }
+        } else {
+            Text(
+                saving.count(PointsLabel.name) + (saving.pace?.let { " · $it" } ?: ""),
+                style = MaterialTheme.typography.bodyMedium,
+                color = on,
+                modifier = Modifier.testTag("saving-for-line"),
+            )
         }
     }
 }

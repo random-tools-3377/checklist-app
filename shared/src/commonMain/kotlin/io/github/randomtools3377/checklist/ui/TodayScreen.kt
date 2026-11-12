@@ -115,6 +115,7 @@ fun TodayScreen(
     onIdeas: (io.github.randomtools3377.checklist.core.SkillArea) -> Unit = {},
     onBudget: () -> Unit = {},
     onSpent: () -> Unit = {},
+    onShop: () -> Unit = {},
     onMoodGoals: () -> Unit = {},
     onMoodJournal: () -> Unit = {},
     skipRequest: Long?,
@@ -174,6 +175,7 @@ fun TodayScreen(
     // Today's mood opened in full: from its line on Today, or from the mood reminder.
     val moodStartRow by vm.moodStartRow.collectAsStateWithLifecycle()
     val lookForward by vm.lookForward.collectAsStateWithLifecycle()
+    val savingFor by vm.savingFor.collectAsStateWithLifecycle()
     val moodPutOff by vm.moodPutOff.collectAsStateWithLifecycle()
     val moodOpen by vm.moodOpen.collectAsStateWithLifecycle()
     var moodDay by remember { mutableStateOf(false) }
@@ -522,7 +524,14 @@ fun TodayScreen(
                     }
                 }
                 TodaySection.BALANCE -> item(key = "balance") {
-                    BalanceCard(view.balance, modifier = Modifier.clickable(onClick = onHistory), note = "Tap for your ${pointsWord()} history")
+                    BalanceCard(
+                        view.balance,
+                        modifier = Modifier.clickable(onClick = onHistory),
+                        note = "Tap for your ${pointsWord()} history",
+                        // The starred reward; hidden while the shop is behind the privacy lock.
+                        saving = savingFor,
+                        onShop = onShop,
+                    )
                     Spacer(Modifier.height(12.dp))
                 }
                 TodaySection.CHARACTER -> if (character != null) item(key = "character") {

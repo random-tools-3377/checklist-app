@@ -31,6 +31,7 @@ import io.github.randomtools3377.checklist.core.Interest
 import io.github.randomtools3377.checklist.core.GoalCheck
 import io.github.randomtools3377.checklist.core.RewardCheck
 import io.github.randomtools3377.checklist.core.BalanceCheck
+import io.github.randomtools3377.checklist.core.SavingFor
 import io.github.randomtools3377.checklist.core.Suggest
 import io.github.randomtools3377.checklist.core.Ramp
 import io.github.randomtools3377.checklist.core.DifficultySetting
@@ -223,7 +224,8 @@ private const val BADGE_CHECK_DELAY_MS = 800L
 /** A reward in the shop at what it costs now; [usualPrice] is its own price, before repeat buys this week. */
 data class RewardRow(val reward: Reward, val usual: String?, val usualPrice: Int = reward.price, val boughtThisWeek: Int = 0)
 
-data class ShopView(val balance: Int, val rewards: List<RewardRow>, val bought: List<Purchase>)
+/** The shop: [perDay] is what the user usually earns a day, for how long what is still missing takes. */
+data class ShopView(val balance: Int, val rewards: List<RewardRow>, val bought: List<Purchase>, val perDay: Double? = null)
 
 /** The character's path, the titles earned, the setting for the title shown, and the title shown. */
 data class CharacterTitles(
@@ -1533,8 +1535,13 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
         viewModelScope.launch { repository.setSetting(name, if (on) "1" else "0") }
     }
 
-    val shopView: StateFlow<ShopView?> = today.flatMapLatest { day ->
-        val pointsPerDay = combine(
+    /**
+     * What the user actually earns a day, from their own history (see [Usual.pointsPerDay]).
+     * The shop, the balance check, the reward editor and Today all take the days a price takes
+     * from this one figure, through [Usual.days].
+     */
+    val usualPerDay: StateFlow<Double?> = today.flatMapLatest { day ->
+        combine(
             dao.observeEarnedByDay(day.minusDays(Usual.WINDOW_DAYS).toEpochDay()),
             dao.observeFirstEarningDay(),
         ) { earned, first ->
@@ -1544,6 +1551,10 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
                 today = day,
             )
         }
+    }.state(null)
+
+    val shopView: StateFlow<ShopView?> = today.flatMapLatest { day ->
+        val pointsPerDay = usualPerDay
         // Rewards bought this week cost more each time (see RepeatPrice): from Monday, when the day ends.
         val weekStart = LocalDateTime(Boost.weekOf(day), LocalTime(settings.value.dayEndHour, 0)).toInstant(TimeZone.currentSystemDefault()).toEpochMilliseconds()
         val thisWeek = combine(dao.observePurchasesSince(weekStart), dao.observeSetting(RepeatPrice.SETTING)) { list, on ->
@@ -1559,9 +1570,30 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
                     RewardRow(reward.copy(price = now), Usual.describe(now, perDay), usualPrice = reward.price, boughtThisWeek = times)
                 },
                 bought = bought.map { it.toCore() },
+                perDay = perDay,
             )
         }
     }.state(null)
+
+    /** The id of the reward starred as the one being saved for, or null. */
+    val starredReward: StateFlow<Long?> = dao.observeSetting(SavingFor.SETTING).map { SavingFor.starred(it) }.state(null)
+
+    /**
+     * The starred reward for Today's balance card: at what it costs now, against the balance and
+     * the usual earnings. Null with no star, and while the shop is behind the privacy lock.
+     */
+    val savingFor: StateFlow<SavingFor?> =
+        combine(shopView, dao.observeSetting(SavingFor.SETTING), combine(settings, unlocked) { s, open -> s.locks.shop && !open }) { shop, setting, locked ->
+            if (shop == null || locked) null else SavingFor.of(setting, shop.rewards.map { it.reward }, shop.balance, shop.perDay)
+        }.state(null)
+
+    /** Stars [rewardId] as the reward being saved for, or takes its star off. */
+    fun setSavingFor(rewardId: Long, on: Boolean) {
+        viewModelScope.launch { repository.setSavingFor(rewardId, on) }
+    }
+
+    /** Whether [rewardId] is the starred reward, for its editor. */
+    suspend fun isSavingFor(rewardId: Long): Boolean = rewardId != 0L && SavingFor.starred(dao.setting(SavingFor.SETTING)) == rewardId
 
     /** Every change to the balance, newest first. Private goals' entries aren't named while they are locked. */
     val history: StateFlow<List<Entry>?> = combine(dao.observeEntries(), privateIds, hidingPrivate) { rows, ids, hide ->
@@ -1945,10 +1977,7 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
 
     /** The balance check in the shop: prices against earnings, and goals against how often they get done. */
     val balanceCheck: StateFlow<BalanceCheckView?> = today.flatMapLatest { day ->
-        val perDay = combine(
-            dao.observeEarnedByDay(day.minusDays(Usual.WINDOW_DAYS).toEpochDay()),
-            dao.observeFirstEarningDay(),
-        ) { earned, first -> Usual.pointsPerDay(earned.associate { it.day.toDay() to it.amount }, first?.toDay(), day) }
+        val perDay = usualPerDay
         val shown = combine(dao.observeGoals(), settings, unlocked) { goals, s, isUnlocked ->
             val all = goals.map { it.toCore() }
             if (s.locks.privateGoals && !isUnlocked) all.filter { !it.private } else all

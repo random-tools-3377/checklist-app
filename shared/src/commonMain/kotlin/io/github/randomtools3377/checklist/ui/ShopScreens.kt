@@ -59,6 +59,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -92,6 +94,7 @@ fun ShopScreen(
     val limitLeft by vm.rewardsLimitLeft.collectAsStateWithLifecycle()
     val shopFeatures by vm.features.collectAsStateWithLifecycle()
     val savingGoals by vm.savings.collectAsStateWithLifecycle()
+    val starred by vm.starredReward.collectAsStateWithLifecycle()
     // The saving goal a reward is paid from, picked in the Buy box; null for this month's budget.
     var payFrom by remember { mutableStateOf<Long?>(null) }
 
@@ -146,6 +149,9 @@ fun ShopScreen(
                         onBuy = { buying = row.reward },
                         onEdit = { onEdit(row.reward) },
                         work = if (budgetShown) rewardWorkText(row.reward.value, payPlan) else null,
+                        starred = starred == row.reward.id,
+                        onStar = { vm.setSavingFor(row.reward.id, starred != row.reward.id) },
+                        perDay = view.perDay,
                     )
                     Spacer(Modifier.height(10.dp))
                 }
@@ -293,6 +299,11 @@ private fun RewardCard(
     onBuy: () -> Unit,
     onEdit: () -> Unit,
     work: String? = null,
+    /** Whether this is the one reward being saved for, shown on Today. */
+    starred: Boolean = false,
+    onStar: () -> Unit = {},
+    /** What the user usually earns a day, for how long what is still missing takes. */
+    perDay: Double? = null,
 ) {
     val reward = row.reward
     val affordable = reward.price <= balance
@@ -310,7 +321,7 @@ private fun RewardCard(
                     )
                     if (reward.price != row.usualPrice) {
                         Text(
-                            "Usually ${row.usualPrice}: bought ${if (row.boughtThisWeek == 1) "once" else "${row.boughtThisWeek} times"} this week. Back to normal on Monday.",
+                            "Usually ${pointsText(row.usualPrice)}: bought ${if (row.boughtThisWeek == 1) "once" else "${row.boughtThisWeek} times"} this week. Back to normal on Monday.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.testTag("repeat-price:${reward.name}"),
@@ -340,6 +351,17 @@ private fun RewardCard(
                         Icon(Icons.Filled.KeyboardArrowDown, contentDescription = "Move ${reward.name} down")
                     }
                 } else {
+                    // The one reward being saved for: Today's balance card shows it. A filled star and an empty one, not colour alone.
+                    IconButton(onClick = onStar, modifier = Modifier.testTag("star:${reward.name}")) {
+                        Text(
+                            if (starred) "★" else "☆",
+                            fontSize = 24.sp,
+                            color = if (starred) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.clearAndSetSemantics {
+                                contentDescription = if (starred) "Saving for ${reward.name}. Tap to take the star off." else "Save for ${reward.name}: show it on Today"
+                            },
+                        )
+                    }
                     Button(onClick = onBuy, enabled = affordable, modifier = Modifier.testTag("buy:${reward.name}")) { Text("Buy") }
                 }
             }
@@ -352,11 +374,20 @@ private fun RewardCard(
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Text(
-                    "Saving for it: $have of ${reward.price} · ${pointsText(reward.price - balance)} to go",
+                    "Saving for it: $have of ${pointsText(reward.price)} · ${pointsText(reward.price - balance)} to go",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 4.dp),
+                    modifier = Modifier.padding(top = 4.dp).testTag("saving:${reward.name}"),
                 )
+                // What is still missing, from the same figure as "≈ N days of your usual" above.
+                io.github.randomtools3377.checklist.core.Usual.more(reward.price - balance, perDay)?.let {
+                    Text(
+                        "$it at your usual pace",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.testTag("saving-days:${reward.name}"),
+                    )
+                }
             }
         }
     }
@@ -540,7 +571,8 @@ fun BalanceCheckScreen(view: BalanceCheckView?, vm: MainViewModel, onBack: () ->
                         name = check.reward.name,
                         line = buildList {
                             add("${check.reward.price} ${pointsWord(check.reward.price)}")
-                            check.days?.let { add(if (it < 1) "less than a day" else "≈ ${it.toInt()} day" + if (it.toInt() == 1) "" else "s") }
+                            // The same figure as on the shop's cards (see Usual.days).
+                            io.github.randomtools3377.checklist.core.Usual.short(check.reward.price, view.perDay)?.let { add(it) }
                             when (check.verdict) {
                                 io.github.randomtools3377.checklist.core.PriceVerdict.TOO_CHEAP -> add("maybe too cheap")
                                 io.github.randomtools3377.checklist.core.PriceVerdict.OUT_OF_REACH -> add("maybe out of reach")
@@ -617,12 +649,15 @@ fun RewardEditor(id: Long, vm: MainViewModel, onClose: () -> Unit) {
     var follows by rememberSaveable { mutableStateOf(false) }
     var showErrors by rememberSaveable { mutableStateOf(false) }
     val rate by vm.moneyRate.collectAsStateWithLifecycle()
-    val perDay by vm.usualAtNormal.collectAsStateWithLifecycle()
+    // What the user actually earns a day: the shop's cards show the same days for the same price.
+    val perDay by vm.usualPerDay.collectAsStateWithLifecycle()
     val budget by vm.treatBudget.collectAsStateWithLifecycle()
     val features by vm.features.collectAsStateWithLifecycle()
+    // The one reward being saved for, shown on Today.
+    var saving by rememberSaveable { mutableStateOf(false) }
     // What the editor held when it opened, to ask before throwing changes away.
     var baseline by rememberSaveable { mutableStateOf<String?>(null) }
-    fun snapshot(): String = editorSnapshot(name, icon, price, mystery, if (mystery) prizes.filter { it.isNotBlank() } else null, size, money, follows)
+    fun snapshot(): String = editorSnapshot(name, icon, price, mystery, if (mystery) prizes.filter { it.isNotBlank() } else null, size, money, follows, saving)
 
     LaunchedEffect(id) {
         if (!loaded) {
@@ -637,6 +672,7 @@ fun RewardEditor(id: Long, vm: MainViewModel, onClose: () -> Unit) {
                     mystery = true
                     prizes = it.prizes
                 }
+                saving = vm.isSavingFor(id)
             }
             loaded = true
         }
@@ -649,7 +685,7 @@ fun RewardEditor(id: Long, vm: MainViewModel, onClose: () -> Unit) {
     // Following money, the price works itself out; until it can, it is typed in as usual.
     val autoPrice = if (follows && moneyValue != null) rate?.let { MoneyPrices.price(moneyValue, it) } else null
     val priceValue = autoPrice ?: price.toIntOrNull()
-    val priceError = if (priceValue == null || priceValue < 1) "A price of at least 1 point" else null
+    val priceError = if (priceValue == null || priceValue < 1) "A price of at least ${pointsText(1)}" else null
     val prizesError = if (mystery && Mystery.tidy(prizes).size < 2) "Write at least two things it could be" else null
 
     EditorScaffold(
@@ -664,6 +700,7 @@ fun RewardEditor(id: Long, vm: MainViewModel, onClose: () -> Unit) {
                         id = id, name = name.trim(), icon = icon, price = priceValue!!, prizes = if (mystery) Mystery.tidy(prizes) else emptyList(),
                         size = size?.let { RewardSize.valueOf(it) }, value = moneyValue,
                         followsMoney = follows && moneyValue != null,
+                        savingFor = saving,
                     ),
                     onDone = onClose,
                 )
@@ -706,12 +743,10 @@ fun RewardEditor(id: Long, vm: MainViewModel, onClose: () -> Unit) {
                 Text("Price: ${pointsText(autoPrice)}", style = MaterialTheme.typography.titleMedium, modifier = Modifier.testTag("auto-price"))
                 Text(
                     buildList {
-                        perDay?.takeIf { it > 0 }?.let { usual ->
-                            val days = autoPrice / usual
-                            add(if (days < 1) "Less than a day of your usual" else "≈ ${days.toInt()} day${if (days.toInt() == 1) "" else "s"} of your usual")
-                        }
-                        add("worked out from ${moneyText(moneyValue!!)}")
+                        io.github.randomtools3377.checklist.core.Usual.describe(autoPrice, perDay)?.let { add(it.replaceFirstChar { c -> c.uppercase() }) }
+                        add((if (isEmpty()) "Worked" else "worked") + " out from ${moneyText(moneyValue!!)}")
                     }.joinToString(", ") + ".",
+                    modifier = Modifier.testTag("price-days"),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -723,6 +758,8 @@ fun RewardEditor(id: Long, vm: MainViewModel, onClose: () -> Unit) {
                 onValueChange = { price = it },
                 tag = "field:price",
                 error = if (showErrors) priceError else null,
+                // How long the typed price takes, as the shop will show it.
+                hint = price.toIntOrNull()?.let { io.github.randomtools3377.checklist.core.Usual.describe(it, perDay) }?.replaceFirstChar { c -> c.uppercase() },
             )
             if (follows && moneyValue != null && budget != null) {
                 Text(
@@ -748,6 +785,12 @@ fun RewardEditor(id: Long, vm: MainViewModel, onClose: () -> Unit) {
                 vm = vm,
             )
         }
+        SwitchRow(
+            "Saving for this",
+            saving,
+            "field:saving-for",
+            hint = "Puts a star on it and shows it on Today, with how far along you are. One reward at a time: starring another moves the star.",
+        ) { saving = it }
         SwitchRow(
             "Mystery reward",
             mystery,

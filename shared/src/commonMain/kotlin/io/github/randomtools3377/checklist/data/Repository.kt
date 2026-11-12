@@ -31,6 +31,7 @@ import io.github.randomtools3377.checklist.core.GoalKind
 import io.github.randomtools3377.checklist.core.Period
 import io.github.randomtools3377.checklist.core.Reminder
 import io.github.randomtools3377.checklist.core.Repeat
+import io.github.randomtools3377.checklist.core.SavingFor
 import io.github.randomtools3377.checklist.core.RewardSize
 import io.github.randomtools3377.checklist.core.Effort
 import io.github.randomtools3377.checklist.core.FocusSession
@@ -257,6 +258,8 @@ data class RewardDraft(
     val value: Double? = null,
     /** Whether its price follows [value] (see MoneyPrices). */
     val followsMoney: Boolean = false,
+    /** Whether it is the reward being saved for (see SavingFor); null leaves the star where it is. */
+    val savingFor: Boolean? = null,
 )
 
 /** Today in the budget game: today's share (null with nothing to share), spent today in cents, and good days in a row before today. */
@@ -827,7 +830,7 @@ class Repository(private val db: AppDatabase, private val celebrations: GifStore
 
     suspend fun saveReward(draft: RewardDraft): Unit = db.withTransaction {
         val existing = if (draft.id != 0L) dao.reward(draft.id) else null
-        if (existing == null) {
+        val id = if (existing == null) {
             dao.insertReward(
                 RewardEntity(
                     name = draft.name,
@@ -850,8 +853,22 @@ class Repository(private val db: AppDatabase, private val celebrations: GifStore
                     followsMoney = draft.followsMoney && (draft.value ?: 0.0) > 0,
                 ),
             )
+            existing.id
         }
+        draft.savingFor?.let { star(id, it) }
         Unit
+    }
+
+    /**
+     * Stars a reward as the one being saved for, or with [on] false takes its star off. There is
+     * one star: starring another reward moves it.
+     */
+    suspend fun setSavingFor(rewardId: Long, on: Boolean): Unit = db.withTransaction { star(rewardId, on) }
+
+    private suspend fun star(rewardId: Long, on: Boolean) {
+        val starred = SavingFor.starred(dao.setting(SavingFor.SETTING))
+        if (on && starred != rewardId) dao.putSetting(SettingEntity(SavingFor.SETTING, rewardId.toString()))
+        if (!on && starred == rewardId) dao.putSetting(SettingEntity(SavingFor.SETTING, ""))
     }
 
     /**

@@ -299,6 +299,13 @@ object Reminders {
             plan.goals == 1 -> "Today: 1 goal"
             else -> "Today: ${plan.goals} goals"
         }
+        // The reward being saved for, in one short line; left out while the shop is behind the lock.
+        val dao = (context.applicationContext as ChecklistApplication).container.db.dao()
+        val saving: String? = try {
+            io.github.randomtools3377.checklist.data.SavingFors.morningLine(dao, today.day, dayEnd)
+        } catch (e: Exception) {
+            null
+        }
         val text = buildList {
             plan.first?.let { first ->
                 val goal = first.row.goal
@@ -311,6 +318,7 @@ object Reminders {
             }
             if (plan.goals > 0 && plan.alsoOpen > 0) add("${plan.alsoOpen} more open this week or month")
             if (plan.todos > 0) add(if (plan.todos == 1) "1 to-do waiting" else "${plan.todos} to-dos waiting")
+            saving?.let { add(it) }
         }.joinToString(" · ")
         val open = PendingIntent.getActivity(
             context,

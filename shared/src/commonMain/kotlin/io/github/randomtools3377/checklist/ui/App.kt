@@ -550,6 +550,7 @@ fun ChecklistApp(vm: MainViewModel) {
                                 onIdeas = { area -> push("ideas/${area.name}") },
                                 onBudget = { goTo(AppTab.BUDGET) },
                                 onSpent = { push("money/0") },
+                                onShop = { goTo(AppTab.SHOP) },
                                 onMoodGoals = { push("mood-goals") },
                                 onMoodJournal = { push("mood-journal") },
                                 skipRequest = skipRequest,
