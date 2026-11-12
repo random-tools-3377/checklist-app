@@ -595,6 +595,9 @@ interface ChecklistDao {
     @Update
     suspend fun updateGap(gap: GapEntity)
 
+    @Query("DELETE FROM gaps WHERE id = :id")
+    suspend fun deleteGap(id: Long)
+
     // Routines
 
     @Query("SELECT * FROM checks WHERE goalId = :goalId AND periodStart = :periodStart ORDER BY id")

@@ -124,10 +124,13 @@ fun HistoryScreen(
                 items(onDay, key = { "entry-${it.id}" }) { entry ->
                     // A tick can be fixed: when it was done, and a note about it.
                     val tickId = entry.tickId?.takeIf { entry.kind == EntryKind.TICK }
+                    // A penalty's skip or miss can be opened: to change its reason or note, or to say it was a forgotten tick.
+                    val lapseId = entry.lapseId?.takeIf { entry.kind == EntryKind.PENALTY && vm != null }
                     Row(
                         Modifier
                             .fillMaxWidth()
                             .then(if (tickId != null && vm != null) Modifier.clickable { editing = tickId } else Modifier)
+                            .then(if (lapseId != null) Modifier.clickable { vm?.openMiss?.value = lapseId } else Modifier)
                             .padding(vertical = 8.dp)
                             .testTag("entry:${entry.label}"),
                         verticalAlignment = Alignment.CenterVertically,
@@ -138,7 +141,7 @@ fun HistoryScreen(
                                 Text("“$note”", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
                             }
                             Text(
-                                "${kindText(entry)} · ${timeText(entry.at.toLocalDateTime().time)}",
+                                "${kindText(entry)} · ${timeText(entry.at.toLocalDateTime().time)}" + if (lapseId != null) " · tap to open" else "",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )

@@ -88,7 +88,21 @@ fun ReviewScreen(
     onMoodJournal: () -> Unit = {},
     /** With no goals yet: adds a first one, for the hint at the top. */
     onAddGoal: (() -> Unit)? = null,
+    /** The misses in the stretch that still stand, and what opens one to put it right (see [PastMissDialog]). */
+    misses: List<io.github.randomtools3377.checklist.core.Lapse> = emptyList(),
+    onMiss: (Long) -> Unit = {},
 ) {
+    // A goal with several misses in the stretch: the box that asks which one to open.
+    val choosing = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<Long?>(null) }
+    choosing.value?.let { goalId ->
+        val mine = misses.filter { it.goalId == goalId }
+        val name = summary?.goals?.firstOrNull { it.goal.id == goalId }?.goal?.let { "${it.icon} ${it.name}" }
+        if (mine.isEmpty() || name == null) {
+            androidx.compose.runtime.LaunchedEffect(goalId) { choosing.value = null }
+        } else {
+            GoalMissesDialog(name, mine, hideReasons, onMiss = { choosing.value = null; onMiss(it) }, onDone = { choosing.value = null })
+        }
+    }
     LazyColumn(
         modifier = Modifier.fillMaxSize().testTag("review"),
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = padding.calculateTopPadding() + 8.dp, bottom = padding.calculateBottomPadding() + 24.dp),
@@ -145,7 +159,15 @@ fun ReviewScreen(
         if (period == Period.WEEKLY || period == Period.MONTHLY) item { DayCharts(summary, period) }
         if (period == Period.YEARLY) item { YearCard(summary, moods, hideMoods = hideReasons) }
         if (period == Period.MONTHLY) item { MonthCalendar(summary) }
-        item { GoalsCard(summary) }
+        val shownMisses = misses.filter { it.day >= summary.from && it.day <= summary.to }
+        item {
+            GoalsCard(summary, shownMisses) { goal ->
+                val mine = shownMisses.filter { it.goalId == goal.goal.id }
+                if (mine.size == 1) onMiss(mine.single().id) else choosing.value = goal.goal.id
+            }
+        }
+        // The day view lists what was missed; each opens to change its reason or say it was a forgotten tick.
+        if (period == Period.DAILY && shownMisses.isNotEmpty()) item { MissedCard(shownMisses, hideReasons, onMiss) }
         if (summary.categories.isNotEmpty()) item { CategoriesCard(summary) }
         item { ReasonsCard(summary, hideReasons) }
         val shownMoods = moods.filter { it.day >= summary.from && it.day <= summary.to }
@@ -194,7 +216,12 @@ private fun PointsFigure(label: String, value: String, color: androidx.compose.u
 }
 
 @Composable
-private fun GoalsCard(summary: ReviewSummary) {
+private fun GoalsCard(
+    summary: ReviewSummary,
+    /** The misses in the stretch that still stand: a goal's row with any opens them. */
+    misses: List<io.github.randomtools3377.checklist.core.Lapse> = emptyList(),
+    onMisses: (io.github.randomtools3377.checklist.core.GoalSummary) -> Unit = {},
+) {
     ReviewCard("Each goal") {
         val shown = summary.goals.filter { it.due > 0 || it.ticks > 0 }
         if (shown.isEmpty()) {
@@ -207,7 +234,11 @@ private fun GoalsCard(summary: ReviewSummary) {
                 }
             }
             shown.forEach { goal ->
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                val opens = misses.any { it.goalId == goal.goal.id }
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = (if (opens) Modifier.clickable { onMisses(goal) } else Modifier).testTag("review-goal:${goal.goal.name}"),
+                ) {
                     Text("${goal.goal.icon} ${goal.goal.name}", maxLines = 1, modifier = Modifier.weight(1f))
                     Cell("${goal.done}/${goal.due}")
                     Cell("${goal.skipped}")
@@ -216,6 +247,13 @@ private fun GoalsCard(summary: ReviewSummary) {
                 }
             }
             Text("Run: the most times in a row it was done in this stretch.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (shown.any { goal -> misses.any { it.goalId == goal.goal.id } }) {
+                Text(
+                    "Tap a goal with a miss to change its reason, or to say you forgot to tick it.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
     }
 }

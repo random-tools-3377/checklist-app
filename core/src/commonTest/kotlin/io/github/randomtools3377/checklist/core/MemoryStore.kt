@@ -105,6 +105,9 @@ class MemoryStore : Store {
     override suspend fun updateGap(gap: Gap) {
         gapList[gapList.indexOfFirst { it.id == gap.id }] = gap
     }
+    override suspend fun removeGap(id: Long) {
+        gapList.removeAll { it.id == id }
+    }
 }
 
 /** A clock the test can move. It runs in UTC. */

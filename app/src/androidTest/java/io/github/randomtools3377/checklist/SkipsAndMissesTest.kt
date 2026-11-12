@@ -1,5 +1,7 @@
 package io.github.randomtools3377.checklist
 
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
@@ -123,5 +125,24 @@ class MissesOnOpeningTest {
         app.waitFor { !gone("today-list") }
         app.toTopOfToday()
         app.onNodeWithTag("balance", useUnmergedTree = true).assertTextEquals("-4 points")
+    }
+
+    @Test
+    fun sameReasonForAllFillsEveryCardAndEachCanStillBeChanged() {
+        val today = nowLocal().date
+        val container = (InstrumentationRegistry.getInstrumentation().targetContext.applicationContext as ChecklistApplication).container
+        app.waitFor { !gone("misses-list") }
+        // Two are waiting, so the row is there; nothing is picked yet.
+        app.waitFor { app.shownIn("misses-list", "same-reason") }
+        app.onNodeWithTag("misses-done").assertIsNotEnabled()
+
+        // One tap gives both the same reason.
+        app.tapIn("misses-list", "reason-all:ILL")
+        app.onNodeWithTag("misses-done").assertIsEnabled()
+        // One card is then changed on its own.
+        app.tapIn("misses-list", "reason:Read:${today.minusDays(1)}:NO_TIME")
+        app.tap("misses-done")
+
+        app.waitFor { runBlocking { container.db.dao().allLapses() }.map { it.reason } == listOf("ILL", "NO_TIME") }
     }
 }

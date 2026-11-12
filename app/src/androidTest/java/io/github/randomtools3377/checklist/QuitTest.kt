@@ -1,6 +1,10 @@
 package io.github.randomtools3377.checklist
 
+import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import io.github.randomtools3377.checklist.core.Challenge
@@ -49,5 +53,18 @@ class QuitTest {
         // The tick is taken back and the miss is there, waiting for its reason.
         app.waitFor { balance() <= 0 }
         app.waitFor { runBlocking { container.db.dao().allLapses() }.size == 1 }
+
+        // It is asked about as a slip, with its own way back.
+        val undo = "forgot:No sugar:${nowLocal().date}"
+        app.waitFor { app.onAllNodesWithTag("misses-list").fetchSemanticsNodes().isNotEmpty() }
+        app.waitFor { app.onAllNodesWithText("You slipped on", substring = true).fetchSemanticsNodes().isNotEmpty() }
+        app.onNodeWithTag(undo).assertTextEquals("Undo, I didn't slip")
+
+        // Not a slip after all: today is ticked as avoided again, and nothing waits for a reason.
+        app.tap(undo)
+        app.waitFor { balance() == 4 }
+        app.waitFor { runBlocking { container.db.dao().allLapses() }.single().forgotten }
+        app.waitFor { app.onAllNodesWithTag("misses-list").fetchSemanticsNodes().isEmpty() }
+        app.waitFor { app.shownIn("today-list", "slip:No sugar") }
     }
 }

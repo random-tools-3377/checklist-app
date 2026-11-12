@@ -102,4 +102,7 @@ interface Store {
     suspend fun gap(id: Long): Gap?
     suspend fun addGap(gap: Gap): Long
     suspend fun updateGap(gap: Gap)
+
+    /** Takes a gap away: every miss in it turned out to be a forgotten tick (see [Gaps.clearIfForgotten]). */
+    suspend fun removeGap(id: Long)
 }

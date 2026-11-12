@@ -221,6 +221,9 @@ fun ChecklistApp(vm: MainViewModel) {
     val review by vm.review.collectAsStateWithLifecycle()
     val reviewPeriod by vm.reviewPeriod.collectAsStateWithLifecycle()
     val allGaps by vm.gaps.collectAsStateWithLifecycle()
+    // Misses that still stand in the review's stretch, and the one opened to be put right.
+    val reviewMisses by vm.reviewMisses.collectAsStateWithLifecycle()
+    val openMiss by vm.openMiss.collectAsStateWithLifecycle()
 
     // Opening the app: the gap check-in or misses waiting for a reason first, then the penalty task, then the rest.
     val misses = unexplained
@@ -228,7 +231,7 @@ fun ChecklistApp(vm: MainViewModel) {
     val checkIn = gap
     if (checkIn != null) {
         Page {
-            GapCheckInScreen(checkIn, vm)
+            GapCheckInScreen(checkIn, vm, hiddenGoals = hiddenGoals, onUnlock = unlock)
         }
         return
     }
@@ -514,6 +517,8 @@ fun ChecklistApp(vm: MainViewModel) {
                                 onMoodJournal = { push("mood-journal") },
                                 // Nothing to look back on yet: a way to add a first goal.
                                 onAddGoal = if (goals?.goals?.isEmpty() == true && removedGoals.isEmpty()) ({ goTo(AppTab.GOALS); newGoal = true }) else null,
+                                misses = reviewMisses,
+                                onMiss = { vm.openMiss.value = it },
                             )
                         }
                         AppTab.BUDGET -> if (settings.locks.budget && !unlocked) {
@@ -549,6 +554,8 @@ fun ChecklistApp(vm: MainViewModel) {
         }
         }
 
+        // A past miss opened from the review or the points history, to be put right.
+        openMiss?.let { lapseId -> PastMissDialog(lapseId, vm, onUnlock = unlock) { vm.openMiss.value = null } }
         voiceCommand?.let { command ->
             VoiceDialog(
                 command,

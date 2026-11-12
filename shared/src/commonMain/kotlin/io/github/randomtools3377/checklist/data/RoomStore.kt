@@ -113,6 +113,7 @@ class RoomStore(private val db: AppDatabase) : Store {
     override suspend fun gap(id: Long): Gap? = dao.gap(id)?.toCore()
     override suspend fun addGap(gap: Gap): Long = dao.insertGap(gap.toEntity())
     override suspend fun updateGap(gap: Gap) = dao.updateGap(gap.toEntity())
+    override suspend fun removeGap(id: Long) = dao.deleteGap(id)
 }
 
 fun GoalEntity.toCore() = Goal(

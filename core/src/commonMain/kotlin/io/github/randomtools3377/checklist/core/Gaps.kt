@@ -25,6 +25,18 @@ class Gaps(private val store: Store, private val book: Book) {
 
         /** How far back gaps are looked for. */
         const val LOOK_BACK_DAYS = 60
+
+        /**
+         * Stretches that were flagged as a gap and turned out not to be one (see
+         * [clearIfForgotten]), as "from..to" ISO dates separated by ";". Their days aren't flagged again.
+         */
+        const val CLEARED = "gaps_cleared"
+
+        /** The stretches kept in [CLEARED], as first and last day. */
+        fun cleared(text: String?): List<Pair<LocalDate, LocalDate>> = text.orEmpty().split(';').mapNotNull { part ->
+            val days = part.split("..").mapNotNull { runCatching { LocalDate.parse(it) }.getOrNull() }
+            if (days.size == 2 && days[0] <= days[1]) days[0] to days[1] else null
+        }
     }
 
     suspend fun settings(): GapSettings {
@@ -83,7 +95,9 @@ class Gaps(private val store: Store, private val book: Book) {
         val due = dueDays(from, yesterday, goals, store.habitTicksSince(Days.earliestOpenDay(from)))
         val ticked = store.tickedDays(from, yesterday)
         val existing = store.gaps().toMutableList()
-        fun covered(day: LocalDate) = existing.any { day >= it.from && day <= it.to }
+        // A stretch that was a gap until every miss in it turned out to be a forgotten tick isn't flagged again.
+        val cleared = cleared(store.setting(CLEARED))
+        fun covered(day: LocalDate) = existing.any { day >= it.from && day <= it.to } || cleared.any { day >= it.first && day <= it.second }
         val changed = mutableListOf<Gap>()
 
         // Stretches of days with something due and nothing ticked. Days with nothing due don't break them.
@@ -113,7 +127,8 @@ class Gaps(private val store: Store, private val book: Book) {
         val undone = store.allLapses(from, yesterday).filter { it.forgotten }.map { it.id }.toSet()
         val answered = existing.filter { it.reason != null }
         val losses = store.entries(from, yesterday).filter { entry ->
-            entry.kind == EntryKind.PENALTY && entry.lapseId !in undone && answered.none { entry.day >= it.from && entry.day <= it.to }
+            entry.kind == EntryKind.PENALTY && entry.lapseId !in undone && answered.none { entry.day >= it.from && entry.day <= it.to } &&
+                cleared.none { entry.day >= it.first && entry.day <= it.second }
         }
         var lossDay = from
         while (lossDay <= yesterday) {
@@ -174,6 +189,35 @@ class Gaps(private val store: Store, private val book: Book) {
                 }
             }
         }
+    }
+
+    /**
+     * The misses inside [gap] that still stand, oldest first: the check-in lists them, each with
+     * its own "I forgot to tick it". One turned into a forgotten tick drops out.
+     */
+    suspend fun misses(gap: Gap): List<Lapse> =
+        store.allLapses(gap.from, gap.to).filter { it.gapId == gap.id && it.kind == LapseKind.MISS && !it.forgotten }
+
+    /**
+     * After "I forgot to tick it" on a miss inside the gap [gapId] (see [Lapses.forgotToTick]):
+     * when every miss in it has turned out to be a forgotten tick, it was no gap. It goes away,
+     * with its penalty task if that wasn't done yet, and its days are remembered so what is left
+     * of them, like a skipped day, isn't flagged again. While a miss still stands, the gap stays
+     * as it is: its one reason and one penalty task cover the rest. Returns true when it went away.
+     */
+    suspend fun clearIfForgotten(gapId: Long): Boolean = store.transaction {
+        val gap = store.gap(gapId) ?: return@transaction false
+        val inGap = store.allLapses(gap.from, gap.to).filter { it.gapId == gap.id && it.kind == LapseKind.MISS }
+        if (inGap.isEmpty() || inGap.any { !it.forgotten }) return@transaction false
+        val now = book.millis()
+        store.openPenalties().filter { it.gapId == gap.id }.forEach { store.updatePenalty(it.copy(cancelledAt = now)) }
+        inGap.forEach { store.updateLapse(it.copy(gapId = null)) }
+        store.removeGap(gap.id)
+        // Kept only as far back as gaps are looked for.
+        val oldest = book.today().minusDays(LOOK_BACK_DAYS + 1)
+        val kept = (cleared(store.setting(CLEARED)) + (gap.from to gap.to)).filter { it.second >= oldest }
+        store.putSetting(CLEARED, kept.joinToString(";") { "${it.first}..${it.second}" })
+        true
     }
 
     /** Answers the gap check-in: one reason and an optional note for the whole stretch. */

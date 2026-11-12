@@ -1012,11 +1012,17 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
     /** Every gap, to mark in the history and the review. */
     val gaps: StateFlow<List<Gap>> = dao.observeGaps().map { rows -> rows.map { it.toCore() } }.state(emptyList())
 
-    /** How many misses fall inside a gap, and the points they cost, for the check-in. */
-    suspend fun gapCost(gap: Gap): Pair<Int, Int> {
-        val inGap = dao.allLapses(gap.from.toEpochDay(), gap.to.toEpochDay()).filter { it.gapId == gap.id }
-        return inGap.size to inGap.sumOf { it.cost }
-    }
+    /**
+     * The misses inside the gap waiting for its check-in that still stand, oldest first. The
+     * check-in lists them, each with its own "I forgot to tick it"; one said to be a forgotten
+     * tick drops out, and when none is left the gap goes away.
+     */
+    val gapMisses: StateFlow<List<Lapse>> = dao.observeUnansweredGaps().flatMapLatest { rows ->
+        val gap = rows.firstOrNull() ?: return@flatMapLatest kotlinx.coroutines.flow.flowOf(emptyList())
+        dao.observeLapsesSince(gap.fromDay).map { lapses ->
+            lapses.map { it.toCore() }.filter { it.gapId == gap.id && it.kind == io.github.randomtools3377.checklist.core.LapseKind.MISS && !it.forgotten }
+        }
+    }.state(emptyList())
 
     fun explainGap(gapId: Long, reason: Reason, note: String?, reasonText: String? = null) {
         viewModelScope.launch { parts.gaps.explain(gapId, reason, note, reasonText) }
@@ -1154,6 +1160,42 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
 
     fun forgotToTick(lapseId: Long) {
         viewModelScope.launch { lapses.forgotToTick(lapseId) }
+    }
+
+    // Misses put right later, from the review and the points history
+
+    /** The goals to quit, removed ones too: a miss made by "I slipped" on one is worded as a slip. */
+    val quitGoals: StateFlow<Set<Long>> = combine(dao.observeGoals(), dao.observeRemovedGoals()) { shown, removed ->
+        (shown + removed).filter { it.quit }.map { it.id }.toSet()
+    }.state(emptySet())
+
+    /**
+     * The misses that still stand in the stretch being reviewed, oldest first, to open and put
+     * right. Those of private goals are left out while they are locked, as in the rest of the review.
+     */
+    val reviewMisses: StateFlow<List<Lapse>> = combine(reviewPeriod, reviewDay, today) { period, day, todayDay ->
+        Review.range(day ?: todayDay, period)
+    }.distinctUntilChanged().flatMapLatest { (from, to) ->
+        combine(dao.observeLapsesSince(from.toEpochDay()), privateIds, hidingPrivate) { rows, private, hide ->
+            rows.map { it.toCore() }.filter {
+                it.kind == io.github.randomtools3377.checklist.core.LapseKind.MISS && !it.forgotten && it.day <= to && !(hide && it.goalId in private)
+            }
+        }
+    }.state(emptyList())
+
+    /** The skip or miss opened to be put right, by its id: from the review or a penalty's line in the points history. */
+    val openMiss = MutableStateFlow<Long?>(null)
+
+    /** What the box for a past skip or miss shows (see [PastMissDialog]); null when it is gone. */
+    suspend fun loadMiss(lapseId: Long): PastMiss? {
+        val lapse = dao.lapse(lapseId)?.toCore() ?: return null
+        val goal = repository.goal(lapse.goalId)
+        return PastMiss(
+            lapse = lapse,
+            private = goal?.private == true,
+            slip = io.github.randomtools3377.checklist.core.Lapses.isSlip(lapse, goal?.quit == true, settings.value.dayEndHour),
+            canForget = io.github.randomtools3377.checklist.core.Lapses.canForgetLater(lapse, currentDay()),
+        )
     }
 
     fun makeUp(penaltyId: Long, goalId: Long) {

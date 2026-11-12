@@ -86,6 +86,16 @@ class PerfectDays(private val store: Store, private val book: Book) {
         /** The last day looked at. */
         const val THROUGH = "perfect_through"
 
+        /**
+         * The first day the bonus counts from: the day after the last one that ended while it
+         * was off, so a day put right later (see [DayBack]) isn't paid for a time it was off.
+         * Not set for someone who has had it on since before this was kept.
+         */
+        const val SINCE = "perfect_since"
+
+        /** What the bonus's line in the points history says. */
+        const val LABEL = "Perfect day"
+
         /** The bonus while the feature is on; off (0) until the user turns it on. */
         suspend fun bonus(store: Store): Int = store.setting(BONUS)?.toIntOrNull()?.coerceIn(0, 10_000) ?: 0
 
@@ -102,11 +112,14 @@ class PerfectDays(private val store: Store, private val book: Book) {
         val through = store.setting(THROUGH)?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
         if (through == null) {
             store.putSetting(THROUGH, yesterday.toString())
+            store.putSetting(SINCE, yesterday.plusDays(1).toString())
             return@transaction emptyList()
         }
         val bonus = bonus(store)
         val paid = mutableListOf<Entry>()
         var day = through.plusDays(1)
+        // A day that ended while it was off isn't paid: it counts from today.
+        if (bonus <= 0 && day <= yesterday) store.putSetting(SINCE, yesterday.plusDays(1).toString())
         if (day <= yesterday && bonus > 0) {
             val goals = store.activeGoals()
             val ticks = store.habitTicksSince(Days.earliestOpenDay(day))

@@ -169,6 +169,16 @@ class Combos(private val store: Store, private val book: Book) {
         const val COUNT = "combo_count"
         const val THROUGH = "combo_through"
 
+        /**
+         * The first day combos count from: the day after the last one that ended while they were
+         * off, so a day put right later (see [DayBack]) doesn't join a combo from a time they
+         * were off. Not set for someone who has had them on since before this was kept.
+         */
+        const val SINCE = "combo_since"
+
+        /** What a combo's line in the points history starts with, before its number of days. */
+        const val LABEL = "Combo ×"
+
         /** What a combo of [combo] days pays. */
         fun pay(combo: Int): Int = combo.coerceAtMost(MOST) * PER_STEP
     }
@@ -181,12 +191,16 @@ class Combos(private val store: Store, private val book: Book) {
         if (!Feature.isOn(store, Feature.COMBOS)) {
             // A day that ended while combos were off was never looked at, so it ends the combo:
             // turned on again, it starts from 1.
-            if (through == null || through < yesterday) store.putSetting(COUNT, "0")
+            if (through == null || through < yesterday) {
+                store.putSetting(COUNT, "0")
+                store.putSetting(SINCE, yesterday.plusDays(1).toString())
+            }
             store.putSetting(THROUGH, yesterday.toString())
             return@transaction emptyList()
         }
         if (through == null) {
             store.putSetting(THROUGH, yesterday.toString())
+            store.putSetting(SINCE, yesterday.plusDays(1).toString())
             return@transaction emptyList()
         }
         var combo = store.setting(COUNT)?.toIntOrNull() ?: 0

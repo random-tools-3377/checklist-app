@@ -1,6 +1,9 @@
 package io.github.randomtools3377.checklist.core
 
+import kotlinx.datetime.Instant
 import kotlinx.datetime.LocalDate
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
 import kotlin.random.Random
 
 /** What a skip would mean, shown before the user confirms it. */
@@ -51,6 +54,29 @@ class Lapses(
          * Days before that are still gone through, so to-dos and "since last done" goals move on.
          */
         const val MISSES_DAYS_BACK = Gaps.LOOK_BACK_DAYS
+
+        /**
+         * How many days back a miss opened later, from the review or the points history, still
+         * offers "I forgot to tick it": the same two weeks a penalty can be made up over. On the
+         * misses screen and the gap check-in, where a miss is first asked about, it is always offered.
+         */
+        const val FORGET_DAYS = 14
+
+        /**
+         * Whether a miss opened later can still be said to be a forgotten tick on [today]: a
+         * habit's miss (a project's missed deadline never is) from the last [FORGET_DAYS] days.
+         */
+        fun canForgetLater(lapse: Lapse, today: LocalDate): Boolean =
+            lapse.kind == LapseKind.MISS && !lapse.forgotten && lapse.period != null && lapse.day >= today.minusDays(FORGET_DAYS)
+
+        /**
+         * Whether [lapse] came from "I slipped" on a goal to quit (see [slip]): a miss of such a
+         * goal recorded during its own day. A miss found once the day had ended, because it wasn't
+         * ticked as avoided, is an ordinary miss. [quit] says whether its goal is one to quit.
+         */
+        fun isSlip(lapse: Lapse, quit: Boolean, dayEndHour: Int, zone: TimeZone = TimeZone.currentSystemDefault()): Boolean =
+            quit && lapse.kind == LapseKind.MISS &&
+                Days.dayOf(Instant.fromEpochMilliseconds(lapse.at).toLocalDateTime(zone), dayEndHour) == lapse.day
     }
 
     /**
@@ -258,7 +284,11 @@ class Lapses(
      * "I forgot to tick it": the miss is undone. The goal is done for the day, week, month or
      * year it was missed in: what was left of it is ticked, paying its points and any finishing bonus
      * (see [Book.finishMissedWindow]). Any penalty the miss caused is refunded and its penalty
-     * task dropped if it wasn't done yet.
+     * task dropped if it wasn't done yet. The day gets back what it would have had (see
+     * [DayBack]): its perfect-day bonus and its place in the combo, once everything due on it is
+     * done. Inside a gap, the gap goes away once every miss in it has turned out to be a
+     * forgotten tick (see [Gaps.clearIfForgotten]). It works the same from the misses screen,
+     * the gap check-in, and later from the review or the points history.
      */
     suspend fun forgotToTick(lapseId: Long): Boolean = store.transaction {
         Rules.load(store)
@@ -271,8 +301,9 @@ class Lapses(
                 Entry(at = now, day = book.today(), kind = EntryKind.REFUND, amount = lapse.cost, goalId = goal.id, label = goal.name, lapseId = lapse.id),
             )
         }
-        // A "since last done" goal done after all: the next one counts from that day.
-        goal.repeat?.takeIf { it.kind == RepeatKind.AFTER_DONE }?.let { r ->
+        // A "since last done" goal done after all: the next one counts from that day. Only while
+        // it is still late from this miss; corrected later, once it has been done since, it has moved on.
+        goal.repeat?.takeIf { it.kind == RepeatKind.AFTER_DONE && it.lateSince == lapse.day }?.let { r ->
             store.setRepeat(goal.id, r.copy(start = maxOf(lapse.day.plusDays(r.interval.coerceAtLeast(1)), book.today()), lateSince = null))
         }
         store.penaltyForLapse(lapse.id)?.let { penalty ->
@@ -281,6 +312,10 @@ class Lapses(
         store.updateLapse(lapse.copy(forgotten = true, reason = lapse.reason ?: Reason.FORGOT))
         // Ticked once the miss is undone, so a challenge it completes isn't held back by it.
         book.finishMissedWindow(goal, lapse.day, lapse.period, lapse.periodStart)
+        // The day gets back what it would have had, if it is now perfect after all.
+        DayBack(store, book).restore(lapse.day)
+        // A gap whose every miss turned out to be a forgotten tick was no gap.
+        lapse.gapId?.let { Gaps(store, book).clearIfForgotten(it) }
         true
     }
 
