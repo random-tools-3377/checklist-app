@@ -1,8 +1,11 @@
 package io.github.randomtools3377.checklist.ui
 
+import io.github.randomtools3377.checklist.core.Feature
+
 /**
  * A short guide to one part of the app: what it's for, then how to use it, step by step.
- * "{points}" in the text stands for what the user calls points (they can rename them).
+ * "{points}" in the text stands for what the user calls points (they can rename them), and the
+ * other words in braces for the numbers set in Points and rules (see [guideWords]).
  */
 enum class HelpTopic(val title: String, val intro: String, val steps: List<String>) {
     TODAY(
@@ -40,7 +43,7 @@ enum class HelpTopic(val title: String, val intro: String, val steps: List<Strin
             "Type in \"Search goals\" to find goals by name or category.",
             "Tap \"Reorder\" and use the arrows. \"My order\" on Today follows this order.",
             "Tap \"Select\" to choose several goals, then change their category or difficulty, or remove them together.",
-            "\"Done list\" at the bottom holds finished projects and to-dos; removed goals can be brought back there too.",
+            "At the bottom, \"Done list\" holds finished projects and done to-dos, and \"removed goals\" lets you bring one back.",
         ),
     ),
     SHOP(
@@ -61,12 +64,12 @@ enum class HelpTopic(val title: String, val intro: String, val steps: List<Strin
         "Look back at how it went: a day, a week, a month or a year at a time.",
         listOf(
             "Pick \"Day\", \"Week\", \"Month\" or \"Year\" at the top, and use the arrows to go earlier or later.",
-            "See the {points} you earned, spent and lost in that stretch, and any savings interest and bets.",
+            "See the {points} you earned, spent and lost in that stretch, and any savings interest.",
             "\"Each goal\" shows how often it was done, skipped and missed, and its longest run in a row.",
             "In a month, the calendar marks each day: everything done, some, none, or a gap. Days still to come aren't counted yet.",
             "Below are the reasons that came up most, any gaps, and stats like your most consistent goal.",
+            "With the mood check-in on, your moods show beside what got done.",
             "Tap \"Badges\" to see every badge, earned or still to earn.",
-            "You can put the review behind the privacy lock in Settings → Privacy.",
         ),
     ),
     BUDGET(
@@ -116,7 +119,7 @@ enum class HelpTopic(val title: String, val intro: String, val steps: List<Strin
             "Tap \"Reset\" beside a changed number to put it back to its usual value.",
             "Tap \"Reset all\" at the top to put every number back at once.",
             "Changes apply from now on; anything already paid or taken stays as it was.",
-            "Some numbers only matter when their extra is on in Settings → Features, like bets or bosses.",
+            "Some numbers only matter when their extra is on in Settings → Features, like quests or bosses.",
         ),
     ),
     APPEARANCE(
@@ -180,6 +183,7 @@ enum class HelpTopic(val title: String, val intro: String, val steps: List<Strin
             "Turn on \"Mystery reward\" and write two or more things it could be; buying it draws one at random.",
             "With \"Suggested points and prices\" on in Settings → Features, \"How big is it?\" suggests a price.",
             "That extra also lets you type what it costs in money, and the price follows it as your goals change.",
+            "With Budget on, a reward that costs money goes into the budget's Rewards category when you buy it.",
             "Tap \"Save\". \"Remove this reward\" takes it out of the shop; anything bought stays under \"Bought\".",
         ),
     ),
@@ -212,12 +216,23 @@ enum class HelpTopic(val title: String, val intro: String, val steps: List<Strin
         "A drawn character that levels up with the {points} your goals pay. It's an extra: turn on \"Character and skills\" in Settings → Features.",
         listOf(
             "All the {points} your goals pay count as experience. Spending and penalties never take it away.",
+            "Its card on Today shows your level and how far to the next. Tap it to open your character's page.",
             "Six skills, Fitness, Health, Mind, Home, Work and Creative, level up from their own goals.",
             "Each goal's skill is guessed from its name; change it under \"Skill\" in the goal's editor.",
             "Skills earn bronze at level 5, silver at 10 and gold at 20, and gear for your character to wear.",
-            "Under \"Style\", pick its skin, hair, hair colour and eyes.",
-            "At level 10, choose a path, like Athlete or Scholar, for a title and more experience in its skill.",
-            "Tap \"💡 Ideas\" by a skill for ways to level it up.",
+            "Under \"Style\", pick its skin, hair, hair colour and eyes. Tap \"💡 Ideas\" by a skill for ways to level it up.",
+            "With \"Character check-ins\" on too, it talks to you on Today: it suggests one small goal after a slip, answers how you feel, and cheers a new level.",
+        ),
+    ),
+    PATHS(
+        "Paths and titles",
+        "A path and titles for your character, shown under its level. They're part of \"Character and skills\" in Settings → Features.",
+        listOf(
+            "At level 10, choose a path on your character's page: Athlete, Healer, Scholar, Homemaker, Professional or Maker.",
+            "Its skill gets {pathBonus}% more experience, and its title shows under your level. You can change it later.",
+            "Titles are earned from how you play, like \"Early bird\" for ticking 20 goals before 8 am.",
+            "Under \"Titles\", each one still to earn says how. Once earned, a title is kept.",
+            "Tap a title to show it, or \"None\" to show none.",
         ),
     ),
     IDEAS(
@@ -231,6 +246,75 @@ enum class HelpTopic(val title: String, val intro: String, val steps: List<Strin
             "Tap \"More ideas\" for others. When they run out, tap \"Bring back hidden ones\".",
             "With the AI helper on, \"Make new ideas\" asks the AI for fresh ones.",
             "Nothing is saved until you check it in the goal editor and tap \"Save\".",
+        ),
+    ),
+    QUESTS(
+        "Daily quests",
+        "Three small quests each day, made from your own goals, each paying a few {points}. It's an extra: turn on \"Daily quests\" in Settings → Features.",
+        listOf(
+            "They show on Today under \"🗺️ Today's quests\", with how far along each one is.",
+            "A quest is like \"Tick 2 goals before noon\", \"Do 📖 Read\" or \"Finish everything due by 8 pm\".",
+            "Each one pays {quest} {points} once it's done; finishing everything by 8 pm pays {questBig}.",
+            "They're picked from what's due that day, and stay the same all day.",
+            "A quest for a goal that's moved or removed today drops off the list.",
+            "Change what they pay in Settings → Points and rules.",
+        ),
+    ),
+    RACE(
+        "Beat last week",
+        "A race against yourself: this week's {points} against last week's, by the same time. It's an extra: turn on \"Beat last week\" in Settings → Features.",
+        listOf(
+            "A card on Today shows how far ahead or behind you are, like \"12 {points} ahead of last week\".",
+            "Below it: this week so far, and last week by the same day and time.",
+            "Weeks start on Monday.",
+            "What your goals pay counts, with bonuses and refunds. Spending in the shop doesn't.",
+            "It's just for fun: it pays nothing and takes nothing.",
+        ),
+    ),
+    BOSSES(
+        "Items and bosses",
+        "A boss to beat each week with items from your ticks. It's an extra: turn on \"Items and bosses\" in Settings → Features.",
+        listOf(
+            "Every tick earns an item from its goal's skill, like ⚡ for Fitness or 📜 for Mind.",
+            "Each Monday a new boss arrives on Today, weaker to two skills: their items hit {bossWeak}% as hard.",
+            "Tap \"Use … items\" on its card to use every item you hold on it.",
+            "Beat it by Sunday night for +{bossReward} {points}.",
+            "A boss still standing just leaves on Sunday night. Nothing is lost, and items you didn't use are kept.",
+            "Its health is set so an ordinary good week of your goals beats it.",
+            "With \"Character and skills\" on, change a goal's skill under \"Skill\" in its editor.",
+        ),
+    ),
+    LUCKY(
+        "Lucky ticks",
+        "Now and then a tick pays extra. It's an extra: turn on \"Lucky ticks\" in Settings → Features.",
+        listOf(
+            "About one tick in {luckyOneIn} is lucky.",
+            "A lucky tick pays its {points} twice, or opens a chest of {chestMin} to {chestMax} {points}.",
+            "The bar at the bottom of Today says so, like \"🍀 lucky chest: +8\".",
+            "Luck never takes anything away. Taking a tick back takes its lucky extra with it.",
+            "Lucky ticks show in your {points} history as \"Lucky tick\".",
+        ),
+    ),
+    COMBOS(
+        "Combos",
+        "Perfect days in a row build a combo that pays a little more each day. It's an extra: turn on \"Combos\" in Settings → Features.",
+        listOf(
+            "A perfect day is one with everything due done and nothing skipped.",
+            "The first perfect day pays {comboDay} {points}, the next {comboDay2}, and so on, up to {comboMost} a day.",
+            "It's paid once the day ends, and shows in your history as \"Combo of perfect days\".",
+            "A day with something skipped or left undone ends the combo, and the next perfect day starts again from one.",
+            "Days with nothing due neither add to it nor end it.",
+        ),
+    ),
+    SHIELDS(
+        "Streak shields",
+        "Shields that save your main streak on a bad day. It's an extra: turn on \"Streak shields\" in Settings → Features.",
+        listOf(
+            "Every {shieldEvery} days of main streak earns a shield. You can hold {shieldsMost} at most.",
+            "A day that would break your main streak uses up a shield instead, and the streak goes on.",
+            "Under your streaks on Today, \"🛡️\" shows the shields you hold, when the next comes, and the last day one saved.",
+            "Shields count from the day you turn them on.",
+            "Change how often they come, and how many you can hold, in Settings → Points and rules.",
         ),
     ),
     BADGES(
@@ -251,10 +335,10 @@ enum class HelpTopic(val title: String, val intro: String, val steps: List<Strin
             "Answer the mood check-in on Today in the morning. Once everything due today is done, Today asks again: \"How do you feel now?\"",
             "After a couple of weeks of moods, \"Goals that go with a better mood\" lists the goals on whose days you tend to feel better in the morning, and by how much.",
             "\"Goals that go with a lower mood\" lists the others, each with a few ways that may make it easier.",
-            "Tap \"Make it come after\" to put it right after a goal that goes with a better mood (needs \"Habit chains\" on), \"Edit it\" to make it smaller, or \"Pay\" to make it pay more.",
+            "Tap \"Make it come after\" to put it right after a goal that goes with a better mood (needs \"Habit chains\" on), \"Edit it\" to make it smaller, or \"Pay …\" to make it pay more.",
             "\"Things that go with a better mood\" and \"…a lower mood\" do the same for what you pick under \"What played a part?\", like \"Slept well\".",
             "It shows what goes together, not what causes what.",
-            "Open it from the card once everything is done, or from \"Mood\" in the Review. Lock it with reasons and notes, or with the review, in Settings → Privacy.",
+            "Open it from the card once everything is done, or from \"Mood\" in the Review. Tap \"Mood journal\" for every day's notes.",
         ),
     ),
     MOOD_JOURNAL(
@@ -267,7 +351,7 @@ enum class HelpTopic(val title: String, val intro: String, val steps: List<Strin
             "Tap \"+ Add your own\" to add something of your own to the list.",
             "Here, tap a day to change what played a part, its notes or its faces, then \"Save\".",
             "Tap \"Edit the list\" to take things off the list or add your own. Days you already picked them on keep them.",
-            "Lock it with reasons and notes, or with the review, in Settings → Privacy. Notes never show in widgets or reminders.",
+            "Notes never show in widgets or reminders.",
         ),
     ),
     TIMELINE(
@@ -293,6 +377,17 @@ enum class HelpTopic(val title: String, val intro: String, val steps: List<Strin
             "\"The days ahead\" shows what's due each day until Sunday.",
             "Tap \"Move things in the planner\" to spread things out.",
             "Tap \"Done planning\" when you're happy, and the card goes away until next week.",
+        ),
+    ),
+    REMINDERS(
+        "Reminders",
+        "Reminders come at the times you set, the way a calendar reminds you. They're set on this device and need no internet.",
+        listOf(
+            "In a habit's editor, under Reminders, give it a set time, or a time under \"Remind me at\".",
+            "With a set time, \"Also alert before\" adds an earlier one, like 10 minutes before.",
+            "Turn on \"Keep reminding until it's done\" to be reminded every 30 minutes until it's done or its finish time passes.",
+            "With \"Reminders at your usual time\" on in Settings → Features, goals with no reminder remind you around when you usually tick them.",
+            "While private goals are locked, their reminders say \"A private goal\".",
         ),
     ),
     DONE_LIST(
@@ -398,6 +493,18 @@ enum class HelpTopic(val title: String, val intro: String, val steps: List<Strin
             "Use ◀ and ▶ at the top to see other months.",
         ),
     ),
+    BUDGET_GAME(
+        "Budget game",
+        "Earn {points} for keeping within each day's share of your money. It's an extra: turn on \"Budget game\" in Settings → Features, with Budget.",
+        listOf(
+            "Each day gets a share of the month's money: your pay and money in, less bills, spread over the month.",
+            "The \"🎮 Money game\" card on the Budget tab shows what's spent today against the share.",
+            "A day within its share pays +{goodMoneyDay}, and a day with no spending +{noSpendDay}. Bills don't count against it.",
+            "The {points} come the next day. Good days in a row make a money streak.",
+            "A month within every category's limit pays +{monthBonus}, and reaching a saving goal +{savedUp}.",
+            "Change what it pays in Settings → Points and rules.",
+        ),
+    ),
     SKIPS_AND_MISSES(
         "Skips and misses",
         "Life happens. Each goal has a few skips and misses allowed for free; past that, they cost a little.",
@@ -407,7 +514,7 @@ enum class HelpTopic(val title: String, val intro: String, val steps: List<Strin
             "A goal not done or skipped by the end of its day is a miss, and asks for a reason.",
             "Pick Forgot, No time, Ill, Chose not to, or your own reason, and add a note if you like.",
             "Did it but forgot to tick it? Tap \"I did it, I forgot to tick it\".",
-            "Past the allowance, each costs a reason, usually half the goal's {points}, and a penalty task.",
+            "Past the allowance, each needs a reason, costs {penalty}% of the goal's {points}, and brings a penalty task.",
             "Set \"My day ends at\" in Settings, so a late night still counts as that day.",
         ),
     ),
@@ -454,8 +561,8 @@ enum class HelpTopic(val title: String, val intro: String, val steps: List<Strin
         "One setting that makes the whole app easier or harder: how much goals pay and how many skips and misses are free.",
         listOf(
             "Pick a level in Settings → Difficulty, from Very easy to Very hard.",
-            "Very easy pays double, with 2 more free skips or misses; Very hard pays half, with none free.",
-            "Normal pays what each goal is set to. Penalties stay half the goal's own {points}.",
+            "Usually, Very easy pays double, with 2 more free skips or misses; Very hard pays half, with none free.",
+            "Normal pays what each goal is set to. Penalties stay {penalty}% of the goal's own {points}.",
             "Reward prices don't change with the level.",
             "Tap \"Get harder over time…\" to move from one level to another over the weeks you choose.",
             "It moves a level at a time on Mondays. Picking a level yourself stops it.",
@@ -467,12 +574,12 @@ enum class HelpTopic(val title: String, val intro: String, val steps: List<Strin
         "Keep chosen parts of the app behind your phone's own lock. Nothing is locked until you choose it.",
         listOf(
             "In Settings → Privacy, pick what to lock, like the history, the shop, reasons for misses, or the review.",
+            "Your moods, their notes, the mood journal and \"Mood and your goals\" are locked with reasons and notes, or with the review.",
+            "With Budget on, \"The budget\" locks the Budget tab and every page of it.",
             "Turn on \"Private\" in a goal's editor to lock just that goal.",
-            "Tap \"Unlock\" and use your fingerprint, face, PIN or pattern.",
-            "It stays unlocked until you leave the app. Leaving closes any page behind the lock.",
+            "Tap \"Unlock\" and use your fingerprint, face, PIN or pattern. It stays unlocked until you leave the app.",
             "While anything is locked, turning a lock off or exporting asks you to unlock first.",
             "While locked, private goals are left off the widgets, and their reminders don't name them.",
-            "The app's preview is hidden in the recent-apps screen.",
         ),
     ),
     BACKUP(
@@ -526,3 +633,117 @@ enum class HelpTopic(val title: String, val intro: String, val steps: List<Strin
         ),
     ),
 }
+
+/** The groups the guides are listed in, in Help, each with its guides in order. */
+enum class HelpGroup(val title: String, val topics: List<HelpTopic>) {
+    BASICS(
+        "Basics",
+        listOf(HelpTopic.TODAY, HelpTopic.GOALS, HelpTopic.REVIEW, HelpTopic.STREAKS, HelpTopic.SKIPS_AND_MISSES, HelpTopic.PENALTY, HelpTopic.GAPS, HelpTopic.BADGES),
+    ),
+    GOALS(
+        "Goals",
+        listOf(HelpTopic.HABIT_EDITOR, HelpTopic.PROJECT_EDITOR, HelpTopic.TODO_EDITOR, HelpTopic.FOCUS, HelpTopic.DONE_LIST, HelpTopic.REMOVED_GOALS),
+    ),
+    PLANNING(
+        "Today and planning",
+        listOf(HelpTopic.PLAN, HelpTopic.TIMELINE, HelpTopic.WEEK_PLAN, HelpTopic.REMINDERS, HelpTopic.WIDGETS),
+    ),
+    SHOP(
+        "Shop and points",
+        listOf(HelpTopic.SHOP, HelpTopic.REWARD_EDITOR, HelpTopic.HISTORY, HelpTopic.BALANCE_CHECK, HelpTopic.RULES, HelpTopic.DIFFICULTY),
+    ),
+    EXTRAS(
+        "Extras",
+        listOf(
+            HelpTopic.FEATURES, HelpTopic.CHARACTER, HelpTopic.PATHS, HelpTopic.IDEAS, HelpTopic.QUESTS, HelpTopic.COMBOS,
+            HelpTopic.RACE, HelpTopic.BOSSES, HelpTopic.LUCKY, HelpTopic.SHIELDS, HelpTopic.AI,
+        ),
+    ),
+    MONEY(
+        "Money",
+        listOf(
+            HelpTopic.BUDGET, HelpTopic.PAY_AND_HOURS, HelpTopic.WORK_DAY, HelpTopic.MONEY_ENTRY, HelpTopic.CATEGORIES,
+            HelpTopic.BILLS, HelpTopic.BILL_EDITOR, HelpTopic.BUDGET_REPORT, HelpTopic.BUDGET_GAME,
+        ),
+    ),
+    MOOD("Mood", listOf(HelpTopic.MOOD_GOALS, HelpTopic.MOOD_JOURNAL)),
+    DATA("Settings and data", listOf(HelpTopic.SETTINGS, HelpTopic.APPEARANCE, HelpTopic.PRIVACY, HelpTopic.BACKUP)),
+}
+
+/** The extras a guide is about, which all have to be on for it to show under "Only extras that are on". */
+val HelpTopic.extras: Set<Feature>
+    get() = when (this) {
+        HelpTopic.TODO_EDITOR -> setOf(Feature.TODOS)
+        HelpTopic.TIMELINE -> setOf(Feature.TIMELINE)
+        HelpTopic.WEEK_PLAN -> setOf(Feature.WEEKLY_PLANNING)
+        HelpTopic.BALANCE_CHECK -> setOf(Feature.BALANCE_CHECK)
+        HelpTopic.CHARACTER, HelpTopic.PATHS, HelpTopic.IDEAS -> setOf(Feature.CHARACTER)
+        HelpTopic.QUESTS -> setOf(Feature.QUESTS)
+        HelpTopic.COMBOS -> setOf(Feature.COMBOS)
+        HelpTopic.RACE -> setOf(Feature.RACE)
+        HelpTopic.BOSSES -> setOf(Feature.BOSSES)
+        HelpTopic.LUCKY -> setOf(Feature.LUCKY)
+        HelpTopic.SHIELDS -> setOf(Feature.SHIELDS)
+        HelpTopic.AI -> setOf(Feature.AI)
+        HelpTopic.BUDGET, HelpTopic.PAY_AND_HOURS, HelpTopic.WORK_DAY, HelpTopic.MONEY_ENTRY, HelpTopic.CATEGORIES,
+        HelpTopic.BILLS, HelpTopic.BILL_EDITOR, HelpTopic.BUDGET_REPORT -> setOf(Feature.BUDGET)
+        HelpTopic.BUDGET_GAME -> setOf(Feature.BUDGET, Feature.BUDGET_GAME)
+        HelpTopic.MOOD_GOALS, HelpTopic.MOOD_JOURNAL -> setOf(Feature.MOOD)
+        else -> emptySet()
+    }
+
+/** The guides to read next, where parts of the app connect: the "See also" at the end of each. */
+val HelpTopic.seeAlso: List<HelpTopic>
+    get() = when (this) {
+        HelpTopic.TODAY -> listOf(HelpTopic.GOALS, HelpTopic.SKIPS_AND_MISSES, HelpTopic.STREAKS, HelpTopic.REMINDERS, HelpTopic.PLAN)
+        HelpTopic.PLAN -> listOf(HelpTopic.TODAY, HelpTopic.TIMELINE, HelpTopic.WEEK_PLAN)
+        HelpTopic.GOALS -> listOf(HelpTopic.HABIT_EDITOR, HelpTopic.PROJECT_EDITOR, HelpTopic.TODO_EDITOR, HelpTopic.DONE_LIST)
+        HelpTopic.SHOP -> listOf(HelpTopic.REWARD_EDITOR, HelpTopic.HISTORY, HelpTopic.CATEGORIES, HelpTopic.BALANCE_CHECK)
+        HelpTopic.REVIEW -> listOf(HelpTopic.MOOD_GOALS, HelpTopic.MOOD_JOURNAL, HelpTopic.BADGES, HelpTopic.GAPS, HelpTopic.STREAKS)
+        HelpTopic.BUDGET -> listOf(HelpTopic.PAY_AND_HOURS, HelpTopic.MONEY_ENTRY, HelpTopic.CATEGORIES, HelpTopic.BILLS, HelpTopic.BUDGET_REPORT, HelpTopic.BUDGET_GAME)
+        HelpTopic.SETTINGS -> listOf(HelpTopic.FEATURES, HelpTopic.RULES, HelpTopic.APPEARANCE, HelpTopic.PRIVACY, HelpTopic.BACKUP)
+        HelpTopic.FEATURES -> listOf(HelpTopic.SETTINGS, HelpTopic.APPEARANCE, HelpTopic.RULES)
+        HelpTopic.RULES -> listOf(HelpTopic.DIFFICULTY, HelpTopic.SKIPS_AND_MISSES, HelpTopic.FEATURES)
+        HelpTopic.APPEARANCE -> listOf(HelpTopic.TODAY, HelpTopic.WIDGETS, HelpTopic.SETTINGS)
+        HelpTopic.HABIT_EDITOR -> listOf(HelpTopic.GOALS, HelpTopic.REMINDERS, HelpTopic.FOCUS, HelpTopic.SKIPS_AND_MISSES)
+        HelpTopic.PROJECT_EDITOR -> listOf(HelpTopic.GOALS, HelpTopic.DONE_LIST, HelpTopic.SKIPS_AND_MISSES)
+        HelpTopic.TODO_EDITOR -> listOf(HelpTopic.GOALS, HelpTopic.DONE_LIST, HelpTopic.REMINDERS)
+        HelpTopic.REWARD_EDITOR -> listOf(HelpTopic.SHOP, HelpTopic.CATEGORIES, HelpTopic.BALANCE_CHECK)
+        HelpTopic.BALANCE_CHECK -> listOf(HelpTopic.SHOP, HelpTopic.RULES)
+        HelpTopic.HISTORY -> listOf(HelpTopic.SHOP, HelpTopic.GAPS, HelpTopic.BACKUP)
+        HelpTopic.CHARACTER -> listOf(HelpTopic.PATHS, HelpTopic.IDEAS, HelpTopic.BADGES, HelpTopic.BOSSES)
+        HelpTopic.PATHS -> listOf(HelpTopic.CHARACTER, HelpTopic.QUESTS, HelpTopic.BOSSES, HelpTopic.LUCKY)
+        HelpTopic.IDEAS -> listOf(HelpTopic.CHARACTER, HelpTopic.HABIT_EDITOR)
+        HelpTopic.QUESTS -> listOf(HelpTopic.TODAY, HelpTopic.PATHS, HelpTopic.RULES)
+        HelpTopic.RACE -> listOf(HelpTopic.HISTORY, HelpTopic.WEEK_PLAN)
+        HelpTopic.BOSSES -> listOf(HelpTopic.CHARACTER, HelpTopic.PATHS, HelpTopic.RULES)
+        HelpTopic.LUCKY -> listOf(HelpTopic.HISTORY, HelpTopic.PATHS)
+        HelpTopic.COMBOS -> listOf(HelpTopic.STREAKS, HelpTopic.HISTORY)
+        HelpTopic.SHIELDS -> listOf(HelpTopic.STREAKS, HelpTopic.RULES)
+        HelpTopic.BADGES -> listOf(HelpTopic.REVIEW, HelpTopic.CHARACTER)
+        HelpTopic.MOOD_GOALS -> listOf(HelpTopic.MOOD_JOURNAL, HelpTopic.REVIEW, HelpTopic.PRIVACY)
+        HelpTopic.MOOD_JOURNAL -> listOf(HelpTopic.MOOD_GOALS, HelpTopic.REVIEW, HelpTopic.PRIVACY)
+        HelpTopic.TIMELINE -> listOf(HelpTopic.PLAN, HelpTopic.REMINDERS)
+        HelpTopic.WEEK_PLAN -> listOf(HelpTopic.PLAN, HelpTopic.REVIEW)
+        HelpTopic.REMINDERS -> listOf(HelpTopic.HABIT_EDITOR, HelpTopic.SKIPS_AND_MISSES, HelpTopic.PRIVACY, HelpTopic.WIDGETS)
+        HelpTopic.DONE_LIST -> listOf(HelpTopic.GOALS, HelpTopic.REMOVED_GOALS)
+        HelpTopic.REMOVED_GOALS -> listOf(HelpTopic.GOALS, HelpTopic.DONE_LIST)
+        HelpTopic.PAY_AND_HOURS -> listOf(HelpTopic.BUDGET, HelpTopic.WORK_DAY)
+        HelpTopic.WORK_DAY -> listOf(HelpTopic.PAY_AND_HOURS, HelpTopic.BUDGET)
+        HelpTopic.MONEY_ENTRY -> listOf(HelpTopic.BUDGET, HelpTopic.CATEGORIES, HelpTopic.SHOP)
+        HelpTopic.CATEGORIES -> listOf(HelpTopic.BUDGET, HelpTopic.MONEY_ENTRY, HelpTopic.SHOP)
+        HelpTopic.BILLS -> listOf(HelpTopic.BILL_EDITOR, HelpTopic.BUDGET)
+        HelpTopic.BILL_EDITOR -> listOf(HelpTopic.BILLS, HelpTopic.CATEGORIES)
+        HelpTopic.BUDGET_REPORT -> listOf(HelpTopic.BUDGET, HelpTopic.CATEGORIES)
+        HelpTopic.BUDGET_GAME -> listOf(HelpTopic.BUDGET, HelpTopic.CATEGORIES, HelpTopic.RULES)
+        HelpTopic.SKIPS_AND_MISSES -> listOf(HelpTopic.PENALTY, HelpTopic.GAPS, HelpTopic.STREAKS)
+        HelpTopic.PENALTY -> listOf(HelpTopic.SKIPS_AND_MISSES, HelpTopic.GAPS)
+        HelpTopic.GAPS -> listOf(HelpTopic.SKIPS_AND_MISSES, HelpTopic.PENALTY, HelpTopic.HISTORY)
+        HelpTopic.STREAKS -> listOf(HelpTopic.SHIELDS, HelpTopic.COMBOS, HelpTopic.SKIPS_AND_MISSES)
+        HelpTopic.DIFFICULTY -> listOf(HelpTopic.RULES, HelpTopic.SKIPS_AND_MISSES)
+        HelpTopic.PRIVACY -> listOf(HelpTopic.MOOD_JOURNAL, HelpTopic.BUDGET, HelpTopic.HISTORY, HelpTopic.REMINDERS)
+        HelpTopic.BACKUP -> listOf(HelpTopic.PRIVACY, HelpTopic.HISTORY)
+        HelpTopic.FOCUS -> listOf(HelpTopic.HABIT_EDITOR, HelpTopic.TODAY)
+        HelpTopic.AI -> listOf(HelpTopic.HABIT_EDITOR, HelpTopic.PROJECT_EDITOR, HelpTopic.REVIEW)
+        HelpTopic.WIDGETS -> listOf(HelpTopic.TODAY, HelpTopic.APPEARANCE, HelpTopic.PRIVACY)
+    }

@@ -296,6 +296,15 @@ fun ChecklistApp(vm: MainViewModel) {
         return
     }
 
+    // Someone brand new: the first-run setup, until it's done or skipped. "Add my own" opens the
+    // habit editor over it, and the setup carries on once the editor closes.
+    val setup by vm.setupStep.collectAsStateWithLifecycle()
+    val setupStep = setup
+    if (setupStep != null && stack.size == 1) {
+        Page { FirstRunScreen(setupStep, vm, onOwnGoal = { push("habit/0") }) }
+        return
+    }
+
     androidx.compose.runtime.SideEffect { ShownRoute.route = route }
     FirstTimeTip(route, vm)
     Box(Modifier.fillMaxSize()) {
@@ -321,6 +330,7 @@ fun ChecklistApp(vm: MainViewModel) {
             }
             "todo" -> androidx.compose.runtime.key(route) { TodoEditor(id, vm, onClose = ::pop) }
             "guide" -> GuideScreen(
+                hasGoals = goals?.goals?.isNotEmpty() == true,
                 onExamples = { vm.addExamples(); goTo(AppTab.TODAY) },
                 onScratch = { vm.closeWelcome(); goTo(AppTab.TODAY) },
                 onBack = ::pop,
@@ -451,7 +461,6 @@ fun ChecklistApp(vm: MainViewModel) {
                                 onUnlock = unlock,
                                 onBadges = { push("badges") },
                                 onEditTodo = { id -> push("todo/$id") },
-                                onGuide = { push("guide") },
                                 onTimeline = { push("timeline/0") },
                                 onPlanWeek = { push("plan-week") },
                                 onCharacter = { push("character") },
@@ -477,6 +486,7 @@ fun ChecklistApp(vm: MainViewModel) {
                             onDoneList = { push("done") },
                             selecting = selectGoals,
                             vm = vm,
+                            onNew = { newGoal = true },
                         )
                         AppTab.PLAN -> PlanScreen(planDays, vm, padding, onTimeline = { index -> push("timeline/$index") })
                         AppTab.REVIEW -> if (settings.locks.review && !unlocked) {
@@ -498,6 +508,8 @@ fun ChecklistApp(vm: MainViewModel) {
                                 character = io.github.randomtools3377.checklist.core.Feature.CHARACTER in features,
                                 onMoodGoals = { push("mood-goals") },
                                 onMoodJournal = { push("mood-journal") },
+                                // Nothing to look back on yet: a way to add a first goal.
+                                onAddGoal = if (goals?.goals?.isEmpty() == true && removedGoals.isEmpty()) ({ goTo(AppTab.GOALS); newGoal = true }) else null,
                             )
                         }
                         AppTab.BUDGET -> if (settings.locks.budget && !unlocked) {
@@ -525,6 +537,7 @@ fun ChecklistApp(vm: MainViewModel) {
                             onEdit = { reward -> push("reward/${reward.id}") },
                             padding = padding,
                             onBalanceCheck = { push("balance-check") },
+                            onNew = { push("reward/0") },
                         )
                     }
                 }

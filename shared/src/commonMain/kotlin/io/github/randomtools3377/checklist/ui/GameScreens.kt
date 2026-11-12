@@ -216,6 +216,7 @@ fun LevelCard(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onTertiaryContainer,
                 )
+                GuideButton(HelpTopic.CHARACTER)
             }
             LinearProgressIndicator(progress = { sheet.level.share }, modifier = Modifier.fillMaxWidth())
         }
@@ -494,7 +495,10 @@ private fun Swatches(colours: List<Int>, picked: Int, tag: String, onPick: (Int)
 fun QuestsCard(quests: List<QuestProgress>) {
     Card(Modifier.fillMaxWidth().testTag("quests")) {
         Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text("🗺️ Today's quests", style = MaterialTheme.typography.titleSmall)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("🗺️ Today's quests", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+                GuideButton(HelpTopic.QUESTS)
+            }
             quests.forEach { progress ->
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.testTag("quest:${progress.quest.id}")) {
                     Text(if (progress.complete) "✅" else "▫️", modifier = Modifier.width(28.dp))
@@ -542,6 +546,7 @@ fun RaceCard(race: RaceStanding) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+            GuideButton(HelpTopic.RACE)
         }
     }
 }
@@ -567,6 +572,7 @@ fun BossCard(view: BossView, onAttack: ((String) -> Unit) -> Unit) {
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
+                GuideButton(HelpTopic.BOSSES)
             }
             if (fight.beaten) {
                 Text("🏆 Beaten this week! A new boss comes on Monday.", style = MaterialTheme.typography.bodyMedium, color = goodColor(), modifier = Modifier.testTag("boss-beaten"))

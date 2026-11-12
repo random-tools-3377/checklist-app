@@ -102,7 +102,7 @@ fun MissesScreen(misses: List<Lapse>, vm: MainViewModel, hiddenGoals: Set<Long> 
     val notes = remember { mutableStateMapOf<Long, String>() }
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).safeDrawingPadding().testTag("misses")) {
         Column(Modifier.padding(16.dp)) {
-            Text("What happened?", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            GuideTitle("What happened?", HelpTopic.SKIPS_AND_MISSES)
             Text(
                 if (misses.size == 1) "This one wasn't done or skipped in time. Give it a reason to carry on."
                 else "These weren't done or skipped in time. Give each a reason to carry on.",
@@ -183,7 +183,7 @@ fun PenaltyScreen(
             .testTag("penalty"),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text("Penalty task", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+        GuideTitle("Penalty task", HelpTopic.PENALTY)
         Text(
             if (penalty.gapId != null) "There was a gap, so there's one penalty task for the whole stretch, to do now. It pays nothing."
             else "You went over the limit, so there's a penalty task to do now. It pays nothing.",
@@ -412,7 +412,7 @@ fun GapCheckInScreen(gap: io.github.randomtools3377.checklist.core.Gap, vm: Main
     val cost by produceState(0 to 0, gap.id, gap.to) { value = vm.gapCost(gap) }
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).safeDrawingPadding().padding(16.dp).testTag("gap")) {
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("Looks like you stopped for a while", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            GuideTitle("Looks like you stopped for a while", HelpTopic.GAPS)
             Text(
                 if (gap.from == gap.to) shortDate(gap.from) else "${shortDate(gap.from)} to ${shortDate(gap.to)}",
                 style = MaterialTheme.typography.titleMedium,

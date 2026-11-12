@@ -86,6 +86,8 @@ fun ReviewScreen(
     /** Opens "Mood and your goals", and the mood journal, from the mood part. */
     onMoodGoals: () -> Unit = {},
     onMoodJournal: () -> Unit = {},
+    /** With no goals yet: adds a first one, for the hint at the top. */
+    onAddGoal: (() -> Unit)? = null,
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize().testTag("review"),
@@ -101,6 +103,14 @@ fun ReviewScreen(
                         shape = SegmentedButtonDefaults.itemShape(index = index, count = 4),
                         modifier = Modifier.testTag("review:$label"),
                     ) { Text(label) }
+                }
+            }
+        }
+        onAddGoal?.let { add ->
+            item(key = "review-empty") {
+                Column(Modifier.fillMaxWidth().padding(vertical = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("Nothing to look back on yet. Add a goal and tick it on Today.", textAlign = TextAlign.Center, modifier = Modifier.testTag("review-empty"))
+                    androidx.compose.material3.Button(onClick = add, modifier = Modifier.padding(top = 8.dp).testTag("review-empty-add")) { Text("Add a goal") }
                 }
             }
         }

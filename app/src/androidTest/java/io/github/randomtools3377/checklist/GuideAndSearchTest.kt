@@ -2,16 +2,22 @@ package io.github.randomtools3377.checklist
 
 import android.content.Intent
 import android.content.pm.ShortcutManager
+import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import io.github.randomtools3377.checklist.core.Repeat
+import io.github.randomtools3377.checklist.data.HabitDraft
 import io.github.randomtools3377.checklist.data.SETTING_GUIDE
+import io.github.randomtools3377.checklist.data.nowLocal
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -25,7 +31,7 @@ import org.junit.runner.RunWith
 private val context get() = InstrumentationRegistry.getInstrumentation().targetContext
 private val container get() = (context.applicationContext as ChecklistApplication).container
 
-/** Someone new gets the welcome card and the guide, whose examples can then be searched in Goals. */
+/** The tour from Settings, whose examples can then be searched in Goals, and Undo after adding them. */
 @RunWith(AndroidJUnit4::class)
 class GuideAndSearchTest {
     class Empty : ExternalResource() {
@@ -40,16 +46,29 @@ class GuideAndSearchTest {
     private fun goalNames() = runBlocking { container.db.dao().allGoals() }.map { it.name }.toSet()
     private fun gone(tag: String) = app.onAllNodesWithTag(tag, useUnmergedTree = true).fetchSemanticsNodes().isEmpty()
 
-    @Test
-    fun theGuideAddsExamplesThatGoalsCanSearch() {
-        app.waitFor { !gone("welcome-card") }
-        app.tap("welcome-tour")
+    /** Opens "How the app works" from Settings and goes to its last page. */
+    private fun openTourToTheEnd() {
+        app.waitFor { !gone("settings") }
+        app.onNodeWithTag("settings").performClick()
+        app.waitFor { !gone("setting:guide") }
+        app.tap("setting:guide")
         app.waitFor { !gone("guide") }
-        repeat(5) {
+        // Seven pages, the last but one about the extras in Settings → Features.
+        repeat(6) {
             app.waitFor { !gone("guide-next") }
             app.onNodeWithTag("guide-next").performClick()
         }
         app.waitFor { !gone("guide-examples") }
+    }
+
+    @Test
+    fun theGuideAddsExamplesThatGoalsCanSearch() {
+        // No welcome card or tip pops up on Today by itself.
+        app.waitFor { !gone("today-list") }
+        assertTrue(gone("welcome-card"))
+        openTourToTheEnd()
+        app.onNodeWithTag("guide-scratch").assertTextContains("Start from scratch")
+        // With no goals yet, the examples come straight away.
         app.tap("guide-examples")
         app.waitFor { "Drink water" in goalNames() }
         assertEquals(
@@ -57,8 +76,7 @@ class GuideAndSearchTest {
             goalNames(),
         )
         assertEquals(2, runBlocking { container.db.dao().allRewards() }.size)
-        // The welcome card has been answered.
-        app.waitFor { gone("welcome-card") }
+        app.waitFor { runBlocking { container.db.dao().setting(SETTING_GUIDE) } == "done" }
 
         // Search in the Goals list.
         app.onNodeWithTag("nav:goals").performClick()
@@ -71,12 +89,28 @@ class GuideAndSearchTest {
     }
 
     @Test
-    fun noThanksClosesTheWelcomeCard() {
-        app.waitFor { !gone("welcome-card") }
-        app.tap("welcome-close")
-        app.waitFor { gone("welcome-card") }
-        app.waitFor { runBlocking { container.db.dao().setting(SETTING_GUIDE) } == "done" }
-        assertTrue(goalNames().isEmpty())
+    fun withGoalsTheTourAsksFirstAndUndoTakesTheExamplesBack() {
+        runBlocking {
+            container.repository.saveHabit(
+                HabitDraft(
+                    id = 0, name = "Stretch", icon = "🧘", points = 5, repeat = Repeat.everyDay(nowLocal().date), target = 1, bonus = 0,
+                    minutes = null, at = null, finishBy = null, finishDay = null,
+                ),
+            )
+        }
+        openTourToTheEnd()
+        // "Start from scratch" is "Done" for someone with goals.
+        app.onNodeWithTag("guide-scratch").assertTextContains("Done")
+        app.tap("guide-examples")
+        app.waitFor { !gone("guide-examples-ok") }
+        assertTrue(app.onAllNodesWithText("This adds 5 example goals, a to-do and 2 rewards to your lists.", substring = true).fetchSemanticsNodes().isNotEmpty())
+        app.onNodeWithTag("guide-examples-ok").performClick()
+        app.waitFor { "Drink water" in goalNames() }
+        // Undo takes them all away again, and leaves the user's own goal.
+        app.waitFor { app.onAllNodesWithText("Undo").fetchSemanticsNodes().isNotEmpty() }
+        app.onNodeWithText("Undo").performClick()
+        app.waitFor { goalNames() == setOf("Stretch") }
+        assertEquals(0, runBlocking { container.db.dao().allRewards() }.size)
     }
 }
 

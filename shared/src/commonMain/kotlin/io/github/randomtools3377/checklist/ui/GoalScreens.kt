@@ -132,6 +132,8 @@ fun GoalsScreen(
     onDoneList: () -> Unit = {},
     selecting: Boolean = false,
     vm: MainViewModel? = null,
+    /** Opens the choice of a new habit, project or to-do. */
+    onNew: () -> Unit = {},
 ) {
     if (view == null) return
     // Goals chosen while selecting, to change or remove together.
@@ -158,11 +160,10 @@ fun GoalsScreen(
     ) {
         if (view.goals.isEmpty()) {
             item {
-                Text(
-                    "No goals yet. Add a habit that repeats, like drinking water every day, a project made of steps, or a quick to-do.",
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth().padding(top = 48.dp),
-                )
+                Column(Modifier.fillMaxWidth().padding(top = 48.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("No goals yet. Add a habit, like drinking water every day.", textAlign = TextAlign.Center, modifier = Modifier.testTag("goals-empty"))
+                    androidx.compose.material3.Button(onClick = onNew, modifier = Modifier.padding(top = 12.dp).testTag("goals-empty-add")) { Text("Add a goal") }
+                }
             }
         }
         if (view.hiddenPrivate > 0) {

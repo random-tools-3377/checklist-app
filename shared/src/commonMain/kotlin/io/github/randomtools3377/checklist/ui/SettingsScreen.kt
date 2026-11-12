@@ -492,7 +492,7 @@ fun SettingsScreen(
                     color = MaterialTheme.colorScheme.primary,
                 )
             }
-            if (shows("Help tips guides how to what does"))
+            if (shows("Help tips guides how to what does search reminders game"))
             Column(
                 Modifier
                     .fillMaxWidth()
@@ -502,7 +502,7 @@ fun SettingsScreen(
             ) {
                 Text("Help and tips", style = MaterialTheme.typography.bodyLarge)
                 Text(
-                    "A short guide to every part of the app, and the tips that show the first time.",
+                    "A guide to every part of the app, in groups, with search. Tips the first time are here too.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.primary,
                 )

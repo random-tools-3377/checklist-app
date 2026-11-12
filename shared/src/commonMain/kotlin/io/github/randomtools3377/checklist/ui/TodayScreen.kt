@@ -108,7 +108,6 @@ fun TodayScreen(
     onUnlock: () -> Unit,
     onBadges: () -> Unit,
     onEditTodo: (Long) -> Unit,
-    onGuide: () -> Unit,
     onTimeline: () -> Unit = {},
     onPlanWeek: () -> Unit = {},
     onCharacter: () -> Unit = {},
@@ -155,7 +154,6 @@ fun TodayScreen(
         vm.stopRequest.value = null
     }
     val newBadges by vm.newBadges.collectAsStateWithLifecycle()
-    val welcome by vm.showWelcome.collectAsStateWithLifecycle()
     val boosts by vm.boosts.collectAsStateWithLifecycle()
     val features by vm.features.collectAsStateWithLifecycle()
     val askMood by vm.askMood.collectAsStateWithLifecycle()
@@ -343,11 +341,7 @@ fun TodayScreen(
                     TextButton(onClick = onTimeline, modifier = Modifier.testTag("open-timeline")) { Text("Timeline") }
                 }
             }
-            if (welcome) {
-                WelcomeCard(onTour = onGuide, onExamples = { vm.addExamples() }, onClose = vm::closeWelcome)
-                Spacer(Modifier.height(12.dp))
-            }
-            if (showWeekPlan && !welcome) {
+            if (showWeekPlan) {
                 WeekPlanCard(onPlan = onPlanWeek, onLater = vm::weekPlanned)
                 Spacer(Modifier.height(12.dp))
             }
@@ -404,11 +398,9 @@ fun TodayScreen(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         modifier = Modifier.fillMaxWidth().padding(top = 36.dp),
                     ) {
-                        Text("Nothing due today.", style = MaterialTheme.typography.titleMedium)
-                        Spacer(Modifier.height(8.dp))
-                        Text("Add a habit or a project, then tick it here to earn ${pointsWord()}.", textAlign = TextAlign.Center)
-                        Spacer(Modifier.height(16.dp))
-                        Button(onClick = onAddGoal) { Text("Add a goal") }
+                        Text("Nothing due today. Add a goal, then tick it off here.", textAlign = TextAlign.Center, modifier = Modifier.testTag("today-empty"))
+                        Spacer(Modifier.height(12.dp))
+                        Button(onClick = onAddGoal, modifier = Modifier.testTag("today-add-goal")) { Text("Add a goal") }
                     }
                 }
             }
@@ -422,7 +414,7 @@ fun TodayScreen(
                     // With check-ins on, the character asks instead, on its own card.
                     val characterAsks = companion?.say?.askMood == true &&
                         look.sections.any { it.section == TodaySection.CHARACTER && it.shown }
-                    if (askMood && !welcome && !characterAsks) {
+                    if (askMood && !characterAsks) {
                         MoodCheckIn(onMood = { vm.setMood(it) }, onLater = vm::skipMood)
                         Spacer(Modifier.height(12.dp))
                     }
@@ -546,14 +538,17 @@ fun TodayScreen(
                         StreakCard(screen.streaks, screen.streakSettings)
                         // With streak shields on: those held, and the last day one saved.
                         screen.shields?.let { shields ->
-                            Text(
-                                "🛡️ " + (if (shields.held == 1) "1 shield" else "${shields.held} shields") +
-                                    (shields.saved.lastOrNull()?.let { " · one saved your streak on ${shortDate(it)}" } ?: "") +
-                                    (if (shields.held < io.github.randomtools3377.checklist.core.Shields.MOST) " · next at ${(screen.streaks.done / io.github.randomtools3377.checklist.core.Shields.EVERY + 1) * io.github.randomtools3377.checklist.core.Shields.EVERY} days" else ""),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(top = 4.dp).testTag("shields"),
-                            )
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                                Text(
+                                    "🛡️ " + (if (shields.held == 1) "1 shield" else "${shields.held} shields") +
+                                        (shields.saved.lastOrNull()?.let { " · one saved your streak on ${shortDate(it)}" } ?: "") +
+                                        (if (shields.held < io.github.randomtools3377.checklist.core.Shields.MOST) " · next at ${(screen.streaks.done / io.github.randomtools3377.checklist.core.Shields.EVERY + 1) * io.github.randomtools3377.checklist.core.Shields.EVERY} days" else ""),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.weight(1f).padding(top = 4.dp).testTag("shields"),
+                                )
+                                GuideButton(HelpTopic.SHIELDS)
+                            }
                         }
                         Spacer(Modifier.height(12.dp))
                     }

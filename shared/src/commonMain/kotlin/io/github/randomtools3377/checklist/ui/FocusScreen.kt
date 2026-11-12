@@ -81,6 +81,7 @@ fun FocusScreen(state: FocusState, goal: Goal?, onPause: () -> Unit, onResume: (
                 Button(onClick = onDone, modifier = Modifier.testTag("focus-done")) { Text("Done now") }
             }
             TextButton(onClick = onStop, modifier = Modifier.padding(top = 8.dp).testTag("focus-stop")) { Text("Stop without ticking") }
+            GuideButton(HelpTopic.FOCUS)
         }
     }
     val title: @Composable () -> Unit = {

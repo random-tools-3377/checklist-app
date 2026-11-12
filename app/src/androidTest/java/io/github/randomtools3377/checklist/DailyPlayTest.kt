@@ -53,5 +53,12 @@ class DailyPlayTest {
         app.waitFor { app.shownIn("today-list", "race") }
         // 10 points this week, none last week.
         app.waitFor { text("race-standing").contains("ahead of last week") }
+
+        // Each game card has a small ⓘ that opens its guide.
+        app.waitFor { app.shownIn("today-list", "quests") }
+        app.tap("guide:QUESTS")
+        app.waitFor { app.onAllNodesWithTag("help:QUESTS", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
+        app.tap("help-ok")
+        app.waitFor { app.onAllNodesWithTag("help:QUESTS", useUnmergedTree = true).fetchSemanticsNodes().isEmpty() }
     }
 }

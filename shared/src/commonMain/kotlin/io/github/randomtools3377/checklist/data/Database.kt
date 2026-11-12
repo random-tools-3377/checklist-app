@@ -350,6 +350,23 @@ interface ChecklistDao {
     @Query("SELECT COALESCE(MAX(position), -1) + 1 FROM goals")
     suspend fun nextGoalPosition(): Int
 
+    /** How much history a goal has: its ticks, routine checks, skips and misses. */
+    @Query(
+        "SELECT (SELECT COUNT(*) FROM ticks WHERE goalId = :goalId) + (SELECT COUNT(*) FROM checks WHERE goalId = :goalId) + " +
+            "(SELECT COUNT(*) FROM lapses WHERE goalId = :goalId)",
+    )
+    suspend fun goalHistoryCount(goalId: Long): Int
+
+    /** Deletes a goal for good, for Undo after adding the examples, when it has no history. */
+    @Query("DELETE FROM goals WHERE id = :id")
+    suspend fun deleteGoal(id: Long)
+
+    @Query("DELETE FROM steps WHERE goalId = :goalId")
+    suspend fun deleteStepsOf(goalId: Long)
+
+    @Query("DELETE FROM rewards WHERE id = :id")
+    suspend fun deleteReward(id: Long)
+
     @Query("SELECT * FROM steps WHERE archived = 0 ORDER BY goalId, position, id")
     fun observeSteps(): Flow<List<StepEntity>>
 

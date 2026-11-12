@@ -259,11 +259,15 @@ fun BudgetScreen(
         }
         if (shown.entries.isEmpty()) {
             item {
-                Text(
-                    if (shown.thisMonth) "Nothing yet this month. Add what you spend with the button below, and rewards you buy in the shop that cost money are added here by themselves." else "Nothing that month.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        if (shown.thisMonth) "Nothing spent yet this month. Tap Spent to add what you spend." else "Nothing that month.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.testTag("budget-empty"),
+                    )
+                    if (shown.thisMonth) FilledTonalButton(onClick = { onEntry(0) }, modifier = Modifier.testTag("budget-empty-spent")) { Text("Spent") }
+                }
             }
         }
         val byDay = shown.entries.groupBy { it.day }
@@ -920,7 +924,10 @@ fun TodayMoneyCard(vm: MainViewModel, onOpen: () -> Unit) {
 private fun MoneyGameCard(game: MoneyGameView) {
     Card(Modifier.fillMaxWidth().testTag("money-game")) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text("🎮 Money game", style = MaterialTheme.typography.titleSmall)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("🎮 Money game", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+                GuideButton(HelpTopic.BUDGET_GAME)
+            }
             val share = game.share
             if (share == null) {
                 Text(

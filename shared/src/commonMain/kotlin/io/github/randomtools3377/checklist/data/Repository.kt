@@ -115,8 +115,16 @@ const val SETTING_MOOD_AFTER_CLOSED = "mood_after_closed"
 const val SETTING_MOOD_MORE_CLOSED = "mood_more_closed"
 /** The Monday of the last week planned, or put off, from the weekly planning card. */
 const val SETTING_WEEK_PLANNED = "week_planned"
-/** "done" once the welcome card on Today was answered (see GuideScreen). */
+/** "done" once the welcome card on Today was answered, or the examples added (see GuideScreen). */
 const val SETTING_GUIDE = "guide"
+
+/** What the tour's examples add: habits and projects, to-dos, and rewards (see Repository.addExamples). */
+const val EXAMPLE_GOALS = 5
+const val EXAMPLE_TODOS = 1
+const val EXAMPLE_REWARDS = 2
+
+/** The goals and rewards the examples added, by id, to take away again. */
+data class AddedExamples(val goals: List<Long>, val rewards: List<Long>)
 const val DEFAULT_SNOOZE_MINUTES = 10
 const val SETTING_TODAY_ORDER = "today_order"
 const val ORDER_RECOMMENDED = "recommended"
@@ -444,9 +452,12 @@ class Repository(private val db: AppDatabase, private val celebrations: GifStore
 
     /**
      * Example goals and rewards from the guide, to try the app with: one of each kind of goal, and
-     * two rewards. They are ordinary goals the user can change or remove.
+     * two rewards ([EXAMPLE_GOALS] habits and projects, [EXAMPLE_TODOS] to-do and [EXAMPLE_REWARDS] rewards).
+     * They are ordinary goals the user can change or remove. Returns what was added, for Undo.
      */
-    suspend fun addExamples(today: LocalDate): Unit = db.withTransaction {
+    suspend fun addExamples(today: LocalDate): AddedExamples = db.withTransaction {
+        val goalsBefore = dao.allGoals().map { it.id }.toSet()
+        val rewardsBefore = dao.allRewards().map { it.id }.toSet()
         val daily = Repeat(RepeatKind.EVERY_N_DAYS, today)
         fun habit(name: String, icon: String, points: Int, repeat: Repeat = daily, target: Int = 1, bonus: Int = 0) = HabitDraft(
             id = 0, name = name, icon = icon, points = points, repeat = repeat, target = target, bonus = bonus,
@@ -471,6 +482,28 @@ class Repository(private val db: AppDatabase, private val celebrations: GifStore
         saveReward(RewardDraft(id = 0, name = "A fancy coffee", icon = "☕", price = 30))
         saveReward(RewardDraft(id = 0, name = "A film night", icon = "🎬", price = 100))
         dao.putSetting(SettingEntity(SETTING_GUIDE, "done"))
+        AddedExamples(
+            goals = dao.allGoals().map { it.id }.filter { it !in goalsBefore },
+            rewards = dao.allRewards().map { it.id }.filter { it !in rewardsBefore },
+        )
+    }
+
+    /**
+     * Undo after adding the examples: they go again. One already used (ticked, skipped, or a
+     * reward bought) is removed the usual way instead, so its history stays.
+     */
+    suspend fun removeExamples(added: AddedExamples): Unit = db.withTransaction {
+        for (id in added.goals) {
+            if (dao.goalHistoryCount(id) == 0) {
+                dao.deleteStepsOf(id)
+                dao.deleteGoal(id)
+            } else {
+                removeGoal(id)
+            }
+        }
+        for (id in added.rewards) {
+            if (dao.purchasesOf(id).isEmpty()) dao.deleteReward(id) else removeReward(id)
+        }
     }
 
     /**

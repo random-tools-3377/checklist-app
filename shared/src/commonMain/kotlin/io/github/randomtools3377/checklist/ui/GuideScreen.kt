@@ -13,15 +13,13 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -42,6 +40,10 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import io.github.randomtools3377.checklist.core.Rules
+import io.github.randomtools3377.checklist.data.EXAMPLE_GOALS
+import io.github.randomtools3377.checklist.data.EXAMPLE_REWARDS
+import io.github.randomtools3377.checklist.data.EXAMPLE_TODOS
 
 /** One page of the guide. */
 private class GuidePage(val emoji: String, val title: String, val text: () -> String)
@@ -63,8 +65,12 @@ private val pages = listOf(
             "It waits with your bought rewards until you use it, and can be returned until then."
     },
     GuidePage("🙈", "Skips and misses") {
-        "Each goal can be skipped or missed once a week for free, or as often as you set. Past that, it costs half its " +
-            "${pointsWord()} and a penalty task, done right then. A miss always asks why."
+        "Each goal can be skipped or missed once a week for free, or as often as you set. Past that, it costs " +
+            "${penaltyShare()} its ${pointsWord()} and a penalty task, done right then. A miss always asks why."
+    },
+    GuidePage("🧩", "Extras when you want them") {
+        "To-dos, a mood check-in, a budget, a game and more start off, to keep things simple. " +
+            "Turn on any of them in Settings → Features."
     },
     GuidePage("🔒", "It stays on your phone") {
         "No internet and no account. Back up to a file from Settings, and put private things behind your phone's own lock " +
@@ -72,12 +78,34 @@ private val pages = listOf(
     },
 )
 
-/** A short guide to the app, a page at a time, ending with the choice of example goals or none. */
+/** How much of a goal's points going over the limit costs, as set in Points and rules: "half", or "30% of". */
+internal fun penaltyShare(percent: Int = Rules.current.penaltyPercent): String = if (percent == 50) "half" else "$percent% of"
+
+/** What adding the examples does, said before adding them to someone who has goals already. */
+internal fun examplesText(): String =
+    "This adds $EXAMPLE_GOALS example goals, ${if (EXAMPLE_TODOS == 1) "a to-do" else "$EXAMPLE_TODOS to-dos"} and $EXAMPLE_REWARDS rewards to your lists."
+
+/**
+ * A short guide to the app, a page at a time, ending with the choice of example goals or none.
+ * Someone who [hasGoals] already is asked before the examples are added, and ends with "Done".
+ */
 @Composable
-fun GuideScreen(onExamples: () -> Unit, onScratch: () -> Unit, onBack: () -> Unit) {
+fun GuideScreen(hasGoals: Boolean, onExamples: () -> Unit, onScratch: () -> Unit, onBack: () -> Unit) {
     var index by rememberSaveable { mutableStateOf(0) }
+    var asking by rememberSaveable { mutableStateOf(false) }
     val page = pages[index]
     val last = index == pages.lastIndex
+    if (asking) {
+        AlertDialog(
+            onDismissRequest = { asking = false },
+            title = { Text("Add the examples?") },
+            text = { Text(examplesText() + " Change or remove them any time.") },
+            confirmButton = {
+                TextButton(onClick = { asking = false; onExamples() }, modifier = Modifier.testTag("guide-examples-ok")) { Text("Add them") }
+            },
+            dismissButton = { TextButton(onClick = { asking = false }) { Text("Cancel") } },
+        )
+    }
     Scaffold(
         topBar = {
             TopAppBar(
@@ -119,7 +147,10 @@ fun GuideScreen(onExamples: () -> Unit, onScratch: () -> Unit, onBack: () -> Uni
             }
             Spacer(Modifier.height(24.dp))
             if (last) {
-                Button(onClick = onExamples, modifier = Modifier.fillMaxWidth().testTag("guide-examples")) { Text("Add some examples to try") }
+                Button(
+                    onClick = { if (hasGoals) asking = true else onExamples() },
+                    modifier = Modifier.fillMaxWidth().testTag("guide-examples"),
+                ) { Text("Add some examples to try") }
                 Text(
                     "A few habits, a project, a to-do and two rewards. Change or remove them any time.",
                     style = MaterialTheme.typography.bodySmall,
@@ -127,37 +158,15 @@ fun GuideScreen(onExamples: () -> Unit, onScratch: () -> Unit, onBack: () -> Uni
                     textAlign = TextAlign.Center,
                     modifier = Modifier.padding(top = 4.dp, bottom = 8.dp),
                 )
-                OutlinedButton(onClick = onScratch, modifier = Modifier.fillMaxWidth().testTag("guide-scratch")) { Text("Start from scratch") }
+                OutlinedButton(onClick = if (hasGoals) onBack else onScratch, modifier = Modifier.fillMaxWidth().testTag("guide-scratch")) {
+                    Text(if (hasGoals) "Done" else "Start from scratch")
+                }
             }
             Row(Modifier.fillMaxWidth().padding(top = 8.dp)) {
                 if (index > 0) TextButton(onClick = { index-- }, modifier = Modifier.testTag("guide-back")) { Text("Back") }
                 Spacer(Modifier.weight(1f))
                 if (!last) Button(onClick = { index++ }, modifier = Modifier.testTag("guide-next")) { Text("Next") }
             }
-        }
-    }
-}
-
-/** The card at the top of Today for someone new: the guide, examples, or neither. */
-@Composable
-fun WelcomeCard(onTour: () -> Unit, onExamples: () -> Unit, onClose: () -> Unit) {
-    Card(
-        modifier = Modifier.fillMaxWidth().testTag("welcome-card"),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
-    ) {
-        Column(Modifier.padding(16.dp)) {
-            Text("👋 New here?", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSecondaryContainer)
-            Text(
-                "Take a one-minute tour, or start with a few example goals and rewards to try.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSecondaryContainer,
-            )
-            Row(Modifier.padding(top = 8.dp)) {
-                Button(onClick = onTour, modifier = Modifier.testTag("welcome-tour")) { Text("Show me around") }
-                Spacer(Modifier.width(8.dp))
-                TextButton(onClick = onExamples, modifier = Modifier.testTag("welcome-examples")) { Text("Examples") }
-            }
-            TextButton(onClick = onClose, modifier = Modifier.testTag("welcome-close")) { Text("No thanks") }
         }
     }
 }

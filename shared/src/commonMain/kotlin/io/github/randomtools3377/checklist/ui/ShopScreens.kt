@@ -78,6 +78,8 @@ fun ShopScreen(
     onEdit: (Reward) -> Unit,
     padding: PaddingValues,
     onBalanceCheck: () -> Unit = {},
+    /** Opens the editor for a new reward. */
+    onNew: () -> Unit = {},
 ) {
     if (view == null) return
     val haptics = LocalHapticFeedback.current
@@ -120,11 +122,10 @@ fun ShopScreen(
             if (!showBought) {
                 if (view.rewards.isEmpty()) {
                     item {
-                        Text(
-                            "The shop is empty. Add the real-life rewards you want to earn, at the prices you choose.",
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.fillMaxWidth().padding(top = 32.dp),
-                        )
+                        Column(Modifier.fillMaxWidth().padding(top = 32.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("The shop is empty. Add a treat to earn, at a price you choose.", textAlign = TextAlign.Center, modifier = Modifier.testTag("shop-empty"))
+                            Button(onClick = onNew, modifier = Modifier.padding(top = 12.dp).testTag("shop-empty-add")) { Text("New reward") }
+                        }
                     }
                 }
                 itemsIndexed(view.rewards, key = { _, row -> row.reward.id }) { index, row ->
@@ -144,11 +145,10 @@ fun ShopScreen(
             } else {
                 if (view.bought.isEmpty()) {
                     item {
-                        Text(
-                            "Nothing waiting. Rewards you buy wait here until you use them.",
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.fillMaxWidth().padding(top = 32.dp),
-                        )
+                        Column(Modifier.fillMaxWidth().padding(top = 32.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("Nothing waiting. Rewards you buy wait here until you use them.", textAlign = TextAlign.Center)
+                            TextButton(onClick = { onShowBought(false) }, modifier = Modifier.padding(top = 8.dp).testTag("bought-empty-shop")) { Text("See the rewards") }
+                        }
                     }
                 }
                 items(view.bought, key = { it.id }) { purchase ->

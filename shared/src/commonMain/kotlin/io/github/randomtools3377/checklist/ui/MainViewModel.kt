@@ -1501,9 +1501,9 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
         }
     }
 
-    /** First-time tips: on unless turned off, and the guides already shown. Null until read. */
-    val tips: StateFlow<TipsState?> = combine(dao.observeSetting(SETTING_TIPS_OFF), dao.observeSetting(SETTING_TIPS_SEEN)) { off, seen ->
-        TipsState(on = off != "1", seen = seen.orEmpty().split(",").filter { it.isNotBlank() }.toSet())
+    /** First-time tips: off unless turned on in Help, and the guides already shown. Null until read. */
+    val tips: StateFlow<TipsState?> = combine(dao.observeSetting(SETTING_TIPS_ON), dao.observeSetting(SETTING_TIPS_SEEN)) { on, seen ->
+        TipsState(on = on == "1", seen = seen.orEmpty().split(",").filter { it.isNotBlank() }.toSet())
     }.state(null)
 
     fun tipSeen(topic: HelpTopic) {
@@ -1512,13 +1512,13 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
     }
 
     fun setTipsOn(on: Boolean) {
-        viewModelScope.launch { repository.setSetting(SETTING_TIPS_OFF, if (on) "0" else "1") }
+        viewModelScope.launch { repository.setSetting(SETTING_TIPS_ON, if (on) "1" else "0") }
     }
 
     fun showTipsAgain() {
         viewModelScope.launch {
             repository.setSetting(SETTING_TIPS_SEEN, "")
-            repository.setSetting(SETTING_TIPS_OFF, "0")
+            repository.setSetting(SETTING_TIPS_ON, "1")
         }
     }
 
@@ -2028,19 +2028,55 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
         }
     }
 
-    /** The welcome card on Today: for someone new, until it is answered or a goal is added. */
-    val showWelcome: StateFlow<Boolean> = combine(dao.observeSetting(SETTING_GUIDE), dao.observeGoals(), dao.observeRemovedGoals()) { guide, goals, removed ->
-        guide != "done" && goals.isEmpty() && removed.isEmpty()
-    }.state(false)
+    /**
+     * The first-run setup's step while it shows, or null (see FirstRun): for someone brand new,
+     * until it is done or skipped. Under the app's own tests only when a test starts it.
+     */
+    val setupStep: StateFlow<SetupStep?> = combine(
+        dao.observeSetting(FirstRun.SETTING), dao.observeSetting(SETTING_GUIDE), dao.observeGoals(), dao.observeRemovedGoals(),
+    ) { setup, guide, goals, removed ->
+        FirstRun.step(setup, guide, nothingYet = goals.isEmpty() && removed.isEmpty(), underTest = phone.underTest)
+    }.state(null)
 
+    /** Moves the setup on to [step], or ends it with null. */
+    fun setupTo(step: SetupStep?) {
+        viewModelScope.launch { repository.setSetting(FirstRun.SETTING, step?.name ?: FirstRun.DONE) }
+    }
+
+    /**
+     * The setup's first step: turns on the extras of the [parts] picked (and off again any picked
+     * before and switched off since), then on to the first goal.
+     */
+    fun setupParts(parts: List<SetupPart>) {
+        FirstRun.changes(parts, features.value).forEach { (feature, on) -> setFeature(feature, on) }
+        setupTo(SetupStep.GOAL)
+    }
+
+    /** A first goal from the setup, added with one tap. */
+    fun addFirstGoal(goal: FirstGoal) {
+        viewModelScope.launch { repository.saveHabit(FirstRun.draft(goal, currentDay())) }
+    }
+
+    /** The setup's last step: when the day starts and ends, if changed; then Today. */
+    fun finishSetup(start: LocalTime?, endHour: Int) {
+        viewModelScope.launch {
+            val now = settings.value
+            if (start != null && start != now.dayStart) repository.setDayStart(start)
+            if (endHour != now.dayEndHour) repository.setDayEndHour(endHour)
+            repository.setSetting(FirstRun.SETTING, FirstRun.DONE)
+        }
+    }
+
+    /** "Start from scratch" at the end of the tour, for someone new. */
     fun closeWelcome() {
         viewModelScope.launch { repository.setSetting(SETTING_GUIDE, "done") }
     }
 
-    /** Adds the guide's example goals and rewards. */
+    /** Adds the tour's example goals and rewards, with Undo, which takes them away again. */
     fun addExamples(onDone: () -> Unit = {}) {
         viewModelScope.launch {
-            repository.addExamples(currentDay())
+            val added = repository.addExamples(currentDay())
+            offerUndo("Examples added") { repository.removeExamples(added) }
             onDone()
         }
     }
