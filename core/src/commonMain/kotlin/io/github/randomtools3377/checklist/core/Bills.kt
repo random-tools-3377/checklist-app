@@ -25,6 +25,13 @@ data class Bill(
     val archived: Boolean = false,
     /** The last day it was counted up to; null before it ever was. */
     val countedTo: LocalDate? = null,
+    /**
+     * Regular money in, like a pension, a benefit or a lodger's rent: each time it falls due it
+     * counts as money received that day, by itself, where a bill counts as spent.
+     */
+    val moneyIn: Boolean = false,
+    /** Remind this many days before it is due (0 for on the day); null for no reminder. */
+    val remindDays: Int? = null,
 ) {
     /** "every month", "every 2 weeks". */
     val howOften: String get() = if (count <= 1) "every ${every.one}" else "every $count ${every.many}"
@@ -88,6 +95,34 @@ object Bills {
 
     /** The next day [bill] falls due on or after [day], or null once it has ended. */
     fun next(bill: Bill, day: LocalDate): LocalDate? = if (bill.archived) null else due(bill, day, day.plusDays(400)).firstOrNull()
+
+    /** The days-before a bill's reminder can be set to. */
+    val REMIND_CHOICES: List<Int> = listOf(0, 1, 3, 7)
+
+    /** "On the day", "The day before", "3 days before". */
+    fun remindLabel(days: Int): String = when (days) {
+        0 -> "On the day"
+        1 -> "The day before"
+        else -> "$days days before"
+    }
+
+    /** When something due in [days] days is due, in words: "today", "tomorrow", "in 3 days". */
+    fun dueIn(days: Int): String = when {
+        days <= 0 -> "today"
+        days == 1 -> "tomorrow"
+        else -> "in $days days"
+    }
+
+    /**
+     * What [bill]'s reminder says, [days] before it is due: "Rent is due tomorrow, 650" for a bill
+     * and "Pension comes in tomorrow, 650" for money in, with [amount] as the phone writes money.
+     * With [hidden], while the budget is behind the privacy lock, it names nothing.
+     */
+    fun reminderWords(bill: Bill, days: Int, amount: String, hidden: Boolean = false): String = when {
+        hidden -> if (bill.moneyIn) "Money is coming in" else "A bill is due"
+        bill.moneyIn -> "${bill.name} comes in ${dueIn(days)}, $amount"
+        else -> "${bill.name} is due ${dueIn(days)}, $amount"
+    }
 
     /** What [bill] costs over a usual month: so much a week becomes 52 weeks over 12 months. */
     fun monthly(bill: Bill): Double = when (bill.every) {

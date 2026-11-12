@@ -25,6 +25,7 @@ import io.github.randomtools3377.checklist.core.MoneyEntry
 import io.github.randomtools3377.checklist.core.MoneyKind
 import io.github.randomtools3377.checklist.core.Pay
 import io.github.randomtools3377.checklist.core.PayPlan
+import io.github.randomtools3377.checklist.core.PayPlans
 import io.github.randomtools3377.checklist.core.WorkDay
 import io.github.randomtools3377.checklist.core.GoalKind
 import io.github.randomtools3377.checklist.core.Period
@@ -1052,7 +1053,7 @@ class Repository(private val db: AppDatabase, private val celebrations: GifStore
     suspend fun budgetSpreadsheet(first: LocalDate, now: kotlinx.datetime.LocalDateTime): String {
         val entries = dao.allMoney().map { it.toCore() }
         val categories = dao.moneyCategories().map { it.toCore() }
-        val plan = PayPlan.decode(dao.setting(PayPlan.SETTING))
+        val plan = PayPlans.decode(dao.setting(PayPlan.SETTING))
         val changes = dao.allWorkDays().map { it.toCore() }.associateBy { it.day }
         val month = Budget.month(Budget.monthOf(first), plan, changes, entries, categories, now)
         return io.github.randomtools3377.checklist.core.BudgetSheet.csv(Budget.monthOf(first), entries, categories, month.pay, now)
@@ -1208,7 +1209,7 @@ class Repository(private val db: AppDatabase, private val celebrations: GifStore
      * user to add if it should be. Changing one keeps what was already counted.
      */
     suspend fun saveBill(bill: Bill, today: LocalDate): Unit = db.withTransaction {
-        val name = bill.name.trim().take(40).ifEmpty { "Bill" }
+        val name = bill.name.trim().take(40).ifEmpty { if (bill.moneyIn) "Money in" else "Bill" }
         if (bill.id == 0L) {
             dao.insertBill(bill.copy(name = name, countedTo = today.minusDays(1)).toEntity())
         } else {
@@ -1225,7 +1226,7 @@ class Repository(private val db: AppDatabase, private val celebrations: GifStore
         dao.bill(id)?.let { dao.updateBill(it.copy(archived = true)) }
     }
 
-    /** Counts each bill as spent on each day it fell due up to [today], once. */
+    /** Counts each bill as spent, and regular money in as received, on each day it fell due up to [today], once. */
     suspend fun countBills(today: LocalDate): Unit = db.withTransaction {
         for (bill in dao.allBills().map { it.toCore() }) {
             if (bill.archived) continue
@@ -1233,7 +1234,8 @@ class Repository(private val db: AppDatabase, private val celebrations: GifStore
             days.forEach { day ->
                 dao.insertMoney(
                     MoneyEntry(
-                        kind = MoneyKind.SPENT, cents = bill.cents, categoryId = bill.categoryId, note = bill.name, day = day,
+                        kind = if (bill.moneyIn) MoneyKind.RECEIVED else MoneyKind.SPENT, cents = bill.cents,
+                        categoryId = bill.categoryId.takeIf { !bill.moneyIn }, note = bill.name, day = day,
                         at = nowMillis(), billId = bill.id,
                     ).toEntity(),
                 )
@@ -1314,7 +1316,7 @@ class Repository(private val db: AppDatabase, private val celebrations: GifStore
     private suspend fun moneyGameShares(entries: List<MoneyEntry>): (LocalDate) -> Double? {
         // The user's own daily amount, when set, is the line for every day still to be paid.
         dao.setting(MoneyGame.DAILY)?.toLongOrNull()?.takeIf { it > 0 }?.let { own -> return { _: LocalDate -> own / 100.0 } }
-        val plan = PayPlan.decode(dao.setting(PayPlan.SETTING))
+        val plan = PayPlans.decode(dao.setting(PayPlan.SETTING))
         val changes = dao.allWorkDays().map { it.toCore() }.associateBy { it.day }
         val bills = dao.allBills().map { it.toCore() }
         val shares = mutableMapOf<LocalDate, Double?>()
@@ -1373,12 +1375,35 @@ class Repository(private val db: AppDatabase, private val celebrations: GifStore
         )
     }
 
-    suspend fun savePay(plan: PayPlan) = setSetting(PayPlan.SETTING, PayPlan.encode(plan))
+    /**
+     * Saves the pay, applying from [from] on: the days before keep the pay they had, so past
+     * months and reports stay as they were. With null it applies from the start, to every day.
+     */
+    suspend fun savePay(plan: PayPlan, from: LocalDate? = null): Unit = db.withTransaction {
+        val stored = PayPlans.decode(dao.setting(PayPlan.SETTING))
+        val plans = if (stored == null) PayPlans.of(plan) else stored.changed(plan, from)
+        dao.putSetting(SettingEntity(PayPlan.SETTING, PayPlans.encode(plans)))
+    }
 
-    /** Saves money spent or received: a new entry when [entry]'s id is 0. */
-    suspend fun saveMoney(entry: MoneyEntry) {
-        val row = entry.copy(cents = entry.cents.coerceAtLeast(0), note = entry.note.trim().take(80), at = entry.at.takeIf { it > 0 } ?: nowMillis()).toEntity()
-        if (entry.id == 0L) dao.insertMoney(row) else dao.updateMoney(row)
+    /**
+     * Saves money spent or received: a new entry when [entry]'s id is 0. Spending paid from a
+     * saving goal ([MoneyEntry.spentFromSavings]) comes out of that goal when it holds enough,
+     * and is no part of the month's spending; when it doesn't, it is plain spending.
+     */
+    suspend fun saveMoney(entry: MoneyEntry): Unit = db.withTransaction {
+        var saved = entry.copy(cents = entry.cents.coerceAtLeast(0), note = entry.note.trim().take(80), at = entry.at.takeIf { it > 0 } ?: nowMillis())
+        if (saved.spentFromSavings) {
+            val goal = saved.savingId
+            // What this entry already took from the goal counts as still in it while it is changed.
+            val own = dao.money(saved.id)?.toCore()?.takeIf { it.kind == MoneyKind.TAKEN_OUT && it.savingId == goal }?.cents ?: 0
+            saved = if (goal != null && savedIn(goal) + own >= saved.cents) {
+                saved.copy(kind = MoneyKind.TAKEN_OUT)
+            } else {
+                saved.copy(kind = MoneyKind.SPENT, savingId = null, spentFromSavings = false)
+            }
+        }
+        if (saved.id == 0L) dao.insertMoney(saved.toEntity()) else dao.updateMoney(saved.toEntity())
+        Unit
     }
 
     suspend fun removeMoney(id: Long) = dao.deleteMoney(id)

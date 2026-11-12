@@ -97,7 +97,8 @@ object MoodSheet {
 /**
  * One month of the budget as a spreadsheet (CSV): what was spent, money in, bills, and money put
  * into and taken out of savings, oldest first. Amounts are what they do to what's left: spending,
- * bills and saving below zero, money in and money taken out of savings above it. With pay set,
+ * bills and saving below zero, money in and money taken out of savings above it; something paid
+ * from savings is a line at zero, with the amount in its note. With pay set,
  * the month's pay (so far, for the month still going) is a line of its own, so the amounts add
  * up to what's left.
  */
@@ -109,6 +110,7 @@ object BudgetSheet {
     const val RECEIVED = "Money in"
     const val SAVED = "Put into savings"
     const val TAKEN_OUT = "Taken out of savings"
+    const val FROM_SAVINGS = "Spent from savings"
     const val PAY = "Pay"
     const val PAY_SO_FAR = "Pay so far"
 
@@ -127,9 +129,11 @@ object BudgetSheet {
                 MoneyKind.SPENT -> (if (entry.billId != null) BILL else SPENT) to -entry.cents
                 MoneyKind.RECEIVED -> RECEIVED to entry.cents
                 MoneyKind.SAVED -> SAVED to -entry.cents
-                MoneyKind.TAKEN_OUT -> TAKEN_OUT to entry.cents
+                // Paid from savings: set aside earlier, so it changes nothing in what's left this month.
+                MoneyKind.TAKEN_OUT -> if (entry.paidFromSavings) FROM_SAVINGS to 0L else TAKEN_OUT to entry.cents
             }
-            append(line(entry.day.toString(), what, words(entry.categoryId?.let { names[it] }), amount(cents), words(entry.note)))
+            val note = if (entry.paidFromSavings) listOf(amount(entry.cents) + " from savings", entry.note).filter { it.isNotBlank() }.joinToString(": ") else entry.note
+            append(line(entry.day.toString(), what, words(entry.categoryId?.let { names[it] }), amount(cents), words(note)))
         }
         if (pay != null) {
             val going = now.date <= last

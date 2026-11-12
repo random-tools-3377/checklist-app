@@ -69,6 +69,8 @@ import io.github.randomtools3377.checklist.core.MoneyKind
 import io.github.randomtools3377.checklist.core.MoneyMonth
 import io.github.randomtools3377.checklist.core.Pay
 import io.github.randomtools3377.checklist.core.PayPlan
+import io.github.randomtools3377.checklist.core.PayPlans
+import io.github.randomtools3377.checklist.core.SavingProgress
 import io.github.randomtools3377.checklist.core.PayUnit
 import io.github.randomtools3377.checklist.core.WorkDay
 import io.github.randomtools3377.checklist.core.WorkHours
@@ -167,7 +169,7 @@ fun BudgetScreen(
     }
     val shown = view ?: return
     val now by rememberNow(live = shown.thisMonth)
-    val month = remember(shown, now) { Budget.month(shown.first, shown.plan, shown.changes, shown.entries, shown.categories, now) }
+    val month = remember(shown, now) { Budget.month(shown.first, shown.plans, shown.changes, shown.entries, shown.categories, now) }
     val plan = shown.plan
     val hourly = plan?.let { Pay.hourly(it) }
     val categories = shown.categories.associateBy { it.id }
@@ -204,7 +206,7 @@ fun BudgetScreen(
         }
         if (plan != null && plan.complete && shown.thisMonth) {
             // A night shift from yesterday still going shows until it ends.
-            val todayPay = Pay.current(plan, now, workDays ?: shown.changes)
+            val todayPay = Pay.current(shown.plans ?: PayPlans.of(plan), now, workDays ?: shown.changes)
             item { TodayPayCard(todayPay, now, onChange = { onChangeDay(todayPay.day) }) }
         }
         game?.let { today -> item { MoneyGameCard(today, vm) } }
@@ -277,7 +279,8 @@ fun BudgetScreen(
                 Text(longDate(day), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp))
             }
             items(list, key = { "money-${it.id}" }) { entry ->
-                EntryRow(entry, entry.categoryId?.let { categories[it] }, hourly, onClick = { onEntry(entry.id) })
+                // How long it took to earn, at the pay of its own day.
+                EntryRow(entry, entry.categoryId?.let { categories[it] }, shown.plans?.on(entry.day)?.let { Pay.hourly(it) } ?: hourly, onClick = { onEntry(entry.id) })
             }
         }
     }
@@ -396,7 +399,7 @@ private fun CategoryRow(spend: CategorySpend) {
 @Composable
 private fun EntryRow(entry: MoneyEntry, category: MoneyCategory?, hourly: Double?, onClick: () -> Unit) {
     val received = entry.kind == MoneyKind.RECEIVED
-    if (entry.savingId != null) {
+    if (entry.savingId != null && !entry.spentFromSavings) {
         val out = entry.kind == MoneyKind.TAKEN_OUT
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -419,7 +422,8 @@ private fun EntryRow(entry: MoneyEntry, category: MoneyCategory?, hourly: Double
                 if (!received && entry.note.isNotBlank()) category?.let { add(it.name) }
                 if (!received && hourly != null) add(workText(entry.cents, hourly))
                 if (entry.purchaseId != null) add("bought in the shop")
-                if (entry.billId != null) add("bill")
+                if (entry.billId != null) add(if (received) "regular money in" else "bill")
+                if (entry.spentFromSavings) add("from savings")
             }
             if (line.isNotEmpty()) {
                 Text(line.joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -475,7 +479,9 @@ private fun HoursRow(hours: WorkHours, onChange: (WorkHours) -> Unit, tag: Strin
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun PayEditor(vm: MainViewModel, onClose: () -> Unit) {
-    val current by vm.payPlan.collectAsStateWithLifecycle()
+    // The same flow the Budget tab reads, so the pay is already here when this opens.
+    val plans by vm.payPlans.collectAsStateWithLifecycle()
+    val current = plans?.latest
     var loaded by rememberSaveable { mutableStateOf(false) }
     var amount by rememberSaveable { mutableStateOf("") }
     var unit by rememberSaveable { mutableStateOf(PayUnit.HOUR) }
@@ -494,6 +500,17 @@ fun PayEditor(vm: MainViewModel, onClose: () -> Unit) {
     }
     val amountValue = Amounts.parse(amount)?.takeIf { it > 0 }
     val keep = takeHome.toIntOrNull()?.takeIf { it in 1..100 }
+    // A change to pay that is already set asks from which day it applies.
+    var askFrom by rememberSaveable { mutableStateOf(false) }
+    if (askFrom && amountValue != null && keep != null) {
+        PayFromDialog(
+            onDismiss = { askFrom = false },
+            onSave = { from ->
+                askFrom = false
+                vm.savePay(PayPlan(amountValue, unit, week, keep), from, onClose)
+            },
+        )
+    }
     EditorScaffold(
         title = "Pay and hours",
         onBack = onClose,
@@ -501,7 +518,13 @@ fun PayEditor(vm: MainViewModel, onClose: () -> Unit) {
             if (amountValue == null || keep == null || week.none { it != null }) {
                 showErrors = true
             } else {
-                vm.savePay(PayPlan(amountValue, unit, week, keep), onClose)
+                val plan = PayPlan(amountValue, unit, week, keep)
+                when (current) {
+                    // The first time, it is simply the pay.
+                    null -> vm.savePay(plan, null, onClose)
+                    plan -> onClose()
+                    else -> askFrom = true
+                }
             }
         },
     ) {
@@ -567,18 +590,69 @@ fun PayEditor(vm: MainViewModel, onClose: () -> Unit) {
     }
 }
 
+/** The day a change to the pay applies from, as the "From when?" box offers it. */
+enum class PayFrom(val label: String) {
+    TODAY("Today"),
+    MONTH("The 1st of this month"),
+    START("From the start"),
+    ;
+
+    /** The day itself on [today]; null for from the start. */
+    fun day(today: LocalDate): LocalDate? = when (this) {
+        TODAY -> today
+        MONTH -> Budget.monthOf(today)
+        START -> null
+    }
+}
+
+/** Asks from which day a change to the pay applies: today, the 1st of this month, or from the start. */
+@Composable
+private fun PayFromDialog(onDismiss: () -> Unit, onSave: (LocalDate?) -> Unit) {
+    var choice by rememberSaveable { mutableStateOf(PayFrom.TODAY) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("From when?") },
+        text = {
+            Column {
+                Text(
+                    "Days before it keep the pay they had, so earlier months and reports stay as they were.",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                PayFrom.entries.forEach { from ->
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth().clickable { choice = from }.testTag("pay-from:${from.name}"),
+                    ) {
+                        RadioButton(selected = choice == from, onClick = { choice = from })
+                        Text(from.label, style = MaterialTheme.typography.bodyLarge)
+                    }
+                }
+                if (choice == PayFrom.START) {
+                    Text(
+                        "Every day, earlier months included, is worked out again with this pay.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = { onSave(choice.day(nowLocal().date)) }, modifier = Modifier.testTag("pay-from-save")) { Text("Save") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
+}
+
 /** One day that isn't the usual one: other hours, or a day off with or without pay. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun WorkDayEditor(start: LocalDate, vm: MainViewModel, onClose: () -> Unit) {
-    val plan by vm.payPlan.collectAsStateWithLifecycle()
+    val plans by vm.payPlans.collectAsStateWithLifecycle()
     // Every changed day, so a day in another month shows as it is, not "As usual".
     val changes by vm.workDays.collectAsStateWithLifecycle()
     var day by rememberSaveable { mutableStateOf(start.toEpochDay()) }
     val date = day.toDay()
     val loaded = changes != null
     val current = changes?.get(date)
-    val usual = plan?.usual(date)
+    val usual = plans?.on(date)?.usual(date)
     // 0 usual, 1 other hours, 2 off with pay, 3 off without.
     var choice by rememberSaveable(day, loaded, current) {
         mutableStateOf(
@@ -648,20 +722,33 @@ fun MoneyEditor(id: Long, received: Boolean, vm: MainViewModel, onClose: () -> U
     var purchaseId by rememberSaveable { mutableStateOf<Long?>(null) }
     var billId by rememberSaveable { mutableStateOf<Long?>(null) }
     var savingId by rememberSaveable { mutableStateOf<Long?>(null) }
+    // Spending paid from a saving goal: the goal, and what this entry already took from it.
+    var fromSaving by rememberSaveable { mutableStateOf<Long?>(null) }
+    var tookGoal by rememberSaveable { mutableStateOf<Long?>(null) }
+    var tookCents by rememberSaveable { mutableStateOf(0L) }
     var at by rememberSaveable { mutableStateOf(0L) }
     var showErrors by rememberSaveable { mutableStateOf(false) }
+    val savings by vm.savings.collectAsStateWithLifecycle()
     LaunchedEffect(id) {
         if (!loaded) {
             vm.loadMoney(id)?.let {
-                kind = it.kind
                 amount = Amounts.format(it.cents / 100.0)
                 categoryId = it.categoryId
                 note = it.note
                 day = it.day.toEpochDay()
                 purchaseId = it.purchaseId
                 billId = it.billId
-                savingId = it.savingId
                 at = it.at
+                if (it.spentFromSavings && it.kind == MoneyKind.TAKEN_OUT) {
+                    // Shown as the spending it is, with "From savings" on.
+                    kind = MoneyKind.SPENT
+                    fromSaving = it.savingId
+                    tookGoal = it.savingId
+                    tookCents = it.cents
+                } else {
+                    kind = it.kind
+                    savingId = it.savingId
+                }
             }
             loaded = true
         }
@@ -669,6 +756,16 @@ fun MoneyEditor(id: Long, received: Boolean, vm: MainViewModel, onClose: () -> U
     val value = Amounts.parse(amount)?.takeIf { it > 0 }
     val amountError = if (value == null) "How much" else null
     val categoryError = if (kind == MoneyKind.SPENT && categoryId == null) "Pick what it was for" else null
+    // What each saving goal holds for this entry: what's in it, with what this entry already took.
+    fun holds(goal: SavingProgress): Long = goal.savedCents + if (goal.goal.id == tookGoal) tookCents else 0
+    val canPayFromSavings = kind == MoneyKind.SPENT && savingId == null && purchaseId == null && billId == null
+    val paying = fromSaving.takeIf { canPayFromSavings }
+    val savingError = when {
+        paying == null -> null
+        value == null -> null
+        savings.none { it.goal.id == paying && holds(it) >= Budget.cents(value) } -> "Pick a saving goal that holds enough"
+        else -> null
+    }
     EditorScaffold(
         title = when {
             savingId != null -> "Savings"
@@ -678,14 +775,15 @@ fun MoneyEditor(id: Long, received: Boolean, vm: MainViewModel, onClose: () -> U
         },
         onBack = onClose,
         onSave = {
-            if (amountError != null || categoryError != null) {
+            if (amountError != null || categoryError != null || savingError != null) {
                 showErrors = true
             } else {
                 vm.saveMoney(
                     MoneyEntry(
-                        id = id, kind = kind, cents = Budget.cents(value!!),
+                        id = id, kind = if (paying != null) MoneyKind.TAKEN_OUT else kind, cents = Budget.cents(value!!),
                         categoryId = if (kind == MoneyKind.SPENT) categoryId else null,
-                        note = note, day = day.toDay(), at = at, purchaseId = purchaseId, billId = billId, savingId = savingId,
+                        note = note, day = day.toDay(), at = at, purchaseId = purchaseId, billId = billId,
+                        savingId = paying ?: savingId, spentFromSavings = paying != null,
                     ),
                     onClose,
                 )
@@ -726,6 +824,34 @@ fun MoneyEditor(id: Long, received: Boolean, vm: MainViewModel, onClose: () -> U
             modifier = Modifier.fillMaxWidth().testTag("field:note"),
         )
         DateSetting("Day", day.toDay(), { it?.let { picked -> day = picked.toEpochDay() } }, tag = "field:day", canClear = false)
+        // Paid from a saving goal: the money comes out of the goal and is no part of the month's spending.
+        if (canPayFromSavings && (savings.any { holds(it) > 0 } || fromSaving != null)) {
+            val cents = value?.let { Budget.cents(it) } ?: 0L
+            SwitchRow("From savings", fromSaving != null, "from-savings") { on ->
+                fromSaving = if (on) (savings.firstOrNull { holds(it) >= cents && holds(it) > 0 } ?: savings.firstOrNull())?.goal?.id else null
+            }
+            if (fromSaving != null) {
+                Text(
+                    "It comes out of the saving goal, and isn't counted in this month's spending, limits or the money game.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    savings.forEach { saving ->
+                        FilterChip(
+                            selected = fromSaving == saving.goal.id,
+                            onClick = { fromSaving = saving.goal.id },
+                            enabled = holds(saving) >= cents && holds(saving) > 0,
+                            label = { Text("${saving.goal.icon} ${saving.goal.name} · ${centsText(holds(saving))}") },
+                            modifier = Modifier.testTag("from-saving:${saving.goal.name}"),
+                        )
+                    }
+                }
+                if (showErrors && savingError != null) {
+                    Text(savingError, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("from-savings-error"))
+                }
+            }
+        }
         if (purchaseId != null) {
             Text(
                 "Bought in the shop. Returning the reward there takes this off.",
@@ -874,11 +1000,11 @@ internal val MoneyIcon: androidx.compose.ui.graphics.vector.ImageVector by lazy 
 
 /** Today's pay on Today: what's earned so far, filling up live. Hidden until pay is set. */
 @Composable
-fun TodayMoneyCard(vm: MainViewModel, onOpen: () -> Unit) {
-    val plan by vm.payPlan.collectAsStateWithLifecycle()
+fun TodayMoneyCard(vm: MainViewModel, onOpen: () -> Unit, onSpent: () -> Unit = {}) {
+    val plans by vm.payPlans.collectAsStateWithLifecycle()
     // Every changed day, whatever month the Budget tab was left on.
     val changes by vm.workDays.collectAsStateWithLifecycle()
-    val shown = plan?.takeIf { it.complete } ?: return
+    val shown = plans?.takeIf { it.latest.complete } ?: return
     val now by rememberNow(live = true)
     val pay = Pay.current(shown, now, changes.orEmpty())
     val hours = pay.hours
@@ -895,6 +1021,8 @@ fun TodayMoneyCard(vm: MainViewModel, onOpen: () -> Unit) {
                     style = MaterialTheme.typography.titleMedium,
                     modifier = Modifier.weight(1f),
                 )
+                // Noting what was spent, without going through the Budget tab.
+                TextButton(onClick = onSpent, modifier = Modifier.testTag("today-spent")) { Text("+ Spent") }
             }
             if (hours != null) {
                 val done = pay.done(now)

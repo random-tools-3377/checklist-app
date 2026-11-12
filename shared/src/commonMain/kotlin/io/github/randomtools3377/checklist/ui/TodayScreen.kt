@@ -114,6 +114,7 @@ fun TodayScreen(
     onCharacter: () -> Unit = {},
     onIdeas: (io.github.randomtools3377.checklist.core.SkillArea) -> Unit = {},
     onBudget: () -> Unit = {},
+    onSpent: () -> Unit = {},
     onMoodGoals: () -> Unit = {},
     onMoodJournal: () -> Unit = {},
     skipRequest: Long?,
@@ -700,7 +701,7 @@ fun TodayScreen(
                     habitSection("This year", shown(view.thisYear), screen, ::tick, vm, grid, { details = it }, stopwatch, { r -> entering = r }, ::checkItem, { editingTick = it }) { skipping = it }
                 }
                 TodaySection.MONEY -> if (io.github.randomtools3377.checklist.core.Feature.BUDGET in features && !(vm.settings.value.locks.budget && !vm.unlocked.value)) {
-                    item(key = "money") { TodayMoneyCard(vm, onBudget) }
+                    item(key = "money") { TodayMoneyCard(vm, onBudget, onSpent) }
                 }
                 TodaySection.PROJECTS -> {
                     startGoals()

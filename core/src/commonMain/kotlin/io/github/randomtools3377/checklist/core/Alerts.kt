@@ -35,6 +35,9 @@ enum class AlertKind {
 
     /** A project's deadline is near: the day before it, and on the day (see [Alerts.deadlines]). */
     DEADLINE,
+
+    /** A bill, or regular money in, is due: some days before, as set on it (see [Alerts.bills]). */
+    BILL,
 }
 
 /**
@@ -230,6 +233,55 @@ object Alerts {
             )
         }
     }
+
+    /** The time of day a bill's reminder comes when "My day starts at" isn't set. */
+    val BILL_TIME = LocalTime(9, 0)
+
+    /**
+     * The bill reminders from [from] (included) to [to] (not included): for each bill with a
+     * reminder, one for each time it falls due, [Bill.remindDays] days before, at [time]. An
+     * alert's goal id is the bill's id, its day the day it comes on, and its minutes before the
+     * days before.
+     */
+    fun bills(bills: List<Bill>, from: LocalDateTime, to: LocalDateTime, time: LocalTime = BILL_TIME): List<Alert> {
+        val alerts = mutableListOf<Alert>()
+        for (bill in bills) {
+            val before = bill.remindDays?.coerceAtLeast(0) ?: continue
+            if (bill.archived) continue
+            for (due in Bills.due(bill, from.date.plusDays(before), to.date.plusDays(before))) {
+                val day = due.minusDays(before)
+                alerts += Alert(bill.id, day, LocalDateTime(day, time), AlertKind.BILL, minutesBefore = before)
+            }
+        }
+        return alerts.filter { it.at >= from && it.at < to }.sortedBy { it.at }
+    }
+
+    /**
+     * The bill reminders to show from [from] (included) to [to] (not included), in words: the
+     * title is all there is to say ("Rent is due tomorrow, 650"). With [hidden], while the
+     * budget is behind the privacy lock, each only says "A bill is due". [amount] writes cents
+     * as the phone writes money. Their ids start at [BILL_IDS], apart from the goals'.
+     */
+    fun billReminders(
+        bills: List<Bill>,
+        from: LocalDateTime,
+        to: LocalDateTime,
+        time: LocalTime = BILL_TIME,
+        hidden: Boolean = false,
+        amount: (Long) -> String,
+    ): List<DeadlineReminder> = bills(bills, from, to, time).mapNotNull { alert ->
+        val bill = bills.find { it.id == alert.goalId } ?: return@mapNotNull null
+        DeadlineReminder(
+            goalId = BILL_IDS + bill.id,
+            day = alert.day,
+            at = alert.at,
+            title = (if (hidden) "🔒 " else "${bill.icon} ") + Bills.reminderWords(bill, alert.minutesBefore, amount(bill.cents), hidden),
+            text = if (hidden) "Open the Budget tab to see it." else if (bill.moneyIn) "It is counted as money in on its day, by itself." else "It is counted as spent on its day, by itself.",
+        )
+    }
+
+    /** Where bill reminders' ids start: far above any goal's, and still a notification id of their own on Android. */
+    const val BILL_IDS = 900_000L
 
     /** The goal id a morning plan carries: it is about the whole day, not one goal. */
     const val MORNING_GOAL = 0L

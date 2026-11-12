@@ -43,7 +43,19 @@ object MoneyGame {
      * the share stays the same when a bill falls due.
      */
     fun share(
-        plan: PayPlan?,
+        plan: PayPlan,
+        first: LocalDate,
+        changes: Map<LocalDate, WorkDay>,
+        entries: List<MoneyEntry>,
+        bills: List<Bill> = emptyList(),
+    ): Double? = share(PayPlans.of(plan), first, changes, entries, bills)
+
+    /**
+     * The share with the pay as it was on each day of the month (see [PayPlans]). Regular money
+     * in still to come in the month counts with the money in, like a bill to come counts against.
+     */
+    fun share(
+        plan: PayPlans?,
         first: LocalDate,
         changes: Map<LocalDate, WorkDay>,
         entries: List<MoneyEntry>,
@@ -54,12 +66,13 @@ object MoneyGame {
         val pay = plan?.takeIf { it.complete }?.let { p -> days.sumOf { Pay.day(p, it, changes[it]).total } } ?: 0.0
         val received = month.filter { it.kind == MoneyKind.RECEIVED }.sumOf { it.cents } / 100.0
         val counted = month.filter { it.kind == MoneyKind.SPENT && it.billId != null }.sumOf { it.cents } / 100.0
-        val toCome = bills.filter { !it.archived }.sumOf { bill ->
+        fun toCome(moneyIn: Boolean) = bills.filter { !it.archived && it.moneyIn == moneyIn }.sumOf { bill ->
             val from = maxOf(days.first(), bill.countedTo?.plusDays(1) ?: days.first())
             bill.cents * Bills.due(bill, from, days.last()).size
         } / 100.0
-        val pool = pay + received - counted - toCome
-        return if (pay + received <= 0.0) null else maxOf(0.0, pool) / days.size
+        val comingIn = toCome(moneyIn = true)
+        val pool = pay + received + comingIn - counted - toCome(moneyIn = false)
+        return if (pay + received + comingIn <= 0.0) null else maxOf(0.0, pool) / days.size
     }
 
     /** What [day] spent, bills aside, in cents. */

@@ -15,6 +15,7 @@ import io.github.randomtools3377.checklist.data.LOCK_PRIVATE
 import io.github.randomtools3377.checklist.data.SETTING_DAY_END_HOUR
 import io.github.randomtools3377.checklist.data.SETTING_DEFAULT_FINISH
 import io.github.randomtools3377.checklist.data.SharedParts
+import io.github.randomtools3377.checklist.data.billReminders
 import io.github.randomtools3377.checklist.data.deadlineReminders
 import io.github.randomtools3377.checklist.data.eveningChecks
 import io.github.randomtools3377.checklist.data.moodReminders
@@ -127,7 +128,8 @@ internal object IosReminders {
         // Every day's first reminders before "keep reminding" repeats, so one day's repeats
         // don't take the places of the next days' reminders.
         // A project's deadline, the day before and on the day, while it isn't finished.
-        val deadlines = deadlineReminders(dao, from, to).take((MOST - evenings.size).coerceAtLeast(0))
+        // And a bill, or regular money in, coming up: some days before it is due, as set on it.
+        val deadlines = (deadlineReminders(dao, from, to) + billReminders(dao, from, to)).sortedBy { it.at }.take((MOST - evenings.size).coerceAtLeast(0))
         // The mood reminder for each of the next days, when it is on, left out for a day whose
         // mood is in: handed over again on every change, so today's goes once the mood is given.
         val moods = moodReminders(dao, from, to).take((MOST - evenings.size - deadlines.size).coerceAtLeast(0))
@@ -221,6 +223,7 @@ internal object IosReminders {
         AlertKind.USUAL -> "About now, as usual"
         AlertKind.NEXT -> "Next up"
         AlertKind.DEADLINE -> "Due soon"
+        AlertKind.BILL -> "Due soon"
     }
 
     private fun components(at: LocalDateTime): NSDateComponents = NSDateComponents().apply {

@@ -46,6 +46,8 @@ import io.github.randomtools3377.checklist.data.SETTING_DAY_START
 import io.github.randomtools3377.checklist.data.SETTING_DEFAULT_FINISH
 import io.github.randomtools3377.checklist.data.SETTING_MORNING_PLAN
 import io.github.randomtools3377.checklist.data.SETTING_REMINDER_LIGHT
+import io.github.randomtools3377.checklist.data.billReminders
+import io.github.randomtools3377.checklist.data.billTimes
 import io.github.randomtools3377.checklist.data.deadlineReminders
 import io.github.randomtools3377.checklist.data.deadlineTimes
 import io.github.randomtools3377.checklist.data.eveningChecks
@@ -139,7 +141,7 @@ object Reminders {
         val defaultFinish = dao.setting(SETTING_DEFAULT_FINISH)?.toIntOrNull()?.toTime()
         val nextAlert = (
             Alerts.between(goals, from, to, dayEnd, defaultFinish, usualTimes(dao)) + mornings(dao, from, to, dayEnd) +
-                weeklies(dao, from, to, dayEnd) + deadlineTimes(dao, from, to)
+                weeklies(dao, from, to, dayEnd) + deadlineTimes(dao, from, to) + billTimes(dao, from, to)
             ).minOfOrNull { it.at }
         // The evening check, when it is on.
         val nextEvening = eveningTimes(dao, from, to).minOfOrNull { it.at }
@@ -202,6 +204,8 @@ object Reminders {
         if (moodReminders(dao, since.local(), until.local()).any { it.at.millis() > since }) showMoodReminder(context, dayEnd)
         // A project's deadline, the day before and on the day, while it isn't finished.
         deadlineReminders(dao, since.local(), until.local()).filter { it.at.millis() > since }.forEach { showDeadline(context, it, dayEnd) }
+        // A bill, or regular money in, coming up: some days before it is due, as set on it. It opens the Budget tab.
+        billReminders(dao, since.local(), until.local()).filter { it.at.millis() > since }.forEach { showDeadline(context, it, dayEnd, open = "budget") }
         // A focus timer whose time is up (not one ending in the next few seconds): its goal is
         // ticked here, unless the app on screen took the timer first and ticked it there.
         Focus.takeEnded(context, nowMillis)?.let { focus ->
@@ -391,16 +395,16 @@ object Reminders {
      * left (a private one behind the lock says only when). Tapping it opens Today, where the
      * project is. It goes when its day ends at [dayEnd].
      */
-    private fun showDeadline(context: Context, reminder: DeadlineReminder, dayEnd: Int) {
+    private fun showDeadline(context: Context, reminder: DeadlineReminder, dayEnd: Int, open: String = "today") {
         if (!canNotify(context)) return
         val endsIn = LocalDateTime(reminder.day.plusDays(1), LocalTime(dayEnd, 0)).millis() - System.currentTimeMillis()
         if (endsIn <= 0) return
         val id = notificationId(reminder.goalId)
-        val open = PendingIntent.getActivity(
+        val opens = PendingIntent.getActivity(
             context,
             id,
             Intent(context, MainActivity::class.java)
-                .putExtra(MainActivity.EXTRA_OPEN, "today")
+                .putExtra(MainActivity.EXTRA_OPEN, open)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
@@ -408,7 +412,7 @@ object Reminders {
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(reminder.title)
             .setContentText(reminder.text)
-            .setContentIntent(open)
+            .setContentIntent(opens)
             .setAutoCancel(true)
             .setTimeoutAfter(endsIn)
             .setCategory(NotificationCompat.CATEGORY_REMINDER)
@@ -660,6 +664,7 @@ object Reminders {
             AlertKind.USUAL -> "About now, as usual"
             AlertKind.NEXT -> "Next up"
             AlertKind.DEADLINE -> "Due soon"
+            AlertKind.BILL -> "Due soon"
         }
         val details = buildList {
             add(whenText)

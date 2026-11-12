@@ -257,6 +257,27 @@ fun ChecklistApp(vm: MainViewModel) {
 
     // A notification can ask for a tab, like the weekly summary opening the review.
     val openTab by vm.openTab.collectAsStateWithLifecycle()
+    // Quick "Spent" waiting for the privacy lock to open, and the note when Budget is off.
+    var spentAfterUnlock by rememberSaveable { mutableStateOf(false) }
+    var budgetOffNote by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(unlocked, spentAfterUnlock) {
+        if (unlocked && spentAfterUnlock) {
+            spentAfterUnlock = false
+            // Only where it was asked: not after moving on and unlocking something else.
+            if (stack.lastOrNull() == AppTab.BUDGET.route) push("money/0")
+        }
+    }
+    if (budgetOffNote) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { budgetOffNote = false },
+            title = { Text("Budget is off") },
+            text = { Text("\"Spent\" notes what you spend in the budget. Turn on Budget in Settings → Features to use it.") },
+            confirmButton = {
+                TextButton(onClick = { budgetOffNote = false; push("features") }, modifier = Modifier.testTag("spent-open-features")) { Text("Features") }
+            },
+            dismissButton = { TextButton(onClick = { budgetOffNote = false }) { Text("Not now") } },
+        )
+    }
     androidx.compose.runtime.LaunchedEffect(openTab) {
         val asked = openTab ?: return@LaunchedEffect
         when (asked) {
@@ -272,6 +293,21 @@ fun ChecklistApp(vm: MainViewModel) {
             OPEN_QUICK_TODO -> {
                 goTo(AppTab.TODAY)
                 quickTodo = true
+            }
+            // Quick "Spent", from the app icon or the budget widget: the spending form straight
+            // away. Read from the settings themselves, as they may not be loaded yet.
+            OPEN_SPENT -> if (!vm.featureOn(io.github.randomtools3377.checklist.core.Feature.BUDGET)) {
+                goTo(AppTab.TODAY)
+                budgetOffNote = true
+            } else {
+                goTo(AppTab.BUDGET)
+                if (vm.budgetLocked() && !vm.unlocked.value) {
+                    // Behind the privacy lock it asks to unlock first, and opens once unlocked.
+                    spentAfterUnlock = true
+                    unlock()
+                } else {
+                    push("money/0")
+                }
             }
             // The mood reminder: Today, with today's check-in open.
             io.github.randomtools3377.checklist.core.MoodReminder.OPEN -> {
@@ -513,6 +549,7 @@ fun ChecklistApp(vm: MainViewModel) {
                                 onCharacter = { push("character") },
                                 onIdeas = { area -> push("ideas/${area.name}") },
                                 onBudget = { goTo(AppTab.BUDGET) },
+                                onSpent = { push("money/0") },
                                 onMoodGoals = { push("mood-goals") },
                                 onMoodJournal = { push("mood-journal") },
                                 skipRequest = skipRequest,
@@ -766,6 +803,9 @@ private const val UNDO_MILLIS = 5_000L
 /** What the app shortcuts ask for, through MainActivity.EXTRA_OPEN (see res/xml/shortcuts.xml). */
 const val OPEN_NEW_TODO = "new-todo"
 const val OPEN_NEW_GOAL = "new-goal"
+
+/** Quick "Spent", from the app icon's shortcut and the budget widget: the spending form, straight away. */
+const val OPEN_SPENT = "spent"
 
 /** From the quick-add widget: a box on Today to add a to-do. */
 const val OPEN_QUICK_TODO = "quick-todo"

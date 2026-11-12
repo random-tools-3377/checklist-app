@@ -12,6 +12,7 @@ import io.github.randomtools3377.checklist.data.LOCK_PRIVATE
 import io.github.randomtools3377.checklist.data.SETTING_DAY_END_HOUR
 import io.github.randomtools3377.checklist.data.SETTING_DEFAULT_FINISH
 import io.github.randomtools3377.checklist.data.SharedParts
+import io.github.randomtools3377.checklist.data.billReminders
 import io.github.randomtools3377.checklist.data.deadlineReminders
 import io.github.randomtools3377.checklist.data.eveningChecks
 import io.github.randomtools3377.checklist.data.moodReminders
@@ -171,7 +172,8 @@ class DesktopReminders(private val phone: DesktopPhone) {
             }
             val alerts = Alerts.between(goals, from, to, dayEnd, defaultFinish, usual).sortedBy { it.at }
             // A project's deadline, the day before and on the day, while it isn't finished.
-            val deadlines = deadlineReminders(dao, from, to).map { DueReminder(it.goalId, it.title, it.text) }
+            // And a bill, or regular money in, coming up: some days before it is due, as set on it.
+            val deadlines = (deadlineReminders(dao, from, to) + billReminders(dao, from, to)).map { DueReminder(it.goalId, it.title, it.text) }
             if (alerts.isEmpty()) return deadlines
             val earliest = alerts.minOf { it.day }.minusDays(366)
             val ticks = dao.habitTicksSince(earliest.toEpochDay()).map { it.toCore() }
@@ -220,6 +222,7 @@ class DesktopReminders(private val phone: DesktopPhone) {
             AlertKind.USUAL -> "About now, as usual"
             AlertKind.NEXT -> "Next up"
             AlertKind.DEADLINE -> "Due soon"
+            AlertKind.BILL -> "Due soon"
         }
     }
 }

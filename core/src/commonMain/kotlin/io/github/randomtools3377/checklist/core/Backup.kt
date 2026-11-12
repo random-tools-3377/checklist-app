@@ -74,8 +74,12 @@ data class Backup(
     companion object {
         const val APP = "checklist"
 
-        /** Raised whenever the file's layout changes in a way older versions can't read. */
-        const val FORMAT = 28
+        /**
+         * Raised whenever the file's layout changes in a way older versions can't read. Format 29:
+         * the pay setting can hold dated pay plans, bills can be regular money in and have a
+         * reminder, and spending can be paid from a saving goal.
+         */
+        const val FORMAT = 29
 
         private val json = Json {
             prettyPrint = true

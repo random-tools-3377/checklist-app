@@ -121,7 +121,7 @@ class FocusTimeTest {
             focusSessions = listOf(session(1, monday, 20)),
         )
         val text = Backup.encode(backup)
-        assertEquals(28, Backup.FORMAT)
+        assertTrue(Backup.FORMAT >= 28)
         assertEquals(backup, Backup.decode(text))
         // A file from before focus time was kept has none, and opens as before.
         val older = Backup.decode(Backup.encode(backup.copy(format = 27)).replace(Regex(",\\s*\"focusSessions\": \\[[^\\]]*\\]"), ""))

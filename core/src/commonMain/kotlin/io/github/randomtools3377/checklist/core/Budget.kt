@@ -61,14 +61,75 @@ data class PayPlan(
 
         fun encode(plan: PayPlan): String = json.encodeToString(serializer(), plan)
 
-        fun decode(text: String?): PayPlan? = text?.takeIf { it.isNotBlank() }?.let {
-            try {
-                json.decodeFromString(serializer(), it).takeIf { plan -> plan.week.size == 7 }
+        /** The pay as it is now: the latest plan, whether the setting holds one plan or dated ones (see [PayPlans]). */
+        fun decode(text: String?): PayPlan? = PayPlans.decode(text)?.latest
+
+        /** One plan on its own, as the setting held it before pay could change from a date. */
+        internal fun decodeOne(text: String): PayPlan? = try {
+            json.decodeFromString(serializer(), text).takeIf { plan -> plan.week.size == 7 }
+        } catch (e: SerializationException) {
+            null
+        } catch (e: IllegalArgumentException) {
+            null
+        }
+    }
+}
+
+/** A pay plan and the day it applies from; null for from the start. */
+@Serializable
+data class DatedPlan(val from: LocalDate? = null, val plan: PayPlan)
+
+/**
+ * The pay over time: each plan with the day it applies from, earliest first. A pay rise, a new tax
+ * percentage or a new usual week is a new plan from a date, so the days before it keep the pay
+ * they had. The earliest plan also covers every day before it.
+ */
+@Serializable
+data class PayPlans(val plans: List<DatedPlan>) {
+    /** The pay as it is now. */
+    val latest: PayPlan get() = plans.last().plan
+
+    /** The plan in force on [day]. */
+    fun on(day: LocalDate): PayPlan = (plans.lastOrNull { it.from == null || it.from <= day } ?: plans.first()).plan
+
+    /** Whether any plan has enough to work pay out. */
+    val complete: Boolean get() = plans.any { it.plan.complete }
+
+    /**
+     * These plans with [plan] applying from [from] on, or from the start with null. Plans that
+     * began on or after [from] give way to it; the days before keep the pay they had.
+     */
+    fun changed(plan: PayPlan, from: LocalDate?): PayPlans {
+        if (from == null) return of(plan)
+        val before = plans.filter { it.from == null || it.from < from }.ifEmpty { listOf(DatedPlan(null, plans.first().plan)) }
+        return PayPlans(if (before.last().plan == plan) before else before + DatedPlan(from, plan))
+    }
+
+    companion object {
+        private val json = Json { ignoreUnknownKeys = true }
+
+        /** One plan for every day. */
+        fun of(plan: PayPlan): PayPlans = PayPlans(listOf(DatedPlan(null, plan)))
+
+        /** As the [PayPlan.SETTING] setting holds it: a single plan stays in the older, plain form. */
+        fun encode(plans: PayPlans): String =
+            if (plans.plans.size == 1) PayPlan.encode(plans.latest) else json.encodeToString(serializer(), plans)
+
+        /** Reads the setting: dated plans, or the single plan older versions and backups hold. */
+        fun decode(text: String?): PayPlans? {
+            val stored = text?.takeIf { it.isNotBlank() } ?: return null
+            PayPlan.decodeOne(stored)?.let { return of(it) }
+            val read = try {
+                json.decodeFromString(serializer(), stored)
             } catch (e: SerializationException) {
-                null
+                return null
             } catch (e: IllegalArgumentException) {
-                null
+                return null
             }
+            val plans = read.plans.filter { it.plan.week.size == 7 }
+            if (plans.isEmpty()) return null
+            // Earliest first, the one from the start before any with a date.
+            return PayPlans(plans.sortedBy { it.from?.toEpochDays() ?: Int.MIN_VALUE })
         }
     }
 }
@@ -158,6 +219,23 @@ object Pay {
         return MonthPay(days.sumOf { it.earned(now) }, days.sumOf { it.total })
     }
 
+    /** What [day] pays with the plan in force on it. */
+    fun day(plans: PayPlans, day: LocalDate, change: WorkDay? = null): DayPay = day(plans.on(day), day, change)
+
+    /** The work day going on at [now], each day with the plan in force on it. */
+    fun current(plans: PayPlans, now: LocalDateTime, changes: Map<LocalDate, WorkDay>): DayPay {
+        val yesterday = now.date.minusDays(1)
+        val earlier = day(plans, yesterday, changes[yesterday])
+        if (earlier.hours != null && earlier.done(now).let { it > 0.0 && it < 1.0 }) return earlier
+        return day(plans, now.date, changes[now.date])
+    }
+
+    /** [day]'s month, each day with the plan in force on it, so a pay rise leaves the days before it as they were. */
+    fun month(plans: PayPlans, day: LocalDate, changes: Map<LocalDate, WorkDay>, now: LocalDateTime): MonthPay {
+        val days = monthDays(day).map { day(plans, it, changes[it]) }
+        return MonthPay(days.sumOf { it.earned(now) }, days.sumOf { it.total })
+    }
+
     /** Pay for an hour of work in a usual week, after tax; null without enough to go on. */
     fun hourly(plan: PayPlan): Double? {
         val hours = plan.weekMinutes / 60.0
@@ -213,12 +291,17 @@ data class MoneyEntry(
     val purchaseId: Long? = null,
     val billId: Long? = null,
     val savingId: Long? = null,
+    /**
+     * Spending typed in by hand and paid from the saving goal [savingId]: it is kept as money
+     * taken out of the goal, with its category for the record.
+     */
+    val spentFromSavings: Boolean = false,
 ) {
     /**
-     * A reward paid for from a saving goal: the money leaves the goal, and since it was set aside
-     * earlier it is no part of this month's spending, limits or budget game.
+     * A reward, or spending typed in, paid for from a saving goal: the money leaves the goal, and
+     * since it was set aside earlier it is no part of this month's spending, limits or budget game.
      */
-    val paidFromSavings: Boolean get() = kind == MoneyKind.TAKEN_OUT && purchaseId != null
+    val paidFromSavings: Boolean get() = kind == MoneyKind.TAKEN_OUT && (purchaseId != null || spentFromSavings)
 }
 
 /** A category's spending in a month, against its limit. */
@@ -265,10 +348,20 @@ object Budget {
     /** The first day of [day]'s month. */
     fun monthOf(day: LocalDate): LocalDate = LocalDate(day.year, day.month, 1)
 
-    /** The month starting on [first]: its pay by [now] (with [plan]) and its money, by category in the user's order. */
+    /** The month with one [plan] for every day. */
     fun month(
         first: LocalDate,
-        plan: PayPlan?,
+        plan: PayPlan,
+        changes: Map<LocalDate, WorkDay>,
+        entries: List<MoneyEntry>,
+        categories: List<MoneyCategory>,
+        now: LocalDateTime,
+    ): MoneyMonth = month(first, PayPlans.of(plan), changes, entries, categories, now)
+
+    /** The month starting on [first]: its pay by [now] (each day with the plan in force on it) and its money, by category in the user's order. */
+    fun month(
+        first: LocalDate,
+        plan: PayPlans?,
         changes: Map<LocalDate, WorkDay>,
         entries: List<MoneyEntry>,
         categories: List<MoneyCategory>,

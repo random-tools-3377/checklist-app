@@ -124,9 +124,10 @@ class ShortcutsTest {
     fun empty() = runBlocking { container.db.clearAllTables() }
 
     @Test
-    fun theIconHasFourShortcuts() {
+    fun theIconHasItsShortcuts() {
         val shortcuts = context.getSystemService(ShortcutManager::class.java).manifestShortcuts
-        assertEquals(listOf("new_todo", "new_goal", "plan", "shop"), shortcuts.sortedBy { it.rank }.map { it.id })
+        assertEquals(listOf("new_todo", "new_goal", "plan", "spent", "shop"), shortcuts.sortedBy { it.rank }.map { it.id })
+        assertEquals("spent", shortcuts.first { it.id == "spent" }.intent?.getStringExtra(MainActivity.EXTRA_OPEN))
         assertEquals("new-todo", shortcuts.first { it.id == "new_todo" }.intent?.getStringExtra(MainActivity.EXTRA_OPEN))
     }
 

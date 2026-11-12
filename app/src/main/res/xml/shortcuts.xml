@@ -49,6 +49,22 @@
                 android:value="plan" />
         </intent>
     </shortcut>
+    <!-- Quick "Spent" sits among the first four, as most home screens show no more than four. -->
+    <shortcut
+        android:enabled="true"
+        android:icon="@drawable/shortcut_spent"
+        android:shortcutId="spent"
+        android:shortcutLongLabel="@string/shortcut_spent_long"
+        android:shortcutShortLabel="@string/shortcut_spent_short">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetClass="io.github.randomtools3377.checklist.MainActivity"
+            android:targetPackage="io.github.randomtools3377.checklist">
+            <extra
+                android:name="open_tab"
+                android:value="spent" />
+        </intent>
+    </shortcut>
     <shortcut
         android:enabled="true"
         android:icon="@drawable/shortcut_shop"

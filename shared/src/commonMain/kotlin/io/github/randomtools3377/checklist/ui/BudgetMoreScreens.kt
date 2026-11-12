@@ -65,7 +65,7 @@ import io.github.randomtools3377.checklist.data.toEpochDay
 /** How many days ahead the Budget tab lists bills coming up. */
 private const val BILLS_AHEAD_DAYS = 30
 
-/** Bills falling due in the next [BILLS_AHEAD_DAYS] days, soonest first, for the Budget tab. */
+/** Bills, and regular money in, falling due in the next [BILLS_AHEAD_DAYS] days, soonest first, for the Budget tab. */
 fun billsComingUp(bills: List<Bill>, today: kotlinx.datetime.LocalDate): List<Pair<Bill, kotlinx.datetime.LocalDate>> =
     bills.filter { !it.archived }
         .flatMap { bill -> Bills.due(bill, today, today.plusDays(BILLS_AHEAD_DAYS)).map { bill to it } }
@@ -79,7 +79,11 @@ fun BillsCard(bills: List<Bill>, onBills: () -> Unit) {
     Card(Modifier.fillMaxWidth().testTag("bills-card")) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("🧾 Bills coming up", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+                Text(
+                    if (bills.any { !it.archived && it.moneyIn }) "🧾 Bills and money in coming up" else "🧾 Bills coming up",
+                    style = MaterialTheme.typography.titleSmall,
+                    modifier = Modifier.weight(1f),
+                )
                 TextButton(onClick = onBills, modifier = Modifier.testTag("open-bills")) { Text(if (bills.none { !it.archived }) "Add bills" else "All bills") }
             }
             if (coming.isEmpty()) {
@@ -93,10 +97,11 @@ fun BillsCard(bills: List<Bill>, onBills: () -> Unit) {
             coming.forEach { (bill, day) ->
                 Row(Modifier.fillMaxWidth().testTag("coming:${bill.name}")) {
                     Text(bill.icon, modifier = Modifier.width(32.dp))
-                    Text(bill.name, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                    Text(bill.name + if (bill.moneyIn) " · money in" else "", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
                     Text(
-                        (if (day == today) "today" else shortDate(day)) + " · " + centsText(bill.cents),
+                        (if (day == today) "today" else shortDate(day)) + " · " + (if (bill.moneyIn) "+" else "") + centsText(bill.cents),
                         style = MaterialTheme.typography.bodyMedium,
+                        color = if (bill.moneyIn) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
                     )
                 }
             }
@@ -289,12 +294,24 @@ fun BillsScreen(vm: MainViewModel, onBill: (Long) -> Unit, onBack: () -> Unit) {
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = padding.calculateTopPadding() + 8.dp, bottom = padding.calculateBottomPadding() + 24.dp),
         ) {
             item {
+                val out = shown.filter { !it.moneyIn }
+                val comingIn = shown.filter { it.moneyIn }
                 Text(
-                    if (shown.isEmpty()) "No bills yet. Add rent, phone, subscriptions and the like: each counts as spent on its day, by itself."
-                    else "About ${moneyText(shown.sumOf { Bills.monthly(it) }, alwaysCents = true)} a month in all. Each counts as spent on its day, by itself.",
+                    when {
+                        shown.isEmpty() -> "No bills yet. Add rent, phone, subscriptions and the like: each counts as spent on its day, by itself."
+                        out.isEmpty() -> "No bills yet."
+                        else -> "About ${moneyText(out.sumOf { Bills.monthly(it) }, alwaysCents = true)} a month in all. Each counts as spent on its day, by itself."
+                    },
                     style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.padding(bottom = 8.dp).testTag("bills-total"),
                 )
+                if (comingIn.isNotEmpty()) {
+                    Text(
+                        "About ${moneyText(comingIn.sumOf { Bills.monthly(it) }, alwaysCents = true)} a month comes in by itself, counted as money in on its day.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.padding(bottom = 8.dp).testTag("money-in-total"),
+                    )
+                }
             }
             items(shown, key = { it.id }) { bill ->
                 Row(
@@ -305,12 +322,14 @@ fun BillsScreen(vm: MainViewModel, onBill: (Long) -> Unit, onBack: () -> Unit) {
                     Column(Modifier.weight(1f)) {
                         Text(bill.name, style = MaterialTheme.typography.bodyLarge)
                         Text(
-                            bill.howOften.replaceFirstChar { it.uppercase() } + (Bills.next(bill, today)?.let { " · next ${shortDate(it)}" } ?: " · completed"),
+                            (if (bill.moneyIn) "Money in · " else "") + bill.howOften.replaceFirstChar { it.uppercase() } +
+                                (Bills.next(bill, today)?.let { " · next ${shortDate(it)}" } ?: " · completed") +
+                                (bill.remindDays?.let { " · 🔔" } ?: ""),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
-                    Text(centsText(bill.cents), style = MaterialTheme.typography.bodyLarge)
+                    Text((if (bill.moneyIn) "+" else "") + centsText(bill.cents), style = MaterialTheme.typography.bodyLarge)
                 }
             }
         }
@@ -331,6 +350,8 @@ fun BillEditor(id: Long, vm: MainViewModel, onClose: () -> Unit) {
     var count by rememberSaveable { mutableStateOf("1") }
     var first by rememberSaveable { mutableStateOf(nowLocal().date.toEpochDay()) }
     var until by rememberSaveable { mutableStateOf<Long?>(null) }
+    var moneyIn by rememberSaveable { mutableStateOf(false) }
+    var remindDays by rememberSaveable { mutableStateOf<Int?>(null) }
     var showErrors by rememberSaveable { mutableStateOf(false) }
     var stored by remember { mutableStateOf<Bill?>(null) }
     LaunchedEffect(id) {
@@ -345,6 +366,8 @@ fun BillEditor(id: Long, vm: MainViewModel, onClose: () -> Unit) {
                 count = it.count.toString()
                 first = it.first.toEpochDay()
                 until = it.until?.toEpochDay()
+                moneyIn = it.moneyIn
+                remindDays = it.remindDays
             }
             loaded = true
         }
@@ -356,7 +379,11 @@ fun BillEditor(id: Long, vm: MainViewModel, onClose: () -> Unit) {
     val value = Amounts.parse(amount)?.takeIf { it > 0 }
     val times = count.toIntOrNull()?.takeIf { it in 1..99 }
     EditorScaffold(
-        title = if (id == 0L) "New bill" else "Edit bill",
+        title = when {
+            moneyIn -> "Regular money in"
+            id == 0L -> "New bill"
+            else -> "Edit bill"
+        },
         onBack = onClose,
         onSave = {
             if (name.isBlank() || value == null || times == null) {
@@ -365,17 +392,22 @@ fun BillEditor(id: Long, vm: MainViewModel, onClose: () -> Unit) {
                 val bill = (stored ?: Bill(name = name, icon = icon, cents = 0, first = first.toDay())).copy(
                     id = id, name = name, icon = icon, cents = Budget.cents(value), categoryId = categoryId,
                     every = every, count = times, first = first.toDay(), until = until?.toDay(),
+                    moneyIn = moneyIn, remindDays = remindDays,
                 )
                 vm.saveBill(bill, onClose)
             }
         },
     ) {
         if (!loaded) return@EditorScaffold
+        SwitchRow(
+            "Money in", moneyIn, "bill-money-in",
+            hint = "Regular income, like a pension, a benefit or a lodger's rent. It counts as money in on its day, by itself.",
+        ) { moneyIn = it }
         IconPicker(icon) { icon = it }
         OutlinedTextField(
             value = name,
             onValueChange = { name = it.take(40) },
-            label = { Text("What it's for, like Rent") },
+            label = { Text(if (moneyIn) "Where it's from, like Pension" else "What it's for, like Rent") },
             singleLine = true,
             isError = showErrors && name.isBlank(),
             modifier = Modifier.fillMaxWidth().testTag("field:name"),
@@ -403,26 +435,50 @@ fun BillEditor(id: Long, vm: MainViewModel, onClose: () -> Unit) {
         }
         DateSetting(if (id == 0L) "First (or next) one" else "First one", first.toDay(), { it?.let { d -> first = d.toEpochDay() } }, tag = "field:first", canClear = false)
         DateSetting("Ends", until?.toDay(), { until = it?.toEpochDay() }, tag = "field:until", emptyText = "Never")
-        Text("Category", style = MaterialTheme.typography.titleSmall)
+        if (!moneyIn) {
+            Text("Category", style = MaterialTheme.typography.titleSmall)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                categories.filter { !it.archived || it.id == categoryId }.forEach { category ->
+                    FilterChip(
+                        selected = categoryId == category.id,
+                        onClick = { categoryId = category.id },
+                        label = { Text("${category.icon} ${category.name}") },
+                        modifier = Modifier.testTag("money-category:${category.name}"),
+                    )
+                }
+            }
+        }
+        Text("Reminder", style = MaterialTheme.typography.titleSmall)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            categories.filter { !it.archived || it.id == categoryId }.forEach { category ->
+            FilterChip(selected = remindDays == null, onClick = { remindDays = null }, label = { Text("None") }, modifier = Modifier.testTag("remind:none"))
+            Bills.REMIND_CHOICES.forEach { days ->
                 FilterChip(
-                    selected = categoryId == category.id,
-                    onClick = { categoryId = category.id },
-                    label = { Text("${category.icon} ${category.name}") },
-                    modifier = Modifier.testTag("money-category:${category.name}"),
+                    selected = remindDays == days,
+                    onClick = { remindDays = days },
+                    label = { Text(Bills.remindLabel(days)) },
+                    modifier = Modifier.testTag("remind:$days"),
                 )
             }
         }
+        if (remindDays != null) {
+            Text(
+                "A notification when your day starts, or at 9 in the morning until that is set in Settings.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
         Text(
-            if (id == 0L) "It's counted from today on. Anything already paid before today, add as spending if you want it in this month."
-            else "Changes apply from now on; what was already counted stays.",
+            when {
+                id != 0L -> "Changes apply from now on; what was already counted stays."
+                moneyIn -> "It's counted from today on. Anything that already came in before today, add as money in if you want it in this month."
+                else -> "It's counted from today on. Anything already paid before today, add as spending if you want it in this month."
+            },
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         if (id != 0L) {
             var asking by remember { mutableStateOf(false) }
-            TextButton(onClick = { asking = true }, modifier = Modifier.testTag("remove")) { Text("Stop this bill", color = MaterialTheme.colorScheme.error) }
+            TextButton(onClick = { asking = true }, modifier = Modifier.testTag("remove")) { Text(if (moneyIn) "Stop this money in" else "Stop this bill", color = MaterialTheme.colorScheme.error) }
             if (asking) {
                 AlertDialog(
                     onDismissRequest = { asking = false },
@@ -463,7 +519,7 @@ fun BudgetReportScreen(vm: MainViewModel, onBack: () -> Unit) {
         },
     ) { padding ->
         if (shown == null) return@Scaffold
-        val month = remember(shown) { Budget.month(shown.first, shown.plan, shown.changes, shown.entries, shown.categories, nowLocal()) }
+        val month = remember(shown) { Budget.month(shown.first, shown.plans, shown.changes, shown.entries, shown.categories, nowLocal()) }
         val days = Pay.monthDays(shown.first)
         // Bills aside, as in the budget game, so the day a big bill falls doesn't always come out top.
         val spentByDay = days.map { day -> shown.entries.filter { it.day == day && it.kind == MoneyKind.SPENT && it.billId == null }.sumOf { it.cents } }

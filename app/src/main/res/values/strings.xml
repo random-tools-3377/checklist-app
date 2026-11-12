@@ -17,6 +17,8 @@
     <string name="shortcut_plan_long">Plan the coming days</string>
     <string name="shortcut_shop_short">Shop</string>
     <string name="shortcut_shop_long">Open the shop</string>
+    <string name="shortcut_spent_short">Spent</string>
+    <string name="shortcut_spent_long">Note what you spent</string>
     <string name="tile_label">Tick next</string>
     <string name="quick_add_widget_name">Checklist quick to-do</string>
     <string name="quick_add_widget_description">One tap to add a to-do.</string>

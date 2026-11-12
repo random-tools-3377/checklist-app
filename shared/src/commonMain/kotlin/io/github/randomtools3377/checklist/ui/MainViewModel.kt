@@ -154,6 +154,7 @@ import io.github.randomtools3377.checklist.core.MoneyCategory
 import io.github.randomtools3377.checklist.core.MoneyEntry
 import io.github.randomtools3377.checklist.core.Pay
 import io.github.randomtools3377.checklist.core.PayPlan
+import io.github.randomtools3377.checklist.core.PayPlans
 import io.github.randomtools3377.checklist.core.WorkDay
 import io.github.randomtools3377.checklist.data.RewardDraft
 import io.github.randomtools3377.checklist.data.SETTING_DAY_END_HOUR
@@ -313,10 +314,13 @@ data class TipsState(val on: Boolean, val seen: Set<String>)
 data class BudgetView(
     val first: LocalDate,
     val thisMonth: Boolean,
+    /** The pay as it is now. */
     val plan: PayPlan?,
     val changes: Map<LocalDate, WorkDay>,
     val entries: List<MoneyEntry>,
     val categories: List<MoneyCategory>,
+    /** The pay over time, so each day is worked out with the pay it had. */
+    val plans: PayPlans? = null,
 )
 
 data class Locks(
@@ -2616,6 +2620,9 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
     /** The user's pay and usual week, once set. */
     val payPlan: StateFlow<PayPlan?> = dao.observeSetting(PayPlan.SETTING).map { PayPlan.decode(it) }.state(null)
 
+    /** The pay over time: each plan with the day it applies from. */
+    val payPlans: StateFlow<PayPlans?> = dao.observeSetting(PayPlan.SETTING).map { PayPlans.decode(it) }.state(null)
+
     /** The budget's categories, in the user's order, removed ones included (for the history). */
     val moneyCategories: StateFlow<List<MoneyCategory>> =
         dao.observeMoneyCategories().map { rows -> rows.map { it.toCore() } }.state(emptyList())
@@ -2628,15 +2635,16 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
         .flatMapLatest { first ->
             val days = Pay.monthDays(first)
             combine(
-                payPlan,
+                payPlans,
                 dao.observeWorkDays(first.toEpochDay(), days.last().toEpochDay()),
                 dao.observeMoney(first.toEpochDay(), days.last().toEpochDay()),
                 moneyCategories,
-            ) { plan, changed, money, categories ->
+            ) { plans, changed, money, categories ->
                 BudgetView(
                     first = first,
                     thisMonth = first == Budget.monthOf(nowLocal().date),
-                    plan = plan,
+                    plan = plans?.latest,
+                    plans = plans,
                     changes = changed.map { it.toCore() }.associateBy { it.day },
                     entries = money.map { it.toCore() },
                     categories = categories,
@@ -2653,7 +2661,7 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
         val lastFirst = Budget.monthOf(Budget.monthOf(day).minusDays(1))
         val days = Pay.monthDays(lastFirst)
         combine(
-            payPlan,
+            payPlans,
             dao.observeWorkDays(lastFirst.toEpochDay(), days.last().toEpochDay()),
             dao.observeMoney(lastFirst.toEpochDay(), days.last().toEpochDay()),
             moneyCategories,
@@ -2720,6 +2728,8 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
     fun saveBill(bill: Bill, onDone: () -> Unit) {
         viewModelScope.launch {
             repository.saveBill(bill, nowLocal().date)
+            // Its reminder, if it has one, is set (or taken away) straight away.
+            runCatching { phone.rescheduleReminders() }
             onDone()
         }
     }
@@ -2727,6 +2737,7 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
     fun removeBill(id: Long, onDone: () -> Unit) {
         viewModelScope.launch {
             repository.removeBill(id)
+            runCatching { phone.rescheduleReminders() }
             onDone()
         }
     }
@@ -2780,14 +2791,18 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
         MoneyGameView(share, game.spentCents, if (share != null && MoneyGame.day(game.spentCents, share) != MoneyGame.Day.OVER) before + 1 else before, before, own)
     }.state(null)
 
+    /** Whether the privacy lock covers the budget, read now, for before [settings] has been loaded. */
+    suspend fun budgetLocked(): Boolean = dao.setting(LOCK_BUDGET) == "1"
+
     /** Puts in the starting categories the first time the budget is opened. */
     fun startBudget() {
         viewModelScope.launch { repository.startBudget() }
     }
 
-    fun savePay(plan: PayPlan, onDone: () -> Unit) {
+    /** Saves the pay from [from] on, or from the start with null (see [Repository.savePay]). */
+    fun savePay(plan: PayPlan, from: LocalDate?, onDone: () -> Unit) {
         viewModelScope.launch {
-            repository.savePay(plan)
+            repository.savePay(plan, from)
             onDone()
         }
     }

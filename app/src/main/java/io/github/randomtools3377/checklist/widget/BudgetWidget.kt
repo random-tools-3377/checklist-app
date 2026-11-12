@@ -43,9 +43,11 @@ import io.github.randomtools3377.checklist.core.Feature
 import io.github.randomtools3377.checklist.core.MoneyMonth
 import io.github.randomtools3377.checklist.core.Pay
 import io.github.randomtools3377.checklist.core.PayPlan
+import io.github.randomtools3377.checklist.core.PayPlans
 import io.github.randomtools3377.checklist.data.LOCK_BUDGET
 import io.github.randomtools3377.checklist.data.nowLocal
 import io.github.randomtools3377.checklist.data.toCore
+import io.github.randomtools3377.checklist.ui.OPEN_SPENT
 import io.github.randomtools3377.checklist.ui.billsComingUp
 import io.github.randomtools3377.checklist.ui.centsText
 import io.github.randomtools3377.checklist.ui.minutesText
@@ -59,7 +61,8 @@ import kotlinx.datetime.LocalTime
 sealed interface BudgetWidgetData {
     val look: WidgetLook
 
-    data class Off(override val look: WidgetLook, val why: String) : BudgetWidgetData
+    /** [canSpend]: the budget is on but behind the privacy lock, so "+ Spent" is still offered (the app asks to unlock). */
+    data class Off(override val look: WidgetLook, val why: String, val canSpend: Boolean = false) : BudgetWidgetData
 
     data class Shown(
         override val look: WidgetLook,
@@ -102,8 +105,9 @@ class BudgetWidget : GlanceAppWidget() {
             val look = widgetLook(dao)
             if (!Feature.BUDGET.isOn(dao.setting(Feature.BUDGET.key))) return BudgetWidgetData.Off(look, "Turn on Budget in Settings → Features.")
             // The budget stays off the home screen while the privacy lock covers it.
-            if (dao.setting(LOCK_BUDGET) == "1") return BudgetWidgetData.Off(look, "🔒 The budget is locked.")
-            val plan = PayPlan.decode(dao.setting(PayPlan.SETTING))?.takeIf { it.complete }
+            if (dao.setting(LOCK_BUDGET) == "1") return BudgetWidgetData.Off(look, "🔒 The budget is locked.", canSpend = true)
+            // Each day with the pay it had (see PayPlans).
+            val plan = PayPlans.decode(dao.setting(PayPlan.SETTING))?.takeIf { it.latest.complete }
                 ?: return BudgetWidgetData.Off(look, "Set up your pay in the Budget tab.")
             val now = nowLocal()
             val changes = dao.allWorkDays().map { it.toCore() }.associateBy { it.day }
@@ -112,7 +116,7 @@ class BudgetWidget : GlanceAppWidget() {
             val month = Budget.month(first, plan, changes, money, dao.moneyCategories().map { it.toCore() }, now)
             val spentToday = money.filter { it.day == now.date && it.kind == io.github.randomtools3377.checklist.core.MoneyKind.SPENT }.sumOf { it.cents }
             val next = billsComingUp(dao.allBills().map { it.toCore() }, now.date).firstOrNull()?.let { (bill, day) ->
-                "${bill.name} · ${if (day == now.date) "today" else shortDate(day)} · ${centsText(bill.cents)}"
+                "${bill.name} · ${if (day == now.date) "today" else shortDate(day)} · ${if (bill.moneyIn) "+" else ""}${centsText(bill.cents)}"
             }
             // A night shift from yesterday still going shows until it ends.
             return BudgetWidgetData.Shown(look, now, Pay.current(plan, now, changes), month, spentToday, next)
@@ -133,6 +137,10 @@ private fun BudgetContent(data: BudgetWidgetData) {
     val open = Intent(androidx.glance.LocalContext.current, MainActivity::class.java)
         .putExtra(MainActivity.EXTRA_OPEN, "budget")
         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+    // "+ Spent" opens the spending form straight away (behind the privacy lock, the app asks to unlock first).
+    val spent = Intent(androidx.glance.LocalContext.current, MainActivity::class.java)
+        .putExtra(MainActivity.EXTRA_OPEN, OPEN_SPENT)
+        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
     Row(
         verticalAlignment = Alignment.Top,
         modifier = GlanceModifier.fillMaxSize().background(colors.widgetBackground).cornerRadius(16.dp).padding(12.dp).clickable(actionStartActivity(open)),
@@ -142,12 +150,19 @@ private fun BudgetContent(data: BudgetWidgetData) {
                 Text("💼 Budget", style = TextStyle(color = colors.onSurfaceVariant, fontSize = 12.sp))
                 Spacer(GlanceModifier.height(4.dp))
                 Text(data.why, style = TextStyle(color = colors.onSurface, fontSize = 13.sp))
+                if (data.canSpend) {
+                    Spacer(GlanceModifier.height(6.dp))
+                    SpentButton(spent)
+                }
             }
             is BudgetWidgetData.Shown -> {
                 Column(GlanceModifier.defaultWeight()) {
                     val pay = data.today
                     val hours = pay.hours
-                    Text("💼 Today", style = TextStyle(color = colors.onSurfaceVariant, fontSize = 12.sp))
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = GlanceModifier.fillMaxWidth()) {
+                        Text(if (wide) "💼 Today" else "💼", maxLines = 1, style = TextStyle(color = colors.onSurfaceVariant, fontSize = 12.sp), modifier = GlanceModifier.defaultWeight())
+                        SpentButton(spent)
+                    }
                     when {
                         pay.paidOff -> Text("Day off, paid", maxLines = 1, style = TextStyle(color = colors.onSurface, fontSize = 15.sp, fontWeight = FontWeight.Bold))
                         hours == null -> Text("A day off", maxLines = 1, style = TextStyle(color = colors.onSurface, fontSize = 15.sp, fontWeight = FontWeight.Bold))
@@ -208,6 +223,22 @@ private fun BudgetContent(data: BudgetWidgetData) {
             }
         }
     }
+}
+
+/** "+ Spent": notes spending without going through the Budget tab. */
+@Composable
+private fun SpentButton(open: Intent) {
+    val colors = widgetColors()
+    Text(
+        "+ Spent",
+        maxLines = 1,
+        style = TextStyle(color = colors.primary, fontSize = 12.sp, fontWeight = FontWeight.Bold),
+        modifier = GlanceModifier
+            .background(colors.primaryContainer)
+            .cornerRadius(10.dp)
+            .padding(horizontal = 8.dp, vertical = 3.dp)
+            .clickable(actionStartActivity(open)),
+    )
 }
 
 @Composable
