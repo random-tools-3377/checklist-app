@@ -68,9 +68,9 @@ class NextGoalTile : TileService() {
         val name = next?.let { "${it.goal.icon} ${it.goal.name}" }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             tile.label = "Tick next"
-            tile.subtitle = name ?: "All done today"
+            tile.subtitle = name ?: "That's all for today"
         } else {
-            tile.label = name ?: "All done today"
+            tile.label = name ?: "That's all for today"
         }
         tile.state = if (next == null) Tile.STATE_INACTIVE else Tile.STATE_ACTIVE
         tile.updateTile()
@@ -91,7 +91,8 @@ object NextGoal {
         val lapses = dao.lapsesSince(since.toEpochDay()).map { it.toCore() }
         val steps = dao.allSteps().map { it.toCore() }
         val view = TodayList.build(day, goals, steps, ticks, 0, lapses)
-        val open = view.dueToday.filter { !it.done }
+        // What still needs doing: not done, and not skipped.
+        val open = view.dueToday.filter { !it.settled }
         if (open.isEmpty()) return null
         if (dao.setting(SETTING_TODAY_ORDER) == ORDER_OWN) return open.first()
         val settings = PaceSettings(
@@ -100,6 +101,6 @@ object NextGoal {
             dayStart = dao.setting(SETTING_DAY_START)?.toIntOrNull()?.toTime(),
         )
         val pace = Pace.today(now, day, view.dueToday, settings)
-        return Order.recommend(now, day, view.dueToday, settings, emptyMap(), pace).firstOrNull { !it.row.done }?.row ?: open.first()
+        return Order.recommend(now, day, view.dueToday, settings, emptyMap(), pace).firstOrNull { !it.row.settled }?.row ?: open.first()
     }
 }

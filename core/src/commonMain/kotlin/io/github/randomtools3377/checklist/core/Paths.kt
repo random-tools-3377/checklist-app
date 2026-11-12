@@ -37,7 +37,7 @@ object Paths {
 enum class Title(val icon: String, val label: String, val how: String) {
     EARLY_BIRD("🐦", "Early bird", "Tick 20 goals before 8 am"),
     NIGHT_OWL("🌙", "Night owl", "Tick 20 goals after 10 pm"),
-    WEEKEND_WARRIOR("⚔️", "Weekend warrior", "Do everything due on 8 Saturdays or Sundays"),
+    WEEKEND_WARRIOR("⚔️", "Weekend warrior", "Do everything due, with nothing skipped, on 8 Saturdays or Sundays"),
     UNSTOPPABLE("🚂", "Unstoppable", "Keep the main streak going for 50 days"),
     ALL_ROUNDER("🌈", "All-rounder", "Reach level 5 in every skill"),
     BOSS_SLAYER("🗡️", "Boss slayer", "Beat 4 bosses"),
@@ -72,7 +72,7 @@ object Titles {
         if (times.count { it < 8 * 60 * 60 } >= 20) found += Title.EARLY_BIRD
         if (times.count { it >= 22 * 60 * 60 } >= 20) found += Title.NIGHT_OWL
         val weekendDays = records.count { r ->
-            (r.day.dayOfWeek == DayOfWeek.SATURDAY || r.day.dayOfWeek == DayOfWeek.SUNDAY) && r.due > 0 && r.done >= r.due
+            (r.day.dayOfWeek == DayOfWeek.SATURDAY || r.day.dayOfWeek == DayOfWeek.SUNDAY) && r.perfect
         }
         if (weekendDays >= 8) found += Title.WEEKEND_WARRIOR
         if (longestMainStreak(records, streak) >= 50) found += Title.UNSTOPPABLE
@@ -104,8 +104,8 @@ object Titles {
         var best = 0
         var run = 0
         for (record in records.sortedBy { it.day }) {
-            if (record.due == 0 && record.misses == 0 && record.skips == 0) continue
-            if (StreakCounter.meetsTarget(record, streak)) {
+            val ok = StreakCounter.mainDay(record, streak) ?: continue
+            if (ok) {
                 run++
                 best = maxOf(best, run)
             } else {

@@ -116,7 +116,7 @@ fun ChecklistApp(vm: MainViewModel) {
     var newGoal by remember { mutableStateOf(false) }
     // The box from the quick-add widget.
     var quickTodo by remember { mutableStateOf(false) }
-    // The Undo bar: the last tick, purchase or removed goal, for 5 seconds. A newer one replaces it.
+    // The Undo bar: the last tick, skip, purchase or removed goal, for 5 seconds. A newer one replaces it.
     val undoHost = remember { androidx.compose.material3.SnackbarHostState() }
     LaunchedEffect(Unit) {
         vm.undoBar.collectLatest { offer ->
@@ -457,7 +457,7 @@ fun ChecklistApp(vm: MainViewModel) {
                         AppTab.TODAY -> androidx.compose.runtime.CompositionLocalProvider(
                             LocalBoosted provides today?.boostedGoalId,
                             LocalStreakPercent provides (today?.streakPercent ?: 100),
-                            LocalTodayExtras provides TodayExtras(today?.quitDays.orEmpty(), today?.challenges.orEmpty(), vm::slip),
+                            LocalTodayExtras provides TodayExtras(today?.quitDays.orEmpty(), today?.challenges.orEmpty(), vm::slip, vm::takeBackSkip),
                         ) {
                             TodayScreen(
                                 today, vm, celebrations,

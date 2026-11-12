@@ -5,7 +5,8 @@ import kotlinx.datetime.LocalDate
 /**
  * A habit that is due now, with how many times it has been ticked in its current [window], and
  * how many skips it has there. A skip covers the whole day for a single-day habit, or one of the
- * times for a "times per" habit.
+ * times for a "times per" habit. A skip is never counted as done: [done] is ticked, and
+ * [settled] is "nothing left to do", done or skipped.
  */
 data class HabitRow(
     val goal: Goal,
@@ -16,15 +17,25 @@ data class HabitRow(
     val items: List<StepRow> = emptyList(),
     /** For a goal with an amount: how much has been entered in this window. */
     val progress: Double = 0.0,
+    /** Of [skips], those made on the day shown, which can still be taken back (see [Lapses.takeBackSkip]). */
+    val skipsToday: Int = 0,
 ) {
     /** For a goal with an amount: how much is left to do in this window, every time of it. */
     val amountLeft: Double get() = ((goal.amount ?: 0.0) * goal.target - progress).coerceAtLeast(0.0)
 
     val isRoutine: Boolean get() = items.isNotEmpty()
-    val skipped: Boolean get() = skips > 0 && count < goal.target
-    val done: Boolean
-        get() = count >= goal.target || if (window.period == Period.DAILY) skips > 0 else count + skips >= goal.target
-    val left: Int get() = if (done) 0 else (goal.target - count - skips).coerceAtLeast(0)
+    val skipped: Boolean get() = skips > 0 && !done
+
+    /** Really done: ticked as often as it needs. A skip never makes it done. */
+    val done: Boolean get() = count >= goal.target
+
+    /** Nothing left to do in this window: done, or the rest of it skipped. */
+    val settled: Boolean
+        get() = done || if (window.period == Period.DAILY) skips > 0 else count + skips >= goal.target
+    val left: Int get() = if (settled) 0 else (goal.target - count - skips).coerceAtLeast(0)
+
+    /** It has a skip made today, which can be taken back until the day ends. */
+    val canTakeBackSkip: Boolean get() = skipsToday > 0
 }
 
 data class StepRow(val step: Step, val done: Boolean)
@@ -74,7 +85,8 @@ object TodayList {
         val active = goals.filter { !it.archived }.sortedWith(compareBy({ it.position }, { it.id }))
         val habits = active.filter { it.isHabitLike }.map { Retimes.on(it, day) }.mapNotNull { goal ->
             val window = goal.repeat?.window(day) ?: doneTodayAfterDone(goal, day, ticks) ?: return@mapNotNull null
-            val skips = lapses.count { it.goalId == goal.id && it.kind == LapseKind.SKIP && it.periodStart == window.start && !it.forgotten }
+            val skipped = lapses.filter { it.goalId == goal.id && it.kind == LapseKind.SKIP && it.periodStart == window.start && !it.forgotten }
+            val skips = skipped.size
             val windowTicks = ticks.filter { it.countsToward(goal, window.start) }
             val count = goal.timesDone(windowTicks)
             // A routine's items: ticked if ticked in this window, or all of them once it is done.
@@ -87,7 +99,11 @@ object TodayList {
             val items = steps.filter { it.goalId == goal.id && !it.archived }
                 .sortedWith(compareBy({ it.position }, { it.id }))
                 .map { StepRow(it, it.id in ticked || count >= goal.target) }
-            HabitRow(goal, count, window, skips, items, progress = if (goal.hasAmount) goal.progressOf(windowTicks) else 0.0)
+            HabitRow(
+                goal, count, window, skips, items,
+                progress = if (goal.hasAmount) goal.progressOf(windowTicks) else 0.0,
+                skipsToday = skipped.count { it.day == day },
+            )
         }
         val stepTicks = ticks.filter { it.stepId != null }.associateBy { it.stepId }
         val projects = active.filter { it.kind == GoalKind.PROJECT }.map { goal ->

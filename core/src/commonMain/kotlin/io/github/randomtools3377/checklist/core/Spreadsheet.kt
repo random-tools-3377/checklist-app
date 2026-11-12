@@ -14,10 +14,16 @@ object Spreadsheet {
         for (entry in entries.sortedWith(compareBy({ it.day }, { it.at }))) {
             val time = timeOf(entry.at)
             val note = entry.tickId?.let { notes[it] }.orEmpty()
-            append(listOf(entry.day.toString(), time.time.toString().take(5), kindText(entry.kind), text(entry.label), entry.amount.toString(), text(note)).joinToString(",") { cell(it) })
+            append(listOf(entry.day.toString(), time.time.toString().take(5), kindText(entry), text(entry.label), entry.amount.toString(), text(note)).joinToString(",") { cell(it) })
             append("\r\n")
         }
     }
+
+    /** What [entry] was: its kind, or for a penalty given back with its skip, that. */
+    fun kindText(entry: Entry): String = if (entry.isSkipTakenBack) SKIP_TAKEN_BACK else kindText(entry.kind)
+
+    /** What the points history calls the penalty points that come back when a skip is taken back. */
+    const val SKIP_TAKEN_BACK = "Skip taken back"
 
     fun kindText(kind: EntryKind): String = when (kind) {
         EntryKind.TICK -> "Ticked"

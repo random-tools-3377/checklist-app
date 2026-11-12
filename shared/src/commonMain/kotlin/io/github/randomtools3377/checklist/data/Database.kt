@@ -553,6 +553,10 @@ interface ChecklistDao {
     @Update
     suspend fun updateLapse(lapse: LapseEntity)
 
+    /** A skip taken back: it goes, as if it was never made. */
+    @Query("DELETE FROM lapses WHERE id = :id")
+    suspend fun deleteLapse(id: Long)
+
     @Query("SELECT * FROM lapses WHERE day >= :since ORDER BY day, id")
     fun observeLapsesSince(since: Long): Flow<List<LapseEntity>>
 

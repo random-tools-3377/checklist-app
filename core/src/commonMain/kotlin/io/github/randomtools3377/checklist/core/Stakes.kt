@@ -85,8 +85,8 @@ object Shields {
         val most = MOST
         val saved = mutableListOf<LocalDate>()
         for (record in records.filter { it.day in from..today }.sortedBy { it.day }) {
-            if (record.due == 0 && record.misses == 0 && record.skips == 0) continue
-            val ok = StreakCounter.meetsTarget(record, settings)
+            // Nothing due and nothing missed, or everything due skipped: neither counts nor breaks it.
+            val ok = StreakCounter.mainDay(record, settings) ?: continue
             when {
                 ok -> {
                     main++

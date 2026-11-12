@@ -73,6 +73,12 @@ private val HOUR = 64.dp
 private class Block(val row: HabitRow, val minute: Int, val number: Int = 0) {
     val movable: Boolean get() = number == 0
     val done: Boolean get() = row.done || (number > 0 && row.count >= number)
+
+    /** Nothing left of it to do, done or skipped: it fades on the timeline. */
+    val settled: Boolean get() = done || row.settled
+
+    /** " ✓" once done; a skipped one is never done, and says so. */
+    val mark: String get() = if (done) " ✓" else if (row.settled) " · skipped" else ""
 }
 
 /**
@@ -141,7 +147,7 @@ fun TimelineScreen(
                     anyTime.forEach { row ->
                         AssistChip(
                             onClick = { picking = row },
-                            label = { Text("${row.goal.icon} ${row.goal.name}" + if (row.done) " ✓" else "") },
+                            label = { Text("${row.goal.icon} ${row.goal.name}" + if (row.done) " ✓" else if (row.settled) " · skipped" else "") },
                             modifier = Modifier.testTag("anytime:${row.goal.name}"),
                         )
                     }
@@ -149,7 +155,7 @@ fun TimelineScreen(
                         AssistChip(
                             onClick = {},
                             enabled = false,
-                            label = { Text("${row.goal.icon} ${row.goal.name} · ${row.count} of ${row.goal.target}" + if (row.done) " ✓" else "") },
+                            label = { Text("${row.goal.icon} ${row.goal.name} · ${row.count} of ${row.goal.target}" + if (row.done) " ✓" else if (row.settled) " · skipped" else "") },
                             modifier = Modifier.testTag("anytime:${row.goal.name}"),
                         )
                     }
@@ -237,7 +243,7 @@ private fun Hours(
                             .offset { IntOffset(with(density) { (64 + index * 110).dp.roundToPx() }, (baseY + dragY).roundToInt()) }
                             .width(146.dp)
                             .background(
-                                if (block.done) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.primaryContainer,
+                                if (block.settled) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.primaryContainer,
                                 RoundedCornerShape(8.dp),
                             )
                             .then(
@@ -269,7 +275,7 @@ private fun Hours(
                     ) {
                         Column {
                             Text(
-                                "${row.goal.icon} ${row.goal.name}" + if (block.done) " ✓" else "",
+                                "${row.goal.icon} ${row.goal.name}" + block.mark,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                                 style = MaterialTheme.typography.bodyMedium,

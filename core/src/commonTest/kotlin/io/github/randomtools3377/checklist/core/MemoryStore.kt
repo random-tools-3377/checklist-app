@@ -79,6 +79,7 @@ class MemoryStore : Store {
     override suspend fun updateLapse(lapse: Lapse) {
         lapses[lapses.indexOfFirst { it.id == lapse.id }] = lapse
     }
+    override suspend fun removeLapse(id: Long) { lapses.removeAll { it.id == id } }
     override suspend fun entriesForLapse(lapseId: Long): List<Entry> = entries.filter { it.lapseId == lapseId }
     override suspend fun addPenalty(penalty: Penalty): Long = nextId++.also { penalties += penalty.copy(id = it) }
     override suspend fun penalty(id: Long): Penalty? = penalties.find { it.id == id }

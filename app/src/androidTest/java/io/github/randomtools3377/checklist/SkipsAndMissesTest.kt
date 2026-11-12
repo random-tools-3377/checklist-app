@@ -5,7 +5,9 @@ import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
@@ -20,6 +22,8 @@ import io.github.randomtools3377.checklist.data.nowLocal
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.atStartOfDayIn
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.ExternalResource
@@ -144,5 +148,103 @@ class MissesOnOpeningTest {
         app.tap("misses-done")
 
         app.waitFor { runBlocking { container.db.dao().allLapses() }.map { it.reason } == listOf("ILL", "NO_TIME") }
+    }
+}
+
+/** A skip can be taken back until the day ends, which puts everything back as if it never happened. */
+@RunWith(AndroidJUnit4::class)
+class TakeBackSkipTest {
+    /** Before the app starts: "Read" with one free skip a week, and "Run" with none. */
+    class TwoHabits : ExternalResource() {
+        override fun before() = runBlocking {
+            val container = (InstrumentationRegistry.getInstrumentation().targetContext.applicationContext as ChecklistApplication).container
+            container.db.clearAllTables()
+            val today = nowLocal().date
+            container.repository.saveHabit(
+                HabitDraft(
+                    id = 0, name = "Read", icon = "📖", points = 4, repeat = Repeat.everyDay(today), target = 1, bonus = 0,
+                    minutes = null, at = null, finishBy = null, finishDay = null, allowance = 1,
+                ),
+            )
+            container.repository.saveHabit(
+                HabitDraft(
+                    id = 0, name = "Run", icon = "🏃", points = 10, repeat = Repeat.everyDay(today), target = 1, bonus = 0,
+                    minutes = null, at = null, finishBy = null, finishDay = null, allowance = 0,
+                ),
+            )
+        }
+    }
+
+    private val app = createAndroidComposeRule<MainActivity>()
+
+    @get:Rule
+    val rules: RuleChain = RuleChain.outerRule(TwoHabits()).around(app)
+
+    private val context get() = InstrumentationRegistry.getInstrumentation().targetContext
+    private val container get() = (context.applicationContext as ChecklistApplication).container
+    private fun gone(tag: String) = app.onAllNodesWithTag(tag).fetchSemanticsNodes().isEmpty()
+    private fun skips() = runBlocking { container.db.dao().allLapses().size }
+    private fun balance() = runBlocking { container.db.dao().balance() }
+
+    /** Skips "Read", which is within its allowance: no reason needed. */
+    private fun skipRead() {
+        app.waitFor { app.shownIn("today-list", "skip:Read") }
+        app.tap("skip:Read")
+        app.waitFor { !gone("skip-note") }
+        app.tap("confirm-skip")
+        app.waitFor { skips() == 1 }
+    }
+
+    @Test
+    fun takeBackTheSkipOnTodayPutsTheGoalBack() {
+        // Skipped: its card says so, and offers to take the skip back.
+        skipRead()
+        app.waitFor { app.shownIn("today-list", "take-back-skip:Read") }
+        app.onNodeWithTag("skipped:Read", useUnmergedTree = true).assertTextEquals("Skipped")
+        // The home-screen widget folds it away as skipped, never as done.
+        val widget = runBlocking { io.github.randomtools3377.checklist.widget.TodayWidget.load(context) }
+        assertEquals(0, widget.finished)
+        assertEquals(1, widget.skipped)
+
+        // Taken back: the skip is gone, and the goal can be skipped or done as before.
+        app.tap("take-back-skip:Read")
+        app.waitFor { skips() == 0 && app.shownIn("today-list", "skip:Read") }
+        assertTrue(gone("skipped:Read"))
+        assertTrue(gone("take-back-skip:Read"))
+
+        // Skipped again, then done after all: ticking it takes the skip back by itself.
+        skipRead()
+        app.waitFor { app.shownIn("today-list", "tick:Read") }
+        app.tap("tick:Read")
+        app.waitFor { skips() == 0 && balance() == 4 }
+    }
+
+    @Test
+    fun undoRightAfterASkipTakesItBack() {
+        skipRead()
+        app.waitFor { app.onAllNodesWithText("Undo").fetchSemanticsNodes().isNotEmpty() }
+        app.onNodeWithText("Undo").performClick()
+        app.waitFor { skips() == 0 && app.shownIn("today-list", "skip:Read") }
+    }
+
+    @Test
+    fun takingBackASkipOverTheLimitGivesThePointsBackAndDropsThePenaltyTask() {
+        app.waitFor { app.shownIn("today-list", "skip:Run") }
+        app.tap("skip:Run")
+        app.waitFor { !gone("skip-reason:NO_TIME") }
+        app.tap("skip-reason:NO_TIME")
+        app.tap("confirm-skip")
+
+        // The penalty task fills the screen, with half of 10 taken off. It offers to take the skip back.
+        app.waitFor { !gone("penalty-take-back-skip") }
+        assertEquals(-5, balance())
+        app.tap("penalty-take-back-skip")
+
+        // Back on Today as if it never happened: no skip, no penalty task, and the points are back.
+        app.waitFor { gone("penalty") && !gone("today-list") }
+        app.waitFor { app.shownIn("today-list", "skip:Run") }
+        assertEquals(0, skips())
+        assertEquals(0, balance())
+        assertTrue(runBlocking { container.db.dao().openPenalties() }.isEmpty())
     }
 }

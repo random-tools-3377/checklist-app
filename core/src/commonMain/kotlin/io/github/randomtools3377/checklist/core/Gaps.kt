@@ -122,12 +122,22 @@ class Gaps(private val store: Store, private val book: Book) {
             day = day.plusDays(1)
         }
 
-        // A big point loss within one week. A penalty given back by "I forgot to tick it" wasn't lost,
-        // and one on a day of a gap already answered was asked about there.
+        // A big point loss within one week. A penalty given back by "I forgot to tick it", or
+        // because its skip was taken back, wasn't lost, and one on a day of a gap already answered
+        // was asked about there.
         val undone = store.allLapses(from, yesterday).filter { it.forgotten }.map { it.id }.toSet()
         val answered = existing.filter { it.reason != null }
-        val losses = store.entries(from, yesterday).filter { entry ->
-            entry.kind == EntryKind.PENALTY && entry.lapseId !in undone && answered.none { entry.day >= it.from && entry.day <= it.to } &&
+        val penalties = store.entries(from, yesterday).filter { it.kind == EntryKind.PENALTY }
+        // Each penalty given back with its skip cancels the penalty it gave back: the same goal, day and amount.
+        val givenBack = penalties.filter { it.isSkipTakenBack }.toMutableList()
+        val losses = penalties.filter { entry ->
+            if (entry.isSkipTakenBack) return@filter false
+            val back = givenBack.firstOrNull { it.day == entry.day && it.goalId == entry.goalId && it.amount == -entry.amount }
+            if (back != null) {
+                givenBack.remove(back)
+                return@filter false
+            }
+            entry.lapseId !in undone && answered.none { entry.day >= it.from && entry.day <= it.to } &&
                 cleared.none { entry.day >= it.first && entry.day <= it.second }
         }
         var lossDay = from

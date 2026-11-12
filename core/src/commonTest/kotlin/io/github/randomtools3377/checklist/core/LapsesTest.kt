@@ -243,8 +243,10 @@ class LapsesTest {
         val monday = LocalDate(2026, 11, 9)
         assertEquals(3, store.ticks.count { it.goalId == gym.id && it.periodStart == monday }) // two added
         assertEquals(30, book.balance())
+        // Three done and one skipped: nothing is left of it, but a skip is never done, so it drops out of Sunday.
         val sunday = LocalDate(2026, 11, 15)
-        assertEquals(1, StreakCounter.records(sunday, sunday, store.goals, store.ticks, store.lapses).single().done)
+        val record = StreakCounter.records(sunday, sunday, store.goals, store.ticks, store.lapses).single()
+        assertEquals(listOf(0, 0, 0), listOf(record.due, record.done, record.misses))
     }
 
     @Test
@@ -316,7 +318,7 @@ class StreaksTest {
         assertEquals(1, streaks.noMisses)
         assertEquals(0, streaks.noSkips) // today's skip has already happened
         assertEquals(1, streaks.withinLimit)
-        assertEquals(1, streaks.perfect)
+        assertEquals(0, streaks.perfect) // a day with a skip is never a perfect day, and yesterday wasn't one either
         assertFalse(streaks.allRunning)
 
         val clean = StreakCounter.count(records.take(2) + record(0, 3, 1), today, StreakSettings(StreakTarget.COUNT, 2))
@@ -330,9 +332,10 @@ class StreaksTest {
         assertEquals(0, StreakCounter.count(records, today, StreakSettings(StreakTarget.PERCENT, 90)).done)
         assertEquals(0, StreakCounter.count(records, today, StreakSettings(StreakTarget.COUNT, 1)).done)
         assertEquals(0, Shields.of(records, LocalDate(2026, 1, 1), today, StreakSettings()).main)
-        // A day with only a skip on it still counts, as a skipped goal counts as done.
-        val skipped = listOf(record(2, 2, 2), record(1, 0, 0, skips = 1))
+        // A day where everything due was skipped neither counts nor breaks the main streak.
+        val skipped = listOf(record(3, 2, 2), record(2, 0, 0, skips = 1), record(1, 2, 2))
         assertEquals(2, StreakCounter.count(skipped, today, StreakSettings()).done)
+        assertEquals(2, Shields.of(skipped, LocalDate(2026, 1, 1), today, StreakSettings()).main)
     }
 
     @Test
@@ -355,14 +358,15 @@ class StreaksTest {
     }
 
     @Test
-    fun recordsCountSkipsAsDoneAndTimesPerOnTheirLastDay() {
+    fun recordsLeaveSkippedGoalsOutAndCountTimesPerOnTheirLastDay() {
         val start = LocalDate(2026, 1, 1)
         val daily = Goal(id = 1, kind = GoalKind.HABIT, name = "D", icon = "⭐", points = 1, repeat = Repeat.everyDay(start))
         val weekly = Goal(id = 2, kind = GoalKind.HABIT, name = "W", icon = "⭐", points = 1, repeat = Repeat.timesPer(Period.WEEKLY, start))
         val sunday = LocalDate(2026, 11, 15)
         val skip = Lapse(goalId = 1, kind = LapseKind.SKIP, day = sunday, period = Period.DAILY, periodStart = sunday, at = 0, overLimit = false, label = "D")
         val records = StreakCounter.records(LocalDate(2026, 11, 14), sunday, listOf(daily, weekly), emptyList(), listOf(skip))
-        assertEquals(listOf(1 to 0, 2 to 1), records.map { it.due to it.done })
+        // Sunday: the weekly goal's week ends, not done; the daily one was skipped, so it is neither due nor done.
+        assertEquals(listOf(1 to 0, 1 to 0), records.map { it.due to it.done })
         assertEquals(1, records.last().skips)
     }
 }

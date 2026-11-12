@@ -74,11 +74,14 @@ data class TimelineRow(
     val stepId: Long?,
     /** A routine, or a to-do with steps: taking it back takes back its items too. */
     val routine: Boolean,
-    /** Done by a skip, so there's no tick to take back. */
+    /** Skipped: it needs no doing any more, but it isn't done, and there's no tick to take back. */
     val skipped: Boolean = false,
 )
 
-/** What the timeline widget shows. [rows] are still to do, in order; [done] are finished or skipped. */
+/**
+ * What the timeline widget shows. [rows] are still to do, in order; [done] are finished or
+ * skipped. A skipped goal folds away with the finished ones but is never counted as done.
+ */
 data class TimelineData(
     val rows: List<TimelineRow>,
     val done: List<TimelineRow>,
@@ -88,6 +91,13 @@ data class TimelineData(
     val look: WidgetLook = WidgetLook(),
 ) {
     val total: Int get() = rows.size + done.size
+
+    /** Really done, by a tick. */
+    val finished: Int get() = done.count { !it.skipped }
+    val skipped: Int get() = done.size - finished
+
+    /** What today counts: everything but the skipped ones. */
+    val counted: Int get() = total - skipped
 }
 
 /**
@@ -122,10 +132,11 @@ class TodayWidget : GlanceAppWidget() {
         suspend fun load(context: Context): TimelineData {
             val dao = (context.applicationContext as ChecklistApplication).container.db.dao()
             val plan = DayPlans.load(context)
-            val open = plan.planned.filter { !it.row.done }
+            // What still needs doing. A skipped goal doesn't, though it isn't done: it folds away below, marked "Skipped".
+            val open = plan.planned.filter { !it.row.settled }
             val rows = open.map { row(it.row, it) } + plan.todos.map { todo(it) }
             // To-dos done today count as done, so the total stays the same.
-            val done = plan.planned.filter { it.row.done }.map { row(it.row, null) } + plan.doneTodos.map { todo(it) }
+            val done = plan.planned.filter { it.row.settled }.map { row(it.row, null) } + plan.doneTodos.map { todo(it) }
             val tomorrow = if (rows.isEmpty()) {
                 CalendarView.agenda(plan.day.plusDays(1), plan.goals, plan.ticks).take(5).map { item ->
                     (item.time?.let { timeText(it) + "  " } ?: "") + "${item.goal.icon} ${item.goal.name}"
@@ -141,7 +152,7 @@ class TodayWidget : GlanceAppWidget() {
             val goal = row.goal
             val nextItem = row.items.firstOrNull { !it.done }
             val detail = when {
-                row.done && row.skipped -> "Skipped"
+                row.settled && row.skipped -> "Skipped"
                 row.done -> if (goal.target > 1) "${goal.target} of ${goal.target}" else null
                 row.isRoutine -> "${row.items.count { it.done }} of ${row.items.size}" + (nextItem?.let { " · next: ${it.step.name}" } ?: "")
                 goal.hasAmount -> "${Amounts.format(row.amountLeft)}${goal.unit?.let { " $it" } ?: ""} left"
@@ -162,9 +173,9 @@ class TodayWidget : GlanceAppWidget() {
                 late = planned?.late == true,
                 detail = detail,
                 button = button,
-                stepId = nextItem?.step?.id.takeIf { row.isRoutine && !row.done },
+                stepId = nextItem?.step?.id.takeIf { row.isRoutine && !row.settled },
                 routine = row.isRoutine,
-                skipped = row.done && row.skipped,
+                skipped = row.settled && row.skipped,
             )
         }
 
@@ -249,7 +260,11 @@ private fun Timeline(data: TimelineData) {
             Text("Today", style = TextStyle(color = colors.onSurface, fontSize = 15.sp, fontWeight = FontWeight.Bold), modifier = GlanceModifier.defaultWeight())
             if (data.total > 0) {
                 Text(
-                    if (data.rows.isEmpty()) "All ${data.total} done" else "${data.done.size} of ${data.total} · ${data.rows.size} to go",
+                    when {
+                        data.rows.isNotEmpty() -> "${data.finished} of ${data.counted} · ${data.rows.size} to go"
+                        data.skipped == 0 -> "All ${data.total} done"
+                        else -> "${data.finished} done · ${data.skipped} skipped"
+                    },
                     style = TextStyle(color = colors.primary, fontSize = 12.sp, fontWeight = FontWeight.Bold),
                 )
             }
@@ -257,7 +272,7 @@ private fun Timeline(data: TimelineData) {
         if (data.total > 0) {
             Spacer(GlanceModifier.height(4.dp))
             LinearProgressIndicator(
-                progress = data.done.size.toFloat() / data.total,
+                progress = if (data.counted > 0) data.finished.toFloat() / data.counted else 0f,
                 modifier = GlanceModifier.fillMaxWidth().height(4.dp),
                 color = colors.primary,
                 backgroundColor = colors.secondaryContainer,
@@ -269,7 +284,11 @@ private fun Timeline(data: TimelineData) {
         val next = data.rows.firstOrNull()
         if (next == null) {
             Text(
-                if (data.total == 0) "Nothing due today" else "🎉 All done for today!",
+                when {
+                    data.total == 0 -> "Nothing due today"
+                    data.skipped > 0 -> "That's everything for today"
+                    else -> "🎉 All done for today!"
+                },
                 style = TextStyle(color = colors.onSurface, fontSize = 15.sp, fontWeight = FontWeight.Bold),
             )
             if (data.tomorrow.isNotEmpty() && size.height >= 150.dp) {
@@ -293,7 +312,7 @@ private fun Timeline(data: TimelineData) {
             if (data.done.isNotEmpty()) {
                 item(itemId = DONE_HEADER) {
                     Text(
-                        "Done · tap to take back",
+                        if (data.finished == 0) "Skipped" else "Done · tap to take back",
                         modifier = GlanceModifier.padding(top = 6.dp, bottom = 2.dp),
                         style = TextStyle(color = colors.onSurfaceVariant, fontSize = 11.sp),
                     )
@@ -350,13 +369,13 @@ private fun Line(row: TimelineRow) {
     }
 }
 
-/** A finished goal, crossed off; tapping it takes it back. A skipped one has no tick to take back. */
+/** A finished goal, crossed off; tapping it takes it back. A skipped one has no tick to take back, and no ✓. */
 @Composable
 private fun DoneLine(row: TimelineRow) {
     val colors = widgetColors()
     val line = GlanceModifier.fillMaxWidth().padding(vertical = 2.dp)
     Row(verticalAlignment = Alignment.CenterVertically, modifier = if (row.skipped) line else line.clickable(undo(row))) {
-        Text("✓", style = TextStyle(color = colors.primary, fontSize = 13.sp, fontWeight = FontWeight.Bold), modifier = GlanceModifier.width(18.dp))
+        Text(if (row.skipped) "–" else "✓", style = TextStyle(color = colors.primary, fontSize = 13.sp, fontWeight = FontWeight.Bold), modifier = GlanceModifier.width(18.dp))
         Text(
             row.title + (row.detail?.let { " · $it" } ?: ""),
             maxLines = 1,

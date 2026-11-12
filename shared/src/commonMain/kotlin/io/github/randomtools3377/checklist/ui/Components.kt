@@ -57,11 +57,12 @@ import kotlinx.datetime.LocalTime
 const val GOAL_ICON = "⭐"
 const val REWARD_ICON = "🎁"
 
-/** For Today's cards: days without for goals to quit, challenge progress, and "I slipped". */
+/** For Today's cards: days without for goals to quit, challenge progress, "I slipped" and "Take back the skip". */
 class TodayExtras(
     val quitDays: Map<Long, Int> = emptyMap(),
     val challenges: Map<Long, io.github.randomtools3377.checklist.core.ChallengeProgress> = emptyMap(),
     val onSlip: (Long) -> Unit = {},
+    val onTakeBackSkip: (Long) -> Unit = {},
 )
 
 val LocalTodayExtras = androidx.compose.runtime.compositionLocalOf { TodayExtras() }

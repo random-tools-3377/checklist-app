@@ -71,6 +71,9 @@ interface Store {
     suspend fun addLapse(lapse: Lapse): Long
     suspend fun updateLapse(lapse: Lapse)
 
+    /** Takes a skip out, as if it was never made (see [Lapses.takeBackSkip]). */
+    suspend fun removeLapse(id: Long)
+
     suspend fun entriesForLapse(lapseId: Long): List<Entry>
 
     suspend fun addPenalty(penalty: Penalty): Long

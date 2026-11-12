@@ -93,6 +93,7 @@ class RoomStore(private val db: AppDatabase) : Store {
     override suspend fun lapse(id: Long): Lapse? = dao.lapse(id)?.toCore()
     override suspend fun addLapse(lapse: Lapse): Long = dao.insertLapse(lapse.toEntity())
     override suspend fun updateLapse(lapse: Lapse) = dao.updateLapse(lapse.toEntity())
+    override suspend fun removeLapse(id: Long) = dao.deleteLapse(id)
     override suspend fun entriesForLapse(lapseId: Long): List<Entry> = dao.entriesForLapse(lapseId).map { it.toCore() }
     override suspend fun addPenalty(penalty: Penalty): Long = dao.insertPenalty(penalty.toEntity())
     override suspend fun penalty(id: Long): Penalty? = dao.penalty(id)?.toCore()

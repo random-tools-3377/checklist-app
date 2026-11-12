@@ -199,7 +199,11 @@ data class Tick(
 enum class EntryKind {
     TICK, BONUS, PURCHASE, RETURN,
 
-    /** Half the goal's points, for a skip or miss over the limit. */
+    /**
+     * Half the goal's points, for a skip or miss over the limit. When such a skip is taken back,
+     * the same points come back as a penalty entry above 0 (see [Entry.isSkipTakenBack]), so the
+     * two cancel out wherever penalties are added up, and never count as points earned.
+     */
     PENALTY,
 
     /** A penalty given back, because the miss turned out to be a forgotten tick. */
@@ -235,9 +239,16 @@ data class Entry(
     val purchaseId: Long? = null,
     /** What it was for, as it was named at the time. */
     val label: String,
-    /** The skip or miss a penalty or refund belongs to. */
+    /** The skip or miss a penalty or refund belongs to. Null again once that skip has been taken back. */
     val lapseId: Long? = null,
-)
+) {
+    /**
+     * A penalty's points given back because a skip was taken back (see [Lapses.takeBackSkip]):
+     * the skip's own penalty, or that of a later skip or miss that only went over the limit
+     * because the skip had used the allowance up.
+     */
+    val isSkipTakenBack: Boolean get() = kind == EntryKind.PENALTY && amount > 0
+}
 
 /** A real-life reward in the shop, at the price the user set. */
 @Serializable
@@ -368,7 +379,7 @@ enum class PenaltyChoice { MAKE_UP, TASK }
 @Serializable
 data class Penalty(
     val id: Long = 0,
-    /** The skip or miss that caused it. Null for a gap check-in. */
+    /** The skip or miss that caused it. Null for a gap check-in, and once its skip has been taken back. */
     val lapseId: Long?,
     /** The gap it covers, for a gap check-in. */
     val gapId: Long? = null,

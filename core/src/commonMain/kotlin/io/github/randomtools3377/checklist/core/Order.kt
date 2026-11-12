@@ -18,7 +18,7 @@ data class Planned(
  * The recommended order for today's habits, meant to make each one more likely to get done:
  * goals with a clock time sit at that time; the rest go earliest finish-by first, then the ones
  * usually done by now (falling behind), then the ones usually done around this time of day, then
- * quick ones before long ones. Done habits go last.
+ * quick ones before long ones. Habits with nothing left to do, done or skipped, go last.
  */
 object Order {
     /** Minutes assumed for a tick with no length when there is no pace to go by. */
@@ -35,7 +35,7 @@ object Order {
     ): List<Planned> {
         val nowMinute = now.hour * 60 + now.minute
         val far = LocalDateTime(day.plusDays(2), kotlinx.datetime.LocalTime(0, 0))
-        val left = rows.filter { !it.done }
+        val left = rows.filter { !it.settled }
         // A habit done several times a day goes by its next repetition: at the time the user
         // set for it, or by the time it was spread to.
         val next = left.associateWith { Pace.nextSlot(it, day, settings) }
@@ -77,7 +77,7 @@ object Order {
         // Keep the untimed ones in their recommended order relative to each other.
         val untimedQueue = planned.toMutableList()
         val result = merged.map { if (it.fixed) it else untimedQueue.removeAt(0) }
-        val done = rows.filter { it.done }.map { Planned(it, null, fixed = it.goal.at != null || it.goal.times.isNotEmpty(), late = false) }
+        val done = rows.filter { it.settled }.map { Planned(it, null, fixed = it.goal.at != null || it.goal.times.isNotEmpty(), late = false) }
         return result + done
     }
 }

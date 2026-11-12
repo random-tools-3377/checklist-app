@@ -73,10 +73,11 @@ object DayPlans {
         )
         val pace = Pace.today(now, day, view.dueToday, settings)
         val planned = if (dao.setting(SETTING_TODAY_ORDER) == ORDER_OWN) {
-            val open = view.dueToday.filter { !it.done }
-            (open + view.dueToday.filter { it.done }).map { row ->
+            // Those with nothing left to do, done or skipped, go last.
+            val open = view.dueToday.filter { !it.settled }
+            (open + view.dueToday.filter { it.settled }).map { row ->
                 val at = row.goal.at?.let { Pace.on(day, it, dayEnd) } ?: Pace.nextSlot(row, day, settings)?.takeIf { it.fixed }?.at
-                Planned(row, at?.takeIf { !row.done }, fixed = at != null, late = !row.done && at != null && at < now)
+                Planned(row, at?.takeIf { !row.settled }, fixed = at != null, late = !row.settled && at != null && at < now)
             }
         } else {
             // When each goal is usually ticked, learned from the last 4 weeks, as on Today.

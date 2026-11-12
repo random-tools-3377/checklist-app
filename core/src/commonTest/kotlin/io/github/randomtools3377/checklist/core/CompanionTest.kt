@@ -135,7 +135,8 @@ class CompanionTest {
         assertEquals(0, Checkins.daysAway(records.drop(1), day))
         assertEquals(0, Checkins.daysAway(listOf(record(1, 2, 1)), day))
         assertEquals(3, Checkins.leftYesterday(records, day))
-        assertEquals(1, Checkins.leftYesterday(listOf(DayRecord(day.minusDays(1), 3, 1, 0, 1, 0)), day))
+        // Three were due: one done, one skipped (it dropped out of what was due), one left undone.
+        assertEquals(1, Checkins.leftYesterday(listOf(DayRecord(day.minusDays(1), 2, 1, 0, 1, 0)), day))
         assertEquals(0, Checkins.leftYesterday(emptyList(), day))
     }
 

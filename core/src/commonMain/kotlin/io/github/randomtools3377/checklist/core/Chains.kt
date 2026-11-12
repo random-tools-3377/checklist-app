@@ -4,9 +4,9 @@ import kotlinx.datetime.LocalTime
 
 /** Habit chains: a goal can come after another; ticking that one reminds of the next. */
 object Chains {
-    /** The goals that come right after [goalId] and are still to do on [view]'s day. */
+    /** The goals that come right after [goalId] and are still to do on [view]'s day: not done, and not skipped. */
     fun next(goalId: Long, view: TodayView): List<HabitRow> =
-        (view.dueToday + view.thisWeek + view.thisMonth + view.thisYear).filter { it.goal.after == goalId && !it.done && !it.skipped }
+        (view.dueToday + view.thisWeek + view.thisMonth + view.thisYear).filter { it.goal.after == goalId && !it.settled && !it.skipped }
 
     /**
      * Goals [goal] could come after: other active habits, leaving out any that would make a

@@ -161,7 +161,8 @@ object Alerts {
     /**
      * Whether an alert for [goal] in [window] is still to do, by the rule Today uses: times done,
      * so an amount counts once the whole of it is entered, and skips, which cover a single-day
-     * goal's day or one of a "times per" goal's times. [ticks] and [lapses] may hold other goals'
+     * goal's day or one of a "times per" goal's times (a skipped goal isn't done, but there is
+     * nothing left of it to remind about). [ticks] and [lapses] may hold other goals'
      * and windows'. For one of several a day with its own time ([number] above 0), it is to do
      * until that one is done.
      */
@@ -169,7 +170,7 @@ object Alerts {
         val times = timesDone(goal, window, ticks)
         if (number > 0 && times >= number) return false
         val skips = lapses.count { it.goalId == goal.id && it.kind == LapseKind.SKIP && it.periodStart == window.start && !it.forgotten }
-        return !HabitRow(goal, times, window, skips).done
+        return !HabitRow(goal, times, window, skips).settled
     }
 
     /**
@@ -210,12 +211,12 @@ data class MorningPlan(
     companion object {
         /** The plan for [view] at [now], or null when there's nothing to plan today. */
         fun of(now: LocalDateTime, view: TodayView, settings: PaceSettings, usual: Map<Long, Int> = emptyMap()): MorningPlan? {
-            val left = view.dueToday.filter { !it.done }
-            val open = (view.thisWeek + view.thisMonth + view.thisYear).count { !it.done } + view.projects.count { !it.finished }
+            val left = view.dueToday.filter { !it.settled }
+            val open = (view.thisWeek + view.thisMonth + view.thisYear).count { !it.settled } + view.projects.count { !it.finished }
             val todos = view.todos.count { !it.done }
             if (left.isEmpty() && open == 0 && todos == 0) return null
             val pace = Pace.today(now, view.day, view.dueToday, settings)
-            val first = Order.recommend(now, view.day, view.dueToday, settings, usual, pace).firstOrNull { !it.row.done }
+            val first = Order.recommend(now, view.day, view.dueToday, settings, usual, pace).firstOrNull { !it.row.settled }
             return MorningPlan(left.size, first, open, pace, todos)
         }
     }

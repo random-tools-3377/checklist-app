@@ -229,10 +229,19 @@ object MoodInsights {
         return counted.isNotEmpty() && counted.all { it.count >= it.goal.target }
     }
 
-    /** The after-done check-in's question; gentler after a morning that started low. */
-    fun question(morning: Int?): String =
-        if (morning != null && morning <= 2) "You started the day feeling low. You've done everything — how do you feel now?"
-        else "You've done everything for today. How do you feel now?"
+    /**
+     * The after-done check-in's question; gentler after a morning that started low. With
+     * something [skipped] today it doesn't say everything was done: a skip is never done.
+     */
+    fun question(morning: Int?, skipped: Boolean = false): String {
+        val low = morning != null && morning <= 2
+        return when {
+            low && skipped -> "You started the day feeling low. That's everything for today — how do you feel now?"
+            low -> "You started the day feeling low. You've done everything — how do you feel now?"
+            skipped -> "That's everything for today. How do you feel now?"
+            else -> "You've done everything for today. How do you feel now?"
+        }
+    }
 
     /**
      * What the card says to the answer: only how the mood moved since the morning. It never says

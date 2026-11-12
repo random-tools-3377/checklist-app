@@ -285,12 +285,13 @@ class ReviewTest {
         assertEquals(3, runSummary.longestRun)
         assertEquals(3, runSummary.currentRun)
         val readSummary = summary.goals.first { it.goal.id == 2L }
-        assertEquals(listOf(2, 2, 1, 0), listOf(readSummary.due, readSummary.done, readSummary.skipped, readSummary.missed))
+        // Done on Monday, skipped on Wednesday: the skip is never counted as done.
+        assertEquals(listOf(2, 1, 1, 0), listOf(readSummary.due, readSummary.done, readSummary.skipped, readSummary.missed))
         assertEquals(listOf("No time" to 1), summary.reasons)
         assertEquals(listOf(60, 15, 5), listOf(summary.earned, summary.spent, summary.lost))
         assertEquals("Run", summary.mostMissed?.goal?.name)
         assertEquals("Read", summary.mostSkipped?.goal?.name)
-        assertEquals("Read", summary.mostConsistent?.goal?.name)
+        assertEquals("Run", summary.mostConsistent?.goal?.name) // 6 of 7 ticked, against 1 of 2
         assertEquals(4, summary.worstWeekday) // Thursday: the miss
         assertNull(Review.summarize(monday, monday, monday, emptyList(), emptyList(), emptyList(), emptyList(), emptyList()).mostTicked)
     }

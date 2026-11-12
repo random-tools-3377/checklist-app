@@ -215,6 +215,21 @@ fun PenaltyScreen(
             else "You went over the limit, so there's a penalty task to do now. It pays nothing.",
             style = MaterialTheme.typography.bodyMedium,
         )
+        // Owed for a skip made today: the skip can still be taken back, and this task goes with it.
+        val skip by produceState<Lapse?>(null, penalty.id) { value = vm.skipBehind(penalty) }
+        skip?.let { skipped ->
+            OutlinedCard(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        "Changed your mind? Take the skip back and it's as if it never happened: no penalty task, and the ${pointsWord()} come back.",
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    OutlinedButton(onClick = { vm.takeBackThisSkip(skipped) }, modifier = Modifier.fillMaxWidth().testTag("penalty-take-back-skip")) {
+                        Text("Take back the skip")
+                    }
+                }
+            }
+        }
         val hiddenGoal = penalty.goalId?.let { it in hiddenGoals } == true
         val label = if (hiddenGoal) "🔒 ${io.github.randomtools3377.checklist.core.PrivateGoals.NAME}" else penalty.label
         if (penalty.choice != null && label != null) {
@@ -323,6 +338,15 @@ fun SkipDialog(goal: Goal, vm: MainViewModel, onDone: () -> Unit) {
                         ReasonChips(reason, "skip-reason", own) { reason = it }
                         OutlinedTextField(value = note, onValueChange = { note = it.take(200) }, label = { Text("Note (optional)") })
                     }
+                }
+                // A skip is never counted as done, and it isn't final until the day ends.
+                if (allowed != null) {
+                    Text(
+                        "A skipped goal doesn't count as done. You can take the skip back until the day ends.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.testTag("skip-note"),
+                    )
                 }
             }
         },

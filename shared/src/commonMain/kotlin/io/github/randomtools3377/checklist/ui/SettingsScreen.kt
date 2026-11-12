@@ -1069,7 +1069,7 @@ private fun StreakSettingsRow(current: StreakSettings, onChange: (StreakSettings
                 }
             },
             tag = "setting:streak-value",
-            hint = "At ${current.describe()}, the rest can be missed or skipped without breaking it. Other streaks count days with no misses, no skips, nothing over the limit, and everything done.",
+            hint = "At ${current.describe()}, the rest can be missed without breaking it. A skipped goal isn't counted that day: it is never done, and it doesn't break this streak. Other streaks count days with no misses, no skips, nothing over the limit, and perfect days: everything done, nothing skipped.",
         )
     }
 }

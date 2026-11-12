@@ -19,8 +19,18 @@ data class StreakSettings(val target: StreakTarget = StreakTarget.PERCENT, val v
     }
 }
 
-/** One day's record: goals due and done, and the skips and misses that belong to it. */
-data class DayRecord(val day: LocalDate, val due: Int, val done: Int, val misses: Int, val skips: Int, val overLimit: Int)
+/**
+ * One day's record: goals due and done, and the skips and misses that belong to it. A goal
+ * covered by a skip is in neither [due] nor [done]: it drops out of what the day counts, and
+ * shows only in [skips], the skips made on the day.
+ */
+data class DayRecord(val day: LocalDate, val due: Int, val done: Int, val misses: Int, val skips: Int, val overLimit: Int) {
+    /** Nothing happened on it: such a day neither counts for a streak nor breaks one. */
+    val isEmpty: Boolean get() = due == 0 && misses == 0 && skips == 0
+
+    /** A perfect day, the same everywhere: something was due, all of it was done, and nothing was skipped. */
+    val perfect: Boolean get() = due > 0 && done >= due && skips == 0
+}
 
 /** The current length, in days, of each streak. */
 data class Streaks(
@@ -30,7 +40,7 @@ data class Streaks(
     val noSkips: Int,
     /** Days without going over the limit. */
     val withinLimit: Int,
-    /** Days with everything due done. */
+    /** Perfect days: everything due done, and nothing skipped. */
     val perfect: Int,
 ) {
     /** True when every streak is running at once. */
@@ -69,10 +79,12 @@ internal class PastWindows(goals: List<Goal>, ticks: List<Tick>, lapses: List<La
 object StreakCounter {
     /**
      * Each day's record from [from] to [to]. A single-day habit counts on its day; one due so
-     * many times per week, month or year counts on the day its window ends. A skipped goal counts
-     * as done for the day, but still breaks the no-skip streak. A goal counts only from the day
-     * [countsFrom] gives it (the day it was added, or brought back), so a new, copied or returned
-     * goal doesn't turn earlier days into days not done.
+     * many times per week, month or year counts on the day its window ends. A skip is never
+     * counted as done: a goal whose day was skipped, or whose times were only reached with skips,
+     * drops out of the day, neither due nor done, and its skip still breaks the Skip-free streak
+     * on the day it was made. One done after all (ticked as often as it needs) is done, skip or
+     * no skip. A goal counts only from the day [countsFrom] gives it (the day it was added, or
+     * brought back), so a new, copied or returned goal doesn't turn earlier days into days not done.
      */
     fun records(
         from: LocalDate,
@@ -111,7 +123,9 @@ object StreakCounter {
                 if (window.end != day) continue
                 val count = goal.timesDone(ticksByWindow[Triple(goal.id, goal.period, window.start)].orEmpty())
                 val skips = skipCounts[goal.id to window.start] ?: 0
-                val finished = if (window.period == Period.DAILY) count >= goal.target || skips > 0 else count + skips >= goal.target
+                val finished = count >= goal.target
+                // Skipped: it no longer needs doing, and drops out of what the day counts.
+                if (!finished && (if (window.period == Period.DAILY) skips > 0 else count + skips >= goal.target)) continue
                 // A week, month or year only partly in the goal's dates counts once it is done.
                 if (!finished && repeat.isPartial(window)) continue
                 due++
@@ -142,18 +156,28 @@ object StreakCounter {
     }
 
     /**
+     * What [record]'s day does to the main streak: true when it reaches the target, false when
+     * it breaks the streak, and null when it does neither. That is a day with nothing due and
+     * nothing missed, which includes a day where everything due was skipped: a skip never counts
+     * as done, but it doesn't break the main streak either.
+     */
+    fun mainDay(record: DayRecord, settings: StreakSettings): Boolean? =
+        if (record.due == 0 && record.misses == 0) null else meetsTarget(record, settings)
+
+    /**
      * Counts back from [today]. Days with nothing due neither count nor break a streak. Today
      * counts once it already qualifies. While it is still going it doesn't break the done and
      * perfect-day streaks, but a skip or going over the limit today has already happened, so
-     * those break right away.
+     * those break right away. A day with a skip is never a perfect day, and breaks the Skip-free
+     * streak; for the main streak its skipped goals simply aren't there (see [mainDay]).
      */
     fun count(records: List<DayRecord>, today: LocalDate, settings: StreakSettings): Streaks {
-        fun streak(todayCanBreak: Boolean = false, test: (DayRecord) -> Boolean): Int {
+        fun streak(todayCanBreak: Boolean = false, test: (DayRecord) -> Boolean?): Int {
             var length = 0
             for (record in records.sortedByDescending { it.day }) {
                 if (record.day > today) continue
-                if (record.due == 0 && record.misses == 0 && record.skips == 0) continue
-                val ok = test(record)
+                if (record.isEmpty) continue
+                val ok = test(record) ?: continue
                 if (record.day == today && !ok && !todayCanBreak) continue
                 if (!ok) break
                 length++
@@ -161,11 +185,11 @@ object StreakCounter {
             return length
         }
         return Streaks(
-            done = streak { meetsTarget(it, settings) },
+            done = streak { mainDay(it, settings) },
             noMisses = streak { it.misses == 0 },
             noSkips = streak(todayCanBreak = true) { it.skips == 0 },
             withinLimit = streak(todayCanBreak = true) { it.overLimit == 0 },
-            perfect = streak { it.due > 0 && it.done >= it.due },
+            perfect = streak { it.perfect },
         )
     }
 }

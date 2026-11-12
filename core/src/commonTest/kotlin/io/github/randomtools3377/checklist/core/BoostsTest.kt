@@ -74,11 +74,15 @@ class BoostsTest {
         book.tickHabit(gym.id)
         assertTrue(PerfectDays.isPerfect(today()))
 
-        // Skipped and then done anyway: still not perfect.
+        // Skipped: not perfect, though everything else is done and the skipped goal dropped out.
         val walk = store.addGoal(Goal(kind = GoalKind.HABIT, name = "Walk", icon = "🚶", points = 5, repeat = Repeat.everyDay(monday)))
         Lapses(store, book).skip(walk.id, reason = null, note = null)
-        book.tickHabit(walk.id)
+        assertEquals(2 to 2, today().let { it.due to it.done })
         assertTrue(!PerfectDays.isPerfect(today()))
+        // Done after all the same day: the skip is taken back by itself, and the day is perfect again.
+        book.tickHabit(walk.id)
+        assertTrue(store.lapses.isEmpty())
+        assertTrue(PerfectDays.isPerfect(today()))
     }
 
     @Test

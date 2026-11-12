@@ -459,7 +459,7 @@ fun TodayScreen(
                     moodAfter?.let { after ->
                         val answered = after.after
                         if (answered == null) {
-                            MoodAfterCheckIn(after.morning, onMood = vm::setMoodAfter, onLater = vm::closeMoodAfter)
+                            MoodAfterCheckIn(after.morning, after.skipped, onMood = vm::setMoodAfter, onLater = vm::closeMoodAfter)
                         } else {
                             MoodAfterAnswer(
                                 morning = after.morning,
@@ -694,7 +694,7 @@ fun TodayScreen(
 
 private fun timeLabel(planned: Planned, screen: TodayState): String? {
     val time = planned.time ?: return null
-    if (planned.row.done) return null
+    if (planned.row.settled) return null
     val text = momentText(time, screen.view.day)
     return if (planned.fixed) "at $text" else "by about $text"
 }
@@ -818,14 +818,15 @@ private fun MoodCheckIn(onMood: (Int) -> Unit, onLater: () -> Unit) {
 
 /**
  * The second mood check-in, once everything due today is done: the same five faces, gentler after
- * a morning that started low. "Not now" puts it off until tomorrow.
+ * a morning that started low. With something [skipped] today it says "That's everything", not
+ * that everything was done. "Not now" puts it off until tomorrow.
  */
 @Composable
-private fun MoodAfterCheckIn(morning: Int, onMood: (Int) -> Unit, onLater: () -> Unit) {
+private fun MoodAfterCheckIn(morning: Int, skipped: Boolean, onMood: (Int) -> Unit, onLater: () -> Unit) {
     Card(Modifier.fillMaxWidth().testTag("mood-after")) {
         Column(Modifier.padding(12.dp)) {
             Text(
-                io.github.randomtools3377.checklist.core.MoodInsights.question(morning),
+                io.github.randomtools3377.checklist.core.MoodInsights.question(morning, skipped),
                 style = MaterialTheme.typography.titleSmall,
                 modifier = Modifier.testTag("mood-after-question"),
             )
@@ -987,7 +988,7 @@ private fun paceText(pace: LongPace): String = "${pace.describe()} (finish by ${
  * time it was spread to, and whether that has passed. Without times or a day start, a hint.
  */
 private fun nextLine(row: HabitRow, screen: TodayState): Pair<String, Boolean>? {
-    if (!row.goal.severalADay || row.done) return null
+    if (!row.goal.severalADay || row.settled) return null
     val slot = screen.nextSlots[row.goal.id]
         ?: return if (row.goal.times.isEmpty() && !screen.hasDayStart) "Set when your day starts in Settings to space these out" to false else null
     val text = momentText(slot.at, screen.view.day)
@@ -1161,7 +1162,7 @@ private fun HabitCard(
                 Text(detail, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 if (goal.hasAmount) {
                     // "12 of 20 pages · about 16 min left": the time comes from a typed time or the usual speed.
-                    val left = goal.minutes?.takeIf { !row.done && it > 0 }?.let { " · about ${minutesText(it)} left" } ?: ""
+                    val left = goal.minutes?.takeIf { !row.settled && it > 0 }?.let { " · about ${minutesText(it)} left" } ?: ""
                     Text(
                         io.github.randomtools3377.checklist.core.Amounts.progressText(row.progress, goal) + left,
                         style = MaterialTheme.typography.bodyMedium,
@@ -1169,7 +1170,7 @@ private fun HabitCard(
                         color = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.testTag("amount:${goal.name}"),
                     )
-                    if (amountMode && !row.done) {
+                    if (amountMode && !row.settled) {
                         val running = stopwatch?.takeIf { it.goalId == goal.id }
                         if (running != null) {
                             var now by remember { mutableStateOf(io.github.randomtools3377.checklist.data.nowMillis()) }
@@ -1227,7 +1228,7 @@ private fun HabitCard(
                     )
                 }
                 val length = goal.minutes
-                if (onFocus != null && !row.done && length != null && !goal.hasAmount) {
+                if (onFocus != null && !row.settled && length != null && !goal.hasAmount) {
                     Text(
                         "▶ Focus for ${minutesText(length)}",
                         style = MaterialTheme.typography.labelLarge,
@@ -1253,7 +1254,18 @@ private fun HabitCard(
                     )
                 }
                 if (row.skipped) {
-                    Text("Skipped", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.secondary, modifier = Modifier.testTag("skipped:${goal.name}"))
+                    Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text("Skipped", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.secondary, modifier = Modifier.testTag("skipped:${goal.name}"))
+                        // A skip made today can be taken back until the day ends, as if it never happened.
+                        if (row.canTakeBackSkip) {
+                            Text(
+                                "Take back the skip",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.secondary,
+                                modifier = Modifier.clickable { extras.onTakeBackSkip(goal.id) }.padding(vertical = 4.dp).testTag("take-back-skip:${goal.name}"),
+                            )
+                        }
+                    }
                 } else if (!row.done) {
                     Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                         Text(

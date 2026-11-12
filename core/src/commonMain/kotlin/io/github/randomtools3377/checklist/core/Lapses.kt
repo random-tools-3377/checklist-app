@@ -15,6 +15,70 @@ sealed interface SkipCheck {
     data object NotFound : SkipCheck
 }
 
+/** A skip that was taken back, and the penalty points that came back with it (0 within the allowance). */
+data class SkipTakenBack(val skip: Lapse, val refunded: Int)
+
+/**
+ * Takes the skip [skip] back, as if it never happened. The skip itself goes, and with it the
+ * allowance it used and what it did to the streaks. Over the limit, its penalty points come back
+ * with an entry in the points history, and its penalty task is dropped if it wasn't done yet (one
+ * already done stays done). Nothing is left pointing at the skip: its number could be given to
+ * a later skip or miss once the data has been through a backup. A skip or miss recorded after it
+ * that only went over the limit because of it is put back within the allowance too (see
+ * [freeAllowance]). Returns the points given back for the skip itself. The user's [Rules] must
+ * be in use.
+ */
+internal suspend fun Store.takeBack(skip: Lapse, at: Long): Int {
+    val entries = entriesForLapse(skip.id)
+    val taken = -entries.filter { it.kind == EntryKind.PENALTY }.sumOf { it.amount }
+    entries.forEach { updateEntry(it.copy(lapseId = null)) }
+    if (taken > 0) {
+        // On the skip's own day, as the penalty was, so that day's losses come out as they were.
+        addEntry(Entry(at = at, day = skip.day, kind = EntryKind.PENALTY, amount = taken, goalId = skip.goalId, label = skip.label))
+    }
+    penaltyForLapse(skip.id)?.let { penalty ->
+        val open = penalty.doneAt == null && penalty.cancelledAt == null
+        updatePenalty(penalty.copy(lapseId = null, cancelledAt = if (open) at else penalty.cancelledAt))
+    }
+    removeLapse(skip.id)
+    freeAllowance(skip, at)
+    return taken.coerceAtLeast(0)
+}
+
+/**
+ * The allowance [skip] used is free again now that it is gone. A skip or miss recorded after it
+ * that went over the limit only because the skip had used the allowance up is within it after
+ * all: its penalty points come back, its penalty task is dropped if it wasn't done yet, and it
+ * no longer counts as over the limit. One that would have gone over anyway stays as it is.
+ */
+private suspend fun Store.freeAllowance(skip: Lapse, at: Long) {
+    // Every allowance the skip counted against starts and ends within its week and its month.
+    val from = minOf(Days.periodStart(skip.day, Period.WEEKLY), Days.periodStart(skip.day, Period.MONTHLY))
+    val to = maxOf(Days.periodEnd(skip.day, Period.WEEKLY), Days.periodEnd(skip.day, Period.MONTHLY))
+    // To-dos share one allowance between them; every other goal has its own.
+    val todos = activeGoals().filter { it.kind == GoalKind.TODO }.map { it.id }.toSet()
+    val shared = allLapses(from, to).filter { !it.forgotten && (it.goalId == skip.goalId || (skip.goalId in todos && it.goalId in todos)) }
+    val later = shared.filter { it.overLimit && it.id > skip.id }.sortedBy { it.id }
+    if (later.isEmpty()) return
+    val difficulty = DifficultySetting.of(this)
+    for (lapse in later) {
+        val goal = goal(lapse.goalId) ?: continue
+        val start = Days.periodStart(lapse.day, goal.allowanceWindow)
+        val end = Days.periodEnd(lapse.day, goal.allowanceWindow)
+        if (skip.day < start || skip.day > end) continue
+        // What had been used when it was recorded, now without the skip.
+        val used = shared.count { it.id < lapse.id && it.day >= start && it.day <= end }
+        // Only one the skip itself pushed over: with it, the allowance was just used up.
+        if (used != difficulty.on(lapse.day).allowed(goal.allowed) - 1) continue
+        val paid = -entriesForLapse(lapse.id).filter { it.kind == EntryKind.PENALTY }.sumOf { it.amount }
+        if (paid > 0) {
+            addEntry(Entry(at = at, day = lapse.day, kind = EntryKind.PENALTY, amount = paid, goalId = lapse.goalId, label = lapse.label, lapseId = lapse.id))
+        }
+        penaltyForLapse(lapse.id)?.takeIf { it.doneAt == null && it.cancelledAt == null }?.let { updatePenalty(it.copy(cancelledAt = at)) }
+        updateLapse(lapse.copy(overLimit = false, cost = 0))
+    }
+}
+
 sealed interface SkipResult {
     data class Skipped(val lapse: Lapse, val penaltyId: Long?) : SkipResult
 
@@ -110,10 +174,11 @@ class Lapses(
         val today = book.today()
         val window = repeat.window(today) ?: return SkipCheck.NotDue
         val ticks = store.habitTicks(goalId, window.start).filter { it.countsToward(goal, window.start) }
-        val skips = store.lapses(goalId, window.start, window.end).filter { it.kind == LapseKind.SKIP && it.periodStart == window.start }
+        val skips = store.lapses(goalId, window.start, window.end).filter { it.kind == LapseKind.SKIP && it.periodStart == window.start && !it.forgotten }
         val times = goal.timesDone(ticks)
-        val done = if (window.period == Period.DAILY) times >= goal.target || skips.isNotEmpty() else times + skips.size >= goal.target
-        if (done) return SkipCheck.AlreadyDone
+        // Nothing left of it to skip: done, or skipped already.
+        val settled = if (window.period == Period.DAILY) times >= goal.target || skips.isNotEmpty() else times + skips.size >= goal.target
+        if (settled) return SkipCheck.AlreadyDone
         val used = used(goal, today)
         val allowed = book.difficulty(today).allowed(goal.allowed)
         val over = used >= allowed
@@ -133,6 +198,35 @@ class Lapses(
         val today = book.today()
         val window = goal.repeat!!.window(today)!!
         record(goal, LapseKind.SKIP, today, window.period, window.start, check.overLimit, reason, note, reasonText)
+    }
+
+    /**
+     * Takes back a skip of [goalId] made today, as if it never happened: the allowance it used,
+     * its penalty points and open penalty task over the limit, and what it did to the streaks
+     * (see [takeBack]). For a goal counted so many times a week, month or year, it takes back one
+     * skip of its times, the latest made today. A skip can only be taken back until the day it
+     * was made on ends. Null when there is none to take back.
+     */
+    suspend fun takeBackSkip(goalId: Long): SkipTakenBack? = store.transaction {
+        Rules.load(store)
+        val today = book.today()
+        val skip = store.lapses(goalId, today, today).filter { it.kind == LapseKind.SKIP && !it.forgotten }.maxByOrNull { it.id }
+            ?: return@transaction null
+        SkipTakenBack(skip, store.takeBack(skip, book.millis()))
+    }
+
+    /** Takes back the skip [lapseId], if it is a skip made today (see [takeBackSkip]). */
+    suspend fun takeBackSkipById(lapseId: Long): SkipTakenBack? = store.transaction {
+        Rules.load(store)
+        val skip = store.lapse(lapseId)?.takeIf { it.kind == LapseKind.SKIP && !it.forgotten && it.day == book.today() }
+            ?: return@transaction null
+        SkipTakenBack(skip, store.takeBack(skip, book.millis()))
+    }
+
+    /** The skip the penalty task [penalty] is owed for, if it was made today and so can still be taken back. */
+    suspend fun skipBehind(penalty: Penalty): Lapse? {
+        val lapse = penalty.lapseId?.let { store.lapse(it) } ?: return null
+        return lapse.takeIf { it.kind == LapseKind.SKIP && !it.forgotten && it.day == book.today() }
     }
 
     /** Saves a skip or miss, with its penalty when over the limit. */
@@ -247,9 +341,10 @@ class Lapses(
                     val windowLapses = store.lapses(goal.id, window.start, window.end)
                     // Already missed, by "I slipped" on a goal to quit: not twice.
                     if (windowLapses.any { it.kind == LapseKind.MISS && it.periodStart == window.start && !it.forgotten }) continue
-                    val skips = windowLapses.count { it.kind == LapseKind.SKIP && it.periodStart == window.start }
-                    val done = if (window.period == Period.DAILY) count >= goal.target || skips > 0 else count + skips >= goal.target
-                    if (done) continue
+                    val skips = windowLapses.count { it.kind == LapseKind.SKIP && it.periodStart == window.start && !it.forgotten }
+                    // Done, or skipped: either way there is nothing left of it to miss.
+                    val settled = if (window.period == Period.DAILY) count >= goal.target || skips > 0 else count + skips >= goal.target
+                    if (settled) continue
                     // A first or last week, month or year only partly in the goal's dates isn't missed.
                     if (repeat.isPartial(window)) continue
                     val over = used(goal, day) >= book.difficulty(day).allowed(goal.allowed)

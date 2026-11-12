@@ -34,6 +34,8 @@ data class CompanionFacts(
     val daysAway: Int,
     /** A new level reached since the user last looked, if any. */
     val newLevel: Int? = null,
+    /** Goals skipped today. They are in neither [doneToday] nor [dueToday]: a skip is never done. */
+    val skippedToday: Int = 0,
 )
 
 /**
@@ -73,9 +75,9 @@ object Checkins {
         return 0
     }
 
-    /** What was left undone yesterday: due, neither done nor skipped. */
+    /** What was left undone yesterday: due, neither done nor skipped (a skipped goal isn't in what was due). */
     fun leftYesterday(records: List<DayRecord>, today: LocalDate): Int =
-        records.firstOrNull { it.day == today.minusDays(1) }?.let { (it.due - it.done - it.skips).coerceAtLeast(0) } ?: 0
+        records.firstOrNull { it.day == today.minusDays(1) }?.let { (it.due - it.done).coerceAtLeast(0) } ?: 0
 
     /** The easiest goal left: the quickest, then the smallest. */
     fun easiest(left: List<Goal>): Goal? = left.minWithOrNull(compareBy<Goal>({ it.minutes ?: 15 }, { it.points }, { it.position }))
@@ -131,6 +133,10 @@ object Checkins {
                 wins = wins,
                 hardDay = true,
             )
+        }
+        if (allDone && f.skippedToday > 0) {
+            // Nothing left to do, but not everything was done: glad, without the cheer for a full day.
+            return CompanionSay(Expression.HAPPY, pick("That's everything for today. Nicely done.", "Nothing left for today. Good work on what you did."))
         }
         if (allDone) {
             return CompanionSay(

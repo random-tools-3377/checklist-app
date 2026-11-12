@@ -11,8 +11,8 @@ enum class Badge(val icon: String, val title: String, val how: String, val tier:
     TICKS_100("💯", "100 ticks", "Tick goals 100 times", Tier.BRONZE),
     TICKS_1000("🏅", "1,000 ticks", "Tick goals 1,000 times", Tier.SILVER),
     TICKS_5000("🎖️", "5,000 ticks", "Tick goals 5,000 times", Tier.GOLD),
-    PERFECT_DAY("🌟", "Perfect day", "Do everything due in a day"),
-    PERFECT_WEEK("🏆", "Perfect week", "Do everything due on every day of a week, Monday to Sunday"),
+    PERFECT_DAY("🌟", "Perfect day", "Do everything due in a day, with nothing skipped"),
+    PERFECT_WEEK("🏆", "Perfect week", "Do everything due on every day of a week, Monday to Sunday, with nothing skipped"),
     STREAK_7("🔥", "A week in a row", "Keep the main streak going for 7 days"),
     STREAK_30("🔥", "A month in a row", "Keep the main streak going for 30 days", Tier.BRONZE),
     STREAK_100("☄️", "100 days in a row", "Keep the main streak going for 100 days", Tier.SILVER),
@@ -70,7 +70,7 @@ object Badges {
         add(Badge.TICKS_5000, byTime.getOrNull(4999)?.day)
 
         val days = records.filter { it.day <= today }.sortedBy { it.day }
-        add(Badge.PERFECT_DAY, days.firstOrNull { perfect(it) }?.day)
+        add(Badge.PERFECT_DAY, days.firstOrNull { it.perfect }?.day)
         add(Badge.PERFECT_WEEK, perfectWeek(days, today))
         val streakDays = streakReached(days, today, streak)
         add(Badge.STREAK_7, streakDays[7])
@@ -118,13 +118,14 @@ object Badges {
         return found.sortedBy { it.badge.ordinal }
     }
 
-    private fun perfect(record: DayRecord) = record.due > 0 && record.done >= record.due
-
-    /** The Sunday of the first week, covered all through, with everything due done every day. */
+    /**
+     * The Sunday of the first week, covered all through, with every day that had something due a
+     * perfect day: everything done, nothing skipped.
+     */
     private fun perfectWeek(days: List<DayRecord>, today: LocalDate): LocalDate? =
         days.groupBy { Days.periodStart(it.day, Period.WEEKLY) }.entries.sortedBy { it.key }.firstOrNull { (monday, week) ->
             val sunday = monday.plusDays(6)
-            sunday <= today && week.size == 7 && week.any { it.due > 0 } && week.all { it.due == 0 || perfect(it) }
+            sunday <= today && week.size == 7 && week.any { it.due > 0 } && week.all { it.perfect || (it.due == 0 && it.skips == 0) }
         }?.let { it.key.plusDays(6) }
 
     /**
@@ -135,8 +136,7 @@ object Badges {
         val reached = HashMap<Int, LocalDate>()
         var length = 0
         for (record in days) {
-            if (record.due == 0 && record.misses == 0 && record.skips == 0) continue
-            val ok = StreakCounter.meetsTarget(record, settings)
+            val ok = StreakCounter.mainDay(record, settings) ?: continue
             if (record.day == today && !ok) continue
             if (!ok) {
                 length = 0

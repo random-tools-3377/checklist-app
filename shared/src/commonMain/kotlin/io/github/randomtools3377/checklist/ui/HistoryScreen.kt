@@ -49,6 +49,8 @@ private fun kindText(entry: Entry): String = when {
         else -> "Bonus"
     }
     entry.kind == EntryKind.PERFECT_DAY && entry.label.startsWith("Combo") -> "Combo of perfect days"
+    // The penalty of a skip over the limit, given back when the skip was taken back.
+    entry.isSkipTakenBack -> io.github.randomtools3377.checklist.core.Spreadsheet.SKIP_TAKEN_BACK
     else -> kindText(entry.kind)
 }
 

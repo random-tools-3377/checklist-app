@@ -3,7 +3,11 @@ package io.github.randomtools3377.checklist.core
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.isoDayNumber
 
-/** How one habit went over a stretch of days, counting each time it was due. */
+/**
+ * How one habit went over a stretch of days, counting each time it was due. A time is [done] only
+ * when it was really ticked; one covered by a skip stays in [due] and counts under [skipped], so
+ * skipping never raises a done percentage.
+ */
 data class GoalSummary(
     val goal: Goal,
     val due: Int,
@@ -14,7 +18,7 @@ data class GoalSummary(
     val ticks: Int,
     /** Points it earned in the stretch. */
     val points: Int,
-    /** Longest run of times in a row it was done, within the stretch. */
+    /** Longest run of times in a row it was done, within the stretch. A skipped time neither adds to a run nor ends it. */
     val longestRun: Int,
     /** The run it is on now, if the stretch reaches today. */
     val currentRun: Int,
@@ -36,7 +40,7 @@ data class ReviewSummary(
     val lost: Int,
     val days: List<DayRecord>,
     val gaps: List<Gap>,
-    /** Done out of due for each day of the week, Monday = 1. */
+    /** Due and really done (ticked, not skipped) for each day of the week, Monday = 1. */
     val weekdays: Map<Int, Pair<Int, Int>>,
     /** Points earned on each day of the stretch (ticks, bonuses, refunds), for the chart. */
     val earnedByDay: Map<LocalDate, Int> = emptyMap(),
@@ -91,11 +95,11 @@ object Review {
 
     /**
      * Sums up [from] to [to]. A habit counts each time its window ends inside the stretch, up to
-     * [today] (days still to come aren't counted yet): done if ticked enough (or, for a single
-     * day, skipped), skipped if a skip covered it, missed if a miss was recorded. [goals] may
-     * include removed ones: they aren't counted as due, but their points keep their category.
+     * [today] (days still to come aren't counted yet): done only if ticked enough, skipped if a
+     * skip covered it (never done, whatever the skip covered), missed if a miss was recorded.
+     * [goals] may include removed ones: they aren't counted as due, but their points keep their category.
      * Points come from the ledger: earned (ticks, bonuses, refunds, perfect days, challenges),
-     * spent (rewards, less returns), lost (penalties), interest and bets. A habit counts only
+     * spent (rewards, less returns), lost (penalties, less those of skips taken back), interest and bets. A habit counts only
      * from the day [countsFrom] gives it, the day it was added or brought back. With
      * [hidePrivate], for while the privacy lock is on for private goals, those goals are left
      * out with their ticks, skips, misses and points, as on Today.
@@ -144,11 +148,13 @@ object Review {
                 if (window != null) {
                     val count = goal.timesDone(ticks.filter { it.countsToward(goal, window.start) })
                     val skips = live.count { it.goalId == goal.id && it.kind == LapseKind.SKIP && it.periodStart == window.start }
-                    val finished = if (window.period == Period.DAILY) count >= goal.target || skips > 0 else count + skips >= goal.target
+                    val finished = count >= goal.target
+                    // Nothing left of it to do because of a skip: skipped, never done.
+                    val covered = !finished && (if (window.period == Period.DAILY) skips > 0 else count + skips >= goal.target)
                     // A week, month or year only partly in the goal's dates counts once it is done.
-                    if (finished || !goal.repeat!!.isPartial(window)) {
+                    if (finished || covered || !goal.repeat!!.isPartial(window)) {
                         due++
-                        if (skips > 0 && count < goal.target) skipped++
+                        if (skips > 0 && !finished) skipped++
                         if (live.any { it.goalId == goal.id && it.kind == LapseKind.MISS && it.periodStart == window.start }) missed++
                         weekdayDue[day.dayOfWeek.isoDayNumber]++
                         if (finished) {
@@ -156,7 +162,7 @@ object Review {
                             weekdayDone[day.dayOfWeek.isoDayNumber]++
                             run++
                             longest = maxOf(longest, run)
-                        } else if (day < today) {
+                        } else if (!covered && day < today) {
                             run = 0
                         }
                     }
@@ -172,7 +178,8 @@ object Review {
         fun sum(vararg kinds: EntryKind) = inRange.filter { it.kind in kinds }.sumOf { it.amount }
         val earnedKinds = setOf(EntryKind.TICK, EntryKind.BONUS, EntryKind.REFUND, EntryKind.PERFECT_DAY, EntryKind.CHALLENGE)
         val earnedByDay = inRange.filter { it.kind in earnedKinds }.groupBy { it.day }.mapValues { (_, e) -> e.sumOf { it.amount } }
-        val lostByDay = inRange.filter { it.kind == EntryKind.PENALTY }.groupBy { it.day }.mapValues { (_, e) -> -e.sumOf { it.amount } }
+        // A skip taken back gave its penalty back the same day, so that day lost nothing by it.
+        val lostByDay = inRange.filter { it.kind == EntryKind.PENALTY }.groupBy { it.day }.mapValues { (_, e) -> -e.sumOf { it.amount } }.filterValues { it != 0 }
         return ReviewSummary(
             from = from,
             to = to,

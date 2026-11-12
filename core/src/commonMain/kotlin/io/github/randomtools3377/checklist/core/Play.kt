@@ -84,6 +84,8 @@ object Quests {
      * How far along [quest] is: [rows] are today's goals, [ticks] today's ticks with [timeOf]
      * giving their time, [earned] what goals have paid today. Times are on the user's day, which
      * ends at [dayEndHour]: a tick after midnight that still belongs to the day is late, not early.
+     * Only a goal really done counts: a skipped one is never done, so a quest that asks for it,
+     * for all of its area or for everything due can't be finished while it stays skipped.
      */
     fun progress(quest: Quest, rows: List<HabitRow>, ticks: List<Tick>, timeOf: (Long) -> LocalTime, earned: Int, dayEndHour: Int = 0): QuestProgress {
         fun second(at: Long) = Days.secondOfDay(timeOf(at), dayEndHour)
@@ -159,8 +161,9 @@ object Quests {
 
 /**
  * Combos: every perfect day in a row (everything due done, nothing skipped) adds one, and pays
- * [PER_STEP] points for each, up to [MOST] (see [Rules]). A day with something left undone ends
- * the combo; a day with nothing due neither adds to it nor ends it.
+ * [PER_STEP] points for each, up to [MOST] (see [Rules]). A day with something left undone, or
+ * with a skip made on it (never a perfect day), ends the combo; a day with nothing due and no
+ * skip neither adds to it nor ends it.
  */
 class Combos(private val store: Store, private val book: Book) {
     companion object {
@@ -209,10 +212,13 @@ class Combos(private val store: Store, private val book: Book) {
         if (day <= yesterday) {
             val goals = store.activeGoals()
             val ticks = store.habitTicksSince(Days.earliestOpenDay(day))
-            val lapses = store.allLapses(day, yesterday)
+            // Skips made earlier in a week, month or year that ends on one of these days count too:
+            // a goal they cover drops out of its last day, so they don't end the combo there.
+            val lapses = store.allLapses(Days.earliestOpenDay(day), yesterday)
             for (record in StreakCounter.records(day, yesterday, goals, ticks, lapses)) {
-                if (record.due == 0) continue
-                if (record.done >= record.due && record.skips == 0) {
+                // Nothing due, and nothing skipped either: it neither adds to the combo nor ends it.
+                if (record.due == 0 && record.skips == 0) continue
+                if (record.perfect) {
                     combo++
                     val entry = Entry(at = book.millis(), day = record.day, kind = EntryKind.PERFECT_DAY, amount = pay(combo), label = "Combo ×$combo")
                     paid += entry.copy(id = store.addEntry(entry))

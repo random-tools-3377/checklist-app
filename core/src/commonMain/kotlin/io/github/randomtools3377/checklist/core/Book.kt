@@ -69,8 +69,11 @@ class Book(
         val yesterday = day.minusDays(1)
         val from = day.minusDays(120)
         val zone = timeZone()
+        // Ticks and skips from the start of every window those days fall in, so a goal counted over
+        // a week, month or year is done, or dropped by a skip, on its last day as on Today.
+        val since = Days.earliestOpenDay(from)
         val records = StreakCounter.records(
-            from, yesterday, store.activeGoals(), store.habitTicksSince(Days.earliestOpenDay(from)), store.allLapses(from, yesterday),
+            from, yesterday, store.activeGoals(), store.habitTicksSince(since), store.allLapses(since, yesterday),
         ) { it.addedOn(zone) }
         // With streak shields on, a shield can keep the main streak, and its bonus, going.
         val shieldsFrom = if (Feature.isOn(store, Feature.SHIELDS)) store.setting(Shields.FROM)?.let { runCatching { LocalDate.parse(it) }.getOrNull() } else null
@@ -146,9 +149,33 @@ class Book(
                 Entry(at = at, day = day, kind = EntryKind.BONUS, amount = bonus, goalId = goalId, tickId = tickId, label = goal.name),
             )
         }
+        takeBackSpareSkips(goal, window, ticks.size + 1, day)
         if (finished) nextAfterDone(goal, day)
         if (finished) bonus += payChallenge(goal, day, tickId, pay)
         TickResult.Ticked(points = pay(goal.points), bonus = bonus, finished = finished)
+    }
+
+    /**
+     * Done on the day it was skipped: a skip made today that no longer covers anything is taken
+     * back by itself, as if it never happened (see [takeBack]). For a single day that is once
+     * the goal is done after all; for a goal counted over a week, month or year, once its ticks
+     * and skips come to more than its times, one skip for each time too many. A skip from a day
+     * that has ended stays. [times] is how many of the goal's times are done now.
+     */
+    private suspend fun takeBackSpareSkips(goal: Goal, window: Window, times: Int, day: LocalDate) {
+        val skips = store.lapses(goal.id, window.start, window.end)
+            .filter { it.kind == LapseKind.SKIP && it.periodStart == window.start && !it.forgotten }
+        if (skips.isEmpty()) return
+        var spare = if (window.period == Period.DAILY) {
+            if (times >= goal.target) skips.size else 0
+        } else {
+            times + skips.size - goal.target
+        }
+        for (skip in skips.filter { it.day == day }.sortedByDescending { it.id }) {
+            if (spare <= 0) break
+            store.takeBack(skip, millis())
+            spare--
+        }
     }
 
     /**
@@ -209,6 +236,7 @@ class Book(
                 Entry(at = at, day = day, kind = EntryKind.BONUS, amount = bonus, goalId = goalId, tickId = tickId, label = goal.name),
             )
         }
+        takeBackSpareSkips(goal, window, timesAfter, day)
         if (finished) nextAfterDone(goal, day)
         if (finished) bonus += payChallenge(goal, day, tickId, pay)
         TickResult.Ticked(points = points, bonus = bonus, finished = finished)

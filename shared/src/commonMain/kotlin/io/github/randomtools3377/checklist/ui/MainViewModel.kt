@@ -239,9 +239,10 @@ data class CompanionView(
 
 /**
  * The mood check-in once everything due today is done: the morning's mood, and the answer once
- * given (null while it is still asked).
+ * given (null while it is still asked). With something [skipped] today, the question doesn't say
+ * everything was done.
  */
-data class MoodAfterView(val morning: Int, val after: Int?)
+data class MoodAfterView(val morning: Int, val after: Int?, val skipped: Boolean = false)
 
 data class TodayState(
     val view: TodayView,
@@ -528,7 +529,7 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
                 todayView.dueToday.map { row ->
                     val at = row.goal.at?.let { Pace.on(day, it, s.dayEndHour) }
                         ?: Pace.nextSlot(row, day, paceSettings)?.takeIf { it.fixed }?.at
-                    Planned(row, at, fixed = at != null, late = at != null && !row.done && at < moment)
+                    Planned(row, at, fixed = at != null, late = at != null && !row.settled && at < moment)
                 }
             }
             val longPaces = buildMap {
@@ -1123,7 +1124,33 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
     suspend fun checkSkip(goalId: Long): SkipCheck = lapses.checkSkip(goalId)
 
     fun skip(goalId: Long, reason: Reason?, note: String?, reasonText: String? = null, onResult: (SkipResult) -> Unit = {}) {
-        viewModelScope.launch { onResult(lapses.skip(goalId, reason, note, reasonText)) }
+        viewModelScope.launch {
+            val result = lapses.skip(goalId, reason, note, reasonText)
+            onResult(result)
+            // Right after a skip, the Undo bar takes it back, as if it never happened. Over the
+            // limit the penalty task fills the screen instead, and offers "Take back the skip" itself.
+            if (result is SkipResult.Skipped && result.penaltyId == null) {
+                val skipId = result.lapse.id
+                offerUndo("Skipped ${result.lapse.label}") { lapses.takeBackSkipById(skipId) }
+            }
+        }
+    }
+
+    /**
+     * "Take back the skip": today's skip of a goal goes, as if it never happened, with the
+     * allowance it used, its penalty points and open penalty task over the limit, and what it
+     * did to the streaks. For a goal counted over a week, month or year, one skip of its times.
+     */
+    fun takeBackSkip(goalId: Long) {
+        viewModelScope.launch { lapses.takeBackSkip(goalId) }
+    }
+
+    /** The skip a penalty task is owed for, while it can still be taken back (it was made today). */
+    suspend fun skipBehind(penalty: Penalty): Lapse? = lapses.skipBehind(penalty)
+
+    /** Takes back that very skip, from its penalty task's screen: the task is dropped with it. */
+    fun takeBackThisSkip(skip: Lapse) {
+        viewModelScope.launch { lapses.takeBackSkipById(skip.id) }
     }
 
     fun explain(lapseId: Long, reason: Reason, note: String?, reasonText: String? = null) {
@@ -1266,7 +1293,7 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
 
     // Ticking and the shop. Results come back on the main thread.
 
-    /** What the Undo bar offers to take back: the last tick, removed goal or purchase. */
+    /** What the Undo bar offers to take back: the last tick, skip, removed goal or purchase. */
     val undoBar = kotlinx.coroutines.flow.MutableSharedFlow<Undoable>(extraBufferCapacity = 4)
 
     private fun offerUndo(message: String, undo: suspend () -> Unit) {
@@ -1822,8 +1849,8 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
                 // The first look: start from here, no cheer.
                 repository.setSetting(io.github.randomtools3377.checklist.core.Checkins.LEVEL_SEEN, level.toString())
             }
-            // A goal skipped today counts neither as done nor as left.
-            val rows = state.view.dueToday.filter { it.done || it.skips == 0 }
+            // A goal skipped today counts neither as done nor as left: it isn't done, and nothing is left of it.
+            val rows = state.view.dueToday.filter { !it.skipped }
             val left = rows.filter { !it.done && !it.goal.quit && !it.goal.hasAmount }
             val say = io.github.randomtools3377.checklist.core.Checkins.say(
                 io.github.randomtools3377.checklist.core.CompanionFacts(
@@ -1838,6 +1865,7 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
                     askMood = ask && talks,
                     daysAway = state.daysAway,
                     newLevel = level.takeIf { seenLevel != null && it > seenLevel },
+                    skippedToday = state.view.dueToday.count { it.skipped },
                 ),
             )
             // With everything done, or nothing due, it offers ideas for the area furthest behind.
@@ -1878,7 +1906,7 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
         combine(today, todayState, todayMood, features, dao.observeSetting(SETTING_MOOD_AFTER_CLOSED)) { day, state, mood, on, closed ->
             if (Feature.MOOD !in on || mood == null || closed == day.toString()) return@combine null
             if (mood.after == null && (state == null || state.view.day != day || !MoodInsights.allDone(state.view.dueToday))) return@combine null
-            MoodAfterView(mood.score, mood.after)
+            MoodAfterView(mood.score, mood.after, skipped = state != null && state.view.day == day && state.view.dueToday.any { it.skipped })
         }.state(null)
 
     fun setMoodAfter(score: Int) {

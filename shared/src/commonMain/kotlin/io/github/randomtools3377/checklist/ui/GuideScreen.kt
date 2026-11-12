@@ -66,7 +66,8 @@ private val pages = listOf(
     },
     GuidePage("🙈", "Skips and misses") {
         "Each goal can be skipped or missed once a week for free, or as often as you set. Past that, it costs " +
-            "${penaltyShare()} its ${pointsWord()} and a penalty task, done right then. A miss always asks why."
+            "${penaltyShare()} its ${pointsWord()} and a penalty task, done right then. A miss always asks why. " +
+            "A skip never counts as done, and you can take it back until the day ends."
     },
     GuidePage("🧩", "Extras when you want them") {
         "To-dos, a mood check-in, a budget, a game and more start off, to keep things simple. " +

@@ -109,16 +109,16 @@ object Pace {
 
     /** The next repetition of [row] still to do today, if its times are set or spread out. */
     fun nextSlot(row: HabitRow, day: LocalDate, settings: PaceSettings): Slot? =
-        if (row.done) null else slots(row.goal, day, settings).getOrNull(row.count)
+        if (row.settled) null else slots(row.goal, day, settings).getOrNull(row.count)
 
     /**
-     * The pace for today's habits that are not done. Ticks with a length keep it; the rest share
+     * The pace for today's habits with something left to do (not done, and not skipped). Ticks with a length keep it; the rest share
      * what is left evenly, with earlier finish times taken into account. A habit done several
      * times a day is due one repetition at a time, by each of its times. Null when nothing that is
      * left has a finish time.
      */
     fun today(now: LocalDateTime, day: LocalDate, rows: List<HabitRow>, settings: PaceSettings, busy: List<Busy> = emptyList()): TodayPace? {
-        val left = rows.filter { !it.done }
+        val left = rows.filter { !it.settled }
         // Each tick still to do, with when it is due and how long it takes.
         class Due(val at: LocalDateTime, val minutes: Int?)
         var unpaced = 0
@@ -178,9 +178,9 @@ object Pace {
         }
     }
 
-    /** Pace for a "times per" habit, if it has a finish day and isn't done. */
+    /** Pace for a "times per" habit, if it has a finish day and something left to do. */
     fun forHabit(row: HabitRow, today: LocalDate): LongPace? {
-        if (row.done) return null
+        if (row.settled) return null
         val finish = finishDate(row.goal, row.window) ?: return null
         return LongPace(row.left, daysLeft(today, finish), finish)
     }
