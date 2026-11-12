@@ -66,22 +66,46 @@ sealed interface AutoBackupResult {
     data object Failed : AutoBackupResult
 }
 
+/** How many "before import" copies are kept in the folder: the newest ones. */
+const val BEFORE_IMPORTS_KEPT = 3
+
 /**
  * The automatic backup's file names. Its own files are "checklist-auto-<day>.json", so it never
  * deletes an export the user saved in the same folder ("checklist-backup-<day>.json").
+ *
+ * The copy saved before an import replaces everything is "checklist-before-import-<day>-<time>.json".
+ * The daily clean-up never deletes those: they have their own count ([BEFORE_IMPORTS_KEPT]), trimmed
+ * only when a newer one is saved, so the newest is always there to undo a wrong import.
  */
 object AutoBackupFiles {
     private val OWN = Regex("""checklist-auto-\d{4}-\d{2}-\d{2}.*\.json""")
+    private val BEFORE_IMPORT = Regex("""checklist-before-import-\d{4}-\d{2}-\d{2}.*\.json""")
 
-    /** Offered to restore: its own files, exports, and automatic backups from before 0.62.0. */
-    private val LISTED = Regex("""checklist-(auto|backup)-\d{4}-\d{2}-\d{2}.*\.json""")
+    /** Offered to restore: its own files, exports, "before import" copies, and automatic backups from before 0.62.0. */
+    private val LISTED = Regex("""checklist-(auto|backup|before-import)-\d{4}-\d{2}-\d{2}.*\.json""")
     private val DAY = Regex("""\d{4}-\d{2}-\d{2}""")
+    private val TIME = Regex("""-\d{4}-\d{2}-\d{2}-(\d{2})(\d{2})\d{2}""")
 
     fun name(day: LocalDate): String = "checklist-auto-$day.json"
 
+    /** The copy of what is on the device at [now], saved before an import replaces it. */
+    fun beforeImportName(now: kotlinx.datetime.LocalDateTime): String {
+        fun two(n: Int) = n.toString().padStart(2, '0')
+        return "checklist-before-import-${now.date}-${two(now.hour)}${two(now.minute)}${two(now.second)}.json"
+    }
+
     fun isOwn(name: String): Boolean = OWN.matches(name)
 
+    fun isBeforeImport(name: String): Boolean = BEFORE_IMPORT.matches(name)
+
     fun isListed(name: String): Boolean = LISTED.matches(name)
+
+    /** The day in a file's name, and for a "before import" copy its time as hour and minute. */
+    fun dayOf(name: String): LocalDate? = DAY.find(name)?.value?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+
+    fun timeOf(name: String): kotlinx.datetime.LocalTime? = TIME.find(name)?.let { found ->
+        runCatching { kotlinx.datetime.LocalTime(found.groupValues[1].toInt(), found.groupValues[2].toInt()) }.getOrNull()
+    }
 
     /** Newest day first, whatever the file's prefix. */
     fun <T> newestFirst(files: List<T>, name: (T) -> String): List<T> =
@@ -90,4 +114,8 @@ object AutoBackupFiles {
     /** Its own files beyond the newest [AUTO_BACKUPS_KEPT]: these are deleted. Nothing else is. */
     fun <T> toDelete(files: List<T>, name: (T) -> String): List<T> =
         newestFirst(files.filter { isOwn(name(it)) }, name).drop(AUTO_BACKUPS_KEPT)
+
+    /** "Before import" copies beyond the newest [BEFORE_IMPORTS_KEPT], deleted when a new one is saved. */
+    fun <T> beforeImportsToDelete(files: List<T>, name: (T) -> String): List<T> =
+        newestFirst(files.filter { isBeforeImport(name(it)) }, name).drop(BEFORE_IMPORTS_KEPT)
 }

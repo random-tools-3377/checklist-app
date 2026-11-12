@@ -8,6 +8,11 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.randomtools3377.checklist.core.Backup
 import io.github.randomtools3377.checklist.core.BackupError
+import io.github.randomtools3377.checklist.core.BackupSummary
+import io.github.randomtools3377.checklist.data.AutoBackupFiles
+import io.github.randomtools3377.checklist.data.BackupCrypto
+import io.github.randomtools3377.checklist.data.BackupKey
+import io.github.randomtools3377.checklist.data.WrongPassphraseException
 import io.github.randomtools3377.checklist.core.BuyResult
 import io.github.randomtools3377.checklist.core.Days
 import io.github.randomtools3377.checklist.core.YearReview
@@ -39,6 +44,7 @@ import io.github.randomtools3377.checklist.core.Difficulty
 import io.github.randomtools3377.checklist.core.DoneItem
 import io.github.randomtools3377.checklist.core.DoneList
 import io.github.randomtools3377.checklist.data.SETTING_STOPWATCH
+import io.github.randomtools3377.checklist.data.SETTING_BACKUP_KEY
 import io.github.randomtools3377.checklist.core.HabitRow
 import io.github.randomtools3377.checklist.core.Amounts
 import io.github.randomtools3377.checklist.data.SETTING_WIDGET_STYLE
@@ -1120,7 +1126,7 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
     private fun autoBackup() {
         viewModelScope.launch {
             val result = runCatching {
-                phone.autoBackupIfDue(Days.dayOf(nowLocal(), settings.value.dayEndHour)) { repository.exportBackup() }
+                phone.autoBackupIfDue(Days.dayOf(nowLocal(), settings.value.dayEndHour)) { backupText() }
             }.getOrDefault(io.github.randomtools3377.checklist.data.AutoBackupResult.NotDue)
             when (result) {
                 io.github.randomtools3377.checklist.data.AutoBackupResult.FolderGone -> {
@@ -2909,15 +2915,56 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
 
     // Export and import, through files the user picks with the system dialogs.
 
+    /**
+     * Whether backup files are protected with a passphrase. The key made from it is kept on this
+     * device only, with the app's own data (never the passphrase, and never in a backup file),
+     * so exports and automatic backups can be protected without asking each time.
+     */
+    val backupProtected: StateFlow<Boolean> = dao.observeSetting(SETTING_BACKUP_KEY)
+        .map { BackupKey.decode(it) != null }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+    private suspend fun backupKey(): BackupKey? = BackupKey.decode(dao.setting(SETTING_BACKUP_KEY))
+
+    /**
+     * Turns the passphrase on, or changes it. Files saved from now on need it to be opened. The
+     * device's own crypto is checked first (see [BackupCrypto.works]).
+     */
+    fun setBackupPassphrase(passphrase: String, onDone: (Boolean) -> Unit) {
+        viewModelScope.launch {
+            val key = runCatching {
+                withContext(Dispatchers.Default) {
+                    BackupCrypto.newKey(passphrase).takeIf { BackupCrypto.works(passphrase) }
+                }
+            }.getOrNull()
+            if (key != null) repository.setSetting(SETTING_BACKUP_KEY, key.encode())
+            onDone(key != null)
+        }
+    }
+
+    /** Turns the passphrase off: files saved from now on are plain. Files already saved keep theirs. */
+    fun clearBackupPassphrase() {
+        viewModelScope.launch { repository.setSetting(SETTING_BACKUP_KEY, "") }
+    }
+
+    /** The backup file's text, protected with the passphrase when one is set. */
+    private suspend fun backupText(): String {
+        val text = repository.exportBackup()
+        val key = backupKey() ?: return text
+        return withContext(Dispatchers.Default) { BackupCrypto.seal(text, key) }
+    }
+
     /** Writes everything to [uri]. Reports a plain message either way. */
     fun exportTo(file: PickedFile, onDone: (String) -> Unit) {
         viewModelScope.launch {
             val message = try {
-                val text = repository.exportBackup()
+                val protected = backupKey() != null
+                val text = backupText()
                 phone.writeText(file, text)
                 phone.markBackedUp()
                 refreshBackup()
-                "Exported. Keep the file somewhere safe."
+                if (protected) "Exported, protected with your passphrase. Keep the file somewhere safe."
+                else "Exported. Keep the file somewhere safe."
             } catch (e: NotSavedException) {
                 "Not saved. Nothing was exported."
             } catch (e: Exception) {
@@ -2973,32 +3020,108 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
         }
     }
 
-    /** Reads a backup from [uri] without changing anything, so the user can confirm it first. */
-    fun readBackup(file: PickedFile, onRead: (Backup?, String?) -> Unit) {
+    /** What reading a backup file found. */
+    sealed interface BackupRead {
+        /** A backup, with what it holds and what this device holds now, to confirm before anything changes. */
+        data class Ready(val backup: Backup, val file: BackupSummary, val device: BackupSummary) : BackupRead
+
+        /** A protected file: its [text] waits for the passphrase (see [openBackup]). */
+        data class Protected(val text: String) : BackupRead
+
+        data class Failed(val message: String) : BackupRead
+    }
+
+    private suspend fun ready(backup: Backup): BackupRead = BackupRead.Ready(backup, BackupSummary.of(backup), repository.summary())
+
+    /** Reads a backup from [file] without changing anything, so the user can confirm it first. */
+    fun readBackup(file: PickedFile, onRead: (BackupRead) -> Unit) {
         viewModelScope.launch {
-            try {
+            val read = try {
                 val text = phone.readText(file)
-                onRead(Backup.decode(text), null)
+                if (BackupCrypto.isEncrypted(text)) BackupRead.Protected(text) else ready(Backup.decode(text))
             } catch (e: BackupError) {
-                onRead(null, e.message)
+                BackupRead.Failed(e.message ?: "Couldn't read that file.")
             } catch (e: Exception) {
-                onRead(null, "Couldn't read that file.")
+                BackupRead.Failed("Couldn't read that file.")
             }
+            onRead(read)
         }
     }
 
-    /** Replaces everything with [backup]. */
+    /** Opens the protected file [text] with [passphrase]. A wrong passphrase says so plainly. */
+    fun openBackup(text: String, passphrase: String, onRead: (BackupRead) -> Unit) {
+        viewModelScope.launch {
+            val read = try {
+                ready(Backup.decode(withContext(Dispatchers.Default) { BackupCrypto.open(text, passphrase) }))
+            } catch (e: WrongPassphraseException) {
+                BackupRead.Failed(BackupCrypto.WRONG_PASSPHRASE)
+            } catch (e: BackupError) {
+                BackupRead.Failed(e.message ?: "Couldn't read that file.")
+            } catch (e: Exception) {
+                BackupRead.Failed("Couldn't read that file.")
+            }
+            onRead(read)
+        }
+    }
+
+    /**
+     * Replaces everything with [backup]. With an automatic backup folder set, what is here now is
+     * saved there first as a "before import" copy, to undo a wrong file with "Restore an
+     * automatic backup"; if that copy can't be saved, nothing is replaced.
+     */
     fun restore(backup: Backup, onDone: (String) -> Unit) {
         viewModelScope.launch {
             val message = try {
+                val copied = saveBeforeImport()
+                if (copied == false) {
+                    onDone("Couldn't save a copy in your backup folder first, so nothing was changed. Tap \"Export first\", or choose the folder again.")
+                    return@launch
+                }
                 // A bet still open in an older backup gives its stake back.
                 parts.restore(backup)
                 // What this phone keeps by goal id stops: after a restore, an id can mean another goal.
                 phone.forgetSnoozes()
                 dropFocus()
-                "Imported. Everything now matches the backup."
+                if (copied == true) "Imported. What was here before is in your backup folder: \"Restore an automatic backup\" lists it as \"Before import\"."
+                else "Imported. Everything now matches the backup."
             } catch (e: Exception) {
                 "Couldn't import. Nothing was changed."
+            }
+            onDone(message)
+        }
+    }
+
+    /**
+     * The "before import" copy: true when saved, false when it couldn't be, and null when there
+     * is no folder, nothing here to keep, or this device doesn't keep one.
+     */
+    private suspend fun saveBeforeImport(): Boolean? {
+        if (!phone.canSaveBeforeImport || phone.backupFolder() == null) return null
+        if (repository.summary().isEmpty) return null
+        return try {
+            phone.saveBeforeImport(AutoBackupFiles.beforeImportName(nowLocal()), backupText())
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    /**
+     * "Erase everything and start fresh": everything the app holds goes, settings included, and
+     * the backup passphrase with them. Backup files already saved, and the folder chosen for
+     * them, are left alone.
+     */
+    fun eraseEverything(onDone: (String) -> Unit) {
+        viewModelScope.launch {
+            val message = try {
+                repository.eraseEverything()
+                // What this device keeps by goal id stops too, then its reminders are set again (none).
+                phone.forgetSnoozes()
+                dropFocus()
+                runCatching { phone.rescheduleReminders() }
+                refreshBackup()
+                "Erased. The app is as new."
+            } catch (e: Exception) {
+                "Couldn't erase. Nothing was changed."
             }
             onDone(message)
         }

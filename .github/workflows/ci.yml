@@ -40,6 +40,9 @@ jobs:
           java-version: "17"
           cache: gradle
 
+      - name: Check the backup-rules check itself (it has to fail on rules that leave something in)
+        run: scripts/check-extraction-rules.sh --self-test
+
       - name: Unit tests (the shared rules and the shared database code, on the JVM)
         run: ./gradlew --no-daemon :core:jvmTest :shared:jvmTest :app:testDebugUnitTest
 
@@ -405,7 +408,7 @@ jobs:
           scripts/check-permissions.sh dist/checklist.apk
           scripts/check-permissions.sh dist/checklist-ai.apk
 
-      - name: Check phone backup is off
+      - name: Check phone backup is off, and the backup rules leave out everything
         run: |
           scripts/check-backup.sh dist/checklist.apk
           scripts/check-backup.sh dist/checklist-ai.apk

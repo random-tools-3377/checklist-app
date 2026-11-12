@@ -114,10 +114,17 @@ const val SETTING_CALENDAR = "phone_calendar"
 const val SETTING_CALENDAR_IDS = "phone_calendar_ids"
 
 /**
- * Settings that only make sense on the phone that set them, so they stay out of the backup file:
- * the running Start and Stop timing, and which of the phone's calendars are shown (by its own ids).
+ * The key for backup files protected with a passphrase (see BackupKey), made from the passphrase
+ * and kept with the app's own data on this device. Empty or missing while files are plain.
  */
-val PHONE_ONLY_SETTINGS = setOf(SETTING_STOPWATCH, SETTING_CALENDAR_IDS)
+const val SETTING_BACKUP_KEY = "backup_key"
+
+/**
+ * Settings that only make sense on the phone that set them, so they stay out of the backup file:
+ * the running Start and Stop timing, which of the phone's calendars are shown (by its own ids),
+ * and the key for protected backup files. An import keeps this device's calendars and key.
+ */
+val PHONE_ONLY_SETTINGS = setOf(SETTING_STOPWATCH, SETTING_CALENDAR_IDS, SETTING_BACKUP_KEY)
 
 /** "0" turns off the daily mood check-in; and the day it was put off ("Not today"). */
 const val SETTING_MOOD = "mood_checkin"
@@ -1076,32 +1083,39 @@ class Repository(private val db: AppDatabase, private val celebrations: GifStore
         return io.github.randomtools3377.checklist.core.BudgetSheet.csv(Budget.monthOf(first), entries, categories, month.pay, now)
     }
 
+    /** Everything in the database as a backup, without the picked files. */
+    private suspend fun snapshot(): Backup = db.withTransaction {
+        Backup(
+            exportedAt = nowMillis(),
+            goals = dao.allGoals().map { it.toCore() },
+            steps = dao.allSteps().map { it.toCore() },
+            ticks = dao.allTicks().map { it.toCore() },
+            entries = dao.allEntries().map { it.toCore() },
+            rewards = dao.allRewards().map { it.toCore() },
+            purchases = dao.allPurchases().map { it.toCore() },
+            settings = dao.allSettings().filter { it.name !in PHONE_ONLY_SETTINGS }.associate { it.name to it.value },
+            lapses = dao.allLapses().map { it.toCore() },
+            penalties = dao.allPenalties().map { it.toCore() },
+            penaltyTasks = dao.allPenaltyTasks().map { it.toCore() },
+            gaps = dao.allGaps().map { it.toCore() },
+            checks = dao.allChecks().map { it.toCore() },
+            moods = dao.allMoods().map { it.toCore() },
+            money = dao.allMoney().map { it.toCore() },
+            moneyCategories = dao.moneyCategories().map { it.toCore() },
+            workDays = dao.allWorkDays().map { it.toCore() },
+            bills = dao.allBills().map { it.toCore() },
+            savingGoals = dao.allSavingGoals().map { it.toCore() },
+            focusSessions = dao.allFocusSessions().map { it.toCore() },
+        )
+    }
+
+    /** What this device holds now, counted, to set beside a backup file before it replaces it. */
+    suspend fun summary(): io.github.randomtools3377.checklist.core.BackupSummary =
+        io.github.randomtools3377.checklist.core.BackupSummary.of(snapshot())
+
     /** Everything in the app as a backup file's text. */
     suspend fun exportBackup(): String {
-        val backup = db.withTransaction {
-            Backup(
-                exportedAt = nowMillis(),
-                goals = dao.allGoals().map { it.toCore() },
-                steps = dao.allSteps().map { it.toCore() },
-                ticks = dao.allTicks().map { it.toCore() },
-                entries = dao.allEntries().map { it.toCore() },
-                rewards = dao.allRewards().map { it.toCore() },
-                purchases = dao.allPurchases().map { it.toCore() },
-                settings = dao.allSettings().filter { it.name !in PHONE_ONLY_SETTINGS }.associate { it.name to it.value },
-                lapses = dao.allLapses().map { it.toCore() },
-                penalties = dao.allPenalties().map { it.toCore() },
-                penaltyTasks = dao.allPenaltyTasks().map { it.toCore() },
-                gaps = dao.allGaps().map { it.toCore() },
-                checks = dao.allChecks().map { it.toCore() },
-                moods = dao.allMoods().map { it.toCore() },
-                money = dao.allMoney().map { it.toCore() },
-                moneyCategories = dao.moneyCategories().map { it.toCore() },
-                workDays = dao.allWorkDays().map { it.toCore() },
-                bills = dao.allBills().map { it.toCore() },
-                savingGoals = dao.allSavingGoals().map { it.toCore() },
-                focusSessions = dao.allFocusSessions().map { it.toCore() },
-            )
-        }
+        val backup = snapshot()
         // The GIFs the user picked go in the file too, so a restore brings them back.
         // So do the sounds the user picked for celebrations, in the same part of the file.
         val sounds = CelebrationSounds.used(backup.settings, backup.goals.map { it.id }.toSet())
@@ -1137,6 +1151,37 @@ class Repository(private val db: AppDatabase, private val celebrations: GifStore
     private suspend fun restoreData(backup: Backup): Unit = db.withTransaction {
         // This phone keeps its own calendar choice. A running timing stops: its goal may now be another one.
         val calendarIds = dao.setting(SETTING_CALENDAR_IDS)
+        val backupKey = dao.setting(SETTING_BACKUP_KEY)
+        deleteEverything()
+        dao.insertGoals(backup.goals.map { it.toEntity() })
+        dao.insertSteps(backup.steps.map { it.toEntity() })
+        dao.insertTicks(backup.ticks.map { it.toEntity() })
+        dao.insertEntries(backup.entries.map { it.toEntity() })
+        dao.insertRewards(backup.rewards.map { it.toEntity() })
+        dao.insertPurchases(backup.purchases.map { it.toEntity() })
+        dao.insertSettings(
+            backup.settings.filterKeys { it !in PHONE_ONLY_SETTINGS }.map { (name, value) -> SettingEntity(name, value) } +
+                listOfNotNull(
+                    calendarIds?.let { SettingEntity(SETTING_CALENDAR_IDS, it) },
+                    backupKey?.let { SettingEntity(SETTING_BACKUP_KEY, it) },
+                ),
+        )
+        dao.insertLapses(backup.lapses.map { it.toEntity() })
+        dao.insertPenalties(backup.penalties.map { it.toEntity() })
+        dao.insertPenaltyTasks(backup.penaltyTasks.map { it.toEntity() })
+        dao.insertGaps(backup.gaps.map { it.toEntity() })
+        dao.insertChecks(backup.checks.map { it.toEntity() })
+        dao.insertMoods(backup.moods.map { it.toEntity() })
+        dao.insertMoneyRows(backup.money.map { it.toEntity() })
+        dao.insertMoneyCategories(backup.moneyCategories.map { it.toEntity() })
+        dao.insertWorkDays(backup.workDays.map { it.toEntity() })
+        dao.insertBills(backup.bills.map { it.toEntity() })
+        dao.insertSavingGoals(backup.savingGoals.map { it.toEntity() })
+        dao.insertFocusSessions(backup.focusSessions.filter { it.minutes > 0 }.map { it.toEntity() })
+    }
+
+    /** Empties every table. Inside a transaction. */
+    private suspend fun deleteEverything() {
         dao.deleteTicks()
         dao.deleteEntries()
         dao.deletePurchases()
@@ -1156,28 +1201,17 @@ class Repository(private val db: AppDatabase, private val celebrations: GifStore
         dao.deleteBills()
         dao.deleteSavingGoals()
         dao.deleteFocusSessions()
-        dao.insertGoals(backup.goals.map { it.toEntity() })
-        dao.insertSteps(backup.steps.map { it.toEntity() })
-        dao.insertTicks(backup.ticks.map { it.toEntity() })
-        dao.insertEntries(backup.entries.map { it.toEntity() })
-        dao.insertRewards(backup.rewards.map { it.toEntity() })
-        dao.insertPurchases(backup.purchases.map { it.toEntity() })
-        dao.insertSettings(
-            backup.settings.filterKeys { it !in PHONE_ONLY_SETTINGS }.map { (name, value) -> SettingEntity(name, value) } +
-                listOfNotNull(calendarIds?.let { SettingEntity(SETTING_CALENDAR_IDS, it) }),
-        )
-        dao.insertLapses(backup.lapses.map { it.toEntity() })
-        dao.insertPenalties(backup.penalties.map { it.toEntity() })
-        dao.insertPenaltyTasks(backup.penaltyTasks.map { it.toEntity() })
-        dao.insertGaps(backup.gaps.map { it.toEntity() })
-        dao.insertChecks(backup.checks.map { it.toEntity() })
-        dao.insertMoods(backup.moods.map { it.toEntity() })
-        dao.insertMoneyRows(backup.money.map { it.toEntity() })
-        dao.insertMoneyCategories(backup.moneyCategories.map { it.toEntity() })
-        dao.insertWorkDays(backup.workDays.map { it.toEntity() })
-        dao.insertBills(backup.bills.map { it.toEntity() })
-        dao.insertSavingGoals(backup.savingGoals.map { it.toEntity() })
-        dao.insertFocusSessions(backup.focusSessions.filter { it.minutes > 0 }.map { it.toEntity() })
+    }
+
+    /**
+     * "Erase everything and start fresh": every table is emptied, settings included, so the app
+     * is as it was when first installed; then the picked GIFs, sounds and photo go. Backup files
+     * the user saved are not the app's to touch, and stay where they are.
+     */
+    suspend fun eraseEverything() {
+        db.withTransaction { deleteEverything() }
+        celebrations.keepOnly(emptySet())
+        background?.delete()
     }
 
     // Focus time.

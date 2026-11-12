@@ -146,6 +146,16 @@ interface Phone {
     fun setBackupFolder(folder: PickedFile?) {}
     suspend fun autoBackupIfDue(today: LocalDate, text: suspend () -> String): AutoBackupResult = AutoBackupResult.NotDue
 
+    /** Whether this device saves a "before import" copy in the automatic backup's folder. */
+    val canSaveBeforeImport: Boolean get() = false
+
+    /**
+     * Saves [text] as [name] in the automatic backup's folder, before an import replaces
+     * everything, and trims older "before import" copies (see AutoBackupFiles). Whether it was
+     * saved. Only asked where [canSaveBeforeImport].
+     */
+    suspend fun saveBeforeImport(name: String, text: String): Boolean = false
+
     /** The automatic backups in the folder, newest first: each one's name and file. */
     suspend fun autoBackups(): List<Pair<String, PickedFile>> = emptyList()
 

@@ -158,6 +158,9 @@ class AndroidPhone(private val app: ChecklistApplication) : Phone {
     override fun setBackupFolder(folder: PickedFile?) = Backups.setFolder(app, folder?.let(Uri::parse))
     override suspend fun autoBackupIfDue(today: LocalDate, text: suspend () -> String): AutoBackupResult =
         withContext(Dispatchers.IO) { Backups.autoBackupIfDue(app, today, text) }
+    override val canSaveBeforeImport: Boolean = true
+    override suspend fun saveBeforeImport(name: String, text: String): Boolean =
+        withContext(Dispatchers.IO) { Backups.saveBeforeImport(app, name, text) }
     override suspend fun autoBackups(): List<Pair<String, PickedFile>> =
         withContext(Dispatchers.IO) { Backups.autoBackups(app).map { (name, uri) -> name to uri.toString() } }
 

@@ -418,7 +418,27 @@ fun SettingsScreen(
 ) {
     val phone = LocalPhone.current
     var choosingHour by remember { mutableStateOf(false) }
-    var pendingImport by remember { mutableStateOf<Backup?>(null) }
+    var pendingImport by remember { mutableStateOf<MainViewModel.BackupRead.Ready?>(null) }
+    // A protected file that was picked, waiting for its passphrase.
+    var protectedImport by remember { mutableStateOf<String?>(null) }
+    var openingImport by remember { mutableStateOf(false) }
+    var importError by remember { mutableStateOf<String?>(null) }
+    fun onBackupRead(read: MainViewModel.BackupRead) {
+        openingImport = false
+        when (read) {
+            is MainViewModel.BackupRead.Ready -> {
+                protectedImport = null
+                importError = null
+                pendingImport = read
+            }
+            is MainViewModel.BackupRead.Protected -> {
+                importError = null
+                protectedImport = read.text
+            }
+            // A wrong passphrase is said in the dialog that asked for it, which stays open.
+            is MainViewModel.BackupRead.Failed -> if (protectedImport != null) importError = read.message else phone.toast(read.message)
+        }
+    }
     var hideInRecents by remember { mutableStateOf(phone.hidesPreview()) }
 
     fun toast(message: String) = phone.toast(message)
@@ -456,12 +476,13 @@ fun SettingsScreen(
     val showFocus = shows("Focus timer break after a focus session rest pause countdown")
     val showNotifications = shows(notificationWords(phone))
     val showBackup = shows(
-        "Backup back up backups export import file restore reminder spreadsheet csv excel sheets history goal record move ${phone.deviceWord}" +
+        "Backup back up backups export import file restore reminder spreadsheet csv excel sheets history goal record move ${phone.deviceWord} " +
+            "passphrase password protect encrypt encrypted erase everything delete reset start fresh" +
             if (phone.canPickFolder) " automatic folder" else "",
     )
     val showPrivacy = shows(
         "Privacy lock locked unlock fingerprint private hide screenshots reasons notes skips misses moods mood journal review stats " +
-            "history shop rewards gap check-ins internet" +
+            "history shop rewards gap check-ins internet backup files passphrase" +
             (if (phone.canAskForLock) " face pin pattern passcode" else "") +
             (if (phone.hasRecentsPreview) " recents recent apps preview" else "") +
             if (budgetLockShown) " budget money" else "",
@@ -507,11 +528,10 @@ fun SettingsScreen(
     }
     val importLauncher = rememberOpenFile(listOf("application/json", "text/plain", "application/octet-stream")) { file ->
         if (file != null) {
-            vm.readBackup(file) { backup, error ->
-                if (backup != null) pendingImport = backup else toast(error ?: "Couldn't read that file.")
-            }
+            vm.readBackup(file) { onBackupRead(it) }
         }
     }
+    val backupProtected by vm.backupProtected.collectAsState()
 
     Scaffold(
         topBar = {
@@ -875,6 +895,10 @@ fun SettingsScreen(
                         hint = "Today reminds you when your last backup is over a week old.",
                         padding = PaddingValues(top = 4.dp),
                     ) { vm.setBackupReminder(it) }
+
+                    // A passphrase for the files, and starting over.
+                    BackupPassphraseSetting(vm, backupProtected) { unlockFirst(it) }
+                    EraseEverything(vm, { unlockFirst(it) }) { exportLauncher("checklist-backup-${nowLocal().date}.json") }
                 }
             }
             if (showPrivacy) {
@@ -942,6 +966,15 @@ fun SettingsScreen(
                         phone.setHidesPreview(it)
                     }
                 }
+                // What the lock doesn't cover: the files the user saves themselves.
+                Text(
+                    "Backup files hold everything, including what is behind the lock. " +
+                        if (backupProtected) "Yours are protected with your passphrase (Backup, above)."
+                        else "Anything that can open the folder they are saved in can read them, unless you set a passphrase (Backup, above).",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp).testTag("privacy-backup-files"),
+                )
                 Text(
                     "This app has no internet access" + (if (phone.outOfDeviceBackups) " and is left out of ${phone.deviceWord} backups" else "") +
                         ". Everything stays on this ${phone.deviceWord}.",
@@ -995,47 +1028,45 @@ fun SettingsScreen(
                     if (list.isEmpty()) Text("There are no automatic backups in the folder yet.")
                     else Text("Pick one. You'll see what's in it before anything changes.", style = MaterialTheme.typography.bodySmall)
                     list.forEach { (name, uri) ->
-                        val day = Regex("""\d{4}-\d{2}-\d{2}""").find(name)?.value
-                            ?.let { runCatching { kotlinx.datetime.LocalDate.parse(it) }.getOrNull() }
                         TextButton(
                             onClick = {
                                 autoBackups = null
-                                vm.readBackup(uri) { backup, error ->
-                                    if (backup != null) pendingImport = backup else toast(error ?: "Couldn't read that file.")
-                                }
+                                vm.readBackup(uri) { onBackupRead(it) }
                             },
                             modifier = Modifier.fillMaxWidth().testTag("auto-backup:$name"),
-                        ) { Text(day?.let { dateText(it) } ?: name, modifier = Modifier.fillMaxWidth()) }
+                        ) { Text(BackupWords.listed(name), modifier = Modifier.fillMaxWidth()) }
                     }
                 }
             },
             confirmButton = { TextButton(onClick = { autoBackups = null }) { Text("Cancel") } },
         )
     }
-    pendingImport?.let { backup ->
-        val habits = backup.goals.count { !it.archived && it.repeat != null }
-        val projects = backup.goals.count { !it.archived && it.repeat == null }
-        AlertDialog(
-            onDismissRequest = { pendingImport = null },
-            title = { Text("Replace everything?") },
-            text = {
-                Text(
-                    "This backup is from ${dateText(backup.exportedAt.toLocalDateTime().date)}. It has $habits habits, " +
-                        "$projects projects, ${backup.rewards.count { !it.archived }} rewards and ${backup.ticks.size} ticks, " +
-                        "with a balance of ${pointsText(backup.entries.sumOf { it.amount })}.\n\n" +
-                        "Importing replaces everything on this ${phone.deviceWord} with it. Export first if you want to keep what is here now.",
-                )
+    pendingImport?.let { read ->
+        ImportConfirmDialog(
+            read,
+            // The copy is only made where there is a folder, and something here to keep.
+            copyFolder = if (phone.canSaveBeforeImport && backups.folderSet) backups.folderName ?: "your backup folder" else null,
+            onExportFirst = { unlockFirst { exportLauncher("checklist-backup-${nowLocal().date}.json") } },
+            onConfirm = {
+                pendingImport = null
+                vm.restore(read.backup) { toast(it) }
             },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        pendingImport = null
-                        vm.restore(backup) { toast(it) }
-                    },
-                    modifier = Modifier.testTag("confirm-import"),
-                ) { Text("Replace everything", color = MaterialTheme.colorScheme.error) }
+            onDismiss = { pendingImport = null },
+        )
+    }
+    protectedImport?.let { text ->
+        AskPassphraseDialog(
+            working = openingImport,
+            error = importError,
+            onOpen = { passphrase ->
+                openingImport = true
+                importError = null
+                vm.openBackup(text, passphrase) { onBackupRead(it) }
             },
-            dismissButton = { TextButton(onClick = { pendingImport = null }) { Text("Cancel") } },
+            onDismiss = {
+                protectedImport = null
+                importError = null
+            },
         )
     }
 }

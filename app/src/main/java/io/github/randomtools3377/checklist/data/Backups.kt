@@ -127,6 +127,54 @@ object Backups {
     }
 
     /**
+     * Before an import replaces everything: writes [text] as [name] into the chosen folder, then
+     * keeps only the newest few "before import" copies there (see AutoBackupFiles). The daily
+     * clean-up never deletes these. True when it was saved; a file that couldn't be written is
+     * deleted again, so a failed copy leaves nothing behind.
+     */
+    fun saveBeforeImport(context: Context, name: String, text: String): Boolean {
+        val tree = folder(context) ?: return false
+        val resolver = context.contentResolver
+        val doc: Uri = try {
+            val parentId = DocumentsContract.getTreeDocumentId(tree)
+            val parent = DocumentsContract.buildDocumentUriUsingTree(tree, parentId)
+            DocumentsContract.createDocument(resolver, parent, "application/json", name)
+        } catch (e: Exception) {
+            null
+        } ?: return false
+        val written = runCatching {
+            (resolver.openOutputStream(doc, "wt") ?: error("No stream")).use { it.write(text.toByteArray(Charsets.UTF_8)) }
+        }.isSuccess
+        if (!written) {
+            runCatching { DocumentsContract.deleteDocument(resolver, doc) }
+            return false
+        }
+        runCatching { pruneBeforeImports(context, tree) }
+        return true
+    }
+
+    /** Deletes "before import" copies in the folder beyond the newest few. Nothing else is touched. */
+    private fun pruneBeforeImports(context: Context, tree: Uri) {
+        val resolver = context.contentResolver
+        val children = DocumentsContract.buildChildDocumentsUriUsingTree(tree, DocumentsContract.getTreeDocumentId(tree))
+        val files = mutableListOf<Pair<String, String>>()
+        resolver.query(
+            children,
+            arrayOf(DocumentsContract.Document.COLUMN_DOCUMENT_ID, DocumentsContract.Document.COLUMN_DISPLAY_NAME),
+            null, null, null,
+        )?.use { c ->
+            while (c.moveToNext()) {
+                val id = c.getString(0) ?: continue
+                val name = c.getString(1) ?: continue
+                files += id to name
+            }
+        }
+        AutoBackupFiles.beforeImportsToDelete(files) { it.second }.forEach { (id, _) ->
+            runCatching { DocumentsContract.deleteDocument(resolver, DocumentsContract.buildDocumentUriUsingTree(tree, id)) }
+        }
+    }
+
+    /**
      * The backups in the chosen folder, newest first, by name and address, to restore one: the
      * app's own, and exports saved there. Empty files are left out, as they can't be restored.
      */
