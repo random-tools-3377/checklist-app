@@ -286,7 +286,8 @@ fun ChecklistApp(vm: MainViewModel) {
         val density = androidx.compose.ui.platform.LocalDensity.current
         val center = with(density) { androidx.compose.ui.geometry.Offset(window.width.toPx() / 2, window.height.toPx() / 2) }
         Box(Modifier.fillMaxSize()) {
-            FocusScreen(
+            // A break after a session is the same timer with no goal: a plain countdown.
+            if (state.isBreak) BreakScreen(state, onDone = { vm.finishFocus { } }, onSkip = vm::stopFocus) else FocusScreen(
                 state, goal,
                 onPause = vm::pauseFocus,
                 onResume = vm::resumeFocus,
@@ -299,6 +300,15 @@ fun ChecklistApp(vm: MainViewModel) {
                     }
                 },
             )
+            celebrations.Overlay()
+        }
+        return
+    }
+    // A session just ended and "Break after a focus session" is on: the offer of a break.
+    val breakOffer by vm.breakOffer.collectAsStateWithLifecycle()
+    breakOffer?.let { minutes ->
+        Box(Modifier.fillMaxSize()) {
+            BreakOfferScreen(minutes, onStart = vm::startBreak, onSkip = vm::skipBreak)
             celebrations.Overlay()
         }
         return
@@ -511,6 +521,7 @@ fun ChecklistApp(vm: MainViewModel) {
                         } else {
                             // Best streaks look through every day there is, so only while the review is open.
                             val bestStreaks by vm.bestStreaks.collectAsStateWithLifecycle()
+                            val reviewFocus by vm.reviewFocus.collectAsStateWithLifecycle()
                             ReviewScreen(
                                 summary = review,
                                 period = reviewPeriod,
@@ -534,6 +545,7 @@ fun ChecklistApp(vm: MainViewModel) {
                                 best = bestStreaks,
                                 streakSettings = settings.streak,
                                 today = today?.view?.day,
+                                focus = reviewFocus,
                             )
                         }
                         AppTab.BUDGET -> if (settings.locks.budget && !unlocked) {

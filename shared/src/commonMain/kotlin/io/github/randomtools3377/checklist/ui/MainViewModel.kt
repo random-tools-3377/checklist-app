@@ -102,6 +102,8 @@ import io.github.randomtools3377.checklist.core.Gaps
 import io.github.randomtools3377.checklist.core.Lapse
 import io.github.randomtools3377.checklist.core.Period
 import io.github.randomtools3377.checklist.core.Review
+import io.github.randomtools3377.checklist.core.FocusTime
+import io.github.randomtools3377.checklist.core.FocusTotals
 import io.github.randomtools3377.checklist.core.ReviewSummary
 import io.github.randomtools3377.checklist.core.plusDays
 import io.github.randomtools3377.checklist.core.Penalty
@@ -925,19 +927,65 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
         refreshFocus()
     }
 
+    /**
+     * "Stop without ticking", or a break ended early. The time focused so far is kept; a break
+     * is never counted.
+     */
     fun stopFocus() {
+        val state = phone.takeFocus()
+        val now = nowMillis()
+        refreshFocus()
+        if (state != null && !state.isBreak) viewModelScope.launch { repository.recordFocus(state, now) }
+    }
+
+    /** Drops the timer and keeps nothing of it: after a restore, its goal id can mean another goal. */
+    private fun dropFocus() {
         phone.stopFocus()
+        breakOffer.value = null
         refreshFocus()
     }
 
     /**
-     * Time's up, or "Done now": the goal is ticked. The timer is taken from the phone as it is
-     * now, so if the phone's alarm already ended it and ticked the goal, it isn't ticked again.
+     * Time's up, or "Done now": the goal is ticked, and the time really focused is kept. The
+     * timer is taken from the phone as it is now, so if the phone's alarm already ended it, and
+     * ticked the goal and kept the time, neither is done again. With "Break after a focus
+     * session" on, a break is offered next. A break that ran out only ends.
      */
     fun finishFocus(onResult: (TickResult) -> Unit) {
-        val goalId = phone.takeFocus()?.goalId
+        val shown = focus.value
+        val state = phone.takeFocus()
+        val now = nowMillis()
         refreshFocus()
-        if (goalId != null) tickHabit(goalId, onResult)
+        if ((state ?: shown)?.isBreak != false) return
+        viewModelScope.launch {
+            if (state != null) repository.recordFocus(state, now)
+            breakOffer.value = repository.focusBreakMinutes().takeIf { it > 0 }
+        }
+        if (state != null) tickHabit(state.goalId, onResult)
+    }
+
+    // The break after a focus session
+
+    /** "Break after a focus session" in Settings, in minutes; 0 while it is off. */
+    val focusBreak: StateFlow<Int> = dao.observeSetting(FocusTime.BREAK_SETTING).map { FocusTime.breakMinutes(it) }.state(0)
+
+    fun setFocusBreak(minutes: Int) {
+        viewModelScope.launch { repository.setSetting(FocusTime.BREAK_SETTING, FocusTime.breakMinutes(minutes.toString()).toString()) }
+    }
+
+    /** A break of this many minutes is on offer, a focus session having just ended; null when none is. */
+    val breakOffer = MutableStateFlow<Int?>(null)
+
+    /** "Start a 5 min break": a plain countdown, kept by the phone like the focus timer. */
+    fun startBreak() {
+        val minutes = breakOffer.value ?: return
+        breakOffer.value = null
+        phone.startBreak(minutes)
+        refreshFocus()
+    }
+
+    fun skipBreak() {
+        breakOffer.value = null
     }
 
     /** A tab to open, asked for by a notification (the weekly summary opens the review). */
@@ -1163,6 +1211,20 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
     }.distinctUntilChanged().flatMapLatest { from ->
         dao.observeMoodsSince(from.toEpochDay()).map { rows -> rows.map { it.toCore() } }
     }.state(emptyList())
+
+    /** Focus time in the stretch being reviewed: all of it and each goal's. Private goals are left out while locked. */
+    val reviewFocus: StateFlow<FocusTotals?> = combine(reviewPeriod, reviewDay, today) { period, day, todayDay ->
+        Review.range(day ?: todayDay, period)
+    }.distinctUntilChanged().flatMapLatest { (from, to) ->
+        combine(
+            dao.observeFocusSessions(from.toEpochDay(), to.toEpochDay()),
+            dao.observeGoals(),
+            dao.observeRemovedGoals(),
+            hidingPrivate,
+        ) { rows, active, removed, hide ->
+            FocusTime.totals(rows.map { it.toCore() }, (active + removed).map { it.toCore() }, from, to, hidePrivate = hide)
+        }
+    }.state(null)
 
     // The daily mood check-in
 
@@ -2592,7 +2654,7 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
                 parts.restore(backup)
                 // What this phone keeps by goal id stops: after a restore, an id can mean another goal.
                 phone.forgetSnoozes()
-                stopFocus()
+                dropFocus()
                 "Imported. Everything now matches the backup."
             } catch (e: Exception) {
                 "Couldn't import. Nothing was changed."

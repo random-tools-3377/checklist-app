@@ -122,7 +122,7 @@ class DesktopPhone(
 
     override fun focus(): FocusState? {
         val goal = local.long(FOCUS_GOAL) ?: return null
-        return FocusState(goal, local.long(FOCUS_ENDS) ?: 0, local.long(FOCUS_PAUSED), local.long(FOCUS_TOTAL) ?: 0)
+        return FocusState(goal, local.long(FOCUS_ENDS) ?: 0, local.long(FOCUS_PAUSED), local.long(FOCUS_TOTAL) ?: 0, local.long(FOCUS_STARTED) ?: 0)
     }
 
     override fun startFocus(goalId: Long, minutes: Int) {
@@ -131,6 +131,7 @@ class DesktopPhone(
         local.setLong(FOCUS_ENDS, nowMillis() + total)
         local.setLong(FOCUS_PAUSED, null)
         local.setLong(FOCUS_TOTAL, total)
+        local.setLong(FOCUS_STARTED, nowMillis())
     }
 
     override fun pauseFocus() {
@@ -145,7 +146,7 @@ class DesktopPhone(
     }
 
     override fun stopFocus() {
-        listOf(FOCUS_GOAL, FOCUS_ENDS, FOCUS_PAUSED, FOCUS_TOTAL).forEach { local.setString(it, null) }
+        listOf(FOCUS_GOAL, FOCUS_ENDS, FOCUS_PAUSED, FOCUS_TOTAL, FOCUS_STARTED).forEach { local.setString(it, null) }
     }
 
     // Files: a picked file is its full path on the computer. Picked photos and GIFs are copied in;
@@ -226,6 +227,7 @@ class DesktopPhone(
         private const val FOCUS_ENDS = "focus.ends_at"
         private const val FOCUS_PAUSED = "focus.paused_left"
         private const val FOCUS_TOTAL = "focus.total"
+        private const val FOCUS_STARTED = "focus.started_at"
         private const val BACKUP_LAST = "backup.last"
         private const val BACKUP_FIRST = "backup.first_seen"
         private const val BACKUP_OFF = "backup.reminder_off"

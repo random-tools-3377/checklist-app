@@ -97,6 +97,8 @@ fun ReviewScreen(
     streakSettings: io.github.randomtools3377.checklist.core.StreakSettings = io.github.randomtools3377.checklist.core.StreakSettings(),
     /** The user's day today: a stretch that ended before it is a past one. */
     today: LocalDate? = null,
+    /** The time spent with the focus timer in the stretch, for the week and month views. */
+    focus: io.github.randomtools3377.checklist.core.FocusTotals? = null,
 ) {
     // A goal with several misses in the stretch: the box that asks which one to open.
     val choosing = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<Long?>(null) }
@@ -175,6 +177,7 @@ fun ReviewScreen(
         // The day view lists what was missed; each opens to change its reason or say it was a forgotten tick.
         if (period == Period.DAILY && shownMisses.isNotEmpty()) item { MissedCard(shownMisses, hideReasons, onMiss) }
         if (summary.categories.isNotEmpty()) item { CategoriesCard(summary) }
+        if (focus != null && focus.any && (period == Period.WEEKLY || period == Period.MONTHLY)) item { FocusTimeCard(focus) }
         item { ReasonsCard(summary, hideReasons) }
         val shownMoods = moods.filter { it.day >= summary.from && it.day <= summary.to }
         if (shownMoods.isNotEmpty() && !hideReasons) item { MoodCard(shownMoods, summary, onMoodGoals, onMoodJournal) }

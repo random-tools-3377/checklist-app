@@ -101,6 +101,10 @@ class DesktopReminders(private val phone: DesktopPhone) {
         if (state.endsAt > now || focusShown == state.endsAt) return
         focusShown = state.endsAt
         if (now - state.endsAt > CATCH_UP_MINUTES * 60_000L) return
+        if (state.isBreak) {
+            show("☕ Break", "Break's over")
+            return
+        }
         val dao = phone.parts.db.dao()
         val goal = dao.goal(state.goalId)?.toCore()
         val hidePrivate = dao.setting(LOCK_PRIVATE) == "1"

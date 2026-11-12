@@ -32,6 +32,8 @@ import io.github.randomtools3377.checklist.core.Reminder
 import io.github.randomtools3377.checklist.core.Repeat
 import io.github.randomtools3377.checklist.core.RewardSize
 import io.github.randomtools3377.checklist.core.Effort
+import io.github.randomtools3377.checklist.core.FocusSession
+import io.github.randomtools3377.checklist.core.FocusTime
 import io.github.randomtools3377.checklist.core.Mood
 import io.github.randomtools3377.checklist.core.MoodFactors
 import io.github.randomtools3377.checklist.core.Moods
@@ -986,6 +988,7 @@ class Repository(private val db: AppDatabase, private val celebrations: GifStore
                 workDays = dao.allWorkDays().map { it.toCore() },
                 bills = dao.allBills().map { it.toCore() },
                 savingGoals = dao.allSavingGoals().map { it.toCore() },
+                focusSessions = dao.allFocusSessions().map { it.toCore() },
             )
         }
         // The GIFs the user picked go in the file too, so a restore brings them back.
@@ -1041,6 +1044,7 @@ class Repository(private val db: AppDatabase, private val celebrations: GifStore
         dao.deleteWorkDays()
         dao.deleteBills()
         dao.deleteSavingGoals()
+        dao.deleteFocusSessions()
         dao.insertGoals(backup.goals.map { it.toEntity() })
         dao.insertSteps(backup.steps.map { it.toEntity() })
         dao.insertTicks(backup.ticks.map { it.toEntity() })
@@ -1062,7 +1066,42 @@ class Repository(private val db: AppDatabase, private val celebrations: GifStore
         dao.insertWorkDays(backup.workDays.map { it.toEntity() })
         dao.insertBills(backup.bills.map { it.toEntity() })
         dao.insertSavingGoals(backup.savingGoals.map { it.toEntity() })
+        dao.insertFocusSessions(backup.focusSessions.filter { it.minutes > 0 }.map { it.toEntity() })
     }
+
+    // Focus time.
+
+    /**
+     * A focus timer ended at [now] (it ran out, "Done now", or it was stopped): keeps the minutes
+     * really focused, pauses left out, against its goal and the user's day it ended. Nothing is
+     * kept for a break, or for under half a minute. Call it once for each timer taken.
+     */
+    suspend fun recordFocus(state: io.github.randomtools3377.checklist.reminders.FocusState, now: Long = nowMillis()): FocusSession? {
+        // A timer found after its time was up ended when it ran out, not when it was found.
+        val endedAt = if (state.running) minOf(now, state.endsAt) else now
+        val focused = state.focused(now)
+        val day = Days.dayOf(endedAt.toLocalDateTime(), parseDayEndHour(dao.setting(SETTING_DAY_END_HOUR)))
+        val session = FocusTime.session(
+            goalId = state.goalId,
+            isBreak = state.isBreak,
+            totalMillis = state.totalMillis,
+            leftMillis = state.left(now),
+            startedAt = state.startedAt.takeIf { it in 1..endedAt } ?: (endedAt - focused),
+            day = day,
+        ) ?: return null
+        return session.copy(id = dao.insertFocusSession(session.toEntity()))
+    }
+
+    /** The minutes focused on a goal from [from] to [to], both days included: for the goal's own page. */
+    suspend fun focusMinutes(goalId: Long, from: LocalDate, to: LocalDate): Int =
+        dao.focusMinutes(goalId, from.toEpochDay(), to.toEpochDay())
+
+    /** The same, kept up to date. */
+    fun observeFocusMinutes(goalId: Long, from: LocalDate, to: LocalDate): kotlinx.coroutines.flow.Flow<Int> =
+        dao.observeFocusMinutes(goalId, from.toEpochDay(), to.toEpochDay())
+
+    /** How long the break offered after a focus session is, in minutes; 0 while it is off. */
+    suspend fun focusBreakMinutes(): Int = FocusTime.breakMinutes(dao.setting(FocusTime.BREAK_SETTING))
 
     // The budget.
 

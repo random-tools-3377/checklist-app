@@ -122,7 +122,7 @@ class IosPhone : Phone {
 
     override fun focus(): FocusState? {
         val goal = Local.long(FOCUS_GOAL) ?: return null
-        return FocusState(goal, Local.long(FOCUS_ENDS) ?: 0, Local.long(FOCUS_PAUSED), Local.long(FOCUS_TOTAL) ?: 0)
+        return FocusState(goal, Local.long(FOCUS_ENDS) ?: 0, Local.long(FOCUS_PAUSED), Local.long(FOCUS_TOTAL) ?: 0, Local.long(FOCUS_STARTED) ?: 0)
     }
 
     override fun startFocus(goalId: Long, minutes: Int) {
@@ -131,6 +131,7 @@ class IosPhone : Phone {
         Local.setLong(FOCUS_ENDS, nowMillis() + total)
         Local.setLong(FOCUS_PAUSED, null)
         Local.setLong(FOCUS_TOTAL, total)
+        Local.setLong(FOCUS_STARTED, nowMillis())
     }
 
     override fun pauseFocus() {
@@ -145,7 +146,7 @@ class IosPhone : Phone {
     }
 
     override fun stopFocus() {
-        listOf(FOCUS_GOAL, FOCUS_ENDS, FOCUS_PAUSED, FOCUS_TOTAL).forEach { Local.setString(it, null) }
+        listOf(FOCUS_GOAL, FOCUS_ENDS, FOCUS_PAUSED, FOCUS_TOTAL, FOCUS_STARTED).forEach { Local.setString(it, null) }
     }
 
     // Files. Saving works the iPhone's way round: the file is written in the app's temporary
@@ -262,6 +263,7 @@ class IosPhone : Phone {
         private const val FOCUS_ENDS = "focus.ends_at"
         private const val FOCUS_PAUSED = "focus.paused_left"
         private const val FOCUS_TOTAL = "focus.total"
+        private const val FOCUS_STARTED = "focus.started_at"
         private const val BACKUP_LAST = "backup.last"
         private const val BACKUP_FIRST = "backup.first_seen"
         private const val BACKUP_OFF = "backup.reminder_off"

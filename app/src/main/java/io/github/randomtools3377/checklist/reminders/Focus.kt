@@ -15,15 +15,16 @@ object Focus {
     fun current(context: Context): FocusState? {
         val p = prefs(context)
         val goal = p.getLong("goal", -1)
-        if (goal < 0) return null
+        // A break is kept as a timer with no goal (FocusState.BREAK_GOAL).
+        if (goal < 0 && goal != FocusState.BREAK_GOAL) return null
         val paused = p.getLong("paused_left", -1)
-        return FocusState(goal, p.getLong("ends_at", 0), paused.takeIf { it >= 0 }, p.getLong("total", 0))
+        return FocusState(goal, p.getLong("ends_at", 0), paused.takeIf { it >= 0 }, p.getLong("total", 0), p.getLong("started_at", 0))
     }
 
     @Synchronized
     fun start(context: Context, goalId: Long, minutes: Int, now: Long = System.currentTimeMillis()) {
         val total = minutes * 60_000L
-        prefs(context).edit().putLong("goal", goalId).putLong("ends_at", now + total).putLong("paused_left", -1).putLong("total", total).apply()
+        prefs(context).edit().putLong("goal", goalId).putLong("ends_at", now + total).putLong("paused_left", -1).putLong("total", total).putLong("started_at", now).apply()
     }
 
     @Synchronized

@@ -453,6 +453,7 @@ fun SettingsScreen(
     val showPenalties = shows("Penalty tasks penalty limit")
     val showReasons = shows("Reasons for skips and misses reason skip miss own")
     val showGaps = shows("Gaps gap stopped break days loss")
+    val showFocus = shows("Focus timer break after a focus session rest pause countdown")
     val showNotifications = shows(notificationWords(phone))
     val showBackup = shows(
         "Backup back up backups export import file restore reminder spreadsheet csv excel sheets history move ${phone.deviceWord}" +
@@ -466,7 +467,7 @@ fun SettingsScreen(
             if (budgetLockShown) " budget money" else "",
     )
     val anything = showAppearance || showFeatures || showRules || showHelp || showGuide || showTabs || showDifficulty || showDay ||
-        showStreaks || showWeekly || showPenalties || showReasons || showGaps || showNotifications || showBackup || showPrivacy
+        showStreaks || showWeekly || showPenalties || showReasons || showGaps || showFocus || showNotifications || showBackup || showPrivacy
     val backups by vm.backupState.collectAsState()
     androidx.compose.runtime.LaunchedEffect(Unit) { vm.refreshBackup() }
     val folderLauncher = rememberPickFolder { file ->
@@ -699,6 +700,12 @@ fun SettingsScreen(
                 HorizontalDivider(Modifier.padding(top = 8.dp))
                 Section("Gaps")
                 GapSettingsRow(settings.gaps) { vm.setGapSettings(it) }
+            }
+            if (showFocus) {
+                HorizontalDivider(Modifier.padding(top = 8.dp))
+                Section("Focus timer")
+                val focusBreak by vm.focusBreak.collectAsState()
+                FocusBreakSetting(focusBreak, vm::setFocusBreak, Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
             }
             if (showNotifications) {
                 HorizontalDivider(Modifier.padding(top = 8.dp))

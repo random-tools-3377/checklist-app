@@ -84,6 +84,9 @@ interface Phone {
      */
     fun takeFocus(): FocusState? = focus()?.also { stopFocus() }
 
+    /** Starts a break after a focus session: the same countdown with no goal (see [FocusState.isBreak]). */
+    fun startBreak(minutes: Int) = startFocus(FocusState.BREAK_GOAL, minutes)
+
     // The phone's calendar
 
     val hasCalendar: Boolean get() = false

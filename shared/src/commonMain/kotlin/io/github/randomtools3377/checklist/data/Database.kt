@@ -202,6 +202,21 @@ data class MoodEntity(
     val factors: String? = null,
 )
 
+/**
+ * One go at the focus timer: the minutes really focused on a goal (pauses left out), on the
+ * user's day it ended. Added in version 24.
+ */
+@Entity(tableName = "focus_sessions", indices = [Index("day"), Index("goalId")])
+data class FocusSessionEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val goalId: Long,
+    /** Epoch day. */
+    val day: Long,
+    /** When the timer was started, in epoch milliseconds. */
+    val startedAt: Long,
+    val minutes: Int,
+)
+
 /** Money spent or received, in cents (MoneyEntry in the shared code). Added in version 20. */
 @Entity(tableName = "money", indices = [Index("day"), Index("purchaseId")])
 data class MoneyEntity(
@@ -622,6 +637,18 @@ interface ChecklistDao {
     @Query("DELETE FROM moods") suspend fun deleteMoods()
     @Insert suspend fun insertMoods(rows: List<MoodEntity>)
 
+    // Focus time.
+    @Insert suspend fun insertFocusSession(row: FocusSessionEntity): Long
+    @Query("SELECT * FROM focus_sessions WHERE day BETWEEN :from AND :to ORDER BY startedAt, id")
+    fun observeFocusSessions(from: Long, to: Long): Flow<List<FocusSessionEntity>>
+    @Query("SELECT COALESCE(SUM(minutes), 0) FROM focus_sessions WHERE goalId = :goalId AND day BETWEEN :from AND :to")
+    suspend fun focusMinutes(goalId: Long, from: Long, to: Long): Int
+    @Query("SELECT COALESCE(SUM(minutes), 0) FROM focus_sessions WHERE goalId = :goalId AND day BETWEEN :from AND :to")
+    fun observeFocusMinutes(goalId: Long, from: Long, to: Long): Flow<Int>
+    @Query("SELECT * FROM focus_sessions ORDER BY startedAt, id") suspend fun allFocusSessions(): List<FocusSessionEntity>
+    @Query("DELETE FROM focus_sessions") suspend fun deleteFocusSessions()
+    @Insert suspend fun insertFocusSessions(rows: List<FocusSessionEntity>)
+
     // The budget.
     @Query("SELECT * FROM money WHERE day BETWEEN :from AND :to ORDER BY day DESC, at DESC")
     fun observeMoney(from: Long, to: Long): Flow<List<MoneyEntity>>
@@ -732,11 +759,12 @@ interface ChecklistDao {
         WorkDayEntity::class,
         BillEntity::class,
         SavingGoalEntity::class,
+        FocusSessionEntity::class,
     ],
-    version = 23,
+    version = 24,
     exportSchema = true,
     // Versions 4 to 8 only add tables and columns, so Room works the migrations out from the layouts.
-    autoMigrations = [AutoMigration(from = 3, to = 4), AutoMigration(from = 4, to = 5), AutoMigration(from = 5, to = 6), AutoMigration(from = 6, to = 7), AutoMigration(from = 7, to = 8), AutoMigration(from = 8, to = 9), AutoMigration(from = 9, to = 10), AutoMigration(from = 10, to = 11), AutoMigration(from = 11, to = 12), AutoMigration(from = 12, to = 13), AutoMigration(from = 13, to = 14), AutoMigration(from = 14, to = 15), AutoMigration(from = 15, to = 16), AutoMigration(from = 16, to = 17), AutoMigration(from = 17, to = 18), AutoMigration(from = 18, to = 19), AutoMigration(from = 19, to = 20), AutoMigration(from = 20, to = 21), AutoMigration(from = 21, to = 22), AutoMigration(from = 22, to = 23)],
+    autoMigrations = [AutoMigration(from = 3, to = 4), AutoMigration(from = 4, to = 5), AutoMigration(from = 5, to = 6), AutoMigration(from = 6, to = 7), AutoMigration(from = 7, to = 8), AutoMigration(from = 8, to = 9), AutoMigration(from = 9, to = 10), AutoMigration(from = 10, to = 11), AutoMigration(from = 11, to = 12), AutoMigration(from = 12, to = 13), AutoMigration(from = 13, to = 14), AutoMigration(from = 14, to = 15), AutoMigration(from = 15, to = 16), AutoMigration(from = 16, to = 17), AutoMigration(from = 17, to = 18), AutoMigration(from = 18, to = 19), AutoMigration(from = 19, to = 20), AutoMigration(from = 20, to = 21), AutoMigration(from = 21, to = 22), AutoMigration(from = 22, to = 23), AutoMigration(from = 23, to = 24)],
 )
 @ConstructedBy(AppDatabaseConstructor::class)
 abstract class AppDatabase : RoomDatabase() {

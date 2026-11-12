@@ -188,6 +188,14 @@ fun Goal.toEntity() = GoalEntity(
     skill = skill?.name,
 )
 
+fun FocusSessionEntity.toCore() = io.github.randomtools3377.checklist.core.FocusSession(
+    id = id, goalId = goalId, day = day.toDay(), startedAt = startedAt, minutes = minutes,
+)
+
+fun io.github.randomtools3377.checklist.core.FocusSession.toEntity() = FocusSessionEntity(
+    id = id, goalId = goalId, day = day.toEpochDay(), startedAt = startedAt, minutes = minutes,
+)
+
 fun MoodEntity.toCore() = Mood(
     day = day.toDay(), score = score, note = note, at = at, after = afterScore?.coerceIn(1, 5), afterAt = afterAt,
     afterNote = afterNote, factors = io.github.randomtools3377.checklist.core.MoodFactors.decode(factors),

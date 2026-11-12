@@ -197,10 +197,18 @@ object Reminders {
         // A focus timer whose time is up (not one ending in the next few seconds): its goal is
         // ticked here, unless the app on screen took the timer first and ticked it there.
         Focus.takeEnded(context, nowMillis)?.let { focus ->
-            val result = (context.applicationContext as ChecklistApplication).container.book.tickHabit(focus.goalId)
-            if (result is io.github.randomtools3377.checklist.core.TickResult.Ticked && result.finished) afterDone(context, focus.goalId)
-            dao.goal(focus.goalId)?.toCore()?.let { goal ->
-                showFocusDone(context, goal, result, hidden = dao.setting(LOCK_PRIVATE) == "1" && goal.private)
+            val container = (context.applicationContext as ChecklistApplication).container
+            if (focus.isBreak) {
+                // A break after a focus session: only "Break's over". Nothing is ticked or counted.
+                showBreakDone(context)
+            } else {
+                // The time really focused is kept, as it is when the app ends the timer itself.
+                container.repository.recordFocus(focus, nowMillis)
+                val result = container.book.tickHabit(focus.goalId)
+                if (result is io.github.randomtools3377.checklist.core.TickResult.Ticked && result.finished) afterDone(context, focus.goalId)
+                dao.goal(focus.goalId)?.toCore()?.let { goal ->
+                    showFocusDone(context, goal, result, hidden = dao.setting(LOCK_PRIVATE) == "1" && goal.private)
+                }
             }
         }
         if (due.isNotEmpty()) {
@@ -493,6 +501,33 @@ object Reminders {
     private fun kotlinx.datetime.LocalDate.startOfYear() = Days.earliestOpenDay(this)
 
     fun notificationId(goalId: Long): Int = (goalId % 1_000_000).toInt() + 1000
+
+    /** The break after a focus session ran out: says so. Tapping it opens the app. */
+    private fun showBreakDone(context: Context) {
+        if (!canNotify(context)) return
+        val open = PendingIntent.getActivity(
+            context,
+            BREAK_ID,
+            Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+        val notification = NotificationCompat.Builder(context, CHANNEL)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle("☕ Break")
+            .setContentText("Break's over")
+            .setContentIntent(open)
+            .setAutoCancel(true)
+            .setCategory(NotificationCompat.CATEGORY_REMINDER)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .build()
+        try {
+            NotificationManagerCompat.from(context).notify(BREAK_ID, notification)
+        } catch (e: SecurityException) {
+            // Notifications were turned off in the meantime.
+        }
+    }
+
+    private const val BREAK_ID = 906
 
     /**
      * The focus timer ran out: says so, and that its goal was ticked. It has nothing to tap but

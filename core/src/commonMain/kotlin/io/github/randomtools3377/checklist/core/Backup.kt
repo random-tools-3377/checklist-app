@@ -47,7 +47,8 @@ data class Backup(
      * format 24 the budget;
      * format 25 bills and saving goals;
      * format 26 a second mood each day, once everything due is done;
-     * format 27 the mood journal: a note at the second check-in, and what was behind each day's mood.
+     * format 27 the mood journal: a note at the second check-in, and what was behind each day's mood;
+     * format 28 focus time: the minutes really spent in each focus session.
      */
     val checks: List<Check> = emptyList(),
     /** The user's own photo behind Today, in base64 (format 10). */
@@ -67,12 +68,14 @@ data class Backup(
     /** Bills and saving goals (format 25). */
     val bills: List<Bill> = emptyList(),
     val savingGoals: List<SavingGoal> = emptyList(),
+    /** The time really spent with the focus timer, a session at a time (format 28). */
+    val focusSessions: List<FocusSession> = emptyList(),
 ) {
     companion object {
         const val APP = "checklist"
 
         /** Raised whenever the file's layout changes in a way older versions can't read. */
-        const val FORMAT = 27
+        const val FORMAT = 28
 
         private val json = Json {
             prettyPrint = true

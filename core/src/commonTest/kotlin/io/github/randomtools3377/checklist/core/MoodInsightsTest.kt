@@ -352,7 +352,7 @@ class MoodInsightsTest {
         )
         val backup = Backup(exportedAt = 0, goals = emptyList(), steps = emptyList(), ticks = emptyList(), entries = emptyList(), rewards = emptyList(), purchases = emptyList(), settings = emptyMap(), moods = moods)
         val back = Backup.decode(Backup.encode(backup))
-        assertEquals(27, back.format)
+        assertEquals(Backup.FORMAT, back.format)
         assertEquals("a walk with a friend", back.moods[0].afterNote)
         assertEquals(listOf("Slept badly", "Friends and family"), back.moods[0].factors)
         assertEquals(moods, back.moods)

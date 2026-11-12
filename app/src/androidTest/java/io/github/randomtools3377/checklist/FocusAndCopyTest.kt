@@ -7,11 +7,13 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import io.github.randomtools3377.checklist.core.FocusTime
 import io.github.randomtools3377.checklist.core.Repeat
 import io.github.randomtools3377.checklist.data.HabitDraft
 import io.github.randomtools3377.checklist.data.nowLocal
 import io.github.randomtools3377.checklist.reminders.Focus
 import kotlinx.coroutines.runBlocking
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.ExternalResource
@@ -64,6 +66,27 @@ class FocusAndCopyTest {
                 false
             }
         }
+    }
+
+    @Test
+    fun aBreakIsOfferedAfterASessionAndIsNotFocusTime() {
+        val container = (InstrumentationRegistry.getInstrumentation().targetContext.applicationContext as ChecklistApplication).container
+        runBlocking { container.repository.setSetting(FocusTime.BREAK_SETTING, "5") }
+        app.waitFor { app.shownIn("today-list", "focus:Read") }
+        app.tap("focus:Read")
+        app.waitFor { !gone("focus") }
+        app.tap("focus-done")
+        // The session is over: a break is offered, and starting it shows a plain countdown.
+        app.waitFor { !gone("break-offer") }
+        app.onNodeWithTag("break-start").assertTextEquals("Start a 5 min break")
+        app.tap("break-start")
+        app.waitFor { !gone("break") }
+        app.onNodeWithTag("break-time").assertTextEquals("5:00")
+        app.tap("break-end")
+        app.waitFor { gone("break") && gone("break-offer") && gone("focus") }
+        // The break left nothing behind: only time on a goal is ever kept.
+        val kept = runBlocking { container.db.dao().allFocusSessions() }
+        assertTrue(kept.all { it.goalId > 0 && it.minutes < 5 })
     }
 
     @Test

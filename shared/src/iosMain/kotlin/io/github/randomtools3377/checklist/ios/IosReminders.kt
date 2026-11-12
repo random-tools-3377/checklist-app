@@ -172,10 +172,16 @@ internal object IosReminders {
         focus?.takeIf { it.running }?.let { state ->
             val seconds = (state.endsAt - nowMillis()) / 1000.0
             if (seconds < 1.0) return@let
-            val goal = dao.goal(state.goalId)?.toCore()
+            val goal = if (state.isBreak) null else dao.goal(state.goalId)?.toCore()
             val content = UNMutableNotificationContent()
-            content.setTitle(if (goal == null || (hidePrivate && goal.private)) "⏱ Focus" else "⏱ ${goal.icon} ${goal.name}")
-            content.setBody("Time's up")
+            content.setTitle(
+                when {
+                    state.isBreak -> "☕ Break"
+                    goal == null || (hidePrivate && goal.private) -> "⏱ Focus"
+                    else -> "⏱ ${goal.icon} ${goal.name}"
+                },
+            )
+            content.setBody(if (state.isBreak) "Break's over" else "Time's up")
             content.setSound(UNNotificationSound.defaultSound)
             val request = UNNotificationRequest.requestWithIdentifier(
                 "focus",

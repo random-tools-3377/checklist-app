@@ -35,7 +35,7 @@ import io.github.randomtools3377.checklist.reminders.FocusState
 import kotlinx.coroutines.delay
 
 /** "12:05" for minutes and seconds left. */
-private fun clockText(millis: Long): String {
+internal fun focusClockText(millis: Long): String {
     val seconds = (millis + 999) / 1000
     return "${seconds / 60}:${(seconds % 60).toString().padStart(2, '0')}"
 }
@@ -64,7 +64,7 @@ fun FocusScreen(state: FocusState, goal: Goal?, onPause: () -> Unit, onResume: (
     val clock: @Composable () -> Unit = {
         Box(contentAlignment = Alignment.Center) {
             CircularProgressIndicator(progress = { progress }, strokeWidth = 10.dp, modifier = Modifier.size(ring))
-            Text(clockText(left), fontSize = if (ring < 200.dp) 44.sp else 56.sp, fontWeight = FontWeight.Bold, modifier = Modifier.testTag("focus-time"))
+            Text(focusClockText(left), fontSize = if (ring < 200.dp) 44.sp else 56.sp, fontWeight = FontWeight.Bold, modifier = Modifier.testTag("focus-time"))
         }
     }
     val rest: @Composable () -> Unit = {
