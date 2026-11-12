@@ -2,8 +2,11 @@ package io.github.randomtools3377.checklist.data
 
 import io.github.randomtools3377.checklist.core.AgendaDay
 import io.github.randomtools3377.checklist.core.Busy
+import io.github.randomtools3377.checklist.core.CalendarShow
+import io.github.randomtools3377.checklist.core.CalendarShows
 import io.github.randomtools3377.checklist.core.CalendarView
 import io.github.randomtools3377.checklist.core.DayCell
+import io.github.randomtools3377.checklist.core.DayLabel
 import io.github.randomtools3377.checklist.core.Days
 import io.github.randomtools3377.checklist.core.Feature
 import io.github.randomtools3377.checklist.core.GoalKind
@@ -27,14 +30,17 @@ data class CalendarBoard(
     val monthFirst: LocalDate = LocalDate(today.year, today.monthNumber, 1),
     /** The day picked in the month, with its agenda; null while it is today. Nothing on it can be ticked. */
     val picked: AgendaDay? = null,
-    /** What to write inside each day of the month: events, deadlines and dated to-dos. */
-    val labels: Map<LocalDate, List<String>> = emptyMap(),
+    /** What to write inside each day of the month: events, deadlines and dated to-dos, those the user hid left out. */
+    val labels: Map<LocalDate, List<DayLabel>> = emptyMap(),
+    /** What the user chose to see on the widget (Settings → Appearance); [days], [picked] and [labels] already follow it. */
+    val shows: CalendarShows = CalendarShows(),
 )
 
 /**
  * The calendar widget's data at [now]. [events] are the phone's calendar events for the days
  * shown, read by the phone when the calendar is turned on and allowed; empty otherwise. Private
- * goals are only "A private goal" while the privacy lock covers them.
+ * goals are only "A private goal" while the privacy lock covers them. What the user turned off
+ * under "Calendar widget shows" is left out of the agenda and the month's labels.
  */
 suspend fun calendarBoard(
     dao: ChecklistDao,
@@ -47,6 +53,7 @@ suspend fun calendarBoard(
 ): CalendarBoard {
     val dayEnd = parseDayEndHour(dao.setting(SETTING_DAY_END_HOUR))
     val today = Days.dayOf(now, dayEnd)
+    val shows = calendarShows(dao)
     val goals = dao.activeGoals().map { it.toCore() }
     val hidden = if (dao.setting(LOCK_PRIVATE) == "1") PrivateGoals.ids(goals) else emptySet()
     val monthFirst = month?.let { LocalDate(it.year, it.monthNumber, 1) } ?: LocalDate(today.year, today.monthNumber, 1)
@@ -59,30 +66,38 @@ suspend fun calendarBoard(
     val steps = dao.allSteps().map { it.toCore() }
     val checks = dao.allChecks().map { it.toCore() }
     val finished = CalendarView.finishedProjects(goals, steps, ticks)
-    // A picked day's agenda: nothing on it is late or can be ticked, since it isn't today.
+    // A picked day's agenda: only what is on that day, and nothing on it is late or can be ticked, since it isn't today.
     val pickedDay = picked?.takeIf { it != today }?.let { day ->
         val lines = CalendarView.days(
             day, LocalDateTime(day, kotlinx.datetime.LocalTime(0, 0)), 1, goals, steps, ticks, lapses,
-            checks = checks, events = events, dayEndHour = dayEnd, hidden = hidden,
+            checks = checks, events = events, dayEndHour = dayEnd, hidden = hidden, firstIsToday = false,
         ).firstOrNull()?.lines.orEmpty().map { it.copy(canTick = false) }
-        AgendaDay(day, "${io.github.randomtools3377.checklist.core.weekdayShort(day.dayOfWeek.isoDayNumber)} ${day.dayOfMonth}", lines)
+        shows.day(AgendaDay(day, "${io.github.randomtools3377.checklist.core.weekdayShort(day.dayOfWeek.isoDayNumber)} ${day.dayOfMonth}", lines))
     }
     return CalendarBoard(
         today = today,
-        days = CalendarView.days(
-            today, now, CalendarView.AGENDA_DAYS, goals, steps, ticks, lapses,
-            checks = checks,
-            events = events,
-            dayEndHour = dayEnd,
-            hidden = hidden,
+        days = shows.days(
+            CalendarView.days(
+                today, now, CalendarView.AGENDA_DAYS, goals, steps, ticks, lapses,
+                checks = checks,
+                events = events,
+                dayEndHour = dayEnd,
+                hidden = hidden,
+            ),
+            today,
         ),
         month = CalendarView.monthOf(monthFirst, today, goals, ticks, lapses, finished),
         monthFirst = monthFirst,
         picked = pickedDay,
-        labels = CalendarView.labels(gridStart, gridStart.plusDays(41), goals, events, finished, hidden),
+        labels = shows.labels(CalendarView.labels(gridStart, gridStart.plusDays(41), goals, events, finished, hidden)),
+        shows = shows,
         addsTodo = Feature.TODOS.isOn(dao.setting(Feature.TODOS.key)),
     )
 }
+
+/** What the calendar widget shows, as chosen under "Calendar widget shows" in Settings → Appearance. */
+suspend fun calendarShows(dao: ChecklistDao): CalendarShows =
+    CalendarShows(CalendarShow.entries.filter { it.isOn(dao.setting(it.key)) }.toSet())
 
 /**
  * Whether the phone's calendar is turned on in Settings, and from which calendars (all of them

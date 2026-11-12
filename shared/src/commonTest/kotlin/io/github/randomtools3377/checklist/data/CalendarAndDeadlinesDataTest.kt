@@ -2,6 +2,7 @@ package io.github.randomtools3377.checklist.data
 
 import io.github.randomtools3377.checklist.core.Book
 import io.github.randomtools3377.checklist.core.Busy
+import io.github.randomtools3377.checklist.core.CalendarShow
 import io.github.randomtools3377.checklist.core.Days
 import io.github.randomtools3377.checklist.core.Feature
 import io.github.randomtools3377.checklist.core.LineKind
@@ -102,6 +103,46 @@ class CalendarAndDeadlinesDataTest {
         assertEquals("Deadline · 2 steps left", after.days[2].lines.first().detail)
         assertEquals(2 to 1, after.month.first { it.isToday }.let { it.due to it.done })
         assertTrue(after.addsTodo)
+    }
+
+    @Test
+    fun theBoardLeavesOutWhatTheWidgetWasToldToHide() = runTest {
+        addHabit("Water")
+        addProject("Paint the shed", daysAhead = 1)
+        repository.saveTodo(TodoDraft(id = 0, name = "Post the letter", date = today.plusDays(1)))
+        repository.saveTodo(TodoDraft(id = 0, name = "Buy milk"))
+        val events = listOf(Busy(at(1, 10), at(1, 11), "Dentist"))
+        val tomorrow = today.plusDays(1)
+
+        // To start: everything but the count under each day.
+        val usual = calendarBoard(dao, noon, events, picked = tomorrow)
+        assertFalse(usual.shows.counts)
+        assertEquals(listOf("Paint the shed", "Dentist", "Water", "Post the letter"), usual.days[1].lines.map { it.name })
+        assertEquals(usual.days[1].lines.map { it.name }, usual.picked?.lines?.map { it.name })
+        assertEquals(listOf(LineKind.EVENT, LineKind.DEADLINE, LineKind.TODO), usual.labels[tomorrow]?.map { it.kind })
+
+        repository.setSetting(CalendarShow.COUNTS.key, "1")
+        repository.setSetting(CalendarShow.EVENTS.key, "0")
+        repository.setSetting(CalendarShow.DAILY_GOALS.key, "0")
+        val some = calendarBoard(dao, noon, events, picked = tomorrow)
+        assertTrue(some.shows.counts)
+        assertEquals(listOf("Buy milk"), some.days[0].lines.map { it.name })
+        // Today's count is still the whole day's.
+        assertEquals(2, some.days[0].due)
+        assertEquals(listOf("Paint the shed", "Post the letter"), some.days[1].lines.map { it.name })
+        assertEquals(listOf("Paint the shed", "Post the letter"), some.picked?.lines?.map { it.name })
+        assertEquals(listOf(LineKind.DEADLINE, LineKind.TODO), some.labels[tomorrow]?.map { it.kind })
+
+        repository.setSetting(CalendarShow.DEADLINES.key, "0")
+        repository.setSetting(CalendarShow.TODOS.key, "0")
+        val none = calendarBoard(dao, noon, events, picked = tomorrow)
+        // Only today is left, with the to-do that has no date.
+        assertEquals(listOf(today), none.days.map { it.date })
+        assertEquals(listOf("Buy milk"), none.days[0].lines.map { it.name })
+        assertTrue(none.picked?.lines.orEmpty().isEmpty())
+        assertTrue(none.labels.isEmpty())
+        // The choices travel in the backup file.
+        assertTrue("\"${CalendarShow.TODOS.key}\"" in repository.exportBackup())
     }
 
     @Test

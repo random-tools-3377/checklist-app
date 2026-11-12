@@ -82,6 +82,14 @@ data class Repeat(
         fun timesPer(per: Period, start: LocalDate) = Repeat(RepeatKind.TIMES_PER, start, per = per)
     }
 
+    /** Due every single day: "every day", or every day of the week picked, every week. */
+    val isEveryDay: Boolean
+        get() = when (kind) {
+            RepeatKind.EVERY_N_DAYS -> interval <= 1
+            RepeatKind.WEEKDAYS -> interval <= 1 && weekdays.containsAll((1..7).toList())
+            else -> false
+        }
+
     /** The kind of window a tick counts toward: a single day, or the whole week, month or year. */
     val windowPeriod: Period get() = if (kind == RepeatKind.TIMES_PER) per ?: Period.WEEKLY else Period.DAILY
 

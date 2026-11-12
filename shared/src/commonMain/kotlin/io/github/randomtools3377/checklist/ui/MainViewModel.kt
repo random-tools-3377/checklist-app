@@ -613,6 +613,19 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
         viewModelScope.launch { repository.setSetting(SETTING_WIDGET_STYLE, style.name) }
     }
 
+    /** What the calendar widget shows ("Calendar widget shows" in Appearance); the widget redraws when one changes. */
+    val calendarShows: StateFlow<io.github.randomtools3377.checklist.core.CalendarShows> = combine(
+        io.github.randomtools3377.checklist.core.CalendarShow.entries.map { dao.observeSetting(it.key) },
+    ) { v ->
+        io.github.randomtools3377.checklist.core.CalendarShows(
+            io.github.randomtools3377.checklist.core.CalendarShow.entries.filterIndexed { i, show -> show.isOn(v[i]) }.toSet(),
+        )
+    }.state(io.github.randomtools3377.checklist.core.CalendarShows())
+
+    fun setCalendarShow(show: io.github.randomtools3377.checklist.core.CalendarShow, on: Boolean) {
+        viewModelScope.launch { repository.setSetting(show.key, show.valueOf(on)) }
+    }
+
     // The optional AI, in the separate Checklist AI app.
 
     /** How Checklist AI stands; null until checked. */

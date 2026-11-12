@@ -52,7 +52,9 @@ import io.github.randomtools3377.checklist.MainActivity
 import io.github.randomtools3377.checklist.calendar.PhoneCalendar
 import io.github.randomtools3377.checklist.core.AgendaDay
 import io.github.randomtools3377.checklist.core.AgendaLine
+import io.github.randomtools3377.checklist.core.CalendarShows
 import io.github.randomtools3377.checklist.core.CalendarView
+import io.github.randomtools3377.checklist.core.DayLabel
 import io.github.randomtools3377.checklist.core.DayCell
 import io.github.randomtools3377.checklist.core.DayTone
 import io.github.randomtools3377.checklist.core.Days
@@ -64,6 +66,7 @@ import io.github.randomtools3377.checklist.data.CalendarBoard
 import io.github.randomtools3377.checklist.data.SETTING_DAY_END_HOUR
 import io.github.randomtools3377.checklist.data.calendarBoard
 import io.github.randomtools3377.checklist.data.calendarChoice
+import io.github.randomtools3377.checklist.data.calendarShows
 import io.github.randomtools3377.checklist.data.nowLocal
 import io.github.randomtools3377.checklist.data.parseDayEndHour
 import io.github.randomtools3377.checklist.ui.OPEN_NEW_GOAL
@@ -106,9 +109,11 @@ data class WidgetData(val board: CalendarBoard, val look: WidgetLook = WidgetLoo
  * The home-screen calendar, like a calendar app's own. Small, it shows today's agenda with times
  * and tick boxes. Wider, the agenda of the next days under day headers, with the phone's calendar
  * events (when that is turned on and allowed), project deadlines and dated to-dos in the same
- * list. Taller, the month, like a calendar app's: arrows turn to other months, each day shows how
- * much was due and done and what is on it (events, deadlines, to-dos), and tapping a day shows
- * its agenda below. The date button goes back to today.
+ * list. Taller (the 4 by 4 space it takes when added), the month, like a calendar app's: arrows
+ * turn to other months, each day shows what is on it (events, deadlines, to-dos), and tapping a
+ * day shows its agenda below. The date button goes back to today. What it shows is chosen under
+ * "Calendar widget shows" in Settings → Appearance (see CalendarShows): the board comes with the
+ * hidden kinds already left out.
  */
 class CalendarWidget : GlanceAppWidget() {
     override val sizeMode = SizeMode.Responsive(setOf(SMALL, WIDE, TALL))
@@ -129,7 +134,8 @@ class CalendarWidget : GlanceAppWidget() {
     companion object {
         private val SMALL = DpSize(120.dp, 120.dp)
         private val WIDE = DpSize(250.dp, 120.dp)
-        private val TALL = DpSize(250.dp, 320.dp)
+        // The month, from the 4 by 4 space the widget takes when it is added.
+        private val TALL = DpSize(250.dp, 300.dp)
 
         /** Redraws every calendar widget on the home screen, if there are any. */
         suspend fun refresh(context: Context) {
@@ -150,7 +156,8 @@ class CalendarWidget : GlanceAppWidget() {
             val shownFirst = month ?: LocalDate(today.year, today.monthNumber, 1)
             val from = minOf(CalendarView.monthGridStart(shownFirst), today)
             val days = maxOf(from.daysUntilDay(CalendarView.monthGridStart(shownFirst)) + 42, from.daysUntilDay(today) + CalendarView.AGENDA_DAYS)
-            val events = if (calendarOn && PhoneCalendar.allowed(context)) {
+            // Not read at all while "Calendar events" is turned off for the widget.
+            val events = if (calendarOn && calendarShows(dao).events && PhoneCalendar.allowed(context)) {
                 withContext(Dispatchers.IO) {
                     runCatching { PhoneCalendar.events(context, calendars, from, days) }.getOrDefault(emptyList())
                 }
@@ -237,7 +244,7 @@ private fun Content(data: WidgetData) {
             .cornerRadius(16.dp)
             .padding(10.dp),
     ) {
-        val tall = size.height >= 320.dp
+        val tall = size.height >= 300.dp
         Row(verticalAlignment = Alignment.CenterVertically, modifier = GlanceModifier.fillMaxWidth()) {
             if (tall) {
                 // Like a calendar app: arrows either side of the month, and a button back to today.
@@ -284,7 +291,7 @@ private fun Content(data: WidgetData) {
         when {
             tall -> {
                 val picked = data.board.picked
-                MonthGrid(data.month, data.look.colourBlind, data.board.labels, picked?.date)
+                MonthGrid(data.month, data.look.colourBlind, data.board.labels, picked?.date, data.board.shows)
                 Spacer(GlanceModifier.height(6.dp))
                 // The picked day's agenda under its name, or today's.
                 if (picked != null) Agenda(listOf(picked), headers = true) else Agenda(listOfNotNull(today), headers = false)
@@ -309,12 +316,12 @@ private fun HeaderButton(label: String, onClick: androidx.glance.action.Action) 
     }
 }
 
-/** One row of the agenda's list: a day's header, one of its lines, or "Nothing due today". */
-private data class AgendaRow(val header: String? = null, val line: AgendaLine? = null)
+/** One row of the agenda's list: a day's header, one of its lines, or a [note] like "Nothing due today". */
+private data class AgendaRow(val header: String? = null, val line: AgendaLine? = null, val note: String? = null)
 
 /** The agenda as one list. With [headers], each day comes under its own, like "Tomorrow" or "Fri 14". */
 private fun agendaRows(days: List<AgendaDay>, headers: Boolean): List<AgendaRow> = days.flatMap { day ->
-    val lines = if (day.lines.isEmpty()) listOf(AgendaRow()) else day.lines.map { AgendaRow(line = it) }
+    val lines = if (day.lines.isEmpty()) listOf(AgendaRow(note = day.emptyNote)) else day.lines.map { AgendaRow(line = it) }
     if (headers) listOf(AgendaRow(header = day.header)) + lines else lines
 }
 
@@ -350,7 +357,7 @@ private fun Agenda(days: List<AgendaDay>, headers: Boolean) {
                     modifier = GlanceModifier.fillMaxWidth().padding(top = 4.dp),
                 )
                 line == null -> Text(
-                    "Nothing due today",
+                    row.note ?: "Nothing due today",
                     style = TextStyle(color = colors.onSurfaceVariant, fontSize = 13.sp),
                     modifier = GlanceModifier.fillMaxWidth().padding(vertical = 2.dp),
                 )
@@ -423,12 +430,21 @@ private fun AgendaLineRow(line: AgendaLine) {
 }
 
 /**
- * The month: each day with its number (and 🚩 when a project is due), and under it how much was
- * due and done, in the good colour once everything is done and the bad one for a past day with
- * something left. With [marks], the colour-blind friendly look, ✓, ◐ and ✕ say it too.
+ * The month: each day with its number and what is on it, each label on a line of its own, cut to
+ * fit: events in the app's colour, deadlines after 🚩 and to-dos in the text colour. With
+ * [shows].counts, how much was due and done comes under the number, in the good colour once
+ * everything is done and the bad one for a past day with something left; without it, that line
+ * is a second label's. With [marks], the colour-blind friendly look, ✓, ◐ and ✕ say how the day
+ * went, and ▪ and ○ mark events and to-dos.
  */
 @Composable
-private fun MonthGrid(month: List<DayCell>, marks: Boolean, labels: Map<LocalDate, List<String>> = emptyMap(), picked: LocalDate? = null) {
+private fun MonthGrid(
+    month: List<DayCell>,
+    marks: Boolean,
+    labels: Map<LocalDate, List<DayLabel>> = emptyMap(),
+    picked: LocalDate? = null,
+    shows: CalendarShows = CalendarShows(),
+) {
     val colors = widgetColors()
     Column(modifier = GlanceModifier.fillMaxWidth()) {
         Row(modifier = GlanceModifier.fillMaxWidth()) {
@@ -444,6 +460,8 @@ private fun MonthGrid(month: List<DayCell>, marks: Boolean, labels: Map<LocalDat
         month.chunked(7).filter { week -> week.any { it.inMonth } }.forEach { week ->
             Row(modifier = GlanceModifier.fillMaxWidth()) {
                 week.forEach { cell ->
+                    // What is on the day, like a calendar app writes it in: the first things, and how many more.
+                    val on = CalendarView.cellLabels(labels[cell.date].orEmpty(), shows.labelLines, marks)
                     Box(
                         contentAlignment = Alignment.TopCenter,
                         modifier = GlanceModifier
@@ -459,8 +477,10 @@ private fun MonthGrid(month: List<DayCell>, marks: Boolean, labels: Map<LocalDat
                             .clickable(actionRunCallback<PickDay>(actionParametersOf(DayKey to cell.date.toEpochDays()))),
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            // 🚩 by the number only for a deadline that no label on the day names.
+                            val flag = shows.deadlines && cell.deadlines > 0 && on.none { it.kind == LineKind.DEADLINE }
                             Text(
-                                "${cell.date.dayOfMonth}" + if (cell.deadlines > 0) "🚩" else "",
+                                "${cell.date.dayOfMonth}" + if (flag) "🚩" else "",
                                 maxLines = 1,
                                 style = TextStyle(
                                     color = if (cell.inMonth) colors.onSurface else colors.onSurfaceVariant,
@@ -469,30 +489,34 @@ private fun MonthGrid(month: List<DayCell>, marks: Boolean, labels: Map<LocalDat
                                     textAlign = TextAlign.Center,
                                 ),
                             )
-                            Text(
-                                cell.label(marks).ifEmpty { " " },
-                                maxLines = 1,
-                                style = TextStyle(
-                                    color = when (cell.tone) {
-                                        DayTone.GOOD -> colors.good
-                                        DayTone.BAD -> colors.error
-                                        DayTone.PLAIN -> colors.onSurfaceVariant
-                                    },
-                                    fontSize = 9.sp,
-                                    textAlign = TextAlign.Center,
-                                ),
-                            )
-                            // What is on the day, like a calendar app writes it in: the first thing, and how many more.
-                            val on = labels[cell.date].orEmpty()
-                            Text(
-                                when {
-                                    on.isEmpty() -> " "
-                                    on.size == 1 -> on[0]
-                                    else -> "${on[0].take(6)} +${on.size - 1}"
-                                },
-                                maxLines = 1,
-                                style = TextStyle(color = colors.primary, fontSize = 8.sp, textAlign = TextAlign.Center),
-                            )
+                            if (shows.counts) {
+                                Text(
+                                    cell.label(marks).ifEmpty { " " },
+                                    maxLines = 1,
+                                    style = TextStyle(
+                                        color = when (cell.tone) {
+                                            DayTone.GOOD -> colors.good
+                                            DayTone.BAD -> colors.error
+                                            DayTone.PLAIN -> colors.onSurfaceVariant
+                                        },
+                                        fontSize = 9.sp,
+                                        textAlign = TextAlign.Center,
+                                    ),
+                                )
+                            }
+                            // Every day has the same lines, so the weeks stay the same height.
+                            (0 until shows.labelLines).forEach { index ->
+                                val label = on.getOrNull(index)
+                                Text(
+                                    label?.name ?: " ",
+                                    maxLines = 1,
+                                    style = TextStyle(
+                                        color = if (label?.kind == LineKind.EVENT) colors.primary else colors.onSurface,
+                                        fontSize = 9.sp,
+                                        textAlign = TextAlign.Center,
+                                    ),
+                                )
+                            }
                         }
                     }
                 }

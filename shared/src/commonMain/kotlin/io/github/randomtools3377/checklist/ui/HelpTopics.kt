@@ -673,6 +673,7 @@ enum class HelpTopic(val title: String, val intro: String, val steps: List<Strin
             "\"Checklist budget\" shows today's pay filling up, while Budget is on.",
             "Pick a solid or see-through look in Settings → Appearance, under Widgets.",
             "The calendar widget, made wider, shows the days ahead with deadlines, to-dos and your calendar's events; taller, it shows the month. \"+\" adds a to-do or a goal.",
+            "To keep the month clear, open Settings → Appearance → \"Calendar widget shows\" and turn off what you don't want to see.",
         ),
     ),
 }

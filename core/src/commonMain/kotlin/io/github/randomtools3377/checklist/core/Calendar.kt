@@ -91,6 +91,10 @@ data class AgendaLine(
     val plusOne: Boolean = false,
     val color: Int? = null,
     val hidden: Boolean = false,
+    /** A goal due every single day, which the calendar widget can leave out of its lists. */
+    val everyDay: Boolean = false,
+    /** A to-do with a date of its own, rather than one waiting on today's list. */
+    val dated: Boolean = false,
 ) {
     val title: String get() = "$icon $name"
 
@@ -105,12 +109,98 @@ data class AgendaLine(
 }
 
 /** One day of the agenda, under its [header]: "Today", "Tomorrow" or "Fri 14". */
-data class AgendaDay(val date: LocalDate, val header: String, val lines: List<AgendaLine>) {
-    /** Goals and to-dos that count for the day: not the skipped ones, deadlines or events. */
+data class AgendaDay(
+    val date: LocalDate,
+    val header: String,
+    val lines: List<AgendaLine>,
+    /** Everything on the day, when [lines] leaves out what the user chose not to see (see [CalendarShows]). */
+    val all: List<AgendaLine> = lines,
+) {
+    /** Goals and to-dos that count for the day, shown or not: not the skipped ones, deadlines or events. */
     private val counted: List<AgendaLine>
-        get() = lines.filter { (it.kind == LineKind.GOAL || it.kind == LineKind.TODO) && it.state != LineState.SKIPPED }
+        get() = all.filter { (it.kind == LineKind.GOAL || it.kind == LineKind.TODO) && it.state != LineState.SKIPPED }
     val due: Int get() = counted.size
     val done: Int get() = counted.count { it.state == LineState.DONE }
+
+    /** What to say when no line shows: nothing is on the day, or what is on it was chosen not to be seen. */
+    val emptyNote: String get() = if (all.size > lines.size) "What's on this day is hidden" else "Nothing due today"
+}
+
+/** One thing written inside a day of the month: an event, a project's deadline or a to-do with a date. */
+data class DayLabel(val kind: LineKind, val name: String) {
+    /** What comes before its name: 🚩 for a deadline always, and with [marks] ▪ for an event and ○ for a to-do. */
+    fun mark(marks: Boolean): String = when (kind) {
+        LineKind.DEADLINE -> "🚩"
+        LineKind.EVENT -> if (marks) "▪" else ""
+        LineKind.TODO -> if (marks) "○" else ""
+        LineKind.GOAL -> ""
+    }
+}
+
+/**
+ * One thing the calendar widget can show or leave out, chosen in Settings → Appearance. Each is a
+ * setting of its own ([key], "1" or "0"); until it is set, [usual] says whether it shows.
+ */
+enum class CalendarShow(val key: String, val label: String, val hint: String, val usual: Boolean) {
+    COUNTS("calendar_widget_counts", "Goals done each day", "A count under every day of the month, like 2/3.", false),
+    EVENTS("calendar_widget_events", "Calendar events", "From your calendar, while it is turned on.", true),
+    DEADLINES("calendar_widget_deadlines", "Project deadlines", "🚩 on the day a project is due.", true),
+    TODOS("calendar_widget_todos", "To-dos with a date", "On the day you gave them.", true),
+    DAILY_GOALS("calendar_widget_daily_goals", "Daily goals in the list", "Goals due every day. Off, the list keeps the goals for some days only.", true),
+    ;
+
+    fun isOn(value: String?): Boolean = when (value) {
+        "1" -> true
+        "0" -> false
+        else -> usual
+    }
+
+    fun valueOf(on: Boolean): String = if (on) "1" else "0"
+}
+
+/** What the calendar widget shows, of the things in [CalendarShow]: the usual ones until the user chooses. */
+data class CalendarShows(val on: Set<CalendarShow> = CalendarShow.entries.filter { it.usual }.toSet()) {
+    val counts: Boolean get() = CalendarShow.COUNTS in on
+    val events: Boolean get() = CalendarShow.EVENTS in on
+    val deadlines: Boolean get() = CalendarShow.DEADLINES in on
+    val todos: Boolean get() = CalendarShow.TODOS in on
+    val dailyGoals: Boolean get() = CalendarShow.DAILY_GOALS in on
+
+    /** How many lines of labels a day's cell has: the count's line is free for a second one while it is hidden. */
+    val labelLines: Int get() = if (counts) 1 else 2
+
+    private fun keeps(kind: LineKind): Boolean = when (kind) {
+        LineKind.EVENT -> events
+        LineKind.DEADLINE -> deadlines
+        LineKind.TODO -> todos
+        LineKind.GOAL -> true
+    }
+
+    /**
+     * Whether [line] stays on the agenda. A to-do without a date and a goal for some days only
+     * always stay: the switches are for to-dos with a date and for goals due every day.
+     */
+    fun keeps(line: AgendaLine): Boolean = when (line.kind) {
+        LineKind.TODO -> todos || !line.dated
+        LineKind.GOAL -> dailyGoals || !line.everyDay
+        else -> keeps(line.kind)
+    }
+
+    /** [day] with only the lines that stay. What it counts as due and done stays the whole day's. */
+    fun day(day: AgendaDay): AgendaDay = day.copy(lines = day.lines.filter { keeps(it) })
+
+    /** The agenda with only the lines that stay. [today] is always there; a later day with nothing left is left out. */
+    fun days(days: List<AgendaDay>, today: LocalDate): List<AgendaDay> =
+        days.map { day(it) }.filter { it.date == today || it.lines.isNotEmpty() }
+
+    /** The month's labels with only the kinds that stay. */
+    fun labels(labels: Map<LocalDate, List<DayLabel>>): Map<LocalDate, List<DayLabel>> =
+        labels.mapValues { (_, on) -> on.filter { keeps(it.kind) } }.filterValues { it.isNotEmpty() }
+
+    companion object {
+        /** From the settings as stored, by [CalendarShow.key]. */
+        fun of(settings: Map<String, String?>): CalendarShows = CalendarShows(CalendarShow.entries.filter { it.isOn(settings[it.key]) }.toSet())
+    }
 }
 
 /** What the calendar widget shows: today's agenda, the days ahead, this week, and this month. */
@@ -149,9 +239,11 @@ object CalendarView {
         events: List<Busy> = emptyList(),
         dayEndHour: Int = 0,
         hidden: Set<Long> = emptySet(),
+        /** False to list [today] like any other day (a day picked in the month): only what is on that day itself. */
+        firstIsToday: Boolean = true,
     ): List<AgendaDay> = (0 until count).mapNotNull { offset ->
         val day = today.plusDays(offset)
-        val isToday = offset == 0
+        val isToday = offset == 0 && firstIsToday
         val view = TodayList.build(day, goals, steps, ticks, 0, lapses, checks)
         // Each line with where it sorts: its group, then its moment or its place in the list.
         val lines = mutableListOf<Triple<Int, LocalDateTime?, AgendaLine>>()
@@ -207,6 +299,8 @@ object CalendarView {
                 canTick = isToday && state != LineState.SKIPPED,
                 plusOne = goal.target > 1 && !goal.hasAmount && !row.done,
                 color = goal.color,
+                everyDay = per == null && goal.repeat?.isEveryDay == true,
+                dated = goal.kind == GoalKind.TODO,
             )
             return hide(line, hidden, null)
         }
@@ -330,7 +424,7 @@ object CalendarView {
 
     /**
      * What to write inside each day of a month grid, like a calendar app does: the phone's
-     * calendar events, project deadlines not yet finished (🚩) and to-dos with a date, by day,
+     * calendar events, project deadlines not yet finished and to-dos with a date, by day,
      * events first. Goals in [hidden] (private, behind the lock) are left out.
      */
     fun labels(
@@ -340,18 +434,45 @@ object CalendarView {
         events: List<Busy>,
         finished: Set<Long> = emptySet(),
         hidden: Set<Long> = emptySet(),
-    ): Map<LocalDate, List<String>> {
-        val labels = mutableMapOf<LocalDate, MutableList<String>>()
-        fun add(day: LocalDate, text: String) {
-            if (day >= from && day <= to) labels.getOrPut(day) { mutableListOf() } += text
+    ): Map<LocalDate, List<DayLabel>> {
+        val labels = mutableMapOf<LocalDate, MutableList<DayLabel>>()
+        fun add(day: LocalDate, kind: LineKind, name: String) {
+            if (day >= from && day <= to) labels.getOrPut(day) { mutableListOf() } += DayLabel(kind, name)
         }
-        events.sortedBy { it.start }.forEach { add(it.start.date, it.title) }
+        events.sortedBy { it.start }.forEach { add(it.start.date, LineKind.EVENT, it.title) }
         for (goal in goals) {
             if (goal.archived || goal.id in hidden) continue
-            if (goal.kind == GoalKind.PROJECT && goal.id !in finished) goal.deadline?.let { add(it, "🚩 ${goal.name}") }
-            if (goal.kind == GoalKind.TODO) goal.repeat?.takeIf { it.kind == RepeatKind.ONCE }?.let { add(it.start, goal.name) }
+            if (goal.kind == GoalKind.PROJECT && goal.id !in finished) goal.deadline?.let { add(it, LineKind.DEADLINE, goal.name) }
+            if (goal.kind == GoalKind.TODO) goal.repeat?.takeIf { it.kind == RepeatKind.ONCE }?.let { add(it.start, LineKind.TODO, goal.name) }
         }
         return labels
+    }
+
+    /** How many characters of a label fit a day's cell on one line, its mark and "+2" included. */
+    const val LABEL_CHARS = 8
+
+    /**
+     * What a day's cell writes, on at most [lines] lines, each cut to fit on one: the first things
+     * on the day, and when there are more than fit, the last line ends in how many more, like
+     * "Dent +2". A deadline always starts with 🚩; with [marks] (the colour-blind friendly look)
+     * an event starts with ▪ and a to-do with ○, so it isn't only colour that tells them apart.
+     */
+    fun cellLabels(on: List<DayLabel>, lines: Int, marks: Boolean, width: Int = LABEL_CHARS): List<DayLabel> {
+        if (lines <= 0 || on.isEmpty()) return emptyList()
+        val more = on.size - lines
+        return on.take(lines).mapIndexed { index, label ->
+            val mark = label.mark(marks)
+            val tail = if (more > 0 && index == lines - 1) " +$more" else ""
+            val room = (width - tail.length - (if (mark.isEmpty()) 0 else 1)).coerceAtLeast(1)
+            DayLabel(label.kind, mark + cut(label.name.trim(), room) + tail)
+        }
+    }
+
+    /** [text] cut to [room] characters, never through the middle of an emoji's pair. */
+    private fun cut(text: String, room: Int): String {
+        if (text.length <= room) return text
+        val cut = text.take(room)
+        return (if (cut.last().isHighSurrogate()) cut.dropLast(1) else cut).trimEnd()
     }
 
     /** The projects in [goals] whose steps are all ticked, by [ticks]: their deadline no longer shows. */

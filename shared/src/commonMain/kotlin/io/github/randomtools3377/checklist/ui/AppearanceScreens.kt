@@ -196,6 +196,7 @@ fun AppearanceScreen(appearance: Appearance, vm: MainViewModel, onAnyColour: () 
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                CalendarWidgetShows(vm)
             }
             CelebrationSettings(appearance.celebrate, vm, Modifier.scrollPlace(target, LookPlace.CELEBRATIONS))
         }
@@ -280,6 +281,16 @@ private fun AppIconSetting(current: io.github.randomtools3377.checklist.AppIcon,
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
+}
+
+/** What the calendar widget shows: a switch for each kind of thing, so the month can be kept clear. */
+@Composable
+private fun CalendarWidgetShows(vm: MainViewModel) {
+    val shows by vm.calendarShows.collectAsState()
+    Text("Calendar widget shows", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.testTag("calendar-shows"))
+    io.github.randomtools3377.checklist.core.CalendarShow.entries.forEach { show ->
+        SwitchRow(show.label, show in shows.on, "calendar-show:${show.name}", hint = show.hint) { vm.setCalendarShow(show, it) }
+    }
 }
 
 /** Celebrations: sound, buzz, how much confetti, and a GIF for every goal without its own. */

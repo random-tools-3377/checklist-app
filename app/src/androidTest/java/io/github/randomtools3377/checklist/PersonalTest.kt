@@ -8,6 +8,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import io.github.randomtools3377.checklist.core.CalendarShow
 import io.github.randomtools3377.checklist.core.Repeat
 import io.github.randomtools3377.checklist.data.HabitDraft
 import io.github.randomtools3377.checklist.data.SETTING_CELEBRATE_SOUND
@@ -16,6 +17,7 @@ import io.github.randomtools3377.checklist.data.SETTING_DEFAULT_GIF
 import io.github.randomtools3377.checklist.data.SETTING_FONT
 import io.github.randomtools3377.checklist.data.SETTING_POINTS_NAME
 import io.github.randomtools3377.checklist.data.SETTING_WIDGET_STYLE
+import io.github.randomtools3377.checklist.widget.CalendarWidget
 import io.github.randomtools3377.checklist.widget.StatsWidget
 import io.github.randomtools3377.checklist.widget.WidgetStyle
 import io.github.randomtools3377.checklist.data.nowLocal
@@ -86,6 +88,24 @@ class PersonalTest {
         // Back to the usual icon, for the other tests.
         app.tap("app-icon:GARDEN")
         app.waitFor { AppIcons.current(context) == AppIcon.GARDEN }
+    }
+
+    @Test
+    fun theCalendarWidgetShowsWhatIsChosen() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        fun board() = runBlocking { CalendarWidget.load(context) }.board
+        // To start, the daily goal is in the list and there is no count under each day.
+        app.waitFor { board().days.first().lines.any { it.name == "Read" } && !board().shows.counts }
+        app.onNodeWithTag("settings").performClick()
+        app.waitFor { !gone("setting:appearance") }
+        app.tap("setting:appearance")
+        app.waitFor { !gone("calendar-show:DAILY_GOALS") }
+        app.tap("calendar-show:DAILY_GOALS")
+        app.waitFor { setting(CalendarShow.DAILY_GOALS.key) == "0" }
+        app.waitFor { board().days.first().lines.none { it.name == "Read" } }
+        app.tap("calendar-show:COUNTS")
+        app.waitFor { setting(CalendarShow.COUNTS.key) == "1" }
+        app.waitFor { board().shows.counts }
     }
 
     @Test
