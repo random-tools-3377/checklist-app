@@ -201,6 +201,11 @@ data class ProjectDraft(
     val effort: Effort? = null,
     /** Its skill area for the character; null to guess it. */
     val skill: io.github.randomtools3377.checklist.core.SkillArea? = null,
+    /**
+     * Its deadline reminder (see Alerts.deadlines): null reminds when the user's day starts,
+     * [Reminder.at] is a time picked for it, and [Reminder.onTime] off is no reminder.
+     */
+    val reminder: Reminder? = null,
 )
 
 /** What the to-do editor and the quick add on Today save. [id] is 0 for a new to-do. */
@@ -387,6 +392,7 @@ class Repository(private val db: AppDatabase, private val celebrations: GifStore
                     color = draft.color,
                     effort = draft.effort?.name,
                     skill = draft.skill?.name,
+                    reminder = draft.reminder?.let { RepeatText.encodeReminder(it) },
                 ),
             )
         } else {
@@ -404,6 +410,7 @@ class Repository(private val db: AppDatabase, private val celebrations: GifStore
                     category = category(draft.category, existing.id),
                     color = draft.color,
                     effort = draft.effort?.name,
+                    reminder = draft.reminder?.let { RepeatText.encodeReminder(it) },
                 ),
             )
             existing.id

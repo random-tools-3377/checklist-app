@@ -4,7 +4,7 @@
     <string name="today_widget_name">Checklist today</string>
     <string name="today_widget_description">Your day as a timeline: what\'s up next with a big Done button, then the rest in order. Tick them off without opening the app.</string>
     <string name="widget_name">Checklist calendar</string>
-    <string name="widget_description">Goals due today, with tick boxes. Make it wider for the week, taller for the month.</string>
+    <string name="widget_description">Today\'s agenda with times and tick boxes. Make it wider for the days ahead, with deadlines, to-dos and your calendar\'s events; taller for the month.</string>
     <string name="stats_widget_name">Checklist balance and streaks</string>
     <string name="budget_widget_name">Checklist budget</string>
     <string name="budget_widget_description">Today\'s pay filling up as you work. Make it wider for the month, what you\'ve spent and the next bill.</string>

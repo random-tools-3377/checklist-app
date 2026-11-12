@@ -25,6 +25,8 @@ class WidgetColors(
     val error: ColorProvider,
     /** Text on [primary], for the widgets' main buttons. */
     val onPrimary: ColorProvider,
+    /** For good things, like a day with everything done: the app's colour, or blue with the colour-blind friendly look. */
+    val good: ColorProvider = primary,
 )
 
 private fun fixed(argb: Long) = ColorProvider(Color(argb))
@@ -40,12 +42,14 @@ fun widgetColors(): WidgetColors {
     val look = LocalWidgetLook.current
     val colours = coloursFor(look)
     if (!look.colourBlind) return colours
-    // Colour-blind friendly: vermillion in place of red.
+    // Colour-blind friendly: vermillion in place of red, and blue for good things.
     val bad = if (look.style == WidgetStyle.SEE_THROUGH) fixed(ColourBlind.bad(Brightness.DARK).toLong() and 0xFFFFFFFFL)
     else dayNight(ColourBlind.bad(Brightness.LIGHT), ColourBlind.bad(Brightness.DARK))
+    val good = if (look.style == WidgetStyle.SEE_THROUGH) fixed(ColourBlind.good(Brightness.DARK).toLong() and 0xFFFFFFFFL)
+    else dayNight(ColourBlind.good(Brightness.LIGHT), ColourBlind.good(Brightness.DARK))
     return WidgetColors(
         colours.widgetBackground, colours.onSurface, colours.onSurfaceVariant, colours.primary,
-        colours.primaryContainer, colours.secondaryContainer, bad, colours.onPrimary,
+        colours.primaryContainer, colours.secondaryContainer, bad, colours.onPrimary, good,
     )
 }
 

@@ -32,6 +32,9 @@ enum class AlertKind {
 
     /** A focus timer ran out. */
     FOCUS_DONE,
+
+    /** A project's deadline is near: the day before it, and on the day (see [Alerts.deadlines]). */
+    DEADLINE,
 }
 
 /**
@@ -155,6 +158,79 @@ object Alerts {
         return alerts.filter { it.at >= from && it.at < to }
     }
 
+    /**
+     * Whether [goal] reminds of its deadline: a project with one, unless that was turned off in
+     * its editor. A project keeps the choice where a habit keeps its reminder: [Reminder.onTime]
+     * is the switch, and [Reminder.at] the time picked, if one was.
+     */
+    fun remindsOfDeadline(goal: Goal): Boolean =
+        goal.kind == GoalKind.PROJECT && !goal.archived && goal.deadline != null && goal.reminder?.onTime != false
+
+    /**
+     * The deadline reminders from [from] (included) to [to] (not included): for each project
+     * with a deadline, one on the day before and one on the day, at the time picked for it or,
+     * without one, at [dayStart]; none while neither is set. Each alert's day is the day it comes
+     * on. Whether the project is finished by then is checked when it fires.
+     */
+    fun deadlines(goals: List<Goal>, from: LocalDateTime, to: LocalDateTime, dayStart: LocalTime?, dayEndHour: Int): List<Alert> {
+        val alerts = mutableListOf<Alert>()
+        for (goal in goals) {
+            if (!remindsOfDeadline(goal)) continue
+            val deadline = goal.deadline ?: continue
+            val time = goal.reminder?.at ?: dayStart ?: continue
+            for (day in listOf(deadline.minusDays(1), deadline)) {
+                alerts += Alert(goal.id, day, Pace.on(day, time, dayEndHour), AlertKind.DEADLINE)
+            }
+        }
+        return alerts.filter { it.at >= from && it.at < to }.sortedBy { it.at }
+    }
+
+    /**
+     * What a deadline reminder says under the project's name: "Due tomorrow, 3 steps left".
+     * [stepsLeft] is null for a private project behind the lock, which only says when.
+     */
+    fun deadlineWords(goal: Goal, alert: Alert, stepsLeft: Int?): String {
+        val due = if (goal.deadline == alert.day) "Due today" else "Due tomorrow"
+        return when {
+            stepsLeft == null || stepsLeft <= 0 -> due
+            stepsLeft == 1 -> "$due, 1 step left"
+            else -> "$due, $stepsLeft steps left"
+        }
+    }
+
+    /**
+     * The deadline reminders to show from [from] (included) to [to] (not included), in words,
+     * as things stand: a project whose steps are all ticked has none. [steps] and [stepTicks]
+     * may hold other goals'. With [hidePrivate], a private project is only "A private goal".
+     */
+    fun deadlineReminders(
+        goals: List<Goal>,
+        steps: List<Step>,
+        stepTicks: List<Tick>,
+        from: LocalDateTime,
+        to: LocalDateTime,
+        dayStart: LocalTime?,
+        dayEndHour: Int,
+        hidePrivate: Boolean = false,
+    ): List<DeadlineReminder> {
+        val ticked = stepTicks.mapNotNull { it.stepId }.toSet()
+        return deadlines(goals, from, to, dayStart, dayEndHour).mapNotNull { alert ->
+            val goal = goals.find { it.id == alert.goalId } ?: return@mapNotNull null
+            val own = steps.filter { it.goalId == goal.id && !it.archived }
+            val left = own.count { it.id !in ticked }
+            // Finished: nothing to remind of.
+            if (own.isNotEmpty() && left == 0) return@mapNotNull null
+            val hidden = hidePrivate && goal.private
+            DeadlineReminder(
+                goalId = goal.id,
+                day = alert.day,
+                at = alert.at,
+                title = if (hidden) "🔒 ${PrivateGoals.NAME}" else "${goal.icon} ${goal.name}",
+                text = deadlineWords(goal, alert, left.takeIf { !hidden }),
+            )
+        }
+    }
+
     /** The goal id a morning plan carries: it is about the whole day, not one goal. */
     const val MORNING_GOAL = 0L
 
@@ -195,6 +271,9 @@ object Alerts {
     fun timesDone(goal: Goal, window: Window, ticks: List<Tick>): Int =
         goal.timesDone(ticks.filter { it.countsToward(goal, window.start) })
 }
+
+/** A deadline reminder ready to show at [at], on the user's [day]: the same words on every phone and the computer. */
+data class DeadlineReminder(val goalId: Long, val day: LocalDate, val at: LocalDateTime, val title: String, val text: String)
 
 /** What the morning plan says: what is due today, the first thing to do, and the pace. */
 data class MorningPlan(

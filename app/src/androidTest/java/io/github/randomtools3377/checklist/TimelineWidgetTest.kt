@@ -101,7 +101,7 @@ class TimelineWidgetTest {
     fun theCalendarWidgetFollowsTicksToo() = runBlocking<Unit> {
         val updates = Channel<Int>(Channel.UNLIMITED)
         val watching = launch {
-            DayPlans.following(context) { CalendarWidget.load(context) }.collect { data -> updates.send(data.agenda.first { it.goal.id == brush }.count) }
+            DayPlans.following(context) { CalendarWidget.load(context) }.collect { data -> updates.send(data.days.first().lines.first { it.goalId == brush }.count) }
         }
         try {
             updates.until { it == 0 }

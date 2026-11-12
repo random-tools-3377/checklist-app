@@ -1034,7 +1034,7 @@ private fun NotificationSettings() {
             }
         }
         if (phone.hasWidgets) Text(
-            "Add the Checklist calendar to your home screen from the ${phone.deviceWord}'s widget list. Make it wider for the week, taller for the month.",
+            "Add the Checklist calendar to your home screen from the ${phone.deviceWord}'s widget list. Make it wider for the days ahead, taller for the month.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = 8.dp),

@@ -1450,6 +1450,9 @@ fun ProjectEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Lon
     var bonus by rememberSaveable { mutableStateOf("") }
     var deadline by rememberSaveable { mutableStateOf<Long?>(null) }
     var finishByMinute by rememberSaveable { mutableStateOf<Int?>(null) }
+    // The deadline reminder: on until turned off, at a time of its own or when the day starts.
+    var remind by rememberSaveable { mutableStateOf(true) }
+    var remindAtMinute by rememberSaveable { mutableStateOf<Int?>(null) }
     var allowance by rememberSaveable { mutableStateOf(Goal.DEFAULT_ALLOWANCE.toString()) }
     var isPrivate by rememberSaveable { mutableStateOf(false) }
     var celebration by rememberSaveable { mutableStateOf<String?>(null) }
@@ -1463,7 +1466,7 @@ fun ProjectEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Lon
     // What the editor held when it opened, to ask before throwing changes away.
     var baseline by rememberSaveable { mutableStateOf<String?>(null) }
     fun snapshot(): String = editorSnapshot(
-        name, icon, bonus, deadline, finishByMinute, allowance, isPrivate, celebration, skill, category, color, effort,
+        name, icon, bonus, deadline, finishByMinute, allowance, isPrivate, celebration, skill, category, color, effort, remind, remindAtMinute,
         steps.filter { it.id != 0L || it.name.isNotBlank() }.map { Triple(it.id, it.name, it.points) },
     )
 
@@ -1475,6 +1478,8 @@ fun ProjectEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Lon
                 bonus = if (goal.bonus > 0) goal.bonus.toString() else ""
                 deadline = goal.deadline?.toEpochDay()
                 finishByMinute = goal.finishBy?.toMinuteOfDay()
+                remind = goal.reminder?.onTime != false
+                remindAtMinute = goal.reminder?.at?.toMinuteOfDay()
                 allowance = goal.allowed.toString()
                 isPrivate = goal.private
                 celebration = goal.celebration
@@ -1521,6 +1526,8 @@ fun ProjectEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Lon
                     color = color,
                     effort = effort?.let { Effort.valueOf(it) },
                     skill = skill?.let { io.github.randomtools3377.checklist.core.SkillArea.valueOf(it) },
+                    // Nothing kept while it is as it starts: on, when the day starts.
+                    reminder = if (remind && remindAtMinute == null) null else Reminder(onTime = remind, at = remindAtMinute?.toTime()),
                 ),
                 onDone = {
                     baseline = snapshot()
@@ -1623,6 +1630,23 @@ fun ProjectEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Lon
                 "field:finish-by",
                 emptyText = "Your default from Settings",
             )
+            SwitchRow(
+                title = "Remind me of the deadline",
+                on = remind,
+                tag = "field:deadline-remind",
+                hint = "The day before and on the day, until the project is finished.",
+            ) { remind = it }
+            if (remind) {
+                val dayStart = remember { vm.settings.value.dayStart }
+                TimeSetting(
+                    "Remind me at",
+                    remindAtMinute?.toTime(),
+                    { remindAtMinute = it?.toMinuteOfDay() },
+                    "field:deadline-remind-at",
+                    emptyText = dayStart?.let { "When your day starts, ${timeText(it)}" } ?: "Pick a time, or set “My day starts at” in Settings",
+                    pickFrom = dayStart ?: LocalTime(9, 0),
+                )
+            }
         }
         Text(
             "With a deadline, Today shows how many steps a day it takes to finish in time. Missing it counts as a miss.",

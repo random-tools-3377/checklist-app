@@ -14,6 +14,7 @@ import io.github.randomtools3377.checklist.data.LOCK_PRIVATE
 import io.github.randomtools3377.checklist.data.SETTING_DAY_END_HOUR
 import io.github.randomtools3377.checklist.data.SETTING_DEFAULT_FINISH
 import io.github.randomtools3377.checklist.data.SharedParts
+import io.github.randomtools3377.checklist.data.deadlineReminders
 import io.github.randomtools3377.checklist.data.eveningChecks
 import io.github.randomtools3377.checklist.data.nowLocal
 import io.github.randomtools3377.checklist.data.nowMillis
@@ -123,7 +124,9 @@ internal object IosReminders {
         val evenings = eveningChecks(dao, from, to)
         // Every day's first reminders before "keep reminding" repeats, so one day's repeats
         // don't take the places of the next days' reminders.
-        val waiting = Alerts.keep(stillToDo, MOST - evenings.size)
+        // A project's deadline, the day before and on the day, while it isn't finished.
+        val deadlines = deadlineReminders(dao, from, to).take((MOST - evenings.size).coerceAtLeast(0))
+        val waiting = Alerts.keep(stillToDo, (MOST - evenings.size - deadlines.size).coerceAtLeast(0))
 
         center.removeAllPendingNotificationRequests()
         for (alert in waiting) {
@@ -150,6 +153,18 @@ internal object IosReminders {
                 "evening-${evening.at}",
                 content,
                 UNCalendarNotificationTrigger.triggerWithDateMatchingComponents(components(evening.at), repeats = false),
+            )
+            center.addNotificationRequest(request, withCompletionHandler = null)
+        }
+        for (deadline in deadlines) {
+            val content = UNMutableNotificationContent()
+            content.setTitle(deadline.title)
+            content.setBody(deadline.text)
+            content.setSound(UNNotificationSound.defaultSound)
+            val request = UNNotificationRequest.requestWithIdentifier(
+                "deadline-${deadline.goalId}-${deadline.at}",
+                content,
+                UNCalendarNotificationTrigger.triggerWithDateMatchingComponents(components(deadline.at), repeats = false),
             )
             center.addNotificationRequest(request, withCompletionHandler = null)
         }
@@ -181,6 +196,7 @@ internal object IosReminders {
         AlertKind.FOCUS_DONE -> "Time's up"
         AlertKind.USUAL -> "About now, as usual"
         AlertKind.NEXT -> "Next up"
+        AlertKind.DEADLINE -> "Due soon"
     }
 
     private fun components(at: LocalDateTime): NSDateComponents = NSDateComponents().apply {

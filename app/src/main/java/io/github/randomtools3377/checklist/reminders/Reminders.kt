@@ -20,6 +20,7 @@ import io.github.randomtools3377.checklist.core.Alert
 import io.github.randomtools3377.checklist.core.AlertKind
 import io.github.randomtools3377.checklist.core.Alerts
 import io.github.randomtools3377.checklist.core.Days
+import io.github.randomtools3377.checklist.core.DeadlineReminder
 import io.github.randomtools3377.checklist.core.EveningList
 import io.github.randomtools3377.checklist.core.Chains
 import io.github.randomtools3377.checklist.core.UsualTimes
@@ -43,6 +44,8 @@ import io.github.randomtools3377.checklist.data.SETTING_DAY_END_HOUR
 import io.github.randomtools3377.checklist.data.SETTING_DAY_START
 import io.github.randomtools3377.checklist.data.SETTING_DEFAULT_FINISH
 import io.github.randomtools3377.checklist.data.SETTING_MORNING_PLAN
+import io.github.randomtools3377.checklist.data.deadlineReminders
+import io.github.randomtools3377.checklist.data.deadlineTimes
 import io.github.randomtools3377.checklist.data.eveningChecks
 import io.github.randomtools3377.checklist.data.eveningList
 import io.github.randomtools3377.checklist.data.eveningTimes
@@ -66,10 +69,15 @@ import kotlinx.datetime.toLocalDateTime
  * Notifications at set times, scheduled on the phone like a calendar's. One alarm is kept: at the
  * next notification, or at the end of the user's day (so the widget turns over), whichever is
  * first. When it goes off, the notifications due are shown and the next alarm is set. The evening
- * check, when it is on, is one of them: one notification listing what is still open today.
+ * check, when it is on, is one of them: one notification listing what is still open today. So is
+ * a project's deadline reminder. The morning plan and the weekly summary have channels of their own.
  */
 object Reminders {
     const val CHANNEL = "reminders"
+
+    /** The morning plan and the weekly summary each have their own, to silence or change in the phone's settings. */
+    const val CHANNEL_MORNING = "morning_plan"
+    const val CHANNEL_WEEKLY = "weekly_summary"
     private const val PREFS = "reminders"
     private const val LAST_FIRED = "last_fired"
     private const val LOOK_AHEAD_DAYS = 2
@@ -83,6 +91,17 @@ object Reminders {
             .setDescription("Goals at their set times")
             .build()
         NotificationManagerCompat.from(context).createNotificationChannel(channel)
+        // The two that aren't about one goal arrive without popping over the screen.
+        val morning = NotificationChannelCompat.Builder(CHANNEL_MORNING, NotificationManagerCompat.IMPORTANCE_DEFAULT)
+            .setName("Morning plan")
+            .setDescription("Today's list and the pace, when your day starts")
+            .build()
+        NotificationManagerCompat.from(context).createNotificationChannel(morning)
+        val weekly = NotificationChannelCompat.Builder(CHANNEL_WEEKLY, NotificationManagerCompat.IMPORTANCE_DEFAULT)
+            .setName("Weekly summary")
+            .setDescription("How your week went, on Sunday")
+            .build()
+        NotificationManagerCompat.from(context).createNotificationChannel(weekly)
     }
 
     fun canNotify(context: Context): Boolean =
@@ -114,8 +133,10 @@ object Reminders {
         val from = shownUntil.coerceIn(nowMillis, nowMillis + 30_000).local()
         val to = Pace.plusMinutes(now, LOOK_AHEAD_DAYS * 24 * 60L)
         val defaultFinish = dao.setting(SETTING_DEFAULT_FINISH)?.toIntOrNull()?.toTime()
-        val nextAlert = (Alerts.between(goals, from, to, dayEnd, defaultFinish, usualTimes(dao)) + mornings(dao, from, to, dayEnd) + weeklies(dao, from, to, dayEnd))
-            .minOfOrNull { it.at }
+        val nextAlert = (
+            Alerts.between(goals, from, to, dayEnd, defaultFinish, usualTimes(dao)) + mornings(dao, from, to, dayEnd) +
+                weeklies(dao, from, to, dayEnd) + deadlineTimes(dao, from, to)
+            ).minOfOrNull { it.at }
         // The evening check, when it is on.
         val nextEvening = eveningTimes(dao, from, to).minOfOrNull { it.at }
         val dayTurns = LocalDateTime(Days.dayOf(now, dayEnd).plusDays(1), LocalTime(dayEnd, 0))
@@ -170,6 +191,8 @@ object Reminders {
         weeklies(dao, since.local(), until.local(), dayEnd).lastOrNull { it.at.millis() > since }?.let { showWeekly(context, it.day) }
         // The evening check: what is still open today. Nothing on a day when everything is done.
         eveningChecks(dao, since.local(), until.local()).lastOrNull { it.at.millis() > since }?.let { showEvening(context, it.list, dayEnd) }
+        // A project's deadline, the day before and on the day, while it isn't finished.
+        deadlineReminders(dao, since.local(), until.local()).filter { it.at.millis() > since }.forEach { showDeadline(context, it, dayEnd) }
         // A focus timer whose time is up (not one ending in the next few seconds): its goal is
         // ticked here, unless the app on screen took the timer first and ticked it there.
         Focus.takeEnded(context, nowMillis)?.let { focus ->
@@ -272,7 +295,7 @@ object Reminders {
             Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
-        val notification = NotificationCompat.Builder(context, CHANNEL)
+        val notification = NotificationCompat.Builder(context, CHANNEL_MORNING)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(title)
             .setContentText(text)
@@ -329,7 +352,7 @@ object Reminders {
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
-        val notification = NotificationCompat.Builder(context, CHANNEL)
+        val notification = NotificationCompat.Builder(context, CHANNEL_WEEKLY)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle("Your week")
             .setContentText(text)
@@ -339,6 +362,41 @@ object Reminders {
             .build()
         try {
             NotificationManagerCompat.from(context).notify(WEEKLY_ID, notification)
+        } catch (e: SecurityException) {
+            // Notifications were turned off in the meantime.
+        }
+    }
+
+    /**
+     * A project's deadline is tomorrow or today: its name, when it is due and how many steps are
+     * left (a private one behind the lock says only when). Tapping it opens Today, where the
+     * project is. It goes when its day ends at [dayEnd].
+     */
+    private fun showDeadline(context: Context, reminder: DeadlineReminder, dayEnd: Int) {
+        if (!canNotify(context)) return
+        val endsIn = LocalDateTime(reminder.day.plusDays(1), LocalTime(dayEnd, 0)).millis() - System.currentTimeMillis()
+        if (endsIn <= 0) return
+        val id = notificationId(reminder.goalId)
+        val open = PendingIntent.getActivity(
+            context,
+            id,
+            Intent(context, MainActivity::class.java)
+                .putExtra(MainActivity.EXTRA_OPEN, "today")
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+        val notification = NotificationCompat.Builder(context, CHANNEL)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle(reminder.title)
+            .setContentText(reminder.text)
+            .setContentIntent(open)
+            .setAutoCancel(true)
+            .setTimeoutAfter(endsIn)
+            .setCategory(NotificationCompat.CATEGORY_REMINDER)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .build()
+        try {
+            NotificationManagerCompat.from(context).notify(id, notification)
         } catch (e: SecurityException) {
             // Notifications were turned off in the meantime.
         }
@@ -509,6 +567,7 @@ object Reminders {
             AlertKind.FOCUS_DONE -> "Time's up"
             AlertKind.USUAL -> "About now, as usual"
             AlertKind.NEXT -> "Next up"
+            AlertKind.DEADLINE -> "Due soon"
         }
         val details = buildList {
             add(whenText)

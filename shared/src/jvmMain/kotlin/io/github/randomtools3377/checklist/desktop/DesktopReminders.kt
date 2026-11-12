@@ -11,6 +11,7 @@ import io.github.randomtools3377.checklist.data.LOCK_PRIVATE
 import io.github.randomtools3377.checklist.data.SETTING_DAY_END_HOUR
 import io.github.randomtools3377.checklist.data.SETTING_DEFAULT_FINISH
 import io.github.randomtools3377.checklist.data.SharedParts
+import io.github.randomtools3377.checklist.data.deadlineReminders
 import io.github.randomtools3377.checklist.data.eveningChecks
 import io.github.randomtools3377.checklist.data.nowLocal
 import io.github.randomtools3377.checklist.data.nowMillis
@@ -41,7 +42,7 @@ data class DueReminder(val goalId: Long, val title: String, val text: String)
  * time, so once a minute the app looks for the reminders due since it last looked, worked out
  * as the iPhone works out the ones it hands over (leaving out what is done or skipped), and shows
  * them from its icon in the notification area. The evening check, when it is on, shows the same
- * way at its time. Nothing reminds while the app is closed, and nothing shows where the computer
+ * way at its time, and so does a project's deadline reminder. Nothing reminds while the app is closed, and nothing shows where the computer
  * has no notification area.
  */
 class DesktopReminders(private val phone: DesktopPhone) {
@@ -161,7 +162,9 @@ class DesktopReminders(private val phone: DesktopPhone) {
                 emptyMap()
             }
             val alerts = Alerts.between(goals, from, to, dayEnd, defaultFinish, usual).sortedBy { it.at }
-            if (alerts.isEmpty()) return emptyList()
+            // A project's deadline, the day before and on the day, while it isn't finished.
+            val deadlines = deadlineReminders(dao, from, to).map { DueReminder(it.goalId, it.title, it.text) }
+            if (alerts.isEmpty()) return deadlines
             val earliest = alerts.minOf { it.day }.minusDays(366)
             val ticks = dao.habitTicksSince(earliest.toEpochDay()).map { it.toCore() }
             val hidePrivate = dao.setting(LOCK_PRIVATE) == "1"
@@ -176,7 +179,7 @@ class DesktopReminders(private val phone: DesktopPhone) {
                     title = if (hidden) "🔒 A private goal" else "${goal.icon} ${goal.name}",
                     text = if (hidden) Alerts.lockedWords(alert) else words(alert),
                 )
-            }.distinctBy { it.goalId to it.text }
+            }.distinctBy { it.goalId to it.text } + deadlines
         }
 
         /**
@@ -201,6 +204,7 @@ class DesktopReminders(private val phone: DesktopPhone) {
             AlertKind.FOCUS_DONE -> "Time's up"
             AlertKind.USUAL -> "About now, as usual"
             AlertKind.NEXT -> "Next up"
+            AlertKind.DEADLINE -> "Due soon"
         }
     }
 }
