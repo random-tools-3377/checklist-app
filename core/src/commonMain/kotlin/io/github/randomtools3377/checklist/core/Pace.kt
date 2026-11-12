@@ -145,7 +145,9 @@ object Pace {
                 if (minutes != null) reserved += minutes.toLong() else untimed += 1
             }
             val free = minutesBetween(now, due) - reserved - BusyTime.minutes(busy, now, due)
-            if (free < 0) short = maxOf(short, -free)
+            // Something already late isn't a shortage of time: its own card says it is late. Only
+            // what is still to come can fail to fit.
+            if (due >= now && free < 0) short = maxOf(short, -free)
             if (untimed > 0) best = minOf(best, free.toDouble() / untimed)
         }
         val each = if (untimed == 0) null else best.coerceAtLeast(0.0).toInt()

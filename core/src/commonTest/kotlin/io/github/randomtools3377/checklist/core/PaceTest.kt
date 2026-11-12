@@ -47,6 +47,14 @@ class PaceTest {
     }
 
     @Test
+    fun aGoalAlreadyLateIsNotAShortageOfTime() {
+        // A 5-minute goal set for 7:45 am, looked at at 2 pm, with hours left before the finish time.
+        val pace = Pace.today(twoPm, day, listOf(row(1, minutes = 5, at = LocalTime(7, 45)), row(2, minutes = 10)), tenPm)!!
+        assertEquals(0, pace.shortBy)
+        assertEquals(15, pace.reservedMinutes)
+    }
+
+    @Test
     fun notEnoughTimeIsReported() {
         val pace = Pace.today(twoPm, day, listOf(row(1, minutes = 600)), tenPm)!!
         assertEquals(120, pace.shortBy)
