@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Publishes the signed APKs as one GitHub Release for the version in gradle.properties, with the
 # notes in release-notes/<version>.md: the checklist app and Checklist AI, always together and
-# always the same version. Does nothing if that version already has a Release, so a push that
-# doesn't bump the version publishes nothing.
+# always the same version. If that version already has a Release, a push that doesn't bump the
+# version publishes nothing new; it only adds the iPhone or Windows app if the Release went out
+# without it (its build had failed that time).
 # The iPhone app's unsigned .ipa and the Windows app's .msi go in too when they were built (a
 # missing one doesn't stop the Android release).
 # Usage: publish-release.sh checklist.apk checklist-ai.apk [checklist.ipa] [Checklist-<version>.msi]
@@ -17,13 +18,14 @@ version="$(sed -n 's/^appVersionName=//p' gradle.properties | tr -d '[:space:]')
 tag="v$version"
 notes="release-notes/$version.md"
 
+exists=""
 if gh release view "$tag" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
   echo "Release $tag already exists. Raise appVersionName in gradle.properties to publish a new one."
-  exit 0
+  exists=1
 fi
 # Never publish an older version after a newer one, so the newest stays on top of the list.
 newest="$(gh release list --repo "$GITHUB_REPOSITORY" --limit 100 --json tagName --jq '.[].tagName' | sed -n 's/^v//p' | sort -V | tail -n 1)"
-if [ -n "$newest" ] && [ "$(printf '%s\n%s\n' "$newest" "$version" | sort -V | tail -n 1)" != "$version" ]; then
+if [ -z "$exists" ] && [ -n "$newest" ] && [ "$(printf '%s\n%s\n' "$newest" "$version" | sort -V | tail -n 1)" != "$version" ]; then
   echo "Not publishing $version: $newest is already out."
   exit 0
 fi
@@ -94,6 +96,19 @@ if [ -n "$msi" ] && [ -s "$msi" ]; then
   assets+=("$msi_asset")
 else
   echo "::warning::No Windows app this time."
+fi
+
+if [ -n "$exists" ]; then
+  # Only what is missing is added; nothing already published is replaced.
+  have="$(gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name')"
+  for extra in "${ipa_asset:-}" "${msi_asset:-}"; do
+    [ -n "$extra" ] || continue
+    if ! grep -qxF "$(basename "$extra")" <<< "$have"; then
+      gh release upload "$tag" "$extra" --repo "$GITHUB_REPOSITORY"
+      echo "Added $(basename "$extra") to $tag"
+    fi
+  done
+  exit 0
 fi
 
 gh release create "$tag" "${assets[@]}" \
