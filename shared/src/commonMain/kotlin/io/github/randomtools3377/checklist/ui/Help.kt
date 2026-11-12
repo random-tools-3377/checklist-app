@@ -108,7 +108,7 @@ internal data class GuideDevice(
     val folder: Boolean = true,
     val widgets: Boolean = true,
     val ai: Boolean = true,
-    /** A computer, where reminders come only while the app is open. */
+    /** A computer, where reminders come while the app is running, also with its window closed. */
     val computer: Boolean = false,
     /** The notifications this device can't give yet, like "Morning plan, weekly summary and snooze". */
     val missing: String? = null,
@@ -166,7 +166,7 @@ private fun reminderSteps(device: GuideDevice): List<String> {
             add("\"Morning plan\" comes when your day starts, with today's list and the pace. \"Weekly summary\" comes on Sunday at 6 pm. Turn each on or off in Settings → Notifications.")
         }
         if (device.buttons) add("If reminders come late, tap \"Allow exact times\" in Settings → Notifications, when it shows there.")
-        if (device.computer) add("On a computer, reminders come only while the app is open.")
+        if (device.computer) add("On a computer, reminders come while Checklist is running, also with the window closed. Quit from the icon by the clock.")
         device.missing?.let { add(if (" and " in it) "$it aren't on this device yet." else "$it isn't on this device yet.") }
         addAll(rest)
     }

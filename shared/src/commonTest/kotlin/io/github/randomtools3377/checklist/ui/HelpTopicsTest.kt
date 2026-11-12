@@ -122,8 +122,8 @@ class HelpTopicsTest {
         assertTrue("no buttons yet" in onIphone)
         assertTrue("Morning plan, weekly summary and snooze aren't on this device yet." in onIphone)
         assertFalse("Allow exact times" in onIphone || "\"Snooze\"" in onIphone)
-        assertTrue("only while the app is open" in HelpTopic.REMINDERS.text(computer))
-        assertFalse("only while the app is open" in onIphone)
+        assertTrue("while Checklist is running" in HelpTopic.REMINDERS.text(computer))
+        assertFalse("while Checklist is running" in onIphone)
     }
 
     @Test

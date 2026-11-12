@@ -127,6 +127,7 @@ on one and import the file on the other. Reminders show only while the app is op
 - 0.67.0: the pace card no longer takes a late goal for a shortage of time; a money value on any reward, paying from savings, last month's leftover into savings, and a Used list.
 - 0.67.1: the Money game says its daily figure is a line to stay under, and takes the user's own daily amount.
 - 0.67.2: the calendar widget is 4 by 4 when added, with switches for what it shows.
+- 0.68.0: quick Spent, bill reminders, pay from a date; a reward to save for on Today; a passphrase for backups and Erase everything; Windows backup folder and reminders with the window closed; at most goals.
 
 Every step in CLAUDE.md's build order is built. The iPhone app is installed with SideStore or
 AltStore (see the 0.55.0 release notes).

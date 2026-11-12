@@ -23,6 +23,7 @@ enum class HelpTopic(val title: String, val intro: String, val steps: List<Strin
             "A to-do with a date opens from its name or \"Change date\". In the grid, hold a tile for its card with Skip, Move and Focus; tap a done tile to open its card.",
             "Today, the Today widget, the quick settings tile and the morning plan all show the same goal first.",
             "\"History\" on a goal's card opens its page. Tap \"Today: 😐\" to change today's mood, and \"Check in now\" takes \"Not today\" back.",
+            "Under \"Stay under\", tap \"+1\" each time. A day at or under the limit is done and pays when the day ends, or straight away with \"That's all for today\". Going over is a miss straight away; \"Take back the last one\" undoes a slip of the finger.",
         ),
     ),
     PLAN(
@@ -49,6 +50,7 @@ enum class HelpTopic(val title: String, val intro: String, val steps: List<Strin
             "Tap \"Select\" to choose several goals, then change their category or difficulty, or remove them together.",
             "At the bottom, \"Done list\" holds finished projects and done to-dos, and \"removed goals\" lets you bring one back.",
             "Tap a goal to open its own page: a calendar of its done, skipped and missed days, its runs, how often it got done, and its reasons and notes. \"Edit\" at the top opens the editor.",
+            "With \"At most goals\" on in Settings → Features, a habit can be something to stay under, like no more than 2 coffees: turn on \"At most (stay under a limit)\" in its editor and type the limit.",
         ),
     ),
     SHOP(
@@ -62,6 +64,7 @@ enum class HelpTopic(val title: String, val intro: String, val steps: List<Strin
             "Each price says how long it takes you to earn, like \"≈ 4 days of your usual\".",
             "If your balance goes below zero, the shop opens again once you're back above it.",
             "Tap a reward to change it, or \"Reorder\" to change the order.",
+            "Tap the star on a reward to save for it. Today's balance card then shows how far along you are, and \"about N more days\" says how long the rest takes at your usual pace.",
         ),
     ),
     REVIEW(
@@ -92,6 +95,7 @@ enum class HelpTopic(val title: String, val intro: String, val steps: List<Strin
             "Add bills once under \"Bills coming up\", and saving goals under \"Saving for\", with \"Put in\" and \"Take out\".",
             "Use the arrows to look back at earlier months, or open that month's report.",
             "With the \"Budget game\" extra on, a day within its share of the month's money earns {points}.",
+            "Tap \"+ Spent\" on Today's pay card or on the budget widget, or hold the app icon and tap \"Spent\", to note spending straight away.",
         ),
     ),
     SETTINGS(
@@ -452,6 +456,7 @@ enum class HelpTopic(val title: String, val intro: String, val steps: List<Strin
             "A night shift that stops before it starts ends the next morning.",
             "To change just one day, use \"Change today\" or \"Change a day…\" on the Budget tab.",
             "Tap \"Save\" when you're done.",
+            "When you change your pay, tax or hours, the app asks from when: Today, The 1st of this month, or From the start. Days before keep the pay they had.",
         ),
     ),
     WORK_DAY(
@@ -475,6 +480,7 @@ enum class HelpTopic(val title: String, val intro: String, val steps: List<Strin
             "Tap \"Save\". It shows in the month's list and in its category.",
             "Tap any entry later to change it, or \"Remove this\" to take it off.",
             "Shop rewards with a money value are added by themselves when bought; returning one takes it off.",
+            "Turn on \"From savings\" and pick a saving goal that holds enough: the money comes out of the goal and isn't counted in the month's spending, limits or the money game.",
         ),
     ),
     CATEGORIES(
@@ -497,6 +503,8 @@ enum class HelpTopic(val title: String, val intro: String, val steps: List<Strin
             "Each bill shows how often it comes and when it's next due.",
             "The top line says about how much they all come to in a month.",
             "The Budget tab lists the bills due in the next 30 days.",
+            "Turn on \"Money in\" for regular income like a pension; it is counted as money in on its day, by itself.",
+            "Pick a \"Reminder\" to be told on the day, the day before, or 3 or 7 days before. Behind the privacy lock it only says \"A bill is due\".",
         ),
     ),
     BILL_EDITOR(
@@ -619,6 +627,7 @@ enum class HelpTopic(val title: String, val intro: String, val steps: List<Strin
             "Tap \"Unlock\" and use your fingerprint, face, PIN or pattern. It stays unlocked until you leave the app.",
             "While anything is locked, turning a lock off or exporting asks you to unlock first.",
             "While locked, private goals are left off the widgets, and their reminders don't name them.",
+            "Backup files hold everything, including what is behind the lock. Set a passphrase in Backup to protect them.",
         ),
     ),
     BACKUP(
@@ -633,6 +642,9 @@ enum class HelpTopic(val title: String, val intro: String, val steps: List<Strin
             "Today reminds you when your last backup is over a week old: tap \"Back up\" or \"Later\".",
             "\"Export history as a spreadsheet\" saves your {points} history for a spreadsheet app.",
             "\"Export the goal record as a spreadsheet\" saves each goal each day: done, skipped or missed, with the reason.",
+            "\"Import a backup\" shows what's in the file and what it replaces. Tap \"Export first\" to keep what is here.",
+            "\"Protect backup files with a passphrase\" encrypts exports and automatic backups. A forgotten passphrase can't be recovered.",
+            "\"Erase everything and start fresh\" removes everything from this device. Backup files you saved stay.",
         ),
     ),
     FOCUS(

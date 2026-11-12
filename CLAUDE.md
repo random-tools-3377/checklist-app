@@ -370,9 +370,9 @@ The app has no network access unless the owner decides otherwise for this app.
 - **Details (default):** the same screens in a window (Compose Multiplatform desktop, the
   `:desktop` module, with the computer's side in `shared/src/jvmMain` as DesktopPhone). Data is
   kept in `%LOCALAPPDATA%\Checklist`, never the roaming folder, so it isn't copied to a server.
-  Reminders show from the notification area only while the app is open; there are no widgets,
-  phone calendar, AI, voice, icon choice, automatic backup folder, morning plan, weekly summary
-  or snooze yet (Settings says "Not on this device yet"); the privacy lock opens with a
+  Reminders show from the notification area while the app is running, also with its window
+  closed (since 0.68.0); there are no widgets, phone calendar, AI, voice, icon choice, morning
+  plan, weekly summary or snooze yet (Settings says "Not on this device yet"); the privacy lock opens with a
   note, as on a phone without a screen lock. The installer is an unsigned per-user `.msi` with its
   own Java; Windows warns about it the first time. CI builds it on a Windows runner, checks the
   desktop code has no networking, and opens the app to check it keeps running before a Release
@@ -914,6 +914,24 @@ Build order **(default)**, each step a Release the owner can try:
       goals in its lists (all on to start). **Details (default):** "everyday goals" are those
       due every single day; a day shows two things before "+N" with the count off; a picked day
       lists only what is on that day.
+    - **0.68.0 settled these details (default):** a pay change asks from when (today, the 1st
+      of this month, or from the start) and each day keeps the pay in force on it; the pay
+      setting holds dated plans. A bill can remind on the day or 1, 3 or 7 days before, and can
+      be "Money in", counted as received by itself. "+ Spent" sits on Today's pay card, the
+      budget widget and the app icon; spending can come "From savings". The database is at
+      version 25 and the backup file at format 29. One reward can be starred to save for: Today's
+      balance card and the morning plan show it, hidden with the shop lock; every "days of
+      earning" figure comes from one calculation. Importing offers "Export first", says what is
+      replaced, and on Android saves a "Before import" copy in the backup folder. Backup files
+      can be encrypted with a passphrase (AES-GCM, key from PBKDF2), off unless turned on; a
+      forgotten passphrase cannot be recovered. "Erase everything and start fresh" empties every
+      table and setting and the picked files, never the saved backup files. On Windows, an
+      automatic backup folder as on Android; closing the window keeps Checklist running by the
+      clock for reminders (a setting, on to start), with an optional start at sign-in through
+      the user's Startup folder. "At most" goals are an extra: each thing added counts toward a
+      limit, a day at or under it is done and pays when it ends (or at "That's all for today"),
+      going over is a miss at once; what is added is never taken as progress anywhere else;
+      limits are kept in a setting.
     - Not chosen: a note when a money-priced reward's price moves, celebrations for game wins,
       and carrying money over into the next month.
     - **The 0.62.0 fixes settled these details (default):** a goal counts in streaks, records,
