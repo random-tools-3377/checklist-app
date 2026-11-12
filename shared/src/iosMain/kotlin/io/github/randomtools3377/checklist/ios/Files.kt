@@ -40,7 +40,7 @@ internal fun removeFile(path: String) {
     NSFileManager.defaultManager.removeItemAtPath(path, null)
 }
 
-/** The GIFs the user picked for celebrations, in Documents/celebrations. */
+/** The GIFs and sounds the user picked for celebrations, in Documents/celebrations. */
 internal class IosGifs : GifStore {
     private val folder = documents() + "/celebrations"
 
@@ -48,7 +48,7 @@ internal class IosGifs : GifStore {
         NSFileManager.defaultManager.createDirectoryAtPath(folder, true, null, null)
     }
 
-    private fun path(name: String): String? = if (Celebration.isSafeName(name)) "$folder/$name" else null
+    private fun path(name: String): String? = if (Celebration.isStoredName(name)) "$folder/$name" else null
 
     override fun read(name: String): ByteArray? = path(name)?.let(::readFile)
 

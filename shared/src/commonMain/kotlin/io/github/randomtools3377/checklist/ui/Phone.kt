@@ -119,6 +119,13 @@ interface Phone {
     /** Copies a picked GIF in for a goal's celebration; its file name, or why not. */
     suspend fun addGif(file: PickedFile): Result<String>
 
+    /**
+     * Copies a picked sound file in for celebrations; its file name, or why not: it is over
+     * 5 MB, or this device can't play it.
+     */
+    suspend fun addSound(file: PickedFile): Result<String> =
+        Result.failure(Exception(io.github.randomtools3377.checklist.core.CelebrationSounds.CANT_PLAY))
+
     // Backups: the reminder, and the automatic backup to a folder the user picks.
 
     fun lastBackup(): Long?
@@ -150,6 +157,15 @@ interface Phone {
 
     /** Whether the device can buzz, for celebrations (a computer can't). */
     val canBuzz: Boolean get() = true
+
+    /** Whether the device asks for less motion, where that is known; the glow round the edges is left out then. */
+    fun reducedMotion(): Boolean = false
+
+    /**
+     * Whether a notification can light up the screen and set off the phone's own edge lighting
+     * (Android, where the phone has it): for reminders, and for a tick made away from the app.
+     */
+    val canLightEdges: Boolean get() = false
 
     // Small things kept on this phone only, not in the backup (like the emoji picked lately).
 

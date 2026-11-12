@@ -41,6 +41,7 @@ class ChecklistApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         Reminders.createChannel(this)
+        io.github.randomtools3377.checklist.reminders.EdgeLights.createChannels(this)
     }
 }
 

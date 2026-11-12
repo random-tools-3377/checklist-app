@@ -56,6 +56,7 @@ class DoneReceiver : BroadcastReceiver() {
         if (goalId >= 0 && !forPastDay(context, intent)) {
             val result = (context.applicationContext as ChecklistApplication).container.book.tickHabit(goalId)
             if (result is io.github.randomtools3377.checklist.core.TickResult.Ticked && result.finished) Reminders.afterDone(context, goalId)
+            runCatching { EdgeLights.celebrate(context, goalId, result) }
         }
         val notification = intent.getIntExtra(EXTRA_NOTIFICATION, 0)
         if (notification != Reminders.EVENING_ID) NotificationManagerCompat.from(context).cancel(notification)
@@ -116,6 +117,7 @@ class SkipReceiver : BroadcastReceiver() {
                 Alert(goalId, container.book.today(), io.github.randomtools3377.checklist.data.nowLocal(), AlertKind.REMINDER),
                 count = 0, hidden = goal.private && dao.setting(LOCK_PRIVATE) == "1", skip = check,
                 dayEnd = parseDayEndHour(dao.setting(SETTING_DAY_END_HOUR)),
+                light = dao.setting(io.github.randomtools3377.checklist.data.SETTING_REMINDER_LIGHT) == "1",
             )
         } else {
             NotificationManagerCompat.from(context).cancel(notification)

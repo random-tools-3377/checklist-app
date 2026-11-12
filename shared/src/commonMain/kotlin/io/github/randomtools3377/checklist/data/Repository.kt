@@ -4,6 +4,7 @@ import io.github.randomtools3377.checklist.core.Amounts
 import io.github.randomtools3377.checklist.core.Backup
 import io.github.randomtools3377.checklist.core.Categories
 import io.github.randomtools3377.checklist.core.Celebration
+import io.github.randomtools3377.checklist.core.CelebrationSounds
 import io.github.randomtools3377.checklist.core.Goal
 import io.github.randomtools3377.checklist.core.Moves
 import io.github.randomtools3377.checklist.core.Retimes
@@ -89,6 +90,14 @@ const val SETTING_CELEBRATE_SOUND = "celebrate_sound"
 const val SETTING_CELEBRATE_BUZZ = "celebrate_buzz"
 const val SETTING_CONFETTI = "confetti"
 const val SETTING_DEFAULT_GIF = "default_gif"
+/**
+ * "0" turns off the glow round the screen's edges at a celebration; "1" also lights the edges for
+ * a tick made away from the app (Android); and "1" lights up the screen for reminders (Android).
+ * The user's own celebration sounds are in CelebrationSounds' settings.
+ */
+const val SETTING_CELEBRATE_GLOW = "celebrate_glow"
+const val SETTING_CELEBRATE_GLOW_AWAY = "celebrate_glow_away"
+const val SETTING_REMINDER_LIGHT = "reminder_light"
 /** The app's home-screen icon (see AppIcon), and the widgets' style (see WidgetStyle). */
 const val SETTING_APP_ICON = "app_icon"
 /** The running Start and Stop timing, as "goalId|startedAt" in epoch milliseconds. */
@@ -157,6 +166,8 @@ data class HabitDraft(
     val allowancePer: Period? = null,
     val private: Boolean = false,
     val celebration: String? = null,
+    /** Its own celebration sound, already copied in (see CelebrationSounds); null for the usual one. */
+    val sound: String? = null,
     /** A time for each one, for a habit done several times a day. */
     val times: List<LocalTime> = emptyList(),
     /** A routine's checklist. Empty for a plain habit. */
@@ -194,6 +205,8 @@ data class ProjectDraft(
     val allowance: Int? = null,
     val private: Boolean = false,
     val celebration: String? = null,
+    /** Its own celebration sound, already copied in (see CelebrationSounds); null for the usual one. */
+    val sound: String? = null,
     /** As typed; tidied on saving (see Categories). */
     val category: String? = null,
     val color: Int? = null,
@@ -265,9 +278,29 @@ interface PhotoStore {
 class Repository(private val db: AppDatabase, private val celebrations: GifStore, private val background: PhotoStore? = null) {
     private val dao = db.dao()
 
-    /** Deletes picked GIFs that no goal uses any more. */
+    /** Deletes picked GIFs that no goal uses any more, and picked sounds nothing uses any more. */
     private suspend fun pruneCelebrations() {
-        celebrations.keepOnly(dao.allGoals().mapNotNull { Celebration.ownFile(it.celebration) }.toSet())
+        val goals = dao.allGoals()
+        celebrations.keepOnly(goals.mapNotNull { Celebration.ownFile(it.celebration) }.toSet() + soundsUsed(goals.map { it.id }.toSet()))
+    }
+
+    /** The picked sound files the settings still use, for the goals in [goalIds]. */
+    private suspend fun soundsUsed(goalIds: Set<Long>): Set<String> =
+        CelebrationSounds.used(dao.allSettings().associate { it.name to it.value }, goalIds)
+
+    /** The user's own sound for one kind of celebration, already copied in; null puts the app's sound back. */
+    suspend fun setCelebrationSound(kind: CelebrationSounds.Kind, file: String?) {
+        dao.putSetting(SettingEntity(kind.setting, file?.takeIf { CelebrationSounds.isSafeName(it) }.orEmpty()))
+        pruneCelebrations()
+    }
+
+    /** A goal's own celebration sound, if it has one. */
+    suspend fun goalSound(goalId: Long): String? = CelebrationSounds.goals(dao.setting(CelebrationSounds.GOALS_SETTING))[goalId]
+
+    private suspend fun setGoalSound(goalId: Long, file: String?) {
+        val now = dao.setting(CelebrationSounds.GOALS_SETTING)
+        val next = CelebrationSounds.withGoal(now, goalId, file)
+        if (next != now.orEmpty()) dao.putSetting(SettingEntity(CelebrationSounds.GOALS_SETTING, next))
     }
 
     suspend fun goal(id: Long): Goal? = dao.goal(id)?.toCore()
@@ -338,6 +371,7 @@ class Repository(private val db: AppDatabase, private val celebrations: GifStore
         }
         // A routine's checklist: removed items are archived, so their past ticks still make sense.
         if (draft.items.isNotEmpty() || dao.activeSteps(goalId).isNotEmpty()) saveSteps(goalId, draft.items)
+        setGoalSound(goalId, draft.sound)
         pruneCelebrations()
     }
 
@@ -428,6 +462,7 @@ class Repository(private val db: AppDatabase, private val celebrations: GifStore
                 dao.updateStep(old.copy(name = step.name, points = step.points, position = position))
             }
         }
+        setGoalSound(goalId, draft.sound)
         pruneCelebrations()
     }
 
@@ -649,6 +684,8 @@ class Repository(private val db: AppDatabase, private val celebrations: GifStore
             ),
         )
         dao.activeSteps(id).forEach { step -> dao.insertStep(step.copy(id = 0, goalId = copyId)) }
+        // The copy celebrates like the one it was made from, its own sound included.
+        goalSound(id)?.let { setGoalSound(copyId, it) }
         copyId
     }
 
@@ -952,17 +989,20 @@ class Repository(private val db: AppDatabase, private val celebrations: GifStore
             )
         }
         // The GIFs the user picked go in the file too, so a restore brings them back.
-        val files = backup.goals.mapNotNull { Celebration.ownFile(it.celebration) }.toSet()
+        // So do the sounds the user picked for celebrations, in the same part of the file.
+        val sounds = CelebrationSounds.used(backup.settings, backup.goals.map { it.id }.toSet())
+        val files = (backup.goals.mapNotNull { Celebration.ownFile(it.celebration) }.toSet() + sounds)
             .mapNotNull { name -> celebrations.read(name)?.let { name to Base64.Default.encode(it) } }
             .toMap()
         val photo = background?.read()?.let { Base64.Default.encode(it) }
         return Backup.encode(backup.copy(files = files, background = photo))
     }
 
-    /** Replaces everything in the app with [backup]. All or nothing, then the picked GIFs. */
+    /** Replaces everything in the app with [backup]. All or nothing, then the picked GIFs and sounds. */
     suspend fun restore(backup: Backup) {
         restoreData(backup)
-        val used = backup.goals.mapNotNull { Celebration.ownFile(it.celebration) }.toSet()
+        val used = backup.goals.mapNotNull { Celebration.ownFile(it.celebration) }.toSet() +
+            CelebrationSounds.used(backup.settings, backup.goals.map { it.id }.toSet())
         celebrations.keepOnly(emptySet())
         for ((name, data) in backup.files) {
             if (name !in used) continue
@@ -971,6 +1011,7 @@ class Repository(private val db: AppDatabase, private val celebrations: GifStore
             } catch (e: IllegalArgumentException) {
                 continue
             }
+            if (CelebrationSounds.isSafeName(name) && bytes.size > CelebrationSounds.MAX_BYTES) continue
             celebrations.write(name, bytes)
         }
         background?.let { photo ->

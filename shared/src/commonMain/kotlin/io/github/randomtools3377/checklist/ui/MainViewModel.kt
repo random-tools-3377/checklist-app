@@ -51,6 +51,7 @@ import io.github.randomtools3377.checklist.data.SETTING_CELEBRATE_SOUND
 import io.github.randomtools3377.checklist.data.SETTING_FONT
 import io.github.randomtools3377.checklist.data.SETTING_POINTS_NAME
 import io.github.randomtools3377.checklist.core.Celebration
+import io.github.randomtools3377.checklist.core.CelebrationSounds
 import io.github.randomtools3377.checklist.core.PointsName
 import io.github.randomtools3377.checklist.data.SETTING_FIRST_TAB
 import io.github.randomtools3377.checklist.data.SETTING_HIDDEN_TABS
@@ -671,6 +672,60 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
 
     fun setDefaultGif(gif: String?) {
         viewModelScope.launch { repository.setSetting(SETTING_DEFAULT_GIF, gif.orEmpty()) }
+    }
+
+    /** The glow round the edges and the user's own celebration sounds. */
+    val celebrationExtras: StateFlow<CelebrationExtras> = combine(
+        (
+            listOf(
+                io.github.randomtools3377.checklist.data.SETTING_CELEBRATE_GLOW,
+                io.github.randomtools3377.checklist.data.SETTING_CELEBRATE_GLOW_AWAY,
+                CelebrationSounds.GOALS_SETTING,
+            ) + CelebrationSounds.Kind.entries.map { it.setting }
+            ).map { dao.observeSetting(it) },
+    ) { v ->
+        CelebrationExtras.of(
+            glow = v[0],
+            glowAway = v[1],
+            sounds = CelebrationSounds.Kind.entries.mapIndexed { i, kind -> kind to v[3 + i] }.toMap(),
+            goalSounds = v[2],
+        )
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, CelebrationExtras())
+
+    fun setEdgeGlow(on: Boolean) {
+        viewModelScope.launch { repository.setSetting(io.github.randomtools3377.checklist.data.SETTING_CELEBRATE_GLOW, if (on) "1" else "0") }
+    }
+
+    /** Android: a tick made from a widget or a notification also lights the phone's edges. */
+    fun setEdgeGlowAway(on: Boolean) {
+        viewModelScope.launch { repository.setSetting(io.github.randomtools3377.checklist.data.SETTING_CELEBRATE_GLOW_AWAY, if (on) "1" else "0") }
+    }
+
+    /** The user's own sound for one kind of celebration, already copied in; null puts the app's sound back. */
+    fun setOwnSound(kind: CelebrationSounds.Kind, file: String?) {
+        viewModelScope.launch { repository.setCelebrationSound(kind, file) }
+    }
+
+    /** A goal's own celebration sound, for its editor. */
+    suspend fun goalSound(goalId: Long): String? = repository.goalSound(goalId)
+
+    /** Android: reminders light up the screen, and set off the phone's own edge lighting where it has it. */
+    val reminderLight: StateFlow<Boolean> =
+        dao.observeSetting(io.github.randomtools3377.checklist.data.SETTING_REMINDER_LIGHT).map { it == "1" }.state(false)
+
+    fun setReminderLight(on: Boolean) {
+        viewModelScope.launch { repository.setSetting(io.github.randomtools3377.checklist.data.SETTING_REMINDER_LIGHT, if (on) "1" else "0") }
+    }
+
+    /**
+     * The goal whose tick was just handed back to the screen, for the celebration that follows:
+     * its own sound, and its colour for the glow round the edges.
+     */
+    var celebrated: Goal? = null
+        private set
+
+    private suspend fun celebrating(goalId: Long?) {
+        celebrated = goalId?.let { repository.goal(it) }
     }
 
     /** Changes Today's sections from what is saved, so quick taps each build on the last. */
@@ -1338,6 +1393,7 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
     fun tickHabit(goalId: Long, onResult: (TickResult) -> Unit = {}) {
         viewModelScope.launch {
             val result = book.tickHabit(goalId)
+            celebrating(goalId)
             onResult(result)
             // Lucky ticks: now and then a tick pays extra. Undoing the tick takes the extra back.
             val luck = if (result is TickResult.Ticked && Feature.LUCKY in features.value) {
@@ -1373,6 +1429,7 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
         viewModelScope.launch {
             val result = book.logAmount(goalId, amount, seconds)
             if (seconds != null) repository.setSetting(SETTING_STOPWATCH, "")
+            celebrating(goalId)
             onResult(result)
             offerTickUndo(goalId, result) {
                 book.undoHabitTick(goalId)
@@ -1445,8 +1502,9 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
     fun checkItem(stepId: Long, onResult: (TickResult) -> Unit = {}) {
         viewModelScope.launch {
             val result = book.checkItem(stepId)
-            onResult(result)
             val step = dao.step(stepId)
+            celebrating(step?.goalId)
+            onResult(result)
             if (step != null && result is TickResult.Ticked) {
                 offerUndo("${step.name} ticked") {
                     book.uncheckItem(stepId)
@@ -1465,6 +1523,7 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
     fun finishRoutine(goalId: Long, onResult: (TickResult) -> Unit = {}) {
         viewModelScope.launch {
             val result = book.finishRoutine(goalId)
+            celebrating(goalId)
             onResult(result)
             offerTickUndo(goalId, result) {
                 book.undoRoutine(goalId)
@@ -1481,8 +1540,9 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
     fun tickStep(stepId: Long, onResult: (TickResult) -> Unit = {}) {
         viewModelScope.launch {
             val result = book.tickStep(stepId)
-            onResult(result)
             val step = dao.step(stepId)
+            celebrating(step?.goalId)
+            onResult(result)
             if (step != null && result is TickResult.Ticked) {
                 val paid = result.points + result.bonus
                 offerUndo(if (paid > 0) "${step.name} · +$paid" else "${step.name} ticked") { book.undoStep(stepId) }

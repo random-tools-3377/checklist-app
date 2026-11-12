@@ -147,6 +147,7 @@ class ToggleTick : ActionCallback {
             book.undoHabitTick(goalId)
         }
         if (result is TickResult.Ticked && result.finished) io.github.randomtools3377.checklist.reminders.Reminders.afterDone(context, goalId)
+        runCatching { io.github.randomtools3377.checklist.reminders.EdgeLights.celebrate(context, goalId, result) }
         CalendarWidget().update(context, glanceId)
     }
 }

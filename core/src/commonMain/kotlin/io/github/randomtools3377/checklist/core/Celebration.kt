@@ -32,4 +32,7 @@ object Celebration {
      * its own folder.
      */
     fun isSafeName(name: String): Boolean = SAFE_NAME.matches(name)
+
+    /** A file the app keeps beside the picked GIFs: a GIF, or a picked celebration sound. */
+    fun isStoredName(name: String): Boolean = isSafeName(name) || CelebrationSounds.isSafeName(name)
 }

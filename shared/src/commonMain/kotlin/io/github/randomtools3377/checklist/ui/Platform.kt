@@ -70,10 +70,20 @@ expect fun rememberAsk(what: Ask, onAnswer: (Boolean) -> Unit): () -> Unit
 @Composable
 expect fun rememberUnlock(vm: MainViewModel): () -> Unit
 
-/** The two celebration sounds. */
+/** The two celebration sounds, and the user's own in their place. */
 interface Sounds {
     fun tick()
     fun big()
+
+    /**
+     * Plays a sound the user picked, by its file name in the app's own storage, in place of the
+     * app's small sound or its [big] one. One of these plays at a time, and if it can't be
+     * played the app's own sound plays instead.
+     */
+    fun own(file: String, big: Boolean) {
+        if (big) this.big() else tick()
+    }
+
     fun release()
 }
 

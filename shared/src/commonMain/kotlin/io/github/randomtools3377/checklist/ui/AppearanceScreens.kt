@@ -66,6 +66,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import io.github.randomtools3377.checklist.core.CelebrationSounds
 import androidx.compose.ui.unit.sp
 import io.github.randomtools3377.checklist.core.Colors
 import io.github.randomtools3377.checklist.core.AppTabKind
@@ -284,8 +285,47 @@ private fun AppIconSetting(current: io.github.randomtools3377.checklist.AppIcon,
 /** Celebrations: sound, buzz, how much confetti, and a GIF for every goal without its own. */
 @Composable
 private fun CelebrationSettings(style: CelebrationStyle, vm: MainViewModel, modifier: Modifier = Modifier) {
+    val phone = LocalPhone.current
+    val extras by vm.celebrationExtras.collectAsState()
     Text("Celebrations", style = MaterialTheme.typography.bodyLarge, modifier = modifier)
     SwitchRow("Sound", style.sound, "celebrate:sound") { vm.setCelebrationSound(it) }
+    // Each kind of celebration can play the user's own sound file in place of the app's.
+    val trySounds = rememberTrySounds()
+    CelebrationSounds.Kind.entries.forEach { kind ->
+        SoundPicker(
+            title = when (kind) {
+                CelebrationSounds.Kind.TICK -> "Sound for a tick"
+                CelebrationSounds.Kind.PROJECT -> "Sound for finishing a project"
+                CelebrationSounds.Kind.REWARD -> "Sound for buying a reward"
+            },
+            value = extras.sounds[kind],
+            big = kind != CelebrationSounds.Kind.TICK,
+            tag = kind.name.lowercase(),
+            sounds = trySounds,
+        ) { vm.setOwnSound(kind, it) }
+    }
+    Text(
+        "Your own sound (up to 5 MB) is copied into the app, and goes in your backup file. It plays when Sound is on. A goal can have its own in its editor.",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    SwitchRow(
+        "Edge glow",
+        extras.glow,
+        "celebrate:glow",
+        hint = "A soft glow runs round the edges of the screen: quick for a tick, longer and brighter for finishing a project or buying a reward.",
+    ) { vm.setEdgeGlow(it) }
+    if (phone.canLightEdges) {
+        SwitchRow(
+            "Also light the edges when the app isn't on screen",
+            extras.glowAway,
+            "celebrate:glow-away",
+            hint = "A tick from a widget or a reminder shows a short, silent notification that goes away by itself. " +
+                "On phones with edge lighting, like Samsung's, that lights the edges.",
+        ) { vm.setEdgeGlowAway(it) }
+    } else {
+        NotOnThisDevice("Also light the edges when the app isn't on screen")
+    }
     // A computer has nothing to buzz.
     if (LocalPhone.current.canBuzz) SwitchRow("Buzz", style.buzz, "celebrate:buzz") { vm.setCelebrationBuzz(it) }
     Choice("Confetti", ConfettiAmount.entries, style.confetti, { it.label }, "confetti") { vm.setConfetti(it) }

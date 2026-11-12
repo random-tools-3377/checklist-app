@@ -11,6 +11,7 @@ import android.widget.Toast
 import io.github.randomtools3377.checklist.calendar.PhoneCalendar
 import io.github.randomtools3377.checklist.calendar.PhoneCalendarInfo
 import io.github.randomtools3377.checklist.core.Busy
+import io.github.randomtools3377.checklist.core.CelebrationSounds
 import io.github.randomtools3377.checklist.data.AiClient
 import io.github.randomtools3377.checklist.data.AiStatus
 import io.github.randomtools3377.checklist.data.AutoBackupResult
@@ -112,6 +113,36 @@ class AndroidPhone(private val app: ChecklistApplication) : Phone {
             Result.failure(CelebrationFiles.AddError("That file couldn't be opened."))
         }
     }
+
+    /** A picked sound, kept if the phone can play it. */
+    override suspend fun addSound(file: PickedFile): Result<String> = withContext(Dispatchers.IO) {
+        try {
+            app.contentResolver.openInputStream(Uri.parse(file))?.let { container.celebrationFiles.addSound(it, ::plays) }
+                ?: Result.failure(CelebrationFiles.AddError(CelebrationSounds.CANT_OPEN))
+        } catch (e: Exception) {
+            Result.failure(CelebrationFiles.AddError(CelebrationSounds.CANT_OPEN))
+        }
+    }
+
+    /** Whether the phone's own player can get [file] ready to play. */
+    private fun plays(file: java.io.File): Boolean {
+        val player = android.media.MediaPlayer()
+        return try {
+            player.setDataSource(file.path)
+            player.prepare()
+            true
+        } catch (e: Exception) {
+            false
+        } finally {
+            player.release()
+        }
+    }
+
+    /** Animations turned off in the phone's accessibility or developer settings. */
+    override fun reducedMotion(): Boolean =
+        android.provider.Settings.Global.getFloat(app.contentResolver, android.provider.Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f
+
+    override val canLightEdges: Boolean = true
 
     override fun lastBackup(): Long? = Backups.lastBackup(app)
     override fun markBackedUp() = Backups.markBackedUp(app)

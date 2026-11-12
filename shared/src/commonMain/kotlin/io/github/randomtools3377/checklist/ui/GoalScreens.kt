@@ -668,6 +668,7 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Long)
     var allowancePer by rememberSaveable { mutableStateOf(Period.WEEKLY) }
     var isPrivate by rememberSaveable { mutableStateOf(false) }
     var celebration by rememberSaveable { mutableStateOf<String?>(null) }
+    var sound by rememberSaveable { mutableStateOf<String?>(null) }
     var category by rememberSaveable { mutableStateOf("") }
     var color by rememberSaveable { mutableStateOf<Int?>(null) }
     // An amount in the user's own unit, like 20 pages.
@@ -693,7 +694,7 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Long)
         name, icon, points, target, bonus, choice, interval, weekdays, per, monthDays, weekOfMonth, yearMonth, yearDay, startDay, endDay,
         minutes, atMinute, eachTimeOn, eachTimes, items.filter { it.id != 0L || it.name.isNotBlank() }.map { it.id to it.name },
         finishByMinute, finishDay, notifyOnTime, alertBefore, remindAtMinute, keepReminding, allowance, allowancePer, isPrivate,
-        celebration, category, color, amountText, unit, effort, quit, challengeOn, challengeDays, challengeBonus, after, skill,
+        celebration, sound, category, color, amountText, unit, effort, quit, challengeOn, challengeDays, challengeBonus, after, skill,
     )
     val phone = LocalPhone.current
     val askPermission = rememberAsk(Ask.NOTIFICATIONS) { onClose() }
@@ -725,6 +726,7 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Long)
                 allowancePer = goal.allowanceWindow
                 isPrivate = goal.private
                 celebration = goal.celebration
+                sound = vm.goalSound(goal.id)
                 category = goal.category.orEmpty()
                 color = goal.color
                 amountText = goal.amount?.let { Amounts.format(it) }.orEmpty()
@@ -913,6 +915,7 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Long)
                     allowancePer = allowancePer,
                     private = isPrivate,
                     celebration = celebration,
+                    sound = sound,
                     category = category,
                     color = color,
                 ),
@@ -1290,6 +1293,7 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Long)
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         CelebrationPicker(celebration) { celebration = it }
+        GoalSoundPicker(sound) { sound = it }
         if (id != 0L) {
             // The copy is of what is on screen, so changes are saved first.
             TextButton(onClick = { if (changed) save { vm.duplicateGoal(id, onOpen) } else vm.duplicateGoal(id, onOpen) }, modifier = Modifier.testTag("duplicate")) { Text("Make a copy of this habit") }
@@ -1456,6 +1460,7 @@ fun ProjectEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Lon
     var allowance by rememberSaveable { mutableStateOf(Goal.DEFAULT_ALLOWANCE.toString()) }
     var isPrivate by rememberSaveable { mutableStateOf(false) }
     var celebration by rememberSaveable { mutableStateOf<String?>(null) }
+    var sound by rememberSaveable { mutableStateOf<String?>(null) }
     var skill by rememberSaveable { mutableStateOf<String?>(null) }
     var category by rememberSaveable { mutableStateOf("") }
     var color by rememberSaveable { mutableStateOf<Int?>(null) }
@@ -1466,7 +1471,7 @@ fun ProjectEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Lon
     // What the editor held when it opened, to ask before throwing changes away.
     var baseline by rememberSaveable { mutableStateOf<String?>(null) }
     fun snapshot(): String = editorSnapshot(
-        name, icon, bonus, deadline, finishByMinute, allowance, isPrivate, celebration, skill, category, color, effort, remind, remindAtMinute,
+        name, icon, bonus, deadline, finishByMinute, allowance, isPrivate, celebration, sound, skill, category, color, effort, remind, remindAtMinute,
         steps.filter { it.id != 0L || it.name.isNotBlank() }.map { Triple(it.id, it.name, it.points) },
     )
 
@@ -1483,6 +1488,7 @@ fun ProjectEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Lon
                 allowance = goal.allowed.toString()
                 isPrivate = goal.private
                 celebration = goal.celebration
+                sound = vm.goalSound(goal.id)
                 category = goal.category.orEmpty()
                 color = goal.color
                 effort = goal.effort?.name
@@ -1522,6 +1528,7 @@ fun ProjectEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Lon
                     allowance = allowance.toIntOrNull() ?: Goal.DEFAULT_ALLOWANCE,
                     private = isPrivate,
                     celebration = celebration,
+                    sound = sound,
                     category = category,
                     color = color,
                     effort = effort?.let { Effort.valueOf(it) },
@@ -1666,6 +1673,7 @@ fun ProjectEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Lon
             PrivateSwitch(isPrivate) { isPrivate = it }
         }
         CelebrationPicker(celebration) { celebration = it }
+        GoalSoundPicker(sound) { sound = it }
         if (id != 0L) {
             // The copy is of what is on screen, so changes are saved first.
             TextButton(onClick = { if (changed) save { vm.duplicateGoal(id, onOpen) } else vm.duplicateGoal(id, onOpen) }, modifier = Modifier.testTag("duplicate")) { Text("Make a copy of this project") }

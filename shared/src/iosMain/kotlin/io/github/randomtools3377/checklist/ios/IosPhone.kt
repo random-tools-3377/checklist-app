@@ -2,6 +2,7 @@
 
 package io.github.randomtools3377.checklist.ios
 
+import io.github.randomtools3377.checklist.core.CelebrationSounds
 import io.github.randomtools3377.checklist.data.SharedParts
 import io.github.randomtools3377.checklist.data.nextInChain
 import io.github.randomtools3377.checklist.data.nowMillis
@@ -17,10 +18,12 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
+import platform.AVFAudio.AVAudioPlayer
 import platform.CoreGraphics.CGRectMake
 import platform.CoreGraphics.CGSizeMake
 import platform.Foundation.NSBundle
 import platform.Foundation.NSURL
+import platform.UIKit.UIAccessibilityIsReduceMotionEnabled
 import platform.UIKit.UIApplication
 import platform.UIKit.UIApplicationOpenSettingsURLString
 import platform.UIKit.UIDocumentPickerDelegateProtocol
@@ -220,6 +223,22 @@ class IosPhone : Phone {
         parts.gifs.write(name, bytes)
         return Result.success(name)
     }
+
+    /** A picked sound, kept if the iPhone can play it. The file dialog handed over a copy, which goes. */
+    override suspend fun addSound(file: PickedFile): Result<String> {
+        val bytes = readFile(file) ?: return Result.failure(Exception(CelebrationSounds.CANT_OPEN))
+        removeFile(file)
+        if (bytes.size > CelebrationSounds.MAX_BYTES) return Result.failure(Exception(CelebrationSounds.TOO_BIG))
+        // A file the iPhone can't play gives no player, which comes here as an exception.
+        val plays = bytes.isNotEmpty() && runCatching { AVAudioPlayer(data = bytes.toNSData(), error = null).prepareToPlay() }.getOrDefault(false)
+        if (!plays) return Result.failure(Exception(CelebrationSounds.CANT_PLAY))
+        val name = CelebrationSounds.newName(Random.nextBytes(8))
+        parts.gifs.write(name, bytes)
+        return Result.success(name)
+    }
+
+    /** "Reduce Motion" in the iPhone's Accessibility settings. */
+    override fun reducedMotion(): Boolean = UIAccessibilityIsReduceMotionEnabled()
 
     // Backups: the reminder only; the iPhone app keeps no copy of its own anywhere else.
 

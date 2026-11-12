@@ -180,6 +180,54 @@ class DesktopPhoneTest {
         assertTrue(phone.addGif(notGif.absolutePath).isFailure)
     }
 
+    /** A short, quiet WAV file, as a sound the user might pick. */
+    private fun wav(file: File, seconds: Double = 0.1): File {
+        val format = javax.sound.sampled.AudioFormat(8000f, 8, 1, true, false)
+        val samples = ByteArray((8000 * seconds).toInt())
+        javax.sound.sampled.AudioSystem.write(
+            javax.sound.sampled.AudioInputStream(java.io.ByteArrayInputStream(samples), format, samples.size.toLong()),
+            javax.sound.sampled.AudioFileFormat.Type.WAVE,
+            file,
+        )
+        return file
+    }
+
+    @Test
+    fun aPickedSoundIsCopiedInAndGoesInTheBackup() = runTest {
+        val picked = wav(File(folder, "picked.wav"))
+        val name = phone.addSound(picked.absolutePath).getOrThrow()
+        assertTrue(picked.isFile)
+        assertTrue(io.github.randomtools3377.checklist.core.CelebrationSounds.isSafeName(name))
+        assertEquals(picked.length().toInt(), phone.parts.gifs.read(name)?.size)
+
+        // Used for ticks, it is in the backup file; put back to the app's sound, its copy goes.
+        val kind = io.github.randomtools3377.checklist.core.CelebrationSounds.Kind.TICK
+        phone.parts.repository.setCelebrationSound(kind, name)
+        val backup = io.github.randomtools3377.checklist.core.Backup.decode(phone.parts.repository.exportBackup())
+        assertEquals(setOf(name), backup.files.keys)
+        phone.parts.repository.setCelebrationSound(kind, null)
+        assertEquals(null, phone.parts.gifs.read(name))
+        phone.parts.restore(backup)
+        assertEquals(picked.length().toInt(), phone.parts.gifs.read(name)?.size)
+    }
+
+    @Test
+    fun aSoundThatCannotBePlayedOrIsTooBigSaysSo() = runTest {
+        val notSound = File(folder, "song.wav").apply { writeBytes(ByteArray(64) { 7 }) }
+        assertEquals(DesktopPhone.CANT_PLAY_HERE, phone.addSound(notSound.absolutePath).exceptionOrNull()?.message)
+        val long = wav(File(folder, "long.wav"), seconds = 700.0)
+        assertTrue(long.length() > io.github.randomtools3377.checklist.core.CelebrationSounds.MAX_BYTES)
+        assertEquals(io.github.randomtools3377.checklist.core.CelebrationSounds.TOO_BIG, phone.addSound(long.absolutePath).exceptionOrNull()?.message)
+        assertTrue(phone.addSound(File(folder, "gone.wav").absolutePath).isFailure)
+        assertTrue(folder.resolve("celebrations").list().orEmpty().isEmpty())
+    }
+
+    @Test
+    fun aComputerHasNoEdgeLightingOfItsOwn() {
+        assertFalse(phone.canLightEdges)
+        assertFalse(phone.reducedMotion())
+    }
+
     @Test
     fun theExportFileIsWrittenAndReadBack() = runTest {
         val file = File(folder, "backup.json").absolutePath

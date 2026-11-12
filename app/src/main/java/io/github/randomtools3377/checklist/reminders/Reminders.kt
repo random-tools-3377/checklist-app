@@ -44,6 +44,7 @@ import io.github.randomtools3377.checklist.data.SETTING_DAY_END_HOUR
 import io.github.randomtools3377.checklist.data.SETTING_DAY_START
 import io.github.randomtools3377.checklist.data.SETTING_DEFAULT_FINISH
 import io.github.randomtools3377.checklist.data.SETTING_MORNING_PLAN
+import io.github.randomtools3377.checklist.data.SETTING_REMINDER_LIGHT
 import io.github.randomtools3377.checklist.data.deadlineReminders
 import io.github.randomtools3377.checklist.data.deadlineTimes
 import io.github.randomtools3377.checklist.data.eveningChecks
@@ -206,6 +207,7 @@ object Reminders {
             val earliest = due.minOf { it.day }.startOfYear()
             val ticks = dao.habitTicksSince(earliest.toEpochDay()).map { it.toCore() }
             val hidePrivate = dao.setting(LOCK_PRIVATE) == "1"
+            val light = dao.setting(SETTING_REMINDER_LIGHT) == "1"
             val container = (context.applicationContext as ChecklistApplication).container
             for (alert in due) {
                 val goal = goals.find { it.id == alert.goalId } ?: continue
@@ -214,7 +216,7 @@ object Reminders {
                 val lapses = dao.lapses(goal.id, window.start.toEpochDay(), window.end.toEpochDay()).map { it.toCore() }
                 if (!Alerts.stillToDo(goal, window, ticks, lapses, alert.number)) continue
                 val skip = container.lapses.checkSkip(goal.id) as? SkipCheck.Allowed
-                show(context, goal, alert, Alerts.timesDone(goal, window, ticks), hidden = hidePrivate && goal.private, skip = skip, dayEnd = dayEnd)
+                show(context, goal, alert, Alerts.timesDone(goal, window, ticks), hidden = hidePrivate && goal.private, skip = skip, dayEnd = dayEnd, light = light)
             }
         }
         prefs.edit().putLong(LAST_FIRED, until).apply()
@@ -251,9 +253,10 @@ object Reminders {
         val ticks = dao.habitTicksSince(since.toEpochDay()).map { it.toCore() }
         val view = TodayList.build(day, goals, dao.allSteps().map { it.toCore() }, ticks, 0, dao.lapsesSince(since.toEpochDay()).map { it.toCore() })
         val hidePrivate = dao.setting(LOCK_PRIVATE) == "1"
+        val light = dao.setting(SETTING_REMINDER_LIGHT) == "1"
         for (row in Chains.next(goalId, view)) {
             val skip = container.lapses.checkSkip(row.goal.id) as? SkipCheck.Allowed
-            show(context, row.goal, Alert(row.goal.id, day, now, AlertKind.NEXT), row.count, hidden = hidePrivate && row.goal.private, skip = skip, dayEnd = dayEnd)
+            show(context, row.goal, Alert(row.goal.id, day, now, AlertKind.NEXT), row.count, hidden = hidePrivate && row.goal.private, skip = skip, dayEnd = dayEnd, light = light)
         }
     }
 
@@ -551,8 +554,9 @@ object Reminders {
     /**
      * Shows a notification, or replaces it. [hidden] leaves the goal's name out (privacy lock).
      * It goes when the alert's day ends at [dayEnd], as its buttons act on the day they're tapped.
+     * With [light] ("Light up the screen for reminders") it comes as a message would (see EdgeLights).
      */
-    fun show(context: Context, goal: Goal, alert: Alert, count: Int, hidden: Boolean, skip: SkipCheck.Allowed?, dayEnd: Int) {
+    fun show(context: Context, goal: Goal, alert: Alert, count: Int, hidden: Boolean, skip: SkipCheck.Allowed?, dayEnd: Int, light: Boolean = false) {
         if (!canNotify(context)) return
         val endsIn = LocalDateTime(alert.day.plusDays(1), LocalTime(dayEnd, 0)).millis() - System.currentTimeMillis()
         if (endsIn <= 0) return
@@ -593,7 +597,8 @@ object Reminders {
                 .putExtra(DoneReceiver.EXTRA_DAY, alert.day.toEpochDay()),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
-        val builder = NotificationCompat.Builder(context, CHANNEL)
+        if (light) EdgeLights.createChannels(context)
+        val builder = NotificationCompat.Builder(context, if (light) EdgeLights.REMINDER_CHANNEL else CHANNEL)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(title)
             .setContentText(if (hidden) Alerts.lockedWords(alert) else details)
@@ -611,6 +616,7 @@ object Reminders {
             )
             .setCategory(NotificationCompat.CATEGORY_REMINDER)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
+        if (light) EdgeLights.asMessage(builder)
         if (skip != null) {
             // A skip over the limit needs the warning, a reason and the penalty, so it opens the app.
             val skipIntent = if (skip.overLimit) {

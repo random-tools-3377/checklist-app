@@ -245,7 +245,7 @@ private fun SwitchLine(title: String, hint: String, on: Boolean, tag: String, on
 
 /** The words a Settings search finds the Notifications part by. */
 internal fun notificationWords(phone: Phone): String =
-    "Notifications notification reminders reminder alarm exact weekly summary snooze morning plan evening check still open" +
+    "Notifications notification reminders reminder alarm exact weekly summary snooze morning plan evening check still open light up screen edge lighting" +
         if (phone.hasWidgets) " widget widgets home screen calendar" else ""
 
 /** The notifications [phone] can't give yet, like "Morning plan, weekly summary and snooze"; null if none. */
@@ -262,7 +262,7 @@ internal fun notificationsNotHere(phone: Phone): String? {
 
 /** Something this device doesn't have: its name, and that it isn't here yet. */
 @Composable
-private fun NotOnThisDevice(title: String, modifier: Modifier = Modifier) {
+internal fun NotOnThisDevice(title: String, modifier: Modifier = Modifier) {
     Column(modifier.fillMaxWidth().testTag("not-here:$title")) {
         Text(title, style = MaterialTheme.typography.bodyLarge)
         Text("Not on this device yet.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -744,6 +744,25 @@ fun SettingsScreen(
                         else "When your day starts: today's list, what to do first, and the pace.",
                         padding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
                     ) { vm.setMorningPlan(it) }
+                }
+                if (phone.canLightEdges) {
+                    val light by vm.reminderLight.collectAsState()
+                    SwitchRow(
+                        "Light up the screen for reminders",
+                        light,
+                        "setting:reminder-light",
+                        hint = "A goal's reminder then comes like a message: it pops up, with the light. " +
+                            "Your phone's own \"Edge lighting\" or \"Wake screen for notifications\" setting decides what that looks like.",
+                        padding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+                    ) { vm.setReminderLight(it) }
+                    if (light) {
+                        TextButton(
+                            onClick = { phone.openNotificationSettings() },
+                            modifier = Modifier.padding(horizontal = 8.dp).testTag("reminder-light:settings"),
+                        ) { Text("Open notification settings") }
+                    }
+                } else {
+                    NotOnThisDevice("Light up the screen for reminders", Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
                 }
                 val evening by vm.eveningCheck.collectAsState()
                 EveningCheckSetting(evening, settings.dayEndHour, vm::setEveningCheck, Modifier.padding(horizontal = 16.dp, vertical = 4.dp))

@@ -129,8 +129,17 @@ actual fun rememberSaveFile(mimeType: String, onPicked: (PickedFile?) -> Unit): 
 @Composable
 actual fun rememberOpenFile(mimeTypes: List<String>, onPicked: (PickedFile?) -> Unit): () -> Unit {
     val phone = LocalPhone.current
-    return { onPicked(chooseFile(phone, "Open", FileDialog.LOAD)) }
+    // A sound for a celebration: the kinds Java can play.
+    val sound = mimeTypes.any { it.startsWith("audio/") }
+    return {
+        onPicked(
+            if (sound) chooseFile(phone, "Choose a sound", FileDialog.LOAD, extensions = SoundExtensions)
+            else chooseFile(phone, "Open", FileDialog.LOAD),
+        )
+    }
 }
+
+private val SoundExtensions = listOf("wav", "wave", "aiff", "aif", "au")
 
 /** The computer app keeps no automatic backups in a folder. */
 @Composable
@@ -175,9 +184,13 @@ actual fun rememberUnlock(vm: MainViewModel): () -> Unit {
 }
 
 /** The two celebration sounds, each ready to play from the start. */
-private class DesktopSounds(tick: ByteArray, big: ByteArray) : Sounds {
+private class DesktopSounds(tick: ByteArray, big: ByteArray, private val read: (String) -> ByteArray?) : Sounds {
     private val tickClip = clip(tick)
     private val bigClip = clip(big)
+
+    /** The user's own sound playing, or played last: one at a time, kept to play again. */
+    private var ownName: String? = null
+    private var ownClip: Clip? = null
 
     private fun clip(bytes: ByteArray): Clip =
         AudioSystem.getClip().apply { open(AudioSystem.getAudioInputStream(ByteArrayInputStream(bytes))) }
@@ -192,7 +205,41 @@ private class DesktopSounds(tick: ByteArray, big: ByteArray) : Sounds {
 
     override fun big() = play(bigClip)
 
+    /** One at a time and in the order asked for, so the sound asked for last is the one left playing. */
+    private val ownQueue = java.util.concurrent.Executors.newSingleThreadExecutor { work ->
+        Thread(work, "celebration-sound").apply { isDaemon = true }
+    }
+
+    /** Read and opened off the screen's thread, as a picked sound can be large. */
+    override fun own(file: String, big: Boolean) {
+        // Once let go of, nothing more is taken on, and nothing more plays.
+        runCatching {
+            ownQueue.execute {
+                val played = runCatching {
+                    if (file != ownName) {
+                        ownClip?.close()
+                        ownClip = null
+                        ownName = null
+                        ownClip = clip(read(file) ?: error("no such sound"))
+                        ownName = file
+                    }
+                    play(ownClip ?: error("no clip"))
+                }.isSuccess
+                if (!played) runCatching { if (big) this.big() else tick() }
+            }
+        }
+    }
+
     override fun release() {
+        // After what is queued, so a sound being opened isn't left open.
+        runCatching {
+            ownQueue.execute {
+                ownClip?.close()
+                ownClip = null
+                ownName = null
+            }
+            ownQueue.shutdown()
+        }
         tickClip.close()
         bigClip.close()
     }
@@ -202,11 +249,12 @@ private class DesktopSounds(tick: ByteArray, big: ByteArray) : Sounds {
 @OptIn(org.jetbrains.compose.resources.ExperimentalResourceApi::class)
 @Composable
 actual fun rememberSounds(): Sounds? {
+    val gifs = LocalPhone.current.parts.gifs
     val sounds by produceState<Sounds?>(null) {
         val tick = runCatching { Res.readBytes("files/sounds/celebrate_tick.wav") }.getOrNull()
         val big = runCatching { Res.readBytes("files/sounds/celebrate_big.wav") }.getOrNull()
         if (tick != null && big != null) {
-            value = withContext(Dispatchers.IO) { runCatching { DesktopSounds(tick, big) }.getOrNull() }
+            value = withContext(Dispatchers.IO) { runCatching { DesktopSounds(tick, big, gifs::read) }.getOrNull() }
         }
     }
     return sounds

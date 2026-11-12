@@ -223,6 +223,7 @@ class TimelineTick : ActionCallback {
         val book = (context.applicationContext as ChecklistApplication).container.book
         val result = if (stepId != null) book.checkItem(stepId) else book.tickHabit(goalId)
         if (result is TickResult.Ticked && result.finished) Reminders.afterDone(context, goalId)
+        runCatching { io.github.randomtools3377.checklist.reminders.EdgeLights.celebrate(context, goalId, result) }
         TodayWidget().update(context, glanceId)
     }
 }

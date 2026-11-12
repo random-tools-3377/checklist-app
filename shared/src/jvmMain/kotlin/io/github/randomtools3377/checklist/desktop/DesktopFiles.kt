@@ -20,9 +20,9 @@ internal fun writeWhole(file: File, bytes: ByteArray) {
     }
 }
 
-/** The GIFs the user picked for celebrations, in the app's folder under celebrations. */
+/** The GIFs and sounds the user picked for celebrations, in the app's folder under celebrations. */
 internal class DesktopGifs(private val folder: File) : GifStore {
-    private fun file(name: String): File? = if (Celebration.isSafeName(name)) File(folder, name) else null
+    private fun file(name: String): File? = if (Celebration.isStoredName(name)) File(folder, name) else null
 
     override fun read(name: String): ByteArray? = file(name)?.takeIf { it.isFile }?.readBytes()
 

@@ -201,6 +201,11 @@ fun ChecklistApp(vm: MainViewModel) {
     val appearance by vm.appearance.collectAsStateWithLifecycle()
     val planDays by vm.planDays.collectAsStateWithLifecycle()
     celebrations.style = appearance.celebrate
+    val celebrationExtras by vm.celebrationExtras.collectAsStateWithLifecycle()
+    celebrations.extras = celebrationExtras
+    celebrations.goal = { vm.celebrated }
+    val celebratingOn = LocalPhone.current
+    celebrations.calm = { celebratingOn.reducedMotion() }
     // The app opens on the tab chosen in Appearance, once the settings have been read.
     var firstTabApplied by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(appearance.loaded) {

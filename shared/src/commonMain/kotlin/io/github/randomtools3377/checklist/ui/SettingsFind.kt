@@ -37,7 +37,7 @@ internal fun lookParts(phone: Phone, matchWallpaper: Boolean): List<LookPart> = 
     LookPart(LookPlace.PERSONAL, "Font", "font fonts typeface rounded serif easy to read"),
     LookPart(LookPlace.PERSONAL, "App icon", "app icon home screen").takeIf { phone.canChangeIcon },
     LookPart(LookPlace.PERSONAL, "Widgets", "widgets widget style see-through").takeIf { phone.hasWidgets },
-    LookPart(LookPlace.CELEBRATIONS, "Celebrations", "celebrations sound sounds confetti gif gifs animation" + if (phone.canBuzz) " buzz vibrate vibration" else ""),
+    LookPart(LookPlace.CELEBRATIONS, "Celebrations", "celebrations sound sounds own sound file confetti gif gifs animation edge glow lighting" + if (phone.canBuzz) " buzz vibrate vibration" else ""),
 )
 
 /** The extras the Features page lists on [phone]: the AI helper only where there is Checklist AI to use. */

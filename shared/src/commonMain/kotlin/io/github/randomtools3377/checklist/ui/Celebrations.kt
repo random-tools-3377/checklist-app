@@ -42,6 +42,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import io.github.randomtools3377.checklist.core.CelebrationSounds
+import io.github.randomtools3377.checklist.core.GlowSize
 import kotlinx.coroutines.delay
 import kotlin.math.PI
 import kotlin.math.cos
@@ -79,18 +81,55 @@ class Celebrations {
     /** Sound, buzz, how much confetti and a GIF for every goal, from Settings → Appearance. */
     var style by mutableStateOf(CelebrationStyle())
 
+    /** The glow round the edges and the user's own sounds, from Settings → Appearance. */
+    var extras by mutableStateOf(CelebrationExtras())
+
     /** The sounds, once the app has loaded them. */
     var sounds: Sounds? = null
 
+    /** The goal whose tick is being celebrated, for its own sound and its colour (see MainViewModel.celebrated). */
+    var goal: () -> io.github.randomtools3377.checklist.core.Goal? = { null }
+
+    /** Whether the phone asks for less motion; the glow round the edges is left out then. */
+    var calm: () -> Boolean = { false }
+
+    private var glow by mutableStateOf<Glow?>(null)
+
     /** A burst at [at] (in window coordinates) showing [label], like "+10". */
     fun burst(at: Offset, label: String, big: Boolean = false) {
+        val goal = goal()
         bursts += Burst(nextId++, at, label, big)
-        if (style.sound) sounds?.tick()
+        play(CelebrationSounds.Kind.TICK, goal?.id, big = false)
+        glow(if (big) GlowSize.FINISH else GlowSize.TICK, goal?.color)
     }
 
     fun show(celebration: BigCelebration) {
         big = celebration
-        if (style.sound) sounds?.big()
+        // Buying a reward is no goal's doing; the rest are the goal just ticked.
+        val goal = if (celebration is BigCelebration.Bought) null else goal()
+        val kind = when (celebration) {
+            is BigCelebration.ProjectFinished -> CelebrationSounds.Kind.PROJECT
+            is BigCelebration.Bought -> CelebrationSounds.Kind.REWARD
+            is BigCelebration.GoalFinished -> CelebrationSounds.Kind.TICK
+        }
+        play(kind, goal?.id, big = true)
+        glow(if (celebration is BigCelebration.GoalFinished) GlowSize.FINISH else GlowSize.BIG, goal?.color)
+    }
+
+    /** The goal's own sound, else the one picked for this kind of celebration, else the app's. */
+    private fun play(kind: CelebrationSounds.Kind, goalId: Long?, big: Boolean) {
+        if (!style.sound) return
+        val own = CelebrationSounds.choose(kind, goalId?.let { extras.goalSounds[it] }, extras.sounds)
+        when {
+            own != null -> sounds?.own(own, big)
+            big -> sounds?.big()
+            else -> sounds?.tick()
+        }
+    }
+
+    /** A glow round the edges, scaled with the win; a new one takes the place of one still running. */
+    private fun glow(size: GlowSize, goalColor: Int?) {
+        if (extras.glow && !calm()) glow = Glow(nextId++, size, goalColor)
     }
 
     /** A buzz, unless buzzing is off. */
@@ -109,6 +148,12 @@ class Celebrations {
             big?.let { celebration ->
                 key(celebration) {
                     BigEffect(celebration, style.confetti.amount) { big = null }
+                }
+            }
+            // On top of everything, and only drawn: it never takes a touch.
+            glow?.let { running ->
+                key(running.id) {
+                    EdgeGlowEffect(running) { if (glow == running) glow = null }
                 }
             }
         }

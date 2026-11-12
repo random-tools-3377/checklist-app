@@ -55,6 +55,7 @@ import platform.PhotosUI.PHPickerViewController
 import platform.PhotosUI.PHPickerViewControllerDelegateProtocol
 import platform.UIKit.UIDocumentPickerDelegateProtocol
 import platform.UIKit.UIDocumentPickerViewController
+import platform.UniformTypeIdentifiers.UTTypeAudio
 import platform.UniformTypeIdentifiers.UTTypeData
 import platform.UniformTypeIdentifiers.UTTypeJSON
 import platform.UniformTypeIdentifiers.UTTypePlainText
@@ -149,7 +150,9 @@ actual fun rememberSaveFile(mimeType: String, onPicked: (PickedFile?) -> Unit): 
 actual fun rememberOpenFile(mimeTypes: List<String>, onPicked: (PickedFile?) -> Unit): () -> Unit {
     val delegate = remember { arrayOfNulls<FilePickerDelegate>(1) }
     return {
-        val picker = UIDocumentPickerViewController(forOpeningContentTypes = listOf(UTTypeJSON, UTTypePlainText, UTTypeData), asCopy = true)
+        // A sound for a celebration shows only sounds; anything else, like a backup, any file.
+        val types = if (mimeTypes.any { it.startsWith("audio/") }) listOf(UTTypeAudio) else listOf(UTTypeJSON, UTTypePlainText, UTTypeData)
+        val picker = UIDocumentPickerViewController(forOpeningContentTypes = types, asCopy = true)
         val handler = FilePickerDelegate(onPicked)
         delegate[0] = handler
         picker.delegate = handler
@@ -231,9 +234,35 @@ actual fun rememberUnlock(vm: MainViewModel): () -> Unit {
 }
 
 /** The two celebration sounds, played quietly alongside other sound and silenced by the switch. */
-private class IosSounds(tick: ByteArray, big: ByteArray) : Sounds {
+private class IosSounds(tick: ByteArray, big: ByteArray, private val read: (String) -> ByteArray?) : Sounds {
     private val tickPlayer = AVAudioPlayer(data = tick.toNSData(), error = null).apply { prepareToPlay() }
     private val bigPlayer = AVAudioPlayer(data = big.toNSData(), error = null).apply { prepareToPlay() }
+
+    /** The user's own sound playing, or played last: one at a time, kept to play again. */
+    private var ownName: String? = null
+    private var ownPlayer: AVAudioPlayer? = null
+
+    override fun own(file: String, big: Boolean) {
+        // A file the iPhone can't play gives no player, which comes here as an exception.
+        val played = runCatching {
+            if (file != ownName) {
+                ownPlayer?.stop()
+                ownPlayer = null
+                ownName = null
+                val bytes = read(file) ?: error("no such sound")
+                val player = AVAudioPlayer(data = bytes.toNSData(), error = null)
+                check(player.prepareToPlay())
+                ownPlayer = player
+                ownName = file
+            }
+            val player = ownPlayer ?: error("no player")
+            player.currentTime = 0.0
+            player.play()
+        }.getOrDefault(false)
+        if (!played) {
+            if (big) this.big() else tick()
+        }
+    }
 
     override fun tick() {
         tickPlayer.currentTime = 0.0
@@ -248,16 +277,20 @@ private class IosSounds(tick: ByteArray, big: ByteArray) : Sounds {
     override fun release() {
         tickPlayer.stop()
         bigPlayer.stop()
+        ownPlayer?.stop()
+        ownPlayer = null
+        ownName = null
     }
 }
 
 @OptIn(org.jetbrains.compose.resources.ExperimentalResourceApi::class)
 @Composable
 actual fun rememberSounds(): Sounds? {
+    val gifs = LocalPhone.current.parts.gifs
     val sounds by produceState<Sounds?>(null) {
         value = runCatching {
             AVAudioSession.sharedInstance().setCategory(AVAudioSessionCategoryAmbient, error = null)
-            IosSounds(Res.readBytes("files/sounds/celebrate_tick.wav"), Res.readBytes("files/sounds/celebrate_big.wav"))
+            IosSounds(Res.readBytes("files/sounds/celebrate_tick.wav"), Res.readBytes("files/sounds/celebrate_big.wav"), gifs::read)
         }.getOrNull()
     }
     return sounds

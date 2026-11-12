@@ -11,6 +11,7 @@ import android.graphics.Paint
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
 import android.media.AudioAttributes
+import android.media.MediaPlayer
 import android.media.SoundPool
 import android.os.Build
 import android.text.format.DateFormat
@@ -41,6 +42,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
 import io.github.randomtools3377.checklist.core.AiContract
+import io.github.randomtools3377.checklist.core.CelebrationSounds
 import io.github.randomtools3377.checklist.ui.resources.Res
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -48,6 +50,7 @@ import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalTime
 import kotlinx.datetime.toJavaLocalDate
 import kotlinx.datetime.toJavaLocalTime
+import java.io.File
 import java.nio.ByteBuffer
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
@@ -175,16 +178,18 @@ private fun assetPath(path: String): String = Res.getUri(path).removePrefix("fil
  * The two celebration sounds (made by tools/make-sounds.py), played when sound is on in
  * Settings → Appearance. They play like touch sounds, at the phone's sound volume.
  */
-private class AndroidSounds(context: Context) : Sounds {
+private class AndroidSounds(private val context: Context) : Sounds {
+    private val attributes = AudioAttributes.Builder()
+        .setUsage(AudioAttributes.USAGE_ASSISTANCE_SONIFICATION)
+        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+        .build()
     private val pool = SoundPool.Builder()
         .setMaxStreams(2)
-        .setAudioAttributes(
-            AudioAttributes.Builder()
-                .setUsage(AudioAttributes.USAGE_ASSISTANCE_SONIFICATION)
-                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                .build(),
-        )
+        .setAudioAttributes(attributes)
         .build()
+
+    /** The user's own sound while it plays: one at a time. */
+    private var ownPlayer: MediaPlayer? = null
     private val tick = runCatching { context.assets.openFd(assetPath("files/sounds/celebrate_tick.wav")).use { pool.load(it, 1) } }.getOrDefault(0)
     private val big = runCatching { context.assets.openFd(assetPath("files/sounds/celebrate_big.wav")).use { pool.load(it, 1) } }.getOrDefault(0)
 
@@ -196,7 +201,45 @@ private class AndroidSounds(context: Context) : Sounds {
         if (big != 0) pool.play(big, 0.9f, 0.9f, 1, 0, 1f)
     }
 
-    override fun release() = pool.release()
+    /**
+     * A sound the user picked, from the app's own folder of picked celebration files (see
+     * CelebrationFiles in the app). It is got ready off the screen's thread, then plays.
+     */
+    override fun own(file: String, big: Boolean) {
+        stopOwn()
+        val source = File(File(context.filesDir, "celebrations"), file).takeIf { CelebrationSounds.isSafeName(file) && it.isFile }
+        if (source == null) {
+            if (big) this.big() else tick()
+            return
+        }
+        val player = MediaPlayer()
+        ownPlayer = player
+        try {
+            player.setAudioAttributes(attributes)
+            player.setDataSource(source.path)
+            player.setOnPreparedListener { it.start() }
+            player.setOnCompletionListener { if (ownPlayer === it) stopOwn() }
+            player.setOnErrorListener { failed, _, _ ->
+                if (ownPlayer === failed) stopOwn()
+                if (big) this.big() else tick()
+                true
+            }
+            player.prepareAsync()
+        } catch (e: Exception) {
+            stopOwn()
+            if (big) this.big() else tick()
+        }
+    }
+
+    private fun stopOwn() {
+        ownPlayer?.let { runCatching { it.release() } }
+        ownPlayer = null
+    }
+
+    override fun release() {
+        stopOwn()
+        pool.release()
+    }
 }
 
 @Composable

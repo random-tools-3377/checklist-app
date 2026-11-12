@@ -1,5 +1,6 @@
 package io.github.randomtools3377.checklist.desktop
 
+import io.github.randomtools3377.checklist.core.CelebrationSounds
 import io.github.randomtools3377.checklist.data.SharedParts
 import io.github.randomtools3377.checklist.data.appDataFolder
 import io.github.randomtools3377.checklist.data.nowMillis
@@ -180,6 +181,20 @@ class DesktopPhone(
         Result.success(name)
     }
 
+    /** A picked sound, kept if Java can play it here: a WAV, AIFF or AU file. */
+    override suspend fun addSound(file: PickedFile): Result<String> = withContext(Dispatchers.IO) {
+        val picked = File(file)
+        if (!picked.isFile) return@withContext Result.failure(Exception(CelebrationSounds.CANT_OPEN))
+        if (picked.length() > CelebrationSounds.MAX_BYTES) return@withContext Result.failure(Exception(CelebrationSounds.TOO_BIG))
+        val bytes = runCatching { picked.readBytes() }.getOrNull()
+            ?: return@withContext Result.failure(Exception(CelebrationSounds.CANT_OPEN))
+        val plays = runCatching { javax.sound.sampled.AudioSystem.getAudioInputStream(java.io.ByteArrayInputStream(bytes)).close() }.isSuccess
+        if (!plays) return@withContext Result.failure(Exception(CANT_PLAY_HERE))
+        val name = CelebrationSounds.newName(Random.nextBytes(8))
+        parts.gifs.write(name, bytes)
+        Result.success(name)
+    }
+
     // Backups: the reminder only; the computer app keeps no copy of its own anywhere else.
 
     override fun lastBackup(): Long? = local.long(BACKUP_LAST)
@@ -216,6 +231,7 @@ class DesktopPhone(
         private const val BACKUP_OFF = "backup.reminder_off"
         private const val BACKUP_LATER = "backup.later_until"
         private const val MAX_GIF_BYTES = 10 * 1_048_576
+        internal const val CANT_PLAY_HERE = "That sound can't be played on this computer. Pick a WAV file."
 
         /**
          * A photo no bigger than the screen needs, as a JPEG, so the app and the backup stay
