@@ -139,6 +139,9 @@ data class Rules(
 
         fun encode(rules: Rules): String = json.encodeToString(serializer(), rules)
 
+        /** What a number outside [field]'s range is told, like "From 0 to 1000." */
+        fun rangeText(field: RuleField): String = "From ${field.min} to ${field.max}."
+
         /** Reads the user's rules from [store] and puts them in use. */
         suspend fun load(store: Store): Rules = decode(store.setting(SETTING)).also { current = it }
 

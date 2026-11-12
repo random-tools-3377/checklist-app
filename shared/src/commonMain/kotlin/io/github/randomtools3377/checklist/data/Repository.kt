@@ -217,6 +217,8 @@ data class TodoDraft(
     /** A reminder on its date, for a to-do with one. */
     val remindAt: LocalTime? = null,
     val effort: Effort? = null,
+    /** As typed; tidied on saving (see Categories). */
+    val category: String? = null,
 )
 
 /** What the reward editor saves. */
@@ -428,7 +430,12 @@ class Repository(private val db: AppDatabase, private val celebrations: GifStore
         val made = Todos.of(draft.name, draft.points, draft.date, draft.icon.ifBlank { Todos.ICON })
         val reminder = draft.remindAt?.takeIf { draft.date != null }?.let { Reminder(onTime = true, at = it) }
         val goalId = if (existing == null) {
-            dao.insertGoal(made.copy(private = draft.private, reminder = reminder, effort = draft.effort, position = dao.nextGoalPosition(), createdAt = nowMillis()).toEntity())
+            dao.insertGoal(
+                made.copy(
+                    private = draft.private, reminder = reminder, effort = draft.effort, category = category(draft.category, 0),
+                    position = dao.nextGoalPosition(), createdAt = nowMillis(),
+                ).toEntity(),
+            )
         } else {
             val repeat = made.repeat
             dao.updateGoal(
@@ -441,6 +448,7 @@ class Repository(private val db: AppDatabase, private val celebrations: GifStore
                     isPrivate = draft.private,
                     reminder = reminder?.let { RepeatText.encodeReminder(it) },
                     effort = draft.effort?.name,
+                    category = category(draft.category, existing.id),
                 ),
             )
             existing.id

@@ -72,6 +72,13 @@ class LayoutTest {
         app.waitFor { description("tile:Read").contains("Done") }
         app.waitFor { runBlocking { container.book.balance() } == 4 }
 
+        // A done tile opens its card, to add a note or take the tick back.
+        app.tap("tile:Read")
+        app.waitFor { !gone("close-details") }
+        app.onNodeWithTag("close-details").performClick()
+        app.waitFor { gone("close-details") }
+        assertEquals(4, runBlocking { container.book.balance() })
+
         app.waitFor { app.shownIn("today-list", "tile:Water") }
         app.tap("tile:Water")
         app.waitFor { description("tile:Water").contains("1 of 3") }

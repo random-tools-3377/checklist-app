@@ -88,6 +88,7 @@ import io.github.randomtools3377.checklist.core.Goal
 import io.github.randomtools3377.checklist.core.GoalKind
 import io.github.randomtools3377.checklist.core.Period
 import io.github.randomtools3377.checklist.core.Reminder
+import io.github.randomtools3377.checklist.core.Reorder
 import io.github.randomtools3377.checklist.core.Repeat
 import io.github.randomtools3377.checklist.core.RepeatKind
 import io.github.randomtools3377.checklist.core.describe
@@ -686,6 +687,14 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Long)
     var skill by rememberSaveable { mutableStateOf<String?>(null) }
     var showErrors by rememberSaveable { mutableStateOf(false) }
     var choosingRepeat by remember { mutableStateOf(false) }
+    // What the editor held when it opened, to ask before throwing changes away.
+    var baseline by rememberSaveable { mutableStateOf<String?>(null) }
+    fun snapshot(): String = editorSnapshot(
+        name, icon, points, target, bonus, choice, interval, weekdays, per, monthDays, weekOfMonth, yearMonth, yearDay, startDay, endDay,
+        minutes, atMinute, eachTimeOn, eachTimes, items.filter { it.id != 0L || it.name.isNotBlank() }.map { it.id to it.name },
+        finishByMinute, finishDay, notifyOnTime, alertBefore, remindAtMinute, keepReminding, allowance, allowancePer, isPrivate,
+        celebration, category, color, amountText, unit, effort, quit, challengeOn, challengeDays, challengeBonus, after, skill,
+    )
     val phone = LocalPhone.current
     val askPermission = rememberAsk(Ask.NOTIFICATIONS) { onClose() }
     // The user's day, after the day-end setting: a "since last done" goal's next day can't be before it.
@@ -791,8 +800,10 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Long)
     // goal stepped up (longer, more, or more times a week).
     LaunchedEffect(loaded) {
         if (!loaded) return@LaunchedEffect
-        val idea = vm.takeIdea(id) ?: return@LaunchedEffect
-        if (idea.goalId == null) {
+        val idea = vm.takeIdea(id)
+        if (idea == null) {
+            // Nothing to fill in.
+        } else if (idea.goalId == null) {
             fill(idea.goal)
             skill = idea.area.name
             effort = idea.effort.name
@@ -802,8 +813,11 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Long)
             idea.goal.amount?.let { amountText = io.github.randomtools3377.checklist.core.Amounts.format(it) }
             idea.goal.timesPerWeek?.let { target = it.toString() }
         }
+        // From here on, anything different is a change the user made.
+        if (baseline == null) baseline = snapshot()
     }
 
+    val changed = baseline != null && baseline != snapshot()
     val intervalValue = interval.toIntOrNull()
     val needsInterval = choice in setOf(RepeatChoice.EVERY_FEW_DAYS, RepeatChoice.WEEKDAYS, RepeatChoice.MONTH_DATES, RepeatChoice.MONTH_WEEKDAY, RepeatChoice.AFTER_DONE)
     val yearDayValue = yearDay.toIntOrNull()
@@ -860,64 +874,70 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Long)
     val severalADay = counted && choice != RepeatChoice.TIMES_PER
     val eachTimesSet = if (severalADay && eachTimeOn) eachTimes.filter { it >= 0 }.distinct().sorted().take(targetValue ?: 1) else emptyList()
 
+    // Saving, from Save or from "Make a copy", which saves the changes first and then does [then].
+    val save: ((() -> Unit)?) -> Unit = { then ->
+        if (nameError != null || pointsError != null || targetError != null || repeatError != null || amountError != null || challengeError != null || repeat == null) {
+            showErrors = true
+        } else {
+            vm.saveHabit(
+                HabitDraft(
+                    id = id,
+                    name = name.trim(),
+                    icon = icon,
+                    points = points.toInt(),
+                    repeat = repeat,
+                    target = if (routine) 1 else targetValue ?: 1,
+                    bonus = if (counted) bonus.toIntOrNull() ?: 0 else 0,
+                    minutes = minutesValue,
+                    at = if (severalADay) null else atMinute?.toTime(),
+                    times = eachTimesSet.map { it.toTime() },
+                    items = if (hasAmount) emptyList() else items.filter { it.name.isNotBlank() }.map { StepDraft(it.id, it.name.trim(), 0) },
+                    amount = if (hasAmount) amountValue else null,
+                    unit = if (hasAmount) unit.trim() else null,
+                    effort = effort?.let { Effort.valueOf(it) },
+                    quit = quit,
+                    after = after,
+                    skill = skill?.let { io.github.randomtools3377.checklist.core.SkillArea.valueOf(it) },
+                    challenge = challengeDays.toIntOrNull()?.takeIf { hasChallenge && it in 2..3650 }?.let { days ->
+                        Challenge(days, challengeBonus.toIntOrNull() ?: 0, challengeFrom?.toDay() ?: vm.currentDay())
+                    },
+                    finishBy = finishByMinute?.toTime(),
+                    finishDay = if (choice == RepeatChoice.TIMES_PER) finishDay else null,
+                    reminder = Reminder(
+                        onTime = notifyOnTime,
+                        minutesBefore = if (atMinute != null || eachTimesSet.isNotEmpty()) alertBefore else null,
+                        at = if (atMinute == null && eachTimesSet.isEmpty()) remindAtMinute?.toTime() else null,
+                        againEvery = if (keepReminding) Reminder.AGAIN_EVERY else null,
+                    ),
+                    allowance = allowance.toIntOrNull() ?: Goal.DEFAULT_ALLOWANCE,
+                    allowancePer = allowancePer,
+                    private = isPrivate,
+                    celebration = celebration,
+                    category = category,
+                    color = color,
+                ),
+                onDone = {
+                    baseline = snapshot()
+                    if (then != null) return@saveHabit then()
+                    val wantsNotifications = when {
+                        eachTimesSet.isNotEmpty() || (!severalADay && atMinute != null) -> notifyOnTime || alertBefore != null
+                        else -> remindAtMinute != null
+                    }
+                    if (wantsNotifications && !phone.canNotify()) {
+                        askPermission()
+                    } else {
+                        onClose()
+                    }
+                },
+            )
+        }
+    }
+
     EditorScaffold(
         title = if (id == 0L) "New habit" else "Edit habit",
         onBack = onClose,
-        onSave = {
-            if (nameError != null || pointsError != null || targetError != null || repeatError != null || amountError != null || challengeError != null || repeat == null) {
-                showErrors = true
-            } else {
-                vm.saveHabit(
-                    HabitDraft(
-                        id = id,
-                        name = name.trim(),
-                        icon = icon,
-                        points = points.toInt(),
-                        repeat = repeat,
-                        target = if (routine) 1 else targetValue ?: 1,
-                        bonus = if (counted) bonus.toIntOrNull() ?: 0 else 0,
-                        minutes = minutesValue,
-                        at = if (severalADay) null else atMinute?.toTime(),
-                        times = eachTimesSet.map { it.toTime() },
-                        items = if (hasAmount) emptyList() else items.filter { it.name.isNotBlank() }.map { StepDraft(it.id, it.name.trim(), 0) },
-                        amount = if (hasAmount) amountValue else null,
-                        unit = if (hasAmount) unit.trim() else null,
-                        effort = effort?.let { Effort.valueOf(it) },
-                        quit = quit,
-                        after = after,
-                        skill = skill?.let { io.github.randomtools3377.checklist.core.SkillArea.valueOf(it) },
-                        challenge = challengeDays.toIntOrNull()?.takeIf { hasChallenge && it in 2..3650 }?.let { days ->
-                            Challenge(days, challengeBonus.toIntOrNull() ?: 0, challengeFrom?.toDay() ?: vm.currentDay())
-                        },
-                        finishBy = finishByMinute?.toTime(),
-                        finishDay = if (choice == RepeatChoice.TIMES_PER) finishDay else null,
-                        reminder = Reminder(
-                            onTime = notifyOnTime,
-                            minutesBefore = if (atMinute != null || eachTimesSet.isNotEmpty()) alertBefore else null,
-                            at = if (atMinute == null && eachTimesSet.isEmpty()) remindAtMinute?.toTime() else null,
-                            againEvery = if (keepReminding) Reminder.AGAIN_EVERY else null,
-                        ),
-                        allowance = allowance.toIntOrNull() ?: Goal.DEFAULT_ALLOWANCE,
-                        allowancePer = allowancePer,
-                        private = isPrivate,
-                        celebration = celebration,
-                        category = category,
-                        color = color,
-                    ),
-                    onDone = {
-                        val wantsNotifications = when {
-                            eachTimesSet.isNotEmpty() || (!severalADay && atMinute != null) -> notifyOnTime || alertBefore != null
-                            else -> remindAtMinute != null
-                        }
-                        if (wantsNotifications && !phone.canNotify()) {
-                            askPermission()
-                        } else {
-                            onClose()
-                        }
-                    },
-                )
-            }
-        },
+        onSave = { save(null) },
+        changed = changed,
     ) {
         if (!loaded) return@EditorScaffold
         if (id == 0L) {
@@ -1111,6 +1131,7 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Long)
                         singleLine = true,
                         modifier = Modifier.weight(1f).testTag("field:item-$index"),
                     )
+                    MoveArrows(index, items.size, "item") { by -> Reorder.move(items, index, by) }
                     IconButton(onClick = { items.removeAt(index) }) {
                         Icon(Icons.Filled.Close, contentDescription = "Remove item ${index + 1}")
                     }
@@ -1270,7 +1291,8 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Long)
         )
         CelebrationPicker(celebration) { celebration = it }
         if (id != 0L) {
-            TextButton(onClick = { vm.duplicateGoal(id, onOpen) }, modifier = Modifier.testTag("duplicate")) { Text("Make a copy of this habit") }
+            // The copy is of what is on screen, so changes are saved first.
+            TextButton(onClick = { if (changed) save { vm.duplicateGoal(id, onOpen) } else vm.duplicateGoal(id, onOpen) }, modifier = Modifier.testTag("duplicate")) { Text("Make a copy of this habit") }
             RemoveButton("habit", name) { vm.removeGoal(id, onClose) }
         }
     }
@@ -1438,6 +1460,12 @@ fun ProjectEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Lon
     var nextKey by rememberSaveable { mutableStateOf(2L) }
     val steps = rememberSaveable(saver = StepFieldsSaver) { mutableListOf(StepField(1L, 0L, "", "")).toMutableStateList() }
     var showErrors by rememberSaveable { mutableStateOf(false) }
+    // What the editor held when it opened, to ask before throwing changes away.
+    var baseline by rememberSaveable { mutableStateOf<String?>(null) }
+    fun snapshot(): String = editorSnapshot(
+        name, icon, bonus, deadline, finishByMinute, allowance, isPrivate, celebration, skill, category, color, effort,
+        steps.filter { it.id != 0L || it.name.isNotBlank() }.map { Triple(it.id, it.name, it.points) },
+    )
 
     LaunchedEffect(id) {
         if (!loaded) {
@@ -1460,7 +1488,9 @@ fun ProjectEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Lon
             }
             loaded = true
         }
+        if (baseline == null) baseline = snapshot()
     }
+    val changed = baseline != null && baseline != snapshot()
 
     val filled = steps.filter { it.name.isNotBlank() }
     val nameError = if (name.isBlank()) "Give it a name" else null
@@ -1470,34 +1500,41 @@ fun ProjectEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Lon
         else -> null
     }
 
+    // Saving, from Save or from "Make a copy", which saves the changes first and then does [then].
+    val save: ((() -> Unit)?) -> Unit = { then ->
+        if (nameError != null || stepsError != null) {
+            showErrors = true
+        } else {
+            vm.saveProject(
+                ProjectDraft(
+                    id = id,
+                    name = name.trim(),
+                    icon = icon,
+                    steps = filled.map { StepDraft(it.id, it.name.trim(), it.points.toInt()) },
+                    bonus = bonus.toIntOrNull() ?: 0,
+                    deadline = deadline?.toDay(),
+                    finishBy = finishByMinute?.toTime(),
+                    allowance = allowance.toIntOrNull() ?: Goal.DEFAULT_ALLOWANCE,
+                    private = isPrivate,
+                    celebration = celebration,
+                    category = category,
+                    color = color,
+                    effort = effort?.let { Effort.valueOf(it) },
+                    skill = skill?.let { io.github.randomtools3377.checklist.core.SkillArea.valueOf(it) },
+                ),
+                onDone = {
+                    baseline = snapshot()
+                    (then ?: onClose)()
+                },
+            )
+        }
+    }
+
     EditorScaffold(
         title = if (id == 0L) "New project" else "Edit project",
         onBack = onClose,
-        onSave = {
-            if (nameError != null || stepsError != null) {
-                showErrors = true
-            } else {
-                vm.saveProject(
-                    ProjectDraft(
-                        id = id,
-                        name = name.trim(),
-                        icon = icon,
-                        steps = filled.map { StepDraft(it.id, it.name.trim(), it.points.toInt()) },
-                        bonus = bonus.toIntOrNull() ?: 0,
-                        deadline = deadline?.toDay(),
-                        finishBy = finishByMinute?.toTime(),
-                        allowance = allowance.toIntOrNull() ?: Goal.DEFAULT_ALLOWANCE,
-                        private = isPrivate,
-                        celebration = celebration,
-                        category = category,
-                        color = color,
-                        effort = effort?.let { Effort.valueOf(it) },
-                        skill = skill?.let { io.github.randomtools3377.checklist.core.SkillArea.valueOf(it) },
-                    ),
-                    onDone = onClose,
-                )
-            }
-        },
+        onSave = { save(null) },
+        changed = changed,
     ) {
         if (!loaded) return@EditorScaffold
         IconPicker(icon) { icon = it }
@@ -1533,6 +1570,7 @@ fun ProjectEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Lon
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         modifier = Modifier.width(96.dp).testTag("field:step-points-$index"),
                     )
+                    MoveArrows(index, steps.size, "step") { by -> Reorder.move(steps, index, by) }
                     IconButton(
                         onClick = { steps.removeAt(index) },
                         enabled = steps.size > 1,
@@ -1605,7 +1643,8 @@ fun ProjectEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Lon
         }
         CelebrationPicker(celebration) { celebration = it }
         if (id != 0L) {
-            TextButton(onClick = { vm.duplicateGoal(id, onOpen) }, modifier = Modifier.testTag("duplicate")) { Text("Make a copy of this project") }
+            // The copy is of what is on screen, so changes are saved first.
+            TextButton(onClick = { if (changed) save { vm.duplicateGoal(id, onOpen) } else vm.duplicateGoal(id, onOpen) }, modifier = Modifier.testTag("duplicate")) { Text("Make a copy of this project") }
             RemoveButton("project", name) { vm.removeGoal(id, onClose) }
         }
     }
@@ -1679,12 +1718,20 @@ fun TodoEditor(id: Long, vm: MainViewModel, onClose: () -> Unit) {
     // Its steps, if any. Steps pay nothing; the to-do is done when every one is ticked.
     var nextKey by rememberSaveable { mutableStateOf(1L) }
     val steps = rememberSaveable(saver = StepFieldsSaver) { mutableListOf<StepField>().toMutableStateList() }
+    var category by rememberSaveable { mutableStateOf("") }
+    // What the editor held when it opened, to ask before throwing changes away.
+    var baseline by rememberSaveable { mutableStateOf<String?>(null) }
+    fun snapshot(): String = editorSnapshot(
+        name, icon, points, date, isPrivate, remindAtMinute, effort, category,
+        steps.filter { it.id != 0L || it.name.isNotBlank() }.map { it.id to it.name },
+    )
 
     LaunchedEffect(id) {
         if (!loaded) {
             vm.loadGoal(id)?.let { (goal, existingSteps) ->
                 name = goal.name
                 icon = goal.icon
+                category = goal.category.orEmpty()
                 points = goal.points.toString()
                 date = Todos.dateOf(goal)?.toEpochDay()
                 savedDate = date
@@ -1695,35 +1742,45 @@ fun TodoEditor(id: Long, vm: MainViewModel, onClose: () -> Unit) {
             }
             loaded = true
         }
+        if (baseline == null) baseline = snapshot()
     }
+    val changed = baseline != null && baseline != snapshot()
 
     val today = vm.currentDay()
     val nameError = if (name.isBlank()) "Give it a name" else null
     val dateError = date?.takeIf { it != savedDate && it.toDay() < today }?.let { "Pick today or a later day" }
 
+    // Saving, from Save or from "Make a copy", which saves the changes first and then does [then].
+    val save: ((() -> Unit)?) -> Unit = { then ->
+        if (nameError != null || dateError != null) {
+            showErrors = true
+        } else {
+            vm.saveTodo(
+                TodoDraft(
+                    id = id,
+                    name = name.trim(),
+                    icon = icon,
+                    points = points.toIntOrNull() ?: 0,
+                    date = date?.toDay(),
+                    private = isPrivate,
+                    steps = steps.filter { it.name.isNotBlank() }.map { StepDraft(it.id, it.name.trim(), 0) },
+                    remindAt = remindAtMinute?.toTime(),
+                    effort = effort?.let { Effort.valueOf(it) },
+                    category = category,
+                ),
+                onDone = {
+                    baseline = snapshot()
+                    (then ?: onClose)()
+                },
+            )
+        }
+    }
+
     EditorScaffold(
         title = if (id == 0L) "New to-do" else "Edit to-do",
         onBack = onClose,
-        onSave = {
-            if (nameError != null || dateError != null) {
-                showErrors = true
-            } else {
-                vm.saveTodo(
-                    TodoDraft(
-                        id = id,
-                        name = name.trim(),
-                        icon = icon,
-                        points = points.toIntOrNull() ?: 0,
-                        date = date?.toDay(),
-                        private = isPrivate,
-                        steps = steps.filter { it.name.isNotBlank() }.map { StepDraft(it.id, it.name.trim(), 0) },
-                        remindAt = remindAtMinute?.toTime(),
-                        effort = effort?.let { Effort.valueOf(it) },
-                    ),
-                    onDone = onClose,
-                )
-            }
-        },
+        onSave = { save(null) },
+        changed = changed,
     ) {
         if (!loaded) return@EditorScaffold
         IconPicker(icon) { icon = it }
@@ -1745,6 +1802,7 @@ fun TodoEditor(id: Long, vm: MainViewModel, onClose: () -> Unit) {
             onPoints = { points = it },
             vm = vm,
         )
+        CategoryField(category, { category = it }, vm)
         Text("Steps", style = MaterialTheme.typography.titleSmall)
         Text(
             "Optional. Tick them off one by one, over as many days as it takes; the last one does the to-do.",
@@ -1761,6 +1819,7 @@ fun TodoEditor(id: Long, vm: MainViewModel, onClose: () -> Unit) {
                         singleLine = true,
                         modifier = Modifier.weight(1f).testTag("field:step-name-$index"),
                     )
+                    MoveArrows(index, steps.size, "step") { by -> Reorder.move(steps, index, by) }
                     IconButton(onClick = { steps.removeAt(index) }) {
                         Icon(Icons.Filled.Close, contentDescription = "Remove step ${index + 1}")
                     }
@@ -1856,14 +1915,38 @@ private fun EffortField(
     }
 }
 
+/**
+ * [changed] is whether the form holds changes that aren't saved: leaving then, by the back arrow
+ * or the system's back, asks first.
+ */
 @Composable
-fun EditorScaffold(title: String, onBack: () -> Unit, onSave: () -> Unit, content: @Composable () -> Unit) {
+fun EditorScaffold(title: String, onBack: () -> Unit, onSave: () -> Unit, changed: Boolean = false, content: @Composable () -> Unit) {
+    var asking by remember { mutableStateOf(false) }
+    BackButton(enabled = changed) { asking = true }
+    if (asking) {
+        AlertDialog(
+            onDismissRequest = { asking = false },
+            title = { Text("Discard your changes?") },
+            text = { Text("You've changed things here and haven't saved them.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        asking = false
+                        onBack()
+                    },
+                    modifier = Modifier.testTag("discard"),
+                ) { Text("Discard") }
+            },
+            dismissButton = { TextButton(onClick = { asking = false }, modifier = Modifier.testTag("keep-editing")) { Text("Keep editing") } },
+            modifier = Modifier.testTag("discard-question"),
+        )
+    }
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text(title) },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
+                    IconButton(onClick = { if (changed) asking = true else onBack() }, modifier = Modifier.testTag("editor-back")) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
@@ -1885,6 +1968,36 @@ fun EditorScaffold(title: String, onBack: () -> Unit, onSave: () -> Unit, conten
         ) {
             content()
             Spacer(Modifier.height(24.dp))
+        }
+    }
+}
+
+/** Everything an editor holds, as one text, to tell whether anything was changed since it opened. */
+internal fun editorSnapshot(vararg fields: Any?): String = fields.joinToString("\u0001") { it.toString() }
+
+/**
+ * Up and down arrows to reorder a step or a checklist item in its editor, one above the other to
+ * leave room for the name. What moves keeps its id, so a ticked step keeps its tick.
+ */
+@Composable
+internal fun MoveArrows(index: Int, count: Int, what: String, onMove: (Int) -> Unit) {
+    Column {
+        listOf(-1 to "up", 1 to "down").forEach { (by, word) ->
+            val enabled = index + by in 0 until count
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier
+                    .size(width = 36.dp, height = 30.dp)
+                    .clickable(enabled = enabled, role = androidx.compose.ui.semantics.Role.Button) { onMove(by) }
+                    .semantics { contentDescription = "Move $what ${index + 1} $word" }
+                    .testTag("$what-$word-$index"),
+            ) {
+                Icon(
+                    if (by < 0) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
+                    contentDescription = null,
+                    tint = if (enabled) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f),
+                )
+            }
         }
     }
 }

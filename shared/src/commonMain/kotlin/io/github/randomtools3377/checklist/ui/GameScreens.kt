@@ -590,10 +590,10 @@ fun BossCard(view: BossView, onAttack: ((String) -> Unit) -> Unit) {
                         Item.entries.filter { (view.items[it] ?: 0) > 0 }.forEach { item ->
                             val strong = item.area in fight.boss.weakTo
                             Text(
-                                "${item.icon} ${view.items[item]}" + if (strong) " ×2" else "",
+                                "${item.icon} ${view.items[item]}" + if (strong) " ×${io.github.randomtools3377.checklist.core.RuleWords.times(io.github.randomtools3377.checklist.core.Rules.current.bossWeakPercent)}" else "",
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = if (strong) FontWeight.Bold else FontWeight.Normal,
-                                modifier = Modifier.semantics { contentDescription = "${view.items[item]} ${item.label}" + if (strong) ", hits twice as hard" else "" },
+                                modifier = Modifier.semantics { contentDescription = "${view.items[item]} ${item.label}" + if (strong) ", ${io.github.randomtools3377.checklist.core.RuleWords.weakHit()}" else "" },
                             )
                         }
                     }

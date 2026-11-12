@@ -107,6 +107,15 @@ private fun RuleRow(field: RuleField, rules: Rules, usual: Rules, onChange: (Int
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            // Out of range, or not a number: say what it takes. The last good number stays in use.
+            if (bad) {
+                Text(
+                    Rules.rangeText(field),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.testTag("rule-range:${field.key}"),
+                )
+            }
         }
         OutlinedTextField(
             value = text,

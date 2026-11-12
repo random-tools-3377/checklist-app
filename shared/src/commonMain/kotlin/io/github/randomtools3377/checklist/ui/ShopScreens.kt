@@ -490,7 +490,7 @@ fun BalanceCheckScreen(view: BalanceCheckView?, vm: MainViewModel, onBack: () ->
             if (view.goals.none { it.hint != null }) {
                 item {
                     Text(
-                        "All in balance: over the last 4 weeks, every goal was done more than half the time, and none nearly every time.",
+                        io.github.randomtools3377.checklist.core.RuleWords.inBalance(),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -552,6 +552,9 @@ fun RewardEditor(id: Long, vm: MainViewModel, onClose: () -> Unit) {
     val perDay by vm.usualAtNormal.collectAsStateWithLifecycle()
     val budget by vm.treatBudget.collectAsStateWithLifecycle()
     val features by vm.features.collectAsStateWithLifecycle()
+    // What the editor held when it opened, to ask before throwing changes away.
+    var baseline by rememberSaveable { mutableStateOf<String?>(null) }
+    fun snapshot(): String = editorSnapshot(name, icon, price, mystery, if (mystery) prizes.filter { it.isNotBlank() } else null, size, money, follows)
 
     LaunchedEffect(id) {
         if (!loaded) {
@@ -569,7 +572,9 @@ fun RewardEditor(id: Long, vm: MainViewModel, onClose: () -> Unit) {
             }
             loaded = true
         }
+        if (baseline == null) baseline = snapshot()
     }
+    val changed = baseline != null && baseline != snapshot()
 
     val nameError = if (name.isBlank()) "Give it a name" else null
     val moneyValue = Amounts.parse(money)?.takeIf { it > 0 }
@@ -596,6 +601,7 @@ fun RewardEditor(id: Long, vm: MainViewModel, onClose: () -> Unit) {
                 )
             }
         },
+        changed = changed,
     ) {
         if (!loaded) return@EditorScaffold
         IconPicker(icon) { icon = it }

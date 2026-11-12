@@ -2190,10 +2190,13 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
         }
     }
 
-    /** Adds a to-do from the box on Today; [onAdded] gets its id, to open it for a date. */
-    fun addTodo(name: String, onAdded: (Long) -> Unit = {}) {
+    /**
+     * Adds a to-do from the box on Today; [onAdded] gets its id, to open it for a date. Added while
+     * Today shows one [category], it takes that category, so it stays on screen.
+     */
+    fun addTodo(name: String, category: String? = null, onAdded: (Long) -> Unit = {}) {
         if (name.isBlank()) return
-        viewModelScope.launch { onAdded(repository.saveTodo(TodoDraft(id = 0, name = name.trim()))) }
+        viewModelScope.launch { onAdded(repository.saveTodo(TodoDraft(id = 0, name = name.trim(), category = category))) }
     }
 
     /** The user's current day, with the day ending when they set it to. */

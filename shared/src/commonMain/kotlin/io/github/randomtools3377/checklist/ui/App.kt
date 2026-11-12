@@ -495,7 +495,7 @@ fun ChecklistApp(vm: MainViewModel) {
                             onNew = { newGoal = true },
                             finishedProjects = doneList.filter { it.goal.kind == io.github.randomtools3377.checklist.core.GoalKind.PROJECT }.associate { it.goal.id to it.day },
                         )
-                        AppTab.PLAN -> PlanScreen(planDays, vm, padding, onTimeline = { index -> push("timeline/$index") })
+                        AppTab.PLAN -> PlanScreen(planDays, vm, padding, onTimeline = { index -> push("timeline/$index") }, onEditTodo = { id -> push("todo/$id") })
                         AppTab.REVIEW -> if (settings.locks.review && !unlocked) {
                             LockedPanel("The review", unlock, Modifier.padding(padding))
                         } else {

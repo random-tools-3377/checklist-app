@@ -3,6 +3,7 @@
 package io.github.randomtools3377.checklist.ui
 
 import io.github.randomtools3377.checklist.core.Feature
+import io.github.randomtools3377.checklist.core.aboutNow
 import io.github.randomtools3377.checklist.core.Offered
 import io.github.randomtools3377.checklist.core.Rules
 import io.github.randomtools3377.checklist.core.SettingsSearch
@@ -118,7 +119,7 @@ private fun DifficultySettings(vm: MainViewModel) {
             modifier = Modifier.testTag("difficulty-now"),
         )
         Text(
-            "Penalties stay half a goal's own ${pointsWord()}, and prices don't change.",
+            "Penalties stay ${penaltyShare()} a goal's own ${pointsWord()}, and prices don't change.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -281,6 +282,8 @@ fun FeaturesScreen(vm: MainViewModel, onAppearance: () -> Unit, onBack: () -> Un
     val features by vm.features.collectAsState()
     val interest by vm.interestPercent.collectAsState()
     val boosts by vm.boosts.collectAsState()
+    // Each extra's line says the numbers set in Points and rules.
+    val rules by vm.rules.collectAsState()
     Scaffold(
         topBar = {
             TopAppBar(
@@ -318,7 +321,7 @@ fun FeaturesScreen(vm: MainViewModel, onAppearance: () -> Unit, onBack: () -> Un
                         Modifier.scrollPlace(target, feature.name).padding(horizontal = 16.dp, vertical = 6.dp),
                         verticalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
-                        SwitchLine(feature.title, feature.about, feature in features, "feature:${feature.name}") { vm.setFeature(feature, it) }
+                        SwitchLine(feature.title, feature.aboutNow(rules), feature in features, "feature:${feature.name}") { vm.setFeature(feature, it) }
                         if (feature == Feature.AI && feature in features) AiStatusPanel(vm)
                         // How much, for the two that pay an amount.
                         if (feature == Feature.INTEREST && feature in features) {

@@ -1,5 +1,6 @@
 package io.github.randomtools3377.checklist
 
+import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
@@ -12,6 +13,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import io.github.randomtools3377.checklist.core.Rules
 import io.github.randomtools3377.checklist.ui.SETTING_TIPS_ON
 import kotlinx.coroutines.runBlocking
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -57,6 +59,15 @@ class RulesAndHelpTest {
         app.waitFor { shown("rule-reset:penaltyPercent") }
         app.tap("rule-reset:penaltyPercent")
         app.waitFor { Rules.decode(runBlocking { container.db.dao().setting(Rules.SETTING) }).penaltyPercent == 50 }
+
+        // A number out of range says what it takes, and the last good one stays in use.
+        app.onNodeWithTag("rule-field:penaltyPercent").performTextReplacement("5000")
+        app.waitFor { shown("rule-range:penaltyPercent") }
+        app.onNodeWithTag("rule-range:penaltyPercent", useUnmergedTree = true).assertTextEquals("From 0 to 1000.")
+        assertEquals(50, Rules.decode(runBlocking { container.db.dao().setting(Rules.SETTING) }).penaltyPercent)
+        app.onNodeWithTag("rule-field:penaltyPercent").performTextReplacement("60")
+        app.waitFor { !shown("rule-range:penaltyPercent") }
+        app.waitFor { Rules.decode(runBlocking { container.db.dao().setting(Rules.SETTING) }).penaltyPercent == 60 }
     }
 
     @Test

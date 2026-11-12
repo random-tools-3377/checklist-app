@@ -483,7 +483,7 @@ fun GapCheckInScreen(
                     Text(
                         when (gap.kind) {
                             io.github.randomtools3377.checklist.core.GapKind.NOTHING_TICKED -> "Nothing was ticked on these days."
-                            io.github.randomtools3377.checklist.core.GapKind.POINT_LOSS -> "A lot of ${pointsWord()} were lost in one week."
+                            io.github.randomtools3377.checklist.core.GapKind.POINT_LOSS -> "${pointsText(settings.gaps.points)} or more came off within a week."
                         } + " What happened? One reason covers the whole stretch.",
                         style = MaterialTheme.typography.bodyMedium,
                     )

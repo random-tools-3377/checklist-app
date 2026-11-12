@@ -4,6 +4,7 @@ package io.github.randomtools3377.checklist.ui
 
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -52,7 +53,7 @@ import kotlinx.datetime.isoDayNumber
  * with its time, and a day's goal can be moved to another day of the same week.
  */
 @Composable
-fun PlanScreen(days: List<TodayView>, vm: MainViewModel, padding: PaddingValues, onTimeline: (Int) -> Unit = {}) {
+fun PlanScreen(days: List<TodayView>, vm: MainViewModel, padding: PaddingValues, onTimeline: (Int) -> Unit = {}, onEditTodo: (Long) -> Unit = {}) {
     var selected by rememberSaveable { mutableStateOf(0) }
     var moving by remember { mutableStateOf<Pair<Goal, LocalDate>?>(null) }
     if (days.isEmpty()) return
@@ -108,7 +109,9 @@ fun PlanScreen(days: List<TodayView>, vm: MainViewModel, padding: PaddingValues,
             item { Text("Nothing due.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
         }
         items(due, key = { "plan-${it.goal.id}" }) { row ->
-            PlanRow(row, view.day, today, onMove = { moving = row.goal to view.day })
+            // A to-do with a date opens its editor from here, to push it to another day.
+            val isTodo = row.goal.kind == io.github.randomtools3377.checklist.core.GoalKind.TODO
+            PlanRow(row, view.day, today, onMove = { moving = row.goal to view.day }, onEdit = if (isTodo) ({ onEditTodo(row.goal.id) }) else null)
         }
         if (view.thisWeek.isNotEmpty()) {
             item { SectionTitle("This week") }
@@ -162,10 +165,15 @@ internal fun EventLine(event: io.github.randomtools3377.checklist.core.Busy) {
 }
 
 @Composable
-private fun PlanRow(row: HabitRow, day: LocalDate, today: LocalDate, onMove: (() -> Unit)?) {
+private fun PlanRow(row: HabitRow, day: LocalDate, today: LocalDate, onMove: (() -> Unit)?, onEdit: (() -> Unit)? = null) {
     val goal = row.goal
     Card(Modifier.fillMaxWidth().testTag("plan-goal:${goal.name}")) {
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.goalStrip(goal.color).padding(12.dp)) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.goalStrip(goal.color)
+                .then(if (onEdit != null) Modifier.clickable(onClickLabel = "Edit", onClick = onEdit).testTag("plan-open-todo:${goal.name}") else Modifier)
+                .padding(12.dp),
+        ) {
             Text(goal.icon, fontSize = 24.sp, modifier = Modifier.width(40.dp), textAlign = TextAlign.Center)
             Column(Modifier.weight(1f)) {
                 Text(goal.name, style = MaterialTheme.typography.titleMedium)

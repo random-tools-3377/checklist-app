@@ -21,6 +21,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.foundation.layout.Arrangement
 import io.github.randomtools3377.checklist.core.Categories
+import io.github.randomtools3377.checklist.core.GoalKind
 import io.github.randomtools3377.checklist.core.Moves
 import io.github.randomtools3377.checklist.core.Feature
 import io.github.randomtools3377.checklist.core.payFor
@@ -207,7 +208,9 @@ fun TodayScreen(
     // Showing one category at a time, when goals have them.
     var category by rememberSaveable { mutableStateOf<String?>(null) }
     val categories = Categories.of(
-        screen.plan.map { it.row.goal } + (view.thisWeek + view.thisMonth + view.thisYear).map { it.goal } + view.projects.map { it.goal },
+        screen.plan.map { it.row.goal } + (view.thisWeek + view.thisMonth + view.thisYear).map { it.goal } + view.projects.map { it.goal } +
+            // To-dos take categories too, so one used only on to-dos has its chip.
+            view.todos.map { it.goal },
     )
     val filter = category?.takeIf { it in categories }
     val plan = screen.plan.filter { Categories.shows(filter, it.row.goal) }
@@ -280,6 +283,9 @@ fun TodayScreen(
                         stopwatch = stopwatch,
                         onAmount = { spot, seconds -> details = null; entering = AmountRequest(id, seconds, spot) },
                         onStart = { vm.startStopwatch(id) },
+                        // The same buttons as its card in the list: Move for one due today, and a dated to-do's editor.
+                        onMove = if (screen.plan.any { it.row.goal.id == id } && Moves.choices(row.goal, view.day, view.day).isNotEmpty()) ({ details = null; moving = row.goal }) else null,
+                        onEdit = if (row.goal.kind == GoalKind.TODO) ({ details = null; onEditTodo(id) }) else null,
                     )
                 },
             )
@@ -606,6 +612,8 @@ fun TodayScreen(
                                 onAmount = { spot, seconds -> entering = AmountRequest(planned.row.goal.id, seconds, spot) },
                                 onStart = { vm.startStopwatch(planned.row.goal.id) },
                                 onMove = if (Moves.choices(planned.row.goal, view.day, view.day).isNotEmpty()) ({ moving = planned.row.goal }) else null,
+                                // A to-do with a date opens its editor from here, to push it to another day.
+                                onEdit = if (planned.row.goal.kind == GoalKind.TODO) ({ onEditTodo(planned.row.goal.id) }) else null,
                             )
                             Spacer(Modifier.height(10.dp))
                         }
@@ -617,8 +625,9 @@ fun TodayScreen(
                     item(key = "title-todos") { SectionTitle("To-dos") }
                     item(key = "todo-add") {
                         QuickTodoField(
-                            onAdd = { name -> vm.addTodo(name) },
-                            onMore = { name -> if (name.isBlank()) onEditTodo(0) else vm.addTodo(name, onEditTodo) },
+                            // Added while one category is showing, it takes that category, so it stays on screen.
+                            onAdd = { name -> vm.addTodo(name, filter) },
+                            onMore = { name -> if (name.isBlank()) onEditTodo(0) else vm.addTodo(name, filter, onEditTodo) },
                         )
                         Spacer(Modifier.height(10.dp))
                     }
@@ -644,15 +653,15 @@ fun TodayScreen(
                 }
                 TodaySection.THIS_WEEK -> {
                     startGoals()
-                    habitSection("This week", shown(view.thisWeek), screen, ::tick, vm, grid, { details = it }, stopwatch, { r -> entering = r }) { skipping = it }
+                    habitSection("This week", shown(view.thisWeek), screen, ::tick, vm, grid, { details = it }, stopwatch, { r -> entering = r }, ::checkItem, { editingTick = it }) { skipping = it }
                 }
                 TodaySection.THIS_MONTH -> {
                     startGoals()
-                    habitSection("This month", shown(view.thisMonth), screen, ::tick, vm, grid, { details = it }, stopwatch, { r -> entering = r }) { skipping = it }
+                    habitSection("This month", shown(view.thisMonth), screen, ::tick, vm, grid, { details = it }, stopwatch, { r -> entering = r }, ::checkItem, { editingTick = it }) { skipping = it }
                 }
                 TodaySection.THIS_YEAR -> {
                     startGoals()
-                    habitSection("This year", shown(view.thisYear), screen, ::tick, vm, grid, { details = it }, stopwatch, { r -> entering = r }) { skipping = it }
+                    habitSection("This year", shown(view.thisYear), screen, ::tick, vm, grid, { details = it }, stopwatch, { r -> entering = r }, ::checkItem, { editingTick = it }) { skipping = it }
                 }
                 TodaySection.MONEY -> if (io.github.randomtools3377.checklist.core.Feature.BUDGET in features && !(vm.settings.value.locks.budget && !vm.unlocked.value)) {
                     item(key = "money") { TodayMoneyCard(vm, onBudget) }
@@ -1007,6 +1016,9 @@ private fun LazyListScope.habitSection(
     onDetails: (Long) -> Unit,
     stopwatch: Stopwatch?,
     onEnter: (AmountRequest) -> Unit,
+    /** Ticks a routine's item; the last one finishes the routine and celebrates, as in the daily list. */
+    checkItem: (HabitRow, StepRow, Spot) -> Unit,
+    onNote: (Long) -> Unit,
     onSkip: (Goal) -> Unit,
 ) {
     if (rows.isEmpty()) return
@@ -1024,8 +1036,12 @@ private fun LazyListScope.habitSection(
             onTick = { spot -> tick(row, spot) },
             onUndo = { if (row.isRoutine) vm.undoRoutine(row.goal.id) else vm.undoHabitTick(row.goal.id) },
             onSkip = { onSkip(row.goal) },
-            onItem = { item, _ -> vm.checkItem(item.step.id) },
+            onItem = { item, spot -> checkItem(row, item, spot) },
             onUncheck = { item -> vm.uncheckItem(item.step.id) },
+            // The same buttons as a goal due today: Focus for one with a length, and a note on its latest tick.
+            onFocus = row.goal.minutes?.let { minutes -> { vm.startFocus(row.goal.id, minutes) } },
+            lastTick = screen.lastTicks[row.goal.id],
+            onNote = onNote,
             stopwatch = stopwatch,
             onAmount = { spot, seconds -> onEnter(AmountRequest(row.goal.id, seconds, spot)) },
             onStart = { vm.startStopwatch(row.goal.id) },
@@ -1132,6 +1148,8 @@ private fun HabitCard(
     /** For a goal with an amount: opens the box to enter how much, with the timed seconds if it was timed. */
     onAmount: ((Spot, Int?) -> Unit)? = null,
     onStart: (() -> Unit)? = null,
+    /** For a to-do with a date: opens its editor, from a tap on its name or "Change date". */
+    onEdit: (() -> Unit)? = null,
 ) {
     val goal = row.goal
     val spot = remember { Spot() }
@@ -1148,7 +1166,14 @@ private fun HabitCard(
             Text(goal.icon, fontSize = cardSize.icon, modifier = Modifier.width(44.dp), textAlign = TextAlign.Center)
             Spacer(Modifier.width(8.dp))
             Column(Modifier.weight(1f)) {
-                Text(goal.name, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(
+                    goal.name,
+                    style = MaterialTheme.typography.titleMedium,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    // A to-do with a date opens its editor on a tap, like one without.
+                    modifier = if (onEdit != null) Modifier.clickable(onClickLabel = "Edit", onClick = onEdit).testTag("open-todo:${goal.name}") else Modifier,
+                )
                 val detail = buildList {
                     add("+${payFor(goal.points, rate, boosted, streakPercent)}" + if (counted) " each" else "")
                     if (counted && goal.bonus > 0) add("bonus +${payFor(goal.bonus, rate, boosted, streakPercent)}")
@@ -1265,6 +1290,14 @@ private fun HabitCard(
                                 modifier = Modifier.clickable { extras.onTakeBackSkip(goal.id) }.padding(vertical = 4.dp).testTag("take-back-skip:${goal.name}"),
                             )
                         }
+                        if (onEdit != null) {
+                            Text(
+                                "Change date",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.secondary,
+                                modifier = Modifier.clickable(onClick = onEdit).padding(vertical = 4.dp).testTag("change-date:${goal.name}"),
+                            )
+                        }
                     }
                 } else if (!row.done) {
                     Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -1280,6 +1313,14 @@ private fun HabitCard(
                                 style = MaterialTheme.typography.labelLarge,
                                 color = MaterialTheme.colorScheme.secondary,
                                 modifier = Modifier.clickable(onClick = onMove).padding(vertical = 4.dp).testTag("move:${goal.name}"),
+                            )
+                        }
+                        if (onEdit != null) {
+                            Text(
+                                "Change date",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.secondary,
+                                modifier = Modifier.clickable(onClick = onEdit).padding(vertical = 4.dp).testTag("change-date:${goal.name}"),
                             )
                         }
                     }
@@ -1556,7 +1597,8 @@ private fun TileRow(rows: List<HabitRow>, screen: TodayState, tick: (HabitRow, S
                 when {
                     // A routine's items, an amount to enter, and taking back a counted goal, are on its card.
                     row.isRoutine || row.goal.hasAmount -> onDetails(row.goal.id)
-                    done && row.goal.target > 1 -> onDetails(row.goal.id)
+                    // A done one opens its card too: to add a note, or take the tick back.
+                    done -> onDetails(row.goal.id)
                     else -> tick(row, spot)
                 }
             }, onHold = { onDetails(row.goal.id) })
@@ -1597,7 +1639,7 @@ private fun GoalTile(row: HabitRow, line: String, modifier: Modifier, onTap: (Sp
             .onGloballyPositioned { spot.center = it.boundsInRoot().center }
             .combinedClickable(
                 onClickLabel = if (done) "Details" else "Tick",
-                onLongClickLabel = "Details, skip or focus",
+                onLongClickLabel = "Details, skip, move or focus",
                 onClick = { onTap(spot) },
                 onLongClick = onHold,
             )
