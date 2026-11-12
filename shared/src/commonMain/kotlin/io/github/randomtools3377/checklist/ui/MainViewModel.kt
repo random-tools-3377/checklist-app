@@ -374,6 +374,10 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
             io.github.randomtools3377.checklist.data.AtMostLimits.current = io.github.randomtools3377.checklist.core.AtMost.decode(limits)
             rows
         }
+            // One shared run for every screen. Run once per reader, a reader that saw the goals
+            // change before the limits could put the old limits back after another had the new
+            // ones, and a goal just made "at most" then showed as an ordinary habit.
+            .shareIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), replay = 1)
 
     private fun <T> Flow<T>.state(initial: T): StateFlow<T> =
         stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), initial)
