@@ -127,8 +127,6 @@ class ToggleTick : ActionCallback {
         val result = book.tickHabit(goalId)
         if (result == TickResult.AlreadyDone) {
             book.undoHabitTick(goalId)
-            // A bet that tick had won is open again.
-            container.bets.takeBackWins()
         }
         if (result is TickResult.Ticked && result.finished) io.github.randomtools3377.checklist.reminders.Reminders.afterDone(context, goalId)
         CalendarWidget().update(context, glanceId)

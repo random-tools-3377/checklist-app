@@ -119,4 +119,24 @@ class ReviewStretchTest {
         // Together they make up the change in the balance.
         assertEquals(entries.sumOf { it.amount }, summary.earned - summary.spent - summary.lost + summary.interest + summary.bets)
     }
+
+    @Test
+    fun aStakeGivenBackCountsWithBetsAndAStretchWithNoBetsHasNone() {
+        // A bet placed the week bets were removed, its stake given back when the app opened.
+        val withBets = listOf(
+            entry(EntryKind.TICK, 10, monday, 1),
+            entry(EntryKind.BET, -25, week[0], 1),
+            entry(EntryKind.BET, 25, week[2], 1),
+        )
+        val summary = summarize(week.last(), listOf(habit(1)), emptyList(), entries = withBets)
+        assertEquals(0, summary.bets, "nothing gained or lost by it")
+        assertEquals(10, summary.earned, "a stake given back isn't counted as earned")
+        assertEquals(withBets.sumOf { it.amount }, summary.earned - summary.spent - summary.lost + summary.interest + summary.bets)
+
+        val stakeBack = summarize(week.last(), listOf(habit(1)), emptyList(), entries = listOf(entry(EntryKind.BET, 25, week[2], 1)))
+        assertEquals(25, stakeBack.bets)
+
+        val none = summarize(week.last(), listOf(habit(1)), emptyList(), entries = listOf(entry(EntryKind.TICK, 10, monday, 1)))
+        assertEquals(0, none.bets)
+    }
 }

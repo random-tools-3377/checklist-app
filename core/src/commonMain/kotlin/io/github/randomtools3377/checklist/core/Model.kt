@@ -214,7 +214,10 @@ enum class EntryKind {
     /** A challenge's bonus for finishing it (see [Challenges]). */
     CHALLENGE,
 
-    /** Betting on yourself: the stake when placed (negative), twice it when won (see [Bets]). */
+    /**
+     * Betting on yourself, from before bets were removed: the stake when placed (negative), what
+     * a win paid, and the stake of a bet still open then, given back (see [Bets]).
+     */
     BET,
 }
 

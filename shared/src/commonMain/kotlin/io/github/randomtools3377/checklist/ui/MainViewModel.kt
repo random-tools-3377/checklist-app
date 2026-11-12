@@ -1235,7 +1235,6 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
         goalId: Long,
         result: TickResult,
         luck: io.github.randomtools3377.checklist.data.Repository.LuckPaid? = null,
-        wonBets: Int = 0,
         undo: suspend () -> Unit,
     ) {
         if (result !is TickResult.Ticked) return
@@ -1244,8 +1243,7 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
         val name = repository.goal(goalId)?.name ?: return
         val paid = result.points + result.bonus
         val lucky = luck?.let { if (it.double) " · 🍀 lucky, twice the points: +${it.points}" else " · 🍀 lucky chest: +${it.points}" }.orEmpty()
-        val bet = if (wonBets > 0) " · 🎲 bet won: +$wonBets" else ""
-        offerUndo((if (paid > 0) "$name · +$paid" else "$name ticked") + lucky + bet, undo)
+        offerUndo((if (paid > 0) "$name · +$paid" else "$name ticked") + lucky, undo)
     }
 
     fun tickHabit(goalId: Long, onResult: (TickResult) -> Unit = {}) {
@@ -1258,13 +1256,9 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
             } else {
                 null
             }
-            // Bets on yourself: one reached by this tick is won straight away.
-            val betsOn = result is TickResult.Ticked && Feature.BETS in features.value
-            val won = if (betsOn) parts.bets.settle().filter { it.state == io.github.randomtools3377.checklist.core.BetState.WON } else emptyList()
-            offerTickUndo(goalId, result, luck, wonBets = won.sumOf { it.prize }) {
+            offerTickUndo(goalId, result, luck) {
                 book.undoHabitTick(goalId)
                 luck?.let { repository.removeEntry(it.entryId) }
-                parts.bets.takeBackWins()
             }
         }
     }
@@ -1273,19 +1267,15 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
     fun slip(goalId: Long) {
         viewModelScope.launch {
             lapses.slip(goalId)
-            // A tick taken back that had won a bet takes the win back too.
-            parts.bets.takeBackWins()
         }
     }
 
     /**
-     * Takes back the goal's latest tick, with what it paid: a lucky extra goes with its tick,
-     * and a bet it had won is open again.
+     * Takes back the goal's latest tick, with what it paid: a lucky extra goes with its tick.
      */
     fun undoHabitTick(goalId: Long) {
         viewModelScope.launch {
             book.undoHabitTick(goalId)
-            parts.bets.takeBackWins()
         }
     }
 
@@ -1297,7 +1287,6 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
             onResult(result)
             offerTickUndo(goalId, result) {
                 book.undoHabitTick(goalId)
-                parts.bets.takeBackWins()
             }
         }
     }
@@ -1372,7 +1361,6 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
             if (step != null && result is TickResult.Ticked) {
                 offerUndo("${step.name} ticked") {
                     book.uncheckItem(stepId)
-                    parts.bets.takeBackWins()
                 }
             }
         }
@@ -1381,7 +1369,6 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
     fun uncheckItem(stepId: Long) {
         viewModelScope.launch {
             book.uncheckItem(stepId)
-            parts.bets.takeBackWins()
         }
     }
 
@@ -1392,7 +1379,6 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
             onResult(result)
             offerTickUndo(goalId, result) {
                 book.undoRoutine(goalId)
-                parts.bets.takeBackWins()
             }
         }
     }
@@ -1400,7 +1386,6 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
     fun undoRoutine(goalId: Long) {
         viewModelScope.launch {
             book.undoRoutine(goalId)
-            parts.bets.takeBackWins()
         }
     }
 
@@ -1763,37 +1748,6 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
     /** Uses every item in hand on this week's boss; [onDone] says what it did. */
     fun attackBoss(onDone: (io.github.randomtools3377.checklist.core.Attack?) -> Unit) {
         viewModelScope.launch { onDone(repository.attackBoss(currentDay())) }
-    }
-
-    /** This week's bets, each with its goal and how far along it is, while bets are on; null when off. */
-    val bets: StateFlow<List<io.github.randomtools3377.checklist.core.BetRow>?> =
-        combine(features, today, dao.observeBalance(), dao.observeSetting(io.github.randomtools3377.checklist.core.Bets.SETTING), dao.observeGoals()) { on, day, _, text, goals ->
-            if (Feature.BETS in on) Triple(day, text, goals) else null
-        }.mapLatest { found ->
-            found?.let { (day, text, goals) ->
-                val monday = io.github.randomtools3377.checklist.core.Bosses.monday(day)
-                val ticks = dao.allTicks().map { it.toCore() }
-                io.github.randomtools3377.checklist.core.Bets.decode(text).filter { it.week == monday }.mapNotNull { bet ->
-                    goals.firstOrNull { it.id == bet.goalId }?.let { goal ->
-                        io.github.randomtools3377.checklist.core.BetRow(bet, "${goal.icon} ${goal.name}", io.github.randomtools3377.checklist.core.Bets.count(ticks, goal.toCore(), monday))
-                    }
-                }
-            }
-        }.state(null)
-
-    /** For each of [goalIds], the counts a bet can be placed for now; a goal with none is left out. */
-    suspend fun betRooms(goalIds: List<Long>): Map<Long, IntRange> = withContext(Dispatchers.Default) {
-        val day = currentDay()
-        val ticks = dao.habitTicksSince(Days.earliestOpenDay(io.github.randomtools3377.checklist.core.Bosses.monday(day)).toEpochDay()).map { it.toCore() }
-        goalIds.mapNotNull { id ->
-            val goal = dao.goal(id)?.toCore() ?: return@mapNotNull null
-            io.github.randomtools3377.checklist.core.Bets.room(ticks, goal, day).takeIf { !it.isEmpty() }?.let { id to it }
-        }.toMap()
-    }
-
-    /** Bets that [goalId] will be done [times] times this week, for [stake] points; [onDone] gets why not, or null. */
-    fun placeBet(goalId: Long, times: Int, stake: Int, onDone: (io.github.randomtools3377.checklist.core.BetRefusal?) -> Unit) {
-        viewModelScope.launch { onDone(parts.bets.place(goalId, times, stake)) }
     }
 
     /** How the user has styled the character: skin, hair and eyes. */
@@ -2445,7 +2399,8 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
     fun restore(backup: Backup, onDone: (String) -> Unit) {
         viewModelScope.launch {
             val message = try {
-                repository.restore(backup)
+                // A bet still open in an older backup gives its stake back.
+                parts.restore(backup)
                 // What this phone keeps by goal id stops: after a restore, an id can mean another goal.
                 phone.forgetSnoozes()
                 stopFocus()

@@ -477,7 +477,7 @@ fun SettingsScreen(
                     color = MaterialTheme.colorScheme.primary,
                 )
             }
-            if (shows("Points and rules penalty bonus quest combo boss lucky bet shield path budget game prices balance check suggested difficulty percent"))
+            if (shows("Points and rules penalty bonus quest combo boss lucky shield path budget game prices balance check suggested difficulty percent"))
             Column(
                 Modifier
                     .fillMaxWidth()

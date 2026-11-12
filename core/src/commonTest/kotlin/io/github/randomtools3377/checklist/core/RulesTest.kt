@@ -7,12 +7,10 @@ import kotlin.random.Random
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class RulesTest {
     private val start = LocalDate(2026, 1, 1)
-    private val monday = LocalDate(2026, 11, 9)
 
     @AfterTest
     fun putTheUsualRulesBack() {
@@ -65,9 +63,6 @@ class RulesTest {
         assertEquals(10, Bosses.hit(Item.SCROLL, Boss.COUCH_LUMP))
         for (seed in 0L until 3000L) assertEquals(luckBefore(seed, 4), Lucky.of(seed, 4))
 
-        assertEquals(listOf(10, 25, 50), Bets.STAKES)
-        assertEquals(3, Bets.MOST_OPEN)
-        assertEquals(50, Bet(1, monday, 2, 25).prize)
         assertEquals(30, Shields.EVERY)
         assertEquals(2, Shields.MOST)
         assertEquals(10, Paths.BONUS_PERCENT)
@@ -82,7 +77,7 @@ class RulesTest {
 
     @Test
     fun rulesGoThroughTextAndBack() {
-        val changed = Rules(penaltyPercent = 100, veryHardNoFreeSkips = 0, luckyChestMax = 30, betStake3 = 75, minutesPerPoint = 0)
+        val changed = Rules(penaltyPercent = 100, veryHardNoFreeSkips = 0, luckyChestMax = 30, shieldsMost = 3, minutesPerPoint = 0)
         assertEquals(changed, Rules.decode(Rules.encode(changed)))
         assertEquals("{}", Rules.encode(Rules()), "only what differs is kept")
         assertEquals(Rules(), Rules.decode(Rules.encode(Rules())))
@@ -99,11 +94,21 @@ class RulesTest {
     }
 
     @Test
+    fun theBetNumbersStoredBeforeBetsWereRemovedAreLeftOut() {
+        val stored = """{"penaltyPercent":100,"betStake1":5,"betStake2":15,"betStake3":75,"betWinTimes":3,"betsMostOpen":1,"shieldsMost":4}"""
+        val rules = Rules.decode(stored)
+        assertEquals(Rules(penaltyPercent = 100, shieldsMost = 4), rules)
+        assertEquals("""{"penaltyPercent":100,"shieldsMost":4}""", Rules.encode(rules), "saved again without them")
+        assertTrue(Rules.FIELDS.none { it.key.startsWith("bet") }, "no bet numbers on the Points and rules page")
+        assertEquals(listOf("shieldEveryDays", "shieldsMost"), Rules.FIELDS.filter { it.group == "Streak shields" }.map { it.key })
+    }
+
+    @Test
     fun numbersOutOfRangeAreBroughtBack() {
         assertEquals(Rules(), Rules().sane())
         val wild = Rules(
             penaltyPercent = 5000, luckyOneIn = 0, comboPerDay = -3, luckyChestMin = 20, luckyChestMax = 10,
-            shieldsMost = -1, shieldEveryDays = 0, betsMostOpen = -2, veryHardNoFreeSkips = 7,
+            shieldsMost = -1, shieldEveryDays = 0, veryHardNoFreeSkips = 7,
         ).sane()
         assertEquals(1000, wild.penaltyPercent)
         assertEquals(1, wild.luckyOneIn)
@@ -112,7 +117,6 @@ class RulesTest {
         assertEquals(20, wild.luckyChestMax)
         assertEquals(0, wild.shieldsMost)
         assertEquals(1, wild.shieldEveryDays)
-        assertEquals(0, wild.betsMostOpen)
         assertEquals(1, wild.veryHardNoFreeSkips)
         assertEquals(1, Rules.decode("""{"luckyOneIn":0}""").luckyOneIn)
     }
@@ -184,27 +188,5 @@ class RulesTest {
         assertEquals(0, book.balance())
         book.tickHabit(run.id)
         assertEquals(10, book.balance())
-    }
-
-    @Test
-    fun aWonBetIsTakenBackEvenIfItsRuleChangedSince() = runTest {
-        val store = MemoryStore()
-        val clock = TestClock(LocalDateTime(2026, 11, 9, 10, 0))
-        val book = Book(store, clock) { kotlinx.datetime.TimeZone.UTC }
-        val bets = Bets(store, book)
-        val read = store.addGoal(Goal(kind = GoalKind.HABIT, name = "Read", icon = "📖", points = 5, repeat = Repeat.everyDay(monday)))
-        store.addEntry(Entry(at = 0, day = monday, kind = EntryKind.TICK, amount = 30, label = "Start"))
-        store.putSetting(Rules.SETTING, Rules.encode(Rules(betWinTimes = 3)))
-
-        assertNull(bets.place(read.id, 1, 10))
-        book.tickHabit(read.id)
-        assertEquals(listOf(BetState.WON), bets.settle().map { it.state })
-        assertEquals(30 - 10 + 5 + 30, book.balance(), "three times the stake")
-
-        store.putSetting(Rules.SETTING, Rules.encode(Rules()))
-        book.undoHabitTick(read.id)
-        bets.takeBackWins()
-        assertEquals(30 - 10, book.balance())
-        assertEquals(BetState.OPEN, Bets.decode(store.setting(Bets.SETTING)).single().state)
     }
 }

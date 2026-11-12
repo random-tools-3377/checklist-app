@@ -65,13 +65,8 @@ data class Rules(
     val luckyChestMin: Int = 5,
     val luckyChestMax: Int = 15,
 
-    // Bets and shields
-    val betStake1: Int = 10,
-    val betStake2: Int = 25,
-    val betStake3: Int = 50,
-    /** A bet won pays the stake this many times. */
-    val betWinTimes: Int = 2,
-    val betsMostOpen: Int = 3,
+    // Streak shields. (Bets, with their stakes and win, are no longer in the app: their old
+    // numbers in the stored text are left out when it is read.)
     val shieldEveryDays: Int = 30,
     val shieldsMost: Int = 2,
 
@@ -163,7 +158,7 @@ data class Rules(
         private const val BOOSTS = "Boosts and bonuses"
         private const val QUESTS = "Quests and combos"
         private const val BOSSES = "Bosses and lucky ticks"
-        private const val BETS = "Bets and shields"
+        private const val SHIELDS = "Streak shields"
         private const val PATHS = "Paths"
         private const val BUDGET = "Budget game"
         private const val PRICES = "Prices"
@@ -215,13 +210,8 @@ data class Rules(
             field("luckyChestMin", BOSSES, "A lucky chest holds at least", POINTS, 0, MOST, { it.luckyChestMin }) { r, v -> r.copy(luckyChestMin = v) },
             field("luckyChestMax", BOSSES, "A lucky chest holds at most", POINTS, 0, MOST, { it.luckyChestMax }) { r, v -> r.copy(luckyChestMax = v) },
 
-            field("betStake1", BETS, "Smallest bet", POINTS, 1, MOST, { it.betStake1 }) { r, v -> r.copy(betStake1 = v) },
-            field("betStake2", BETS, "Middle bet", POINTS, 1, MOST, { it.betStake2 }) { r, v -> r.copy(betStake2 = v) },
-            field("betStake3", BETS, "Biggest bet", POINTS, 1, MOST, { it.betStake3 }) { r, v -> r.copy(betStake3 = v) },
-            field("betWinTimes", BETS, "A bet won pays back the stake this many times", "", 1, 100, { it.betWinTimes }) { r, v -> r.copy(betWinTimes = v) },
-            field("betsMostOpen", BETS, "Bets open at once, at most", "bets", 0, 100, { it.betsMostOpen }) { r, v -> r.copy(betsMostOpen = v) },
-            field("shieldEveryDays", BETS, "A streak shield is earned every", DAYS, 1, 3650, { it.shieldEveryDays }) { r, v -> r.copy(shieldEveryDays = v) },
-            field("shieldsMost", BETS, "Streak shields held at most", "shields", 0, 100, { it.shieldsMost }) { r, v -> r.copy(shieldsMost = v) },
+            field("shieldEveryDays", SHIELDS, "A streak shield is earned every", DAYS, 1, 3650, { it.shieldEveryDays }) { r, v -> r.copy(shieldEveryDays = v) },
+            field("shieldsMost", SHIELDS, "Streak shields held at most", "shields", 0, 100, { it.shieldsMost }) { r, v -> r.copy(shieldsMost = v) },
 
             field("pathBonusPercent", PATHS, "A path's skill gets this much more experience", PERCENT, 0, 1000, { it.pathBonusPercent }) { r, v -> r.copy(pathBonusPercent = v) },
 

@@ -38,7 +38,6 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -74,12 +73,6 @@ import io.github.randomtools3377.checklist.core.Title
 import io.github.randomtools3377.checklist.core.Titles
 import io.github.randomtools3377.checklist.core.QuestProgress
 import io.github.randomtools3377.checklist.core.BossView
-import io.github.randomtools3377.checklist.core.BetRefusal
-import io.github.randomtools3377.checklist.core.BetRow
-import io.github.randomtools3377.checklist.core.BetState
-import io.github.randomtools3377.checklist.core.Bets
-import io.github.randomtools3377.checklist.core.Goal
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.TextButton
 import io.github.randomtools3377.checklist.core.Bosses
 import io.github.randomtools3377.checklist.core.Item
@@ -614,144 +607,6 @@ fun attackText(dealt: Int, beaten: Boolean, paid: Int): String = when {
     beaten && paid > 0 -> "💥 $dealt damage, and it's beaten! +${pointsText(paid)}"
     beaten -> "💥 $dealt damage, and it's beaten!"
     else -> "💥 $dealt damage!"
-}
-
-/** On Today, with bets on: this week's bets and how far along each is, and a way to place one. */
-@Composable
-fun BetsCard(
-    rows: List<BetRow>,
-    habits: List<Goal>,
-    balance: Int,
-    rooms: suspend (List<Long>) -> Map<Long, IntRange>,
-    onPlace: (Long, Int, Int, (BetRefusal?) -> Unit) -> Unit,
-) {
-    var placing by remember { mutableStateOf(false) }
-    Card(Modifier.fillMaxWidth().testTag("bets")) {
-        Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text("🎲 Bet on yourself", style = MaterialTheme.typography.titleSmall)
-            if (rows.isEmpty()) {
-                Text(
-                    "Stake ${pointsWord()} that you'll do a goal so many times this week. Do it and win ${io.github.randomtools3377.checklist.core.Rules.current.betWinTimes} times the stake back; fall short and it's gone.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            rows.forEach { row ->
-                val bet = row.bet
-                Text(
-                    "${row.goal}: " + when (bet.state) {
-                        BetState.OPEN -> "${row.done} of ${bet.times} · ${pointsText(bet.stake)} at stake, wins ${pointsText(bet.prize)}"
-                        BetState.WON -> "won! +${pointsText(bet.prize)}"
-                        BetState.LOST -> "lost ${pointsText(bet.stake)}"
-                    },
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = if (bet.state == BetState.WON) goodColor() else MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.testTag("bet:${bet.goalId}"),
-                )
-            }
-            if (rows.count { it.bet.state == BetState.OPEN } < Bets.MOST_OPEN && habits.isNotEmpty()) {
-                TextButton(onClick = { placing = true }, modifier = Modifier.testTag("bet-place")) { Text("Place a bet") }
-            }
-        }
-    }
-    if (placing) {
-        PlaceBetDialog(habits.filter { h -> rows.none { it.bet.goalId == h.id } }, balance, rooms, onPlace, onClose = { placing = false })
-    }
-}
-
-/** At most this many counts are offered for a bet, starting from one more than is done. */
-private const val BET_CHOICES = 7
-
-@Composable
-private fun PlaceBetDialog(
-    offered: List<Goal>,
-    balance: Int,
-    rooms: suspend (List<Long>) -> Map<Long, IntRange>,
-    onPlace: (Long, Int, Int, (BetRefusal?) -> Unit) -> Unit,
-    onClose: () -> Unit,
-) {
-    // Only goals that can still be done more times this week, and only counts the week can hold.
-    val room by produceState<Map<Long, IntRange>?>(null, offered) { value = rooms(offered.map { it.id }) }
-    val habits = room?.let { found -> offered.filter { it.id in found } }.orEmpty()
-    var picked by remember { mutableStateOf<Long?>(null) }
-    val goalId = picked?.takeIf { id -> habits.any { it.id == id } } ?: habits.firstOrNull()?.id
-    val choices = goalId?.let { room?.get(it) }?.let { it.first..minOf(it.last, it.first + BET_CHOICES - 1) }
-    var chosen by remember { mutableStateOf(3) }
-    val times = choices?.let { chosen.coerceIn(it.first, it.last) } ?: chosen
-    var stake by remember { mutableStateOf(Bets.STAKES.first()) }
-    var problem by remember { mutableStateOf<String?>(null) }
-    AlertDialog(
-        onDismissRequest = onClose,
-        title = { Text("Bet on yourself") },
-        text = {
-            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Which goal", style = MaterialTheme.typography.labelLarge)
-                if (room != null && habits.isEmpty()) {
-                    Text(
-                        "No goal can be done more times this week.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    habits.forEach { goal ->
-                        FilterChip(selected = goalId == goal.id, onClick = { picked = goal.id }, label = { Text("${goal.icon} ${goal.name}") }, modifier = Modifier.testTag("bet-goal:${goal.name}"))
-                    }
-                }
-                val goal = habits.firstOrNull { it.id == goalId }
-                if (goal != null && choices != null) {
-                    // Done several times a day: a time is a day with all of them done.
-                    Text(
-                        if (goal.severalADay) "How many days this week with all ${goal.target} done" else "How many times this week",
-                        style = MaterialTheme.typography.labelLarge,
-                    )
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        choices.forEach { n -> FilterChip(selected = times == n, onClick = { chosen = n }, label = { Text("$n") }, modifier = Modifier.testTag("bet-times:$n")) }
-                    }
-                    if (choices.first > 1) {
-                        Text(
-                            "Done ${choices.first - 1} so far this week, so a bet is on more than that.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
-                Text("Stake", style = MaterialTheme.typography.labelLarge)
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Bets.STAKES.forEach { n ->
-                        FilterChip(selected = stake == n, onClick = { stake = n }, enabled = n <= balance, label = { Text(pointsText(n)) }, modifier = Modifier.testTag("bet-stake:$n"))
-                    }
-                }
-                Text(
-                    "${pointsText(stake)} comes off now. Do it and you get ${pointsText(stake * 2)} back.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                problem?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
-            }
-        },
-        confirmButton = {
-            TextButton(
-                onClick = {
-                    val id = goalId ?: return@TextButton
-                    onPlace(id, times, stake) { refusal ->
-                        problem = when (refusal) {
-                            null -> { onClose(); null }
-                            BetRefusal.TOO_POOR -> "Not enough ${pointsWord()} for that stake."
-                            BetRefusal.ALREADY -> "There's already a bet on that goal this week."
-                            BetRefusal.TOO_MANY -> "Three bets at a time is the most."
-                            BetRefusal.NOT_A_HABIT -> "Only habits can be bet on."
-                            BetRefusal.DONE_ALREADY -> "That many is done already this week. Pick more."
-                            BetRefusal.OUT_OF_REACH -> "What's left of this week can't hold that many."
-                        }
-                    }
-                },
-                enabled = goalId != null && choices != null && stake <= balance,
-                modifier = Modifier.testTag("bet-ok"),
-            ) { Text("Bet ${pointsText(stake)}") }
-        },
-        dismissButton = { TextButton(onClick = onClose) { Text("Cancel") } },
-    )
 }
 
 /** Choosing a path, from level 10: a title and a little more experience in its skill. */

@@ -10,7 +10,6 @@ enum class TodaySection(val label: String) {
     CHARACTER("Your character"),
     QUESTS("Daily quests"),
     RACE("Race with last week"),
-    BETS("Bets"),
     BOSS("Boss of the week"),
 
     /** Today's pay filling up, while Budget is on and pay is set. */
@@ -32,6 +31,8 @@ data class SectionChoice(val section: TodaySection, val shown: Boolean)
  * Today's sections in the user's order, each shown or hidden. Stored as names in order, with a
  * "-" in front of hidden ones: "BALANCE,-STREAKS,DUE_TODAY". Sections a newer version adds are
  * shown, just after the one before them in the usual order, or first if that one isn't there.
+ * Sections the app no longer has, like Bets in orders saved before 0.63.0, are left out, and
+ * the rest keep their order.
  */
 object Sections {
     val DEFAULT: List<SectionChoice> = TodaySection.entries.map { SectionChoice(it, shown = true) }

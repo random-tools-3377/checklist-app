@@ -6,7 +6,7 @@ import kotlin.test.assertEquals
 class SectionsTest {
     @Test
     fun sectionsKeepTheirOrderAndWhichAreHidden() {
-        val stored = "MOOD,STREAKS,-BALANCE,CHARACTER,QUESTS,RACE,BETS,BOSS,MONEY,WEEKLY_TARGET,PACE,DUE_TODAY,TODOS,THIS_WEEK,THIS_MONTH,THIS_YEAR,PROJECTS"
+        val stored = "MOOD,STREAKS,-BALANCE,CHARACTER,QUESTS,RACE,BOSS,MONEY,WEEKLY_TARGET,PACE,DUE_TODAY,TODOS,THIS_WEEK,THIS_MONTH,THIS_YEAR,PROJECTS"
         val choices = Sections.decode(stored)
         assertEquals(listOf(TodaySection.MOOD, TodaySection.STREAKS, TodaySection.BALANCE, TodaySection.CHARACTER), choices.take(4).map { it.section })
         assertEquals(false, choices[2].shown)
@@ -25,13 +25,28 @@ class SectionsTest {
         assertEquals(
             listOf(
                 TodaySection.MOOD, TodaySection.STREAKS, TodaySection.BALANCE, TodaySection.CHARACTER, TodaySection.QUESTS,
-                TodaySection.RACE, TodaySection.BETS, TodaySection.BOSS, TodaySection.MONEY, TodaySection.WEEKLY_TARGET,
+                TodaySection.RACE, TodaySection.BOSS, TodaySection.MONEY, TodaySection.WEEKLY_TARGET,
             ),
-            older.take(10).map { it.section },
+            older.take(9).map { it.section },
         )
         assertEquals(true, older[3].shown)
         // With nothing before it stored, it goes first.
         assertEquals(TodaySection.MOOD, Sections.decode("DUE_TODAY").first().section)
+    }
+
+    @Test
+    fun anOrderSavedWithTheBetsSectionKeepsTheRestOfIt() {
+        // Saved from 0.61.0 on, with Bets moved up and Pace hidden: Bets is left out quietly.
+        val saved = "MOOD,BETS,STREAKS,-BALANCE,CHARACTER,QUESTS,RACE,BOSS,MONEY,WEEKLY_TARGET,-PACE,DUE_TODAY,TODOS,THIS_WEEK,THIS_MONTH,THIS_YEAR,PROJECTS"
+        val choices = Sections.decode(saved)
+        assertEquals(TodaySection.entries.size, choices.size)
+        assertEquals(listOf(TodaySection.MOOD, TodaySection.STREAKS, TodaySection.BALANCE), choices.take(3).map { it.section })
+        assertEquals(listOf(TodaySection.BALANCE, TodaySection.PACE), choices.filter { !it.shown }.map { it.section })
+        assertEquals(saved.replace("BETS,", ""), Sections.encode(choices))
+        // Hidden, or the only thing stored, it is left out all the same.
+        assertEquals(Sections.decode(saved.replace("BETS,", "")), Sections.decode(saved.replace("BETS,", "-BETS,")))
+        assertEquals(Sections.DEFAULT, Sections.decode("BETS"))
+        assertEquals(Sections.DEFAULT, Sections.decode("-BETS"))
     }
 
     @Test
@@ -40,7 +55,7 @@ class SectionsTest {
         assertEquals(listOf(TodaySection.BALANCE, TodaySection.MOOD, TodaySection.CHARACTER), moved.take(3).map { it.section })
         assertEquals(Sections.DEFAULT, Sections.move(Sections.DEFAULT, 0, -1)) // already at the top
         val hidden = Sections.toggle(Sections.DEFAULT, TodaySection.PACE)
-        assertEquals("MOOD,BALANCE,CHARACTER,QUESTS,RACE,BETS,BOSS,MONEY,WEEKLY_TARGET,STREAKS,-PACE,DUE_TODAY,TODOS,THIS_WEEK,THIS_MONTH,THIS_YEAR,PROJECTS", Sections.encode(hidden))
+        assertEquals("MOOD,BALANCE,CHARACTER,QUESTS,RACE,BOSS,MONEY,WEEKLY_TARGET,STREAKS,-PACE,DUE_TODAY,TODOS,THIS_WEEK,THIS_MONTH,THIS_YEAR,PROJECTS", Sections.encode(hidden))
     }
 
     @Test

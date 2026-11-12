@@ -49,7 +49,10 @@ data class ReviewSummary(
     val categories: List<CategorySummary> = emptyList(),
     /** Savings interest paid in the stretch. */
     val interest: Int = 0,
-    /** Bets on yourself in the stretch: stakes placed (taken off) and wins (paid), together. */
+    /**
+     * Bets on yourself in the stretch, from before bets were removed: stakes placed (taken off),
+     * wins (paid) and stakes given back, together. 0 for a stretch with none.
+     */
     val bets: Int = 0,
 ) {
     val mostSkipped: GoalSummary? get() = goals.filter { it.skipped > 0 }.maxByOrNull { it.skipped }

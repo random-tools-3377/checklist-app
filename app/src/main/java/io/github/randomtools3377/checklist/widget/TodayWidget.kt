@@ -223,8 +223,6 @@ class TimelineUndo : ActionCallback {
         val container = (context.applicationContext as ChecklistApplication).container
         val book = container.book
         if (parameters[TimelineRoutine] == true) book.undoRoutine(goalId) else book.undoHabitTick(goalId)
-        // A bet that tick had won is open again.
-        container.bets.takeBackWins()
         TodayWidget().update(context, glanceId)
     }
 }

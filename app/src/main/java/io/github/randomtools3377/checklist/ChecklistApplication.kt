@@ -55,7 +55,6 @@ class Container(app: Application) {
     val book get() = parts.book
     val lapses get() = parts.lapses
     val gaps get() = parts.gaps
-    val bets get() = parts.bets
     val repository get() = parts.repository
 
     /**

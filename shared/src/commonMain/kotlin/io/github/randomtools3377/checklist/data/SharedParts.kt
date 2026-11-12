@@ -1,5 +1,6 @@
 package io.github.randomtools3377.checklist.data
 
+import io.github.randomtools3377.checklist.core.Backup
 import io.github.randomtools3377.checklist.core.Bets
 import io.github.randomtools3377.checklist.core.Book
 import io.github.randomtools3377.checklist.core.Combos
@@ -26,7 +27,8 @@ class SharedParts(val db: AppDatabase, val gifs: GifStore, val photo: PhotoStore
     /**
      * Finds misses since the last check, then gaps, and pays what the day's end pays. When the
      * app opens, and when the day ends. All in one transaction, so the misses a gap covers never
-     * show on their own first.
+     * show on their own first. A bet still open from before bets were removed gives its stake
+     * back here, once.
      */
     suspend fun closeDays() {
         db.withTransaction {
@@ -35,8 +37,17 @@ class SharedParts(val db: AppDatabase, val gifs: GifStore, val photo: PhotoStore
             interest.pay()
             perfectDays.pay()
             combos.pay()
-            bets.settle()
+            bets.giveBackOpen()
         }
+    }
+
+    /**
+     * Replaces everything with [backup] (see [Repository.restore]). A bet still open in it, from
+     * a backup made before bets were removed, gives its stake back straight away.
+     */
+    suspend fun restore(backup: Backup) {
+        repository.restore(backup)
+        bets.giveBackOpen()
     }
 }
 
