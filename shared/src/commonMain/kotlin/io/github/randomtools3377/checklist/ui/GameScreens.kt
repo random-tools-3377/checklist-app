@@ -185,6 +185,10 @@ fun LevelCard(
     onMood: (Int) -> Unit = {},
     onMoodLater: () -> Unit = {},
     onSuggestion: (io.github.randomtools3377.checklist.core.HabitRow, Offset) -> Unit = { _, _ -> },
+    /** On a low morning: a goal still to do that often goes with a better mood, named on this card. */
+    moodAlso: io.github.randomtools3377.checklist.core.HabitRow? = null,
+    /** On a low morning: one gentle line naming a reward to look forward to. */
+    lookForward: String? = null,
     onCheered: () -> Unit = {},
     onIdeas: (SkillArea) -> Unit = {},
 ) {
@@ -271,6 +275,43 @@ fun LevelCard(
                             (if (counted) "+1  " else "✓ Done:  ") + "${row.goal.icon} ${row.goal.name}",
                             maxLines = 1,
                             overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+                // A low morning: the one suggestion is on this card. The goal that often goes with a
+                // better mood is named here too, with its own button unless it is the quick goal above.
+                if (say.hardDay) {
+                    moodAlso?.let { row ->
+                        Text(
+                            io.github.randomtools3377.checklist.core.MoodInsights.alsoLine(row.goal),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onTertiaryContainer,
+                            modifier = Modifier.testTag("companion-mood-goal"),
+                        )
+                        // A goal with an amount or a checklist is done from its own card, where that is entered.
+                        if (row.goal.id != companion.suggestion?.goal?.id && !row.goal.hasAmount && !row.isRoutine) {
+                            var spot by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(Offset.Zero) }
+                            val counted = row.goal.target > 1 && !row.isRoutine
+                            androidx.compose.material3.FilledTonalButton(
+                                onClick = { onSuggestion(row, spot) },
+                                modifier = Modifier
+                                    .onGloballyPositioned { spot = it.boundsInRoot().center }
+                                    .testTag("companion-mood-do"),
+                            ) {
+                                Text(
+                                    (if (counted) "+1  " else "✓ Done:  ") + "${row.goal.icon} ${row.goal.name}",
+                                    maxLines = 1,
+                                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                )
+                            }
+                        }
+                    }
+                    lookForward?.let { line ->
+                        Text(
+                            line,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onTertiaryContainer,
+                            modifier = Modifier.testTag("companion-look-forward"),
                         )
                     }
                 }

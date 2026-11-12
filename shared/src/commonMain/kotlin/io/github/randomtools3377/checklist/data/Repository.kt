@@ -124,6 +124,8 @@ const val SETTING_MOOD_SKIPPED = "mood_skipped"
 const val SETTING_MOOD_AFTER_CLOSED = "mood_after_closed"
 /** The day the notes under the morning's mood were closed ("Done"). */
 const val SETTING_MOOD_MORE_CLOSED = "mood_more_closed"
+/** The day whose first check-in came after everything was done, so it is that day's only mood. */
+const val SETTING_MOOD_ONLY = "mood_only_day"
 /** The Monday of the last week planned, or put off, from the weekly planning card. */
 const val SETTING_WEEK_PLANNED = "week_planned"
 /** "done" once the welcome card on Today was answered, or the examples added (see GuideScreen). */
@@ -562,13 +564,76 @@ class Repository(private val db: AppDatabase, private val celebrations: GifStore
      * How the user feels today, from the check-in on Today. A null [note] keeps the one there;
      * blank clears it. The mood once everything was done, its note and the day's factors stay.
      */
-    suspend fun setMood(day: LocalDate, score: Int, note: String?) {
+    suspend fun setMood(day: LocalDate, score: Int, note: String?, afterAllDone: Boolean = false) {
         val old = dao.mood(day.toEpochDay())
         val text = if (note == null) old?.note else Moods.tidyNote(note)
         dao.putMood(
             old?.copy(score = score.coerceIn(1, 5), note = text, at = nowMillis())
                 ?: MoodEntity(day.toEpochDay(), score.coerceIn(1, 5), text, nowMillis()),
         )
+        // The day's first check-in, with everything already done: its only mood (see MoodInsights.asksLater).
+        if (old == null && afterAllDone) setSetting(SETTING_MOOD_ONLY, day.toString())
+    }
+
+    /**
+     * A day filled in from the mood journal, for [today] or earlier: its mood, and whatever else
+     * was given with it. False when the day is still to come or already has a mood.
+     */
+    suspend fun addMoodDay(mood: Mood, today: LocalDate): Boolean = db.withTransaction {
+        if (!io.github.randomtools3377.checklist.core.MoodJournal.canAdd(mood.day, today)) return@withTransaction false
+        if (dao.mood(mood.day.toEpochDay()) != null) return@withTransaction false
+        val after = mood.after?.coerceIn(1, 5)
+        dao.putMood(
+            MoodEntity(
+                day = mood.day.toEpochDay(),
+                score = mood.score.coerceIn(1, 5),
+                note = Moods.tidyNote(mood.note),
+                at = nowMillis(),
+                afterScore = after,
+                afterAt = after?.let { nowMillis() },
+                afterNote = Moods.tidyNote(mood.afterNote),
+                factors = MoodFactors.encode(mood.factors),
+            ),
+        )
+        true
+    }
+
+    /**
+     * Takes a day out of the mood journal: its moods, notes and noted things. What Today
+     * remembered about that day's check-ins goes too, so today's can be asked afresh.
+     */
+    suspend fun deleteMoodDay(day: LocalDate): Unit = db.withTransaction {
+        dao.deleteMood(day.toEpochDay())
+        for (name in listOf(SETTING_MOOD_ONLY, SETTING_MOOD_AFTER_CLOSED, SETTING_MOOD_MORE_CLOSED, SETTING_MOOD_SKIPPED)) {
+            if (dao.setting(name) == day.toString()) setSetting(name, "")
+        }
+    }
+
+    /**
+     * "Pay N points" on "Mood and your goals": the goal pays [points] from now on, and what it
+     * paid before is remembered for Undo (see MoodRaises). False when the goal is gone.
+     */
+    suspend fun raiseGoalPoints(id: Long, points: Int): Boolean = db.withTransaction {
+        val goal = dao.goal(id) ?: return@withTransaction false
+        val raises = io.github.randomtools3377.checklist.core.MoodRaises
+        setSetting(raises.SETTING, raises.encode(raises.raised(raises.decode(dao.setting(raises.SETTING)), goal.toCore(), points.coerceAtLeast(0))))
+        dao.updateGoal(goal.copy(points = points.coerceAtLeast(0)))
+        true
+    }
+
+    /**
+     * Undo after "Pay N points": the goal pays what it did before. False, and nothing changes,
+     * when it no longer pays what it was raised to (its points were changed somewhere else).
+     */
+    suspend fun undoRaise(id: Long): Boolean = db.withTransaction {
+        val raises = io.github.randomtools3377.checklist.core.MoodRaises
+        val all = raises.decode(dao.setting(raises.SETTING))
+        val raise = all.firstOrNull { it.goalId == id } ?: return@withTransaction false
+        setSetting(raises.SETTING, raises.encode(raises.without(all, id)))
+        val goal = dao.goal(id) ?: return@withTransaction false
+        if (goal.points != raise.new) return@withTransaction false
+        dao.updateGoal(goal.copy(points = raise.old))
+        true
     }
 
     /**

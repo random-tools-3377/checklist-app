@@ -141,6 +141,7 @@ import io.github.randomtools3377.checklist.data.SETTING_WEEK_PLANNED
 import io.github.randomtools3377.checklist.data.SETTING_MOOD_SKIPPED
 import io.github.randomtools3377.checklist.data.SETTING_MOOD_AFTER_CLOSED
 import io.github.randomtools3377.checklist.data.SETTING_MOOD_MORE_CLOSED
+import io.github.randomtools3377.checklist.data.SETTING_MOOD_ONLY
 import io.github.randomtools3377.checklist.data.SETTING_MOOD
 import io.github.randomtools3377.checklist.data.SETTING_TREAT_BUDGET
 import io.github.randomtools3377.checklist.core.MoneyPrices
@@ -1221,9 +1222,12 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
         }
     }.state(null)
 
-    /** Moods from the start of the stretch being reviewed, however far back it is. */
+    /**
+     * Moods from the start of the stretch before the one being reviewed, however far back it is:
+     * the review's mood part compares the two.
+     */
     val reviewMoods: StateFlow<List<Mood>> = combine(reviewPeriod, reviewDay, today) { period, day, todayDay ->
-        Review.range(day ?: todayDay, period).first
+        Review.range(Review.range(day ?: todayDay, period).first.minusDays(1), period).first
     }.distinctUntilChanged().flatMapLatest { from ->
         dao.observeMoodsSince(from.toEpochDay()).map { rows -> rows.map { it.toCore() } }
     }.state(emptyList())
@@ -1322,7 +1326,39 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
     }.state(false)
 
     fun setMood(score: Int, note: String? = null) {
-        viewModelScope.launch { repository.setMood(currentDay(), score, note) }
+        viewModelScope.launch {
+            val day = currentDay()
+            // With everything already done, this first check-in is the day's only one.
+            val allDone = todayState.value?.view?.takeIf { it.day == day }?.let { MoodInsights.allDone(it.dueToday) } == true
+            repository.setMood(day, score, note, afterAllDone = allDone)
+            // Today's mood reminder isn't needed any more.
+            runCatching { phone.rescheduleReminders() }
+        }
+    }
+
+    /** Whether the check-in was put off today with "Not today", so Today offers "Check in now". */
+    val moodPutOff: StateFlow<Boolean> = combine(today, todayMood, dao.observeSetting(SETTING_MOOD), dao.observeSetting(SETTING_MOOD_SKIPPED)) { day, mood, on, skipped ->
+        Feature.MOOD.isOn(on) && mood == null && skipped == day.toString()
+    }.state(false)
+
+    /** "Check in now": takes "Not today" back, so the check-in is asked again. */
+    fun checkInNow() {
+        viewModelScope.launch { repository.setSetting(SETTING_MOOD_SKIPPED, "") }
+    }
+
+    /** Today's mood asked to open in full, like from the mood reminder. */
+    val moodOpen = MutableStateFlow(false)
+
+    /** When the daily mood reminder comes, or null while it is off (see MoodReminder). */
+    val moodReminder: StateFlow<LocalTime?> = dao.observeSetting(io.github.randomtools3377.checklist.core.MoodReminder.SETTING)
+        .map { io.github.randomtools3377.checklist.core.MoodReminder.decode(it) }.state(null)
+
+    /** Sets when the mood reminder comes; null turns it off. */
+    fun setMoodReminder(time: LocalTime?) {
+        viewModelScope.launch {
+            repository.setSetting(io.github.randomtools3377.checklist.core.MoodReminder.SETTING, io.github.randomtools3377.checklist.core.MoodReminder.encode(time))
+            phone.rescheduleReminders()
+        }
     }
 
     fun skipMood() {
@@ -2130,9 +2166,14 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
      * mood given: asked until answered or put off, then its answer until closed. Null otherwise.
      */
     val moodAfter: StateFlow<MoodAfterView?> =
-        combine(today, todayState, todayMood, features, dao.observeSetting(SETTING_MOOD_AFTER_CLOSED)) { day, state, mood, on, closed ->
-            if (Feature.MOOD !in on || mood == null || closed == day.toString()) return@combine null
-            if (mood.after == null && (state == null || state.view.day != day || !MoodInsights.allDone(state.view.dueToday))) return@combine null
+        combine(
+            today, todayState, todayMood, features,
+            combine(dao.observeSetting(SETTING_MOOD_AFTER_CLOSED), dao.observeSetting(SETTING_MOOD_ONLY)) { closed, only -> closed to only },
+        ) { day, state, mood, on, (closed, only) ->
+            if (Feature.MOOD !in on || mood == null) return@combine null
+            val allDone = state != null && state.view.day == day && MoodInsights.allDone(state.view.dueToday)
+            // A first check-in given after everything was done is the day's only one: not asked again.
+            if (!MoodInsights.asksLater(mood, allDone, onlyOne = only == day.toString(), closed = closed == day.toString())) return@combine null
             MoodAfterView(mood.score, mood.after, skipped = state != null && state.view.day == day && state.view.dueToday.any { it.skipped })
         }.state(null)
 
@@ -2203,11 +2244,77 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
         viewModelScope.launch { repository.editMoodDay(mood) }
     }
 
+    /** A day filled in from the journal's "Add a day", or today's from its box on Today; a day that has a mood is changed. */
+    fun saveMoodDay(mood: Mood) {
+        viewModelScope.launch {
+            val day = currentDay()
+            if (!repository.addMoodDay(mood, day)) {
+                repository.editMoodDay(mood)
+            } else if (mood.day == day) {
+                // Today's, given in full: nothing more to ask under it, and with everything
+                // already done it is the day's only mood.
+                repository.setSetting(SETTING_MOOD_MORE_CLOSED, day.toString())
+                val allDone = todayState.value?.view?.takeIf { it.day == day }?.let { MoodInsights.allDone(it.dueToday) } == true
+                if (allDone && mood.after == null) repository.setSetting(SETTING_MOOD_ONLY, day.toString())
+                runCatching { phone.rescheduleReminders() }
+            }
+        }
+    }
+
+    /** Takes a day out of the journal. */
+    fun deleteMoodDay(day: LocalDate) {
+        viewModelScope.launch {
+            repository.deleteMoodDay(day)
+            runCatching { phone.rescheduleReminders() }
+        }
+    }
+
+    /**
+     * On a morning that started low: one gentle line naming a reward to look forward to, one the
+     * balance already covers or the closest. Null with an empty shop, and while the shop is locked.
+     */
+    val lookForward: StateFlow<String?> =
+        combine(todayMood, shopView, combine(settings, unlocked) { s, open -> s.locks.shop && !open }) { mood, shop, locked ->
+            if (mood == null || mood.after != null || mood.score > 2 || shop == null || locked) return@combine null
+            MoodInsights.lookForward(shop.rewards.map { it.reward }, shop.balance)?.let { MoodInsights.lookForwardLine(it, shop.balance, PointsLabel.name) }
+        }.state(null)
+
+    /** The raises made from "Mood and your goals" that still stand, by goal (see MoodRaises). */
+    val moodRaises: StateFlow<Map<Long, io.github.randomtools3377.checklist.core.MoodRaise>> =
+        combine(dao.observeSetting(io.github.randomtools3377.checklist.core.MoodRaises.SETTING), dao.observeGoals()) { text, goals ->
+            io.github.randomtools3377.checklist.core.MoodRaises
+                .standing(io.github.randomtools3377.checklist.core.MoodRaises.decode(text), goals.map { it.toCore() })
+                .associateBy { it.goalId }
+        }.state(emptyMap())
+
+    /** "Pay N points" on "Mood and your goals". */
+    fun raiseGoalPoints(id: Long, points: Int) {
+        viewModelScope.launch { repository.raiseGoalPoints(id, points) }
+    }
+
+    /** Undo after "Pay N points": the old points come back. */
+    fun undoRaise(id: Long) {
+        viewModelScope.launch { repository.undoRaise(id) }
+    }
+
+    /** Whether "Mood and your goals" marks what comes only from days something was noted on. */
+    val moodHighlight: StateFlow<Boolean> = dao.observeSetting(MoodInsights.HIGHLIGHT_SETTING).map { it == "1" }.state(false)
+
+    fun setMoodHighlight(on: Boolean) {
+        viewModelScope.launch { repository.setSetting(MoodInsights.HIGHLIGHT_SETTING, if (on) "1" else "0") }
+    }
+
     /** On a morning that started low (1 or 2): a goal still to do today that usually lifts the user. */
     val moodStart: StateFlow<Goal?> = combine(todayState, todayMood, moodFindings) { state, mood, findings ->
         if (state == null || mood == null || mood.after != null || mood.score > 2) return@combine null
         val view = state.view
         MoodInsights.startWith(findings, view.dueToday + view.thisWeek + view.thisMonth + view.thisYear)
+    }.state(null)
+
+    /** The goal [moodStart] names, as Today lists it, so it can be ticked where it is mentioned. */
+    val moodStartRow: StateFlow<HabitRow?> = combine(todayState, moodStart) { state, goal ->
+        val view = state?.view ?: return@combine null
+        goal?.let { g -> (view.dueToday + view.thisWeek + view.thisMonth + view.thisYear).firstOrNull { it.goal.id == g.id } }
     }.state(null)
 
     /** Puts a goal right after another in a habit chain, from "Mood and your goals". */

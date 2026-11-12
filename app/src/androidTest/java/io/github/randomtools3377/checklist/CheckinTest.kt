@@ -9,6 +9,7 @@ import io.github.randomtools3377.checklist.core.Checkins
 import io.github.randomtools3377.checklist.core.Feature
 import io.github.randomtools3377.checklist.core.Repeat
 import io.github.randomtools3377.checklist.data.HabitDraft
+import io.github.randomtools3377.checklist.data.RewardDraft
 import io.github.randomtools3377.checklist.data.SettingEntity
 import io.github.randomtools3377.checklist.data.nowLocal
 import kotlinx.coroutines.runBlocking
@@ -20,7 +21,8 @@ import org.junit.runner.RunWith
 
 /**
  * With check-ins on, the character asks how the user feels, answers a hard day gently with one
- * small goal to do from its card, and cheers a new level until it is seen.
+ * small goal to do from its card and a reward to look forward to, and cheers a new level until
+ * it is seen.
  */
 @RunWith(AndroidJUnit4::class)
 class CheckinTest {
@@ -31,6 +33,8 @@ class CheckinTest {
             for (feature in listOf(Feature.CHARACTER, Feature.CHECKINS, Feature.MOOD)) {
                 c.db.dao().putSetting(SettingEntity(feature.key, feature.onValue))
             }
+            // A reward in the shop, to look forward to on a hard day.
+            c.repository.saveReward(RewardDraft(id = 0, name = "Coffee", icon = "☕", price = 20))
             for ((name, minutes) in listOf("Run" to 30, "Water plants" to 2)) {
                 c.repository.saveHabit(
                     HabitDraft(
@@ -71,6 +75,9 @@ class CheckinTest {
         // The "What's behind it?" card now sits above the character's card, so scroll down to it.
         app.waitFor { app.shownIn("today-list", "level-card") && shown("companion-do") && label("companion-do").contains("Water plants") }
         assert(shown("companion-face:CALM"))
+        // One gentle line names a reward to look forward to, on the same card; no second suggestion elsewhere.
+        app.waitFor { text("companion-look-forward").contains("Coffee") }
+        assert(!shown("mood-start-with") && !shown("mood-look-forward"))
         app.tap("companion-do")
         app.waitFor { runBlocking { dao.allTicks() }.size == 1 }
 

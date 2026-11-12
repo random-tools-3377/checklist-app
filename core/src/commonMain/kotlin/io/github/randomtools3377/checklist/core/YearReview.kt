@@ -2,7 +2,7 @@ package io.github.randomtools3377.checklist.core
 
 import kotlinx.datetime.LocalDate
 
-/** One month of the year in review: how much of what was due got done, points earned, and mood. */
+/** One month of the year in review: how much of what was due got done, points earned, and the average mood. */
 data class MonthSummary(val month: Int, val due: Int, val done: Int, val earned: Int, val mood: Double?) {
     val share: Double? get() = if (due == 0) null else done.toDouble() / due
 }
@@ -13,7 +13,8 @@ object YearReview {
         fun inMonth(day: LocalDate) = day.year == year && day.monthNumber == month
         // Only days that have come: the rest of the year is still ahead.
         val days = summary.days.filter { inMonth(it.day) && it.day <= today }
-        val moodsHere = moods.filter { inMonth(it.day) }.map { it.score }
+        // The mood the rest of the app shows for a day: the later one when given.
+        val moodsHere = moods.filter { inMonth(it.day) }.map { it.last }
         MonthSummary(
             month = month,
             due = days.sumOf { it.due },

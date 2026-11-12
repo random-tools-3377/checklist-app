@@ -635,6 +635,7 @@ interface ChecklistDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun putMood(mood: MoodEntity)
     @Query("SELECT * FROM moods") suspend fun allMoods(): List<MoodEntity>
     @Query("DELETE FROM moods") suspend fun deleteMoods()
+    @Query("DELETE FROM moods WHERE day = :day") suspend fun deleteMood(day: Long)
     @Insert suspend fun insertMoods(rows: List<MoodEntity>)
 
     // Focus time.

@@ -50,7 +50,8 @@ data class GoalMood(
 /**
  * One noted thing's mood numbers over the last [MoodInsights.DAYS] days: the days with a mood it
  * was noted on, and the days with a mood it wasn't, with the average mood on each once there are
- * enough of them (see [Rules.moodMinDays]).
+ * enough of them (see [Rules.moodMinDays]). [otherNoted] is how many of the days it wasn't noted
+ * on had something else noted.
  */
 data class FactorMood(
     val factor: String,
@@ -58,7 +59,14 @@ data class FactorMood(
     val otherDays: Int,
     val moodNoted: Double?,
     val moodOther: Double?,
+    val otherNoted: Int = 0,
 ) {
+    /**
+     * Whether its numbers come only from days something was noted on: every day it is set
+     * against had another thing noted, so none of them is a day the chips were just left alone.
+     */
+    val onlyNotedDays: Boolean get() = otherNoted == otherDays
+
     /** How much better the mood is on days it was noted; below 0 when it is lower. */
     val difference: Double? get() = if (moodNoted != null && moodOther != null) moodNoted - moodOther else null
 }
@@ -75,6 +83,9 @@ data class MoodFindings(
     val betterFactors: List<FactorMood> = emptyList(),
     val lowerFactors: List<FactorMood> = emptyList(),
     val factorsCompared: Int = 0,
+    /** Days with a mood in the stretch looked at, and how many of them had something noted. */
+    val moodDays: Int = 0,
+    val notedDays: Int = 0,
 ) {
     /** Whether any goal or noted thing had enough moods to compare yet. */
     val enough: Boolean get() = compared > 0 || factorsCompared > 0
@@ -175,6 +186,7 @@ object MoodInsights {
         return MoodFindings(
             lifts, weighs, compared = all.count { it.difference != null || it.riseGap != null },
             betterFactors = better, lowerFactors = lower, factorsCompared = factors.count { it.difference != null },
+            moodDays = moodByDay.size, notedDays = moodByDay.values.count { it.factors.isNotEmpty() },
         )
     }
 
@@ -184,7 +196,10 @@ object MoodInsights {
         val names = MoodFactors.tidy(moods.sortedBy { it.day }.flatMap { it.factors })
         return names.map { name ->
             val (noted, other) = moods.partition { MoodFactors.has(it.factors, name) }
-            FactorMood(name, noted.size, other.size, average(noted.map { it.score }), average(other.map { it.score }))
+            FactorMood(
+                name, noted.size, other.size, average(noted.map { it.score }), average(other.map { it.score }),
+                otherNoted = other.count { it.factors.isNotEmpty() },
+            )
         }
     }
 
@@ -230,6 +245,19 @@ object MoodInsights {
     }
 
     /**
+     * Whether Today asks "How do you feel now?" (or shows its answer): the day's first mood is
+     * in, the card wasn't closed, and either the later mood is given too or everything is done
+     * now. Never when the first check-in itself came after everything was done ([onlyOne]): that
+     * one is the day's only mood, so it isn't asked twice in a row.
+     */
+    fun asksLater(mood: Mood?, allDone: Boolean, onlyOne: Boolean, closed: Boolean): Boolean = when {
+        mood == null || closed -> false
+        mood.after != null -> true
+        onlyOne -> false
+        else -> allDone
+    }
+
+    /**
      * The after-done check-in's question; gentler after a morning that started low. With
      * something [skipped] today it doesn't say everything was done: a skip is never done.
      */
@@ -244,13 +272,14 @@ object MoodInsights {
     }
 
     /**
-     * What the card says to the answer: only how the mood moved since the morning. It never says
+     * What the card says to the answer: only how the mood moved since the first check-in. It never says
      * why; the user can note that themselves (see [PART_QUESTION]).
      */
-    fun answer(morning: Int?, after: Int): String = when {
+    fun answer(morning: Int?, after: Int, inMorning: Boolean = true): String = when {
         morning == null -> "Feeling ${Moods.face(after)} now."
         after > morning -> "Up from ${Moods.face(morning)} to ${Moods.face(after)}."
-        after == morning -> "Same as this morning."
+        // Only "this morning" when the first check-in was in the morning.
+        after == morning -> if (inMorning) "Same as this morning." else "Same as earlier today."
         else -> "Down from ${Moods.face(morning)} to ${Moods.face(after)} — that's all right."
     }
 
@@ -275,6 +304,33 @@ object MoodInsights {
     fun startWith(findings: MoodFindings, rows: List<HabitRow>): Goal? {
         val open = rows.filter { !it.done && !it.skipped && !it.goal.quit }.map { it.goal.id }.toSet()
         return findings.lifts.firstOrNull { it.goal.id in open }?.goal
+    }
+
+    /**
+     * On the character's card, beside its own quick goal: the same goal named without telling
+     * the user to start with it, as the card suggests only one thing to start with.
+     */
+    fun alsoLine(goal: Goal): String = "Days you do ${goal.icon} ${goal.name} tend to go with a better mood."
+
+    /**
+     * A reward to look forward to on a low morning: the cheapest one [balance] already covers,
+     * or else the one closest to it. Null with an empty shop. [rewards] are the shop's, at what
+     * each costs now.
+     */
+    fun lookForward(rewards: List<Reward>, balance: Int): Reward? {
+        val shown = rewards.filter { !it.archived && it.price > 0 }
+        return shown.filter { it.price <= balance }.minWithOrNull(compareBy<Reward>({ it.price }, { it.position }))
+            ?: shown.minWithOrNull(compareBy<Reward>({ it.price }, { it.position }))
+    }
+
+    /** One gentle line naming [reward], with how far off it is; never a push to earn it. */
+    fun lookForwardLine(reward: Reward, balance: Int, points: PointsName = PointsName.current): String {
+        val name = "${reward.icon} ${reward.name}"
+        return if (reward.price <= balance) {
+            "🎁 Something to look forward to: $name. You can already get it, whenever you like."
+        } else {
+            "🎁 Something to look forward to: $name, ${points.amount(reward.price - balance)} away. No rush."
+        }
     }
 
     fun startWithLine(goal: Goal): String = "Start with ${goal.icon} ${goal.name} — days you do it tend to go with a better mood."
@@ -364,9 +420,53 @@ object MoodInsights {
         return ways.take(MOST_WAYS)
     }
 
+    /** After "Pay N points" on the page: what the goal pays now. */
+    fun nowPays(points: Int, name: PointsName = PointsName.current): String = "Now pays ${name.amount(points)}"
+
+    /** The switch that marks what comes only from days something was noted on. */
+    const val HIGHLIGHT_SETTING = "mood_highlight_noted"
+    const val HIGHLIGHT_LABEL = "Highlight days I noted something"
+    const val ONLY_NOTED = "★ Only from days you noted something"
+
+    /** "You noted something on 12 of 40 days with a mood." */
+    fun notedDaysLine(findings: MoodFindings): String =
+        "You noted something on ${findings.notedDays} of ${days(findings.moodDays)} with a mood. ★ marks what is compared only among those days."
+
     /** When there is nothing to show yet. */
     const val NOT_ENOUGH = "Keep checking in: after a couple of weeks of moods, this shows which goals and things go with a better mood."
 
     /** When goals or things could be compared but none goes with a clearly different mood. */
     const val NOTHING_STANDS_OUT = "Nothing goes with a clearly better or lower mood so far. Keep checking in, and this fills in as you go."
+}
+
+/**
+ * The raises made from "Mood and your goals": for each goal, what it paid before and what it
+ * was raised to, kept in the setting [SETTING] as "goal:old:new" joined by commas. While a goal
+ * still pays what it was raised to, the page shows "Now pays N · Undo" and offers no further
+ * raise; once its points are changed anywhere else, the raise is forgotten.
+ */
+data class MoodRaise(val goalId: Long, val old: Int, val new: Int)
+
+object MoodRaises {
+    const val SETTING = "mood_raises"
+
+    fun decode(text: String?): List<MoodRaise> = text.orEmpty().split(",").mapNotNull { part ->
+        val numbers = part.split(":")
+        val goal = numbers.getOrNull(0)?.toLongOrNull() ?: return@mapNotNull null
+        val old = numbers.getOrNull(1)?.toIntOrNull() ?: return@mapNotNull null
+        val new = numbers.getOrNull(2)?.toIntOrNull() ?: return@mapNotNull null
+        if (numbers.size == 3) MoodRaise(goal, old, new) else null
+    }.distinctBy { it.goalId }
+
+    fun encode(raises: List<MoodRaise>): String = raises.distinctBy { it.goalId }.joinToString(",") { "${it.goalId}:${it.old}:${it.new}" }
+
+    /** The raises that still stand: their goal is among [goals] and still pays what it was raised to. */
+    fun standing(raises: List<MoodRaise>, goals: List<Goal>): List<MoodRaise> =
+        raises.filter { raise -> goals.any { it.id == raise.goalId && !it.archived && it.points == raise.new } }
+
+    /** [raises] with [goal] raised to [points] from what it pays now. */
+    fun raised(raises: List<MoodRaise>, goal: Goal, points: Int): List<MoodRaise> =
+        raises.filterNot { it.goalId == goal.id } + MoodRaise(goal.id, goal.points, points)
+
+    fun without(raises: List<MoodRaise>, goalId: Long): List<MoodRaise> = raises.filterNot { it.goalId == goalId }
 }

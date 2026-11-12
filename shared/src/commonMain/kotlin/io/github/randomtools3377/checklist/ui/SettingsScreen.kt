@@ -245,7 +245,7 @@ private fun SwitchLine(title: String, hint: String, on: Boolean, tag: String, on
 
 /** The words a Settings search finds the Notifications part by. */
 internal fun notificationWords(phone: Phone): String =
-    "Notifications notification reminders reminder alarm exact weekly summary snooze morning plan evening check still open light up screen edge lighting" +
+    "Notifications notification reminders reminder alarm exact weekly summary snooze morning plan evening check still open light up screen edge lighting mood reminder how are you feeling" +
         if (phone.hasWidgets) " widget widgets home screen calendar" else ""
 
 /** The notifications [phone] can't give yet, like "Morning plan, weekly summary and snooze"; null if none. */
@@ -773,6 +773,12 @@ fun SettingsScreen(
                 }
                 val evening by vm.eveningCheck.collectAsState()
                 EveningCheckSetting(evening, settings.dayEndHour, vm::setEveningCheck, Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
+                // The daily mood reminder: with the mood check-in on, or while a time is still set.
+                val moodReminder by vm.moodReminder.collectAsState()
+                val moodOn by vm.askMoodOn.collectAsState()
+                if (moodOn || moodReminder != null) {
+                    MoodReminderSetting(moodReminder, vm::setMoodReminder, Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
+                }
                 // What this device's notifications can't do yet, said once.
                 val missing = notificationsNotHere(phone)
                 if (missing != null) NotOnThisDevice(missing, Modifier.padding(horizontal = 16.dp, vertical = 4.dp))

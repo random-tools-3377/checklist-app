@@ -25,6 +25,7 @@ import io.github.randomtools3377.checklist.core.EveningList
 import io.github.randomtools3377.checklist.core.Chains
 import io.github.randomtools3377.checklist.core.UsualTimes
 import io.github.randomtools3377.checklist.core.Feature
+import io.github.randomtools3377.checklist.core.MoodReminder
 import io.github.randomtools3377.checklist.core.Goal
 import io.github.randomtools3377.checklist.core.Pace
 import io.github.randomtools3377.checklist.core.SkipCheck
@@ -50,6 +51,7 @@ import io.github.randomtools3377.checklist.data.deadlineTimes
 import io.github.randomtools3377.checklist.data.eveningChecks
 import io.github.randomtools3377.checklist.data.eveningList
 import io.github.randomtools3377.checklist.data.eveningTimes
+import io.github.randomtools3377.checklist.data.moodReminders
 import io.github.randomtools3377.checklist.data.toTime
 import io.github.randomtools3377.checklist.ui.minutesText
 import io.github.randomtools3377.checklist.data.nowLocal
@@ -125,6 +127,7 @@ object Reminders {
         val goals = dao.activeGoals().map { it.toCore() }
         runCatching { clearDone(context, dao, goals) }
         runCatching { refreshEvening(context) }
+        runCatching { clearMoodReminder(context, dao) }
         val dayEnd = parseDayEndHour(dao.setting(SETTING_DAY_END_HOUR))
         val nowMillis = System.currentTimeMillis()
         val now = nowMillis.local()
@@ -140,11 +143,14 @@ object Reminders {
             ).minOfOrNull { it.at }
         // The evening check, when it is on.
         val nextEvening = eveningTimes(dao, from, to).minOfOrNull { it.at }
+        // The mood reminder, when it is on, for the next day whose mood isn't in yet.
+        val nextMood = moodReminders(dao, from, to).minOfOrNull { it.at }
         val dayTurns = LocalDateTime(Days.dayOf(now, dayEnd).plusDays(1), LocalTime(dayEnd, 0))
         val soon = System.currentTimeMillis() + 1_000
         val wake = listOfNotNull(
             nextAlert?.millis(),
             nextEvening?.millis(),
+            nextMood?.millis(),
             dayTurns.millis(),
             Snoozes.next(context)?.coerceAtLeast(soon),
             Focus.alarmAt(context)?.coerceAtLeast(soon),
@@ -192,6 +198,8 @@ object Reminders {
         weeklies(dao, since.local(), until.local(), dayEnd).lastOrNull { it.at.millis() > since }?.let { showWeekly(context, it.day) }
         // The evening check: what is still open today. Nothing on a day when everything is done.
         eveningChecks(dao, since.local(), until.local()).lastOrNull { it.at.millis() > since }?.let { showEvening(context, it.list, dayEnd) }
+        // The mood reminder: it only asks, and not once that day's mood is given.
+        if (moodReminders(dao, since.local(), until.local()).any { it.at.millis() > since }) showMoodReminder(context, dayEnd)
         // A project's deadline, the day before and on the day, while it isn't finished.
         deadlineReminders(dao, since.local(), until.local()).filter { it.at.millis() > since }.forEach { showDeadline(context, it, dayEnd) }
         // A focus timer whose time is up (not one ending in the next few seconds): its goal is
@@ -411,6 +419,51 @@ object Reminders {
         } catch (e: SecurityException) {
             // Notifications were turned off in the meantime.
         }
+    }
+
+    /** The mood reminder's notification. */
+    private const val MOOD_ID = 906
+
+    /**
+     * The mood reminder: one notification that only asks how the user is feeling. No mood and no
+     * note is ever in it. Tapping it opens Today with the check-in; it goes when the day ends at
+     * [dayEnd], or once the mood is given (see [clearMoodReminder]).
+     */
+    private fun showMoodReminder(context: Context, dayEnd: Int) {
+        if (!canNotify(context)) return
+        val day = Days.dayOf(nowLocal(), dayEnd)
+        val endsIn = LocalDateTime(day.plusDays(1), LocalTime(dayEnd, 0)).millis() - System.currentTimeMillis()
+        if (endsIn <= 0) return
+        val open = PendingIntent.getActivity(
+            context,
+            MOOD_ID,
+            Intent(context, MainActivity::class.java)
+                .putExtra(MainActivity.EXTRA_OPEN, MoodReminder.OPEN)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+        val notification = NotificationCompat.Builder(context, CHANNEL)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle(MoodReminder.TITLE)
+            .setContentText(MoodReminder.TEXT)
+            .setContentIntent(open)
+            .setAutoCancel(true)
+            .setOnlyAlertOnce(true)
+            .setTimeoutAfter(endsIn)
+            .setCategory(NotificationCompat.CATEGORY_REMINDER)
+            .build()
+        try {
+            NotificationManagerCompat.from(context).notify(MOOD_ID, notification)
+        } catch (e: SecurityException) {
+            // Notifications were turned off in the meantime.
+        }
+    }
+
+    /** Takes the mood reminder away once today's mood is given, or the check-in is turned off. */
+    private suspend fun clearMoodReminder(context: Context, dao: io.github.randomtools3377.checklist.data.ChecklistDao) {
+        val dayEnd = parseDayEndHour(dao.setting(SETTING_DAY_END_HOUR))
+        val given = dao.mood(Days.dayOf(nowLocal(), dayEnd).toEpochDay()) != null
+        if (given || !Feature.MOOD.isOn(dao.setting(Feature.MOOD.key))) NotificationManagerCompat.from(context).cancel(MOOD_ID)
     }
 
     /** The evening check's notification (the timing notice has 902 and 903). */

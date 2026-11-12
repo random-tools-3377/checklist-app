@@ -7,6 +7,7 @@ import io.github.randomtools3377.checklist.core.AlertKind
 import io.github.randomtools3377.checklist.core.Alerts
 import io.github.randomtools3377.checklist.core.Days
 import io.github.randomtools3377.checklist.core.Feature
+import io.github.randomtools3377.checklist.core.MoodReminder
 import io.github.randomtools3377.checklist.core.Pace
 import io.github.randomtools3377.checklist.core.UsualTimes
 import io.github.randomtools3377.checklist.core.minusDays
@@ -16,6 +17,7 @@ import io.github.randomtools3377.checklist.data.SETTING_DEFAULT_FINISH
 import io.github.randomtools3377.checklist.data.SharedParts
 import io.github.randomtools3377.checklist.data.deadlineReminders
 import io.github.randomtools3377.checklist.data.eveningChecks
+import io.github.randomtools3377.checklist.data.moodReminders
 import io.github.randomtools3377.checklist.data.nowLocal
 import io.github.randomtools3377.checklist.data.nowMillis
 import io.github.randomtools3377.checklist.data.parseDayEndHour
@@ -126,7 +128,10 @@ internal object IosReminders {
         // don't take the places of the next days' reminders.
         // A project's deadline, the day before and on the day, while it isn't finished.
         val deadlines = deadlineReminders(dao, from, to).take((MOST - evenings.size).coerceAtLeast(0))
-        val waiting = Alerts.keep(stillToDo, (MOST - evenings.size - deadlines.size).coerceAtLeast(0))
+        // The mood reminder for each of the next days, when it is on, left out for a day whose
+        // mood is in: handed over again on every change, so today's goes once the mood is given.
+        val moods = moodReminders(dao, from, to).take((MOST - evenings.size - deadlines.size).coerceAtLeast(0))
+        val waiting = Alerts.keep(stillToDo, (MOST - evenings.size - deadlines.size - moods.size).coerceAtLeast(0))
 
         center.removeAllPendingNotificationRequests()
         for (alert in waiting) {
@@ -153,6 +158,19 @@ internal object IosReminders {
                 "evening-${evening.at}",
                 content,
                 UNCalendarNotificationTrigger.triggerWithDateMatchingComponents(components(evening.at), repeats = false),
+            )
+            center.addNotificationRequest(request, withCompletionHandler = null)
+        }
+        for (mood in moods) {
+            // It only asks: no mood or note is ever in it.
+            val content = UNMutableNotificationContent()
+            content.setTitle(MoodReminder.TITLE)
+            content.setBody(MoodReminder.TEXT)
+            content.setSound(UNNotificationSound.defaultSound)
+            val request = UNNotificationRequest.requestWithIdentifier(
+                "mood-${mood.at}",
+                content,
+                UNCalendarNotificationTrigger.triggerWithDateMatchingComponents(components(mood.at), repeats = false),
             )
             center.addNotificationRequest(request, withCompletionHandler = null)
         }

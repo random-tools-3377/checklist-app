@@ -273,6 +273,11 @@ fun ChecklistApp(vm: MainViewModel) {
                 goTo(AppTab.TODAY)
                 quickTodo = true
             }
+            // The mood reminder: Today, with today's check-in open.
+            io.github.randomtools3377.checklist.core.MoodReminder.OPEN -> {
+                goTo(AppTab.TODAY)
+                vm.moodOpen.value = true
+            }
             else -> AppTab.entries.firstOrNull { it.route == asked }?.let { goTo(it) }
         }
         vm.openTab.value = null
@@ -396,7 +401,12 @@ fun ChecklistApp(vm: MainViewModel) {
             // The planner on top of weekly planning, so Back returns to it and its "Done planning".
             "planner" -> PlannerPage(planDays, vm, onTimeline = { index -> push("timeline/$index") }, onBack = ::pop)
             "mood-goals" -> MoodGoalsScreen(vm, onEdit = { goalId -> push("habit/$goalId") }, onBack = ::pop, onJournal = { push("mood-journal") })
-            "mood-journal" -> MoodJournalScreen(vm, onBack = ::pop)
+            // From the review's "See the notes", the journal opens on that stretch's days.
+            "mood-journal" -> MoodJournalScreen(
+                vm, onBack = ::pop,
+                from = parts.getOrNull(1)?.let { runCatching { kotlinx.datetime.LocalDate.parse(it) }.getOrNull() },
+                to = parts.getOrNull(2)?.let { runCatching { kotlinx.datetime.LocalDate.parse(it) }.getOrNull() },
+            )
             // A goal's own page. Edit takes its place, so saving or removing goes back to where the page was opened.
             "goal" -> androidx.compose.runtime.key(route) {
                 GoalPageScreen(
@@ -556,6 +566,8 @@ fun ChecklistApp(vm: MainViewModel) {
                                 character = io.github.randomtools3377.checklist.core.Feature.CHARACTER in features,
                                 onMoodGoals = { push("mood-goals") },
                                 onMoodJournal = { push("mood-journal") },
+                                onMoodNotes = { from, to -> push("mood-journal/$from/$to") },
+                                onUnlock = unlock,
                                 // Nothing to look back on yet: a way to add a first goal.
                                 onAddGoal = if (goals?.goals?.isEmpty() == true && removedGoals.isEmpty()) ({ goTo(AppTab.GOALS); newGoal = true }) else null,
                                 misses = reviewMisses,

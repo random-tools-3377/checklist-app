@@ -170,26 +170,36 @@ fun TodayScreen(
     val isUnlocked by vm.unlocked.collectAsStateWithLifecycle()
     // Moods sit behind the lock with reasons and notes, so what they show about goals does too.
     val moodsLocked = lockSettings.locks.reasons && !isUnlocked
-    // A note for today's mood, while it is being written.
-    var moodNote by remember { mutableStateOf<String?>(null) }
-    moodNote?.let { text ->
-        AlertDialog(
-            onDismissRequest = { moodNote = null },
-            title = { Text("A note for today") },
-            text = {
-                OutlinedTextField(
-                    value = text,
-                    onValueChange = { moodNote = it.take(io.github.randomtools3377.checklist.core.Moods.NOTE_LENGTH) },
-                    modifier = Modifier.fillMaxWidth().testTag("mood-note"),
-                )
+    // Today's mood opened in full: from its line on Today, or from the mood reminder.
+    val moodStartRow by vm.moodStartRow.collectAsStateWithLifecycle()
+    val lookForward by vm.lookForward.collectAsStateWithLifecycle()
+    val moodPutOff by vm.moodPutOff.collectAsStateWithLifecycle()
+    val moodOpen by vm.moodOpen.collectAsStateWithLifecycle()
+    var moodDay by remember { mutableStateOf(false) }
+    LaunchedEffect(moodOpen) {
+        if (moodOpen) {
+            moodDay = true
+            vm.moodOpen.value = false
+        }
+    }
+    if (moodDay && io.github.randomtools3377.checklist.core.Feature.MOOD in features) {
+        MoodDayDialog(
+            // With no mood yet, like from the reminder, it asks for one.
+            mood = todayMood ?: io.github.randomtools3377.checklist.core.Mood(view.day, 0),
+            list = moodFactorList,
+            onAdd = { name -> vm.addMoodFactor(name, day = null) },
+            onSave = { changed ->
+                vm.saveMoodDay(changed)
+                moodDay = false
             },
-            confirmButton = {
-                TextButton(onClick = {
-                    todayMood?.let { vm.setMood(it.score, text) }
-                    moodNote = null
-                }) { Text("Save") }
+            onDismiss = { moodDay = false },
+            onJournal = {
+                moodDay = false
+                onMoodJournal()
             },
-            dismissButton = { TextButton(onClick = { moodNote = null }) { Text("Cancel") } },
+            locked = moodsLocked,
+            onUnlock = onUnlock,
+            today = true,
         )
     }
     var editingTick by remember { mutableStateOf<Long?>(null) }
@@ -424,6 +434,18 @@ fun TodayScreen(
                         MoodCheckIn(onMood = { vm.setMood(it) }, onLater = vm::skipMood)
                         Spacer(Modifier.height(12.dp))
                     }
+                    // Put off with "Not today": a small way to take that back.
+                    if (moodPutOff) {
+                        Text(
+                            "Check in now",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.clickable(onClick = vm::checkInNow).padding(bottom = 8.dp).testTag("mood-check-in-now"),
+                        )
+                    }
+                    // On a low morning the character's card, when it talks, carries the one suggestion.
+                    val characterSuggests = character != null && companion?.talks == true && companion?.say?.hardDay == true &&
+                        look.sections.any { it.section == TodaySection.CHARACTER && it.shown }
                     todayMood?.let { mood ->
                         if (moodMore) {
                             // Just picked: what's behind it, and a note.
@@ -445,19 +467,30 @@ fun TodayScreen(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
-                                // Notes sit behind the lock with reasons and notes: unlock first.
-                                modifier = Modifier.clickable { if (moodsLocked) onUnlock() else moodNote = mood.note.orEmpty() }.padding(bottom = 8.dp).testTag("mood-today"),
+                                // Opens today's mood in full. Notes sit behind the lock with reasons and notes: unlock first.
+                                modifier = Modifier.clickable { if (moodsLocked) onUnlock() else moodDay = true }.padding(bottom = 8.dp).testTag("mood-today"),
                             )
                         }
                     }
                     // A morning that started low: a goal still to do that usually lifts the user, to start with.
-                    if (!moodsLocked) {
+                    if (!moodsLocked && !characterSuggests) {
                         moodStart?.let { goal ->
                             Text(
                                 "💡 " + io.github.randomtools3377.checklist.core.MoodInsights.startWithLine(goal),
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.padding(bottom = 8.dp).testTag("mood-start-with"),
+                            )
+                        }
+                    }
+                    // And perhaps a small reward to look forward to (never while the shop is locked).
+                    if (!characterSuggests) {
+                        lookForward?.let { line ->
+                            Text(
+                                line,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(bottom = 8.dp).testTag("mood-look-forward"),
                             )
                         }
                     }
@@ -506,6 +539,9 @@ fun TodayScreen(
                             onMood = { vm.setMood(it) },
                             onMoodLater = vm::skipMood,
                             onSuggestion = { row, at -> tick(row, Spot().apply { center = at }) },
+                            // On a low morning: the goal that often goes with a better mood, and a reward to look forward to.
+                            moodAlso = if (moodsLocked) null else moodStartRow,
+                            lookForward = lookForward,
                             onCheered = vm::levelSeen,
                             onIdeas = onIdeas,
                         )
@@ -939,7 +975,7 @@ private fun MoodAfterAnswer(
     ) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(
-                io.github.randomtools3377.checklist.core.MoodInsights.answer(morning, after),
+                io.github.randomtools3377.checklist.core.MoodInsights.answer(morning, after, inMorning = mood == null || firstLabel(mood) == "Morning"),
                 style = MaterialTheme.typography.bodyLarge,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.testTag("mood-after-line"),

@@ -1,6 +1,8 @@
 package io.github.randomtools3377.checklist.desktop
 
 import io.github.randomtools3377.checklist.core.EveningCheck
+import io.github.randomtools3377.checklist.core.Feature
+import io.github.randomtools3377.checklist.core.MoodReminder
 import io.github.randomtools3377.checklist.core.Period
 import io.github.randomtools3377.checklist.core.Reminder
 import io.github.randomtools3377.checklist.core.Repeat
@@ -149,6 +151,26 @@ class DesktopPhoneTest {
         assertTrue(phone.parts.book.tickHabit(id) is TickResult.Ticked)
         assertTrue(phone.parts.book.tickHabit(dao.activeGoals().single { it.name == "Journal" }.id) is TickResult.Ticked)
         assertEquals(null, DesktopReminders.evening(phone.parts, at(today, 21, 0), at(today, 21, 1)))
+    }
+
+    @Test
+    fun theMoodReminderOnlyAsksAndStopsOnceTheMoodIsIn() = runTest {
+        val today = nowLocal().date
+        val repository = phone.parts.repository
+        repository.setSetting(Feature.MOOD.key, Feature.MOOD.onValue)
+        // Off until a time is picked.
+        assertEquals(null, DesktopReminders.mood(phone.parts, at(today, 9, 0), at(today, 9, 1)))
+        repository.setSetting(MoodReminder.SETTING, MoodReminder.encode(LocalTime(9, 0)))
+        repository.setMood(today.plus(DatePeriod(days = -1)), 1, "a private note")
+        val shown = DesktopReminders.mood(phone.parts, at(today, 9, 0), at(today, 9, 1))
+        // It asks, and nothing of the journal is in it.
+        assertEquals("How are you feeling?" to "Open Checklist to check in.", shown?.let { it.title to it.text })
+        assertEquals(null, DesktopReminders.mood(phone.parts, at(today, 9, 1), at(today, 9, 2)))
+        // Today's mood given: it isn't shown.
+        repository.setMood(today, 4, null)
+        assertEquals(null, DesktopReminders.mood(phone.parts, at(today, 9, 0), at(today, 9, 1)))
+        // It is found with the notifications in a Settings search.
+        assertTrue(SettingsSearch.matches("mood reminder", notificationWords(phone)))
     }
 
     @Test

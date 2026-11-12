@@ -3,6 +3,7 @@ package io.github.randomtools3377.checklist.desktop
 import io.github.randomtools3377.checklist.core.Alert
 import io.github.randomtools3377.checklist.core.AlertKind
 import io.github.randomtools3377.checklist.core.Alerts
+import io.github.randomtools3377.checklist.core.MoodReminder
 import io.github.randomtools3377.checklist.core.Feature
 import io.github.randomtools3377.checklist.core.Pace
 import io.github.randomtools3377.checklist.core.UsualTimes
@@ -13,6 +14,7 @@ import io.github.randomtools3377.checklist.data.SETTING_DEFAULT_FINISH
 import io.github.randomtools3377.checklist.data.SharedParts
 import io.github.randomtools3377.checklist.data.deadlineReminders
 import io.github.randomtools3377.checklist.data.eveningChecks
+import io.github.randomtools3377.checklist.data.moodReminders
 import io.github.randomtools3377.checklist.data.nowLocal
 import io.github.randomtools3377.checklist.data.nowMillis
 import io.github.randomtools3377.checklist.data.nextInChain
@@ -90,6 +92,8 @@ class DesktopReminders(private val phone: DesktopPhone) {
             }
             // The evening check, at its time: what is still open today.
             evening(phone.parts, from, to)?.let { show(it.title, it.text) }
+            // The mood reminder, at its time, unless today's mood is in: it only asks.
+            mood(phone.parts, from, to)?.let { show(it.title, it.text) }
         }
         focusDone()
     }
@@ -194,6 +198,13 @@ class DesktopReminders(private val phone: DesktopPhone) {
             eveningChecks(parts.db.dao(), from, to).lastOrNull()?.let { due ->
                 DueReminder(Alerts.MORNING_GOAL, due.list.title, due.list.lines(EVENING_LINES).joinToString("\n"))
             }
+
+        /**
+         * The mood reminder due from [from] (included) to [to] (not included), if it is on and
+         * that day's mood isn't given yet. It only asks: no mood or note is ever in it.
+         */
+        suspend fun mood(parts: SharedParts, from: LocalDateTime, to: LocalDateTime): DueReminder? =
+            moodReminders(parts.db.dao(), from, to).lastOrNull()?.let { DueReminder(Alerts.MORNING_GOAL, MoodReminder.TITLE, MoodReminder.TEXT_COMPUTER) }
 
         /** How many lines of the evening check fit a message from the notification area. */
         private const val EVENING_LINES = 4

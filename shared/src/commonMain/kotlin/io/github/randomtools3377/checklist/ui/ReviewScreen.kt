@@ -88,6 +88,10 @@ fun ReviewScreen(
     /** Opens "Mood and your goals", and the mood journal, from the mood part. */
     onMoodGoals: () -> Unit = {},
     onMoodJournal: () -> Unit = {},
+    /** "See the notes" on the mood summary: the journal on the days from the first date to the second. */
+    onMoodNotes: (LocalDate, LocalDate) -> Unit = { _, _ -> },
+    /** Unlocks what the privacy lock holds, from the locked Mood card. */
+    onUnlock: () -> Unit = {},
     /** With no goals yet: adds a first one, for the hint at the top. */
     onAddGoal: (() -> Unit)? = null,
     /** The misses in the stretch that still stand, and what opens one to put it right (see [PastMissDialog]). */
@@ -179,7 +183,10 @@ fun ReviewScreen(
         val openDay: (LocalDate) -> Unit = { day -> if (today == null || day <= today) onDay(day) }
         if (period == Period.WEEKLY || period == Period.MONTHLY) item { DayCharts(summary, period, openDay) }
         if (period == Period.YEARLY) item { YearCard(summary, moods, hideMoods = hideReasons) }
-        if (period == Period.MONTHLY) item { MonthCalendar(summary, today, openDay) }
+        if (period == Period.MONTHLY) {
+            // Each day's mood as a small face, unless moods are behind the lock.
+            item { MonthCalendar(summary, today, openDay, faces = if (hideReasons) emptyMap() else moodFacesByDay(moods.filter { it.day >= summary.from && it.day <= summary.to })) }
+        }
         val shownMisses = misses.filter { it.day >= summary.from && it.day <= summary.to }
         item {
             GoalsCard(summary, shownMisses, onGoal) { goal ->
@@ -196,14 +203,23 @@ fun ReviewScreen(
         if (focus != null && focus.any && (period == Period.WEEKLY || period == Period.MONTHLY)) item { FocusTimeCard(focus) }
         item { ReasonsCard(summary, hideReasons) }
         val shownMoods = moods.filter { it.day >= summary.from && it.day <= summary.to }
-        if (shownMoods.isNotEmpty() && !hideReasons) item { MoodCard(shownMoods, summary, onMoodGoals, onMoodJournal) }
+        when {
+            shownMoods.isEmpty() -> {}
+            // Behind the lock it says so, with a way in, rather than going missing.
+            hideReasons -> item { LockedMoodCard(onUnlock) }
+            // A day keeps the full detail; a week, month or year is summed up, with the notes a tap away.
+            period == Period.DAILY -> item { MoodCard(shownMoods, summary, onMoodGoals, onMoodJournal) }
+            else -> item {
+                MoodSummaryCard(moods, summary.from, summary.to, period, onNotes = { onMoodNotes(summary.from, summary.to) }, onMoodGoals = onMoodGoals, onMoodJournal = onMoodJournal)
+            }
+        }
         if (summary.gaps.isNotEmpty()) item { GapsCard(summary.gaps, hideGapNotes) }
         item { StatsCard(summary, streaks, best, streakSettings, today) }
     }
 }
 
 @Composable
-private fun ReviewCard(title: String, content: @Composable () -> Unit) {
+internal fun ReviewCard(title: String, content: @Composable () -> Unit) {
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(title, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
@@ -347,7 +363,7 @@ private fun MoodCard(moods: List<io.github.randomtools3377.checklist.core.Mood>,
                         if (mood.factors.isNotEmpty()) {
                             Text(mood.factors.joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
                         }
-                        mood.note?.let { Text("“$it”", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                        mood.note?.let { Text("${firstLabel(mood)}: “$it”", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                         mood.afterNote?.let { Text("Later: “$it”", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                     }
                     Text(
@@ -404,7 +420,7 @@ private fun GapsCard(gaps: List<Gap>, hideNotes: Boolean) {
 
 /** The month as a calendar: how much of each day got done, with gap days marked. */
 @Composable
-private fun MonthCalendar(summary: ReviewSummary, today: LocalDate? = null, onDay: (LocalDate) -> Unit = {}) {
+private fun MonthCalendar(summary: ReviewSummary, today: LocalDate? = null, onDay: (LocalDate) -> Unit = {}, faces: Map<LocalDate, String> = emptyMap()) {
     val colourBlind = LocalColourBlind.current
     val brightness = LocalBrightness.current
     val first = summary.from
@@ -451,7 +467,16 @@ private fun MonthCalendar(summary: ReviewSummary, today: LocalDate? = null, onDa
                                 horizontalAlignment = Alignment.CenterHorizontally,
                                 verticalArrangement = Arrangement.Center,
                             ) {
-                                Text("${record.day.dayOfMonth}", style = MaterialTheme.typography.labelMedium, color = text)
+                                val face = faces[record.day]
+                                if (face == null) {
+                                    Text("${record.day.dayOfMonth}", style = MaterialTheme.typography.labelMedium, color = text)
+                                } else {
+                                    // The day's mood, small, beside its number.
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text("${record.day.dayOfMonth}", style = MaterialTheme.typography.labelSmall, color = text)
+                                        Text(face, fontSize = 11.sp, modifier = Modifier.testTag("day-mood:${record.day.dayOfMonth}"))
+                                    }
+                                }
                                 if (mark != null) {
                                     Text(
                                         mark,

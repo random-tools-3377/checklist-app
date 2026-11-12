@@ -1,10 +1,12 @@
 package io.github.randomtools3377.checklist
 
 import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -17,6 +19,7 @@ import io.github.randomtools3377.checklist.core.Tick
 import io.github.randomtools3377.checklist.core.minusDays
 import io.github.randomtools3377.checklist.data.HabitDraft
 import io.github.randomtools3377.checklist.data.SETTING_MOOD_AFTER_CLOSED
+import io.github.randomtools3377.checklist.data.SETTING_MOOD_ONLY
 import io.github.randomtools3377.checklist.data.nowMillis
 import io.github.randomtools3377.checklist.data.toEntity
 import io.github.randomtools3377.checklist.data.toEpochDay
@@ -95,6 +98,14 @@ class MoodAfterDoneTest {
             // Not inside anything that scrolls.
         }
         node.performTextInput(text)
+    }
+
+    /** Whether Today's list shows [name] as done, scrolling to it if it does. For waitFor. */
+    private fun doneOnToday(name: String): Boolean = try {
+        app.onNodeWithTag("today-list").performScrollToNode(hasContentDescription("Undo $name"))
+        true
+    } catch (e: Throwable) {
+        false
     }
 
     private fun ticksToday() = runBlocking { dao.allTicks() }.count { it.day == today.toEpochDay() }
@@ -189,6 +200,13 @@ class MoodAfterDoneTest {
         app.waitFor { !shown("mood-more") }
         app.waitFor { todaysMood()?.note == "Busy day ahead" }
         app.waitFor { shown("mood-today") && text("mood-today").contains("note added") }
+        // The line opens today's mood in full: the face can be changed there.
+        app.tap("mood-today")
+        app.waitFor { shown("journal-dialog") && shown("mood-day-journal") }
+        app.tap("journal-mood:4")
+        app.tap("journal-save")
+        app.waitFor { todaysMood()?.score == 4 }
+        assert(todaysMood()?.note == "Busy day ahead")
 
         tickBoth()
         app.waitFor { shown("mood-after") }
@@ -198,5 +216,41 @@ class MoodAfterDoneTest {
         app.waitFor { runBlocking { dao.setting(SETTING_MOOD_AFTER_CLOSED) } == today.toString() }
         assert(todaysMood()?.afterScore == null)
         assert(!shown("mood-after-answer"))
+    }
+
+    @Test
+    fun aFirstCheckInAfterEverythingIsDoneIsTheOnlyOneThatDay() {
+        // Everything is done before the day's first check-in.
+        app.waitFor { shown("mood:3") }
+        tickBoth()
+        // Today has caught up with both ticks before the check-in is answered.
+        for (name in listOf("Read", "Walk")) app.waitFor { doneOnToday(name) }
+        app.toTopOfToday()
+        assert(!shown("mood-after")) { "without a first mood, the usual card asks" }
+        app.waitFor { shown("mood:3") }
+        app.tap("mood:3")
+        app.waitFor { todaysMood()?.score == 3 }
+        app.waitFor { runBlocking { dao.setting(SETTING_MOOD_ONLY) } == today.toString() }
+        // Straight to what's behind it and the note; "How do you feel now?" isn't asked as well.
+        app.waitFor { shown("mood-more") }
+        assert(!shown("mood-after"))
+        type("mood-more-note", "All done early")
+        app.tap("mood-more-done")
+        app.waitFor { todaysMood()?.note == "All done early" }
+        app.waitFor { shown("mood-today") }
+        assert(!shown("mood-after"))
+        assert(todaysMood()?.afterScore == null)
+    }
+
+    @Test
+    fun notTodayCanBeTakenBack() {
+        app.waitFor { shown("mood-later") }
+        assert(!shown("mood-check-in-now"))
+        app.tap("mood-later")
+        app.waitFor { shown("mood-check-in-now") && !shown("mood-checkin") }
+        app.tap("mood-check-in-now")
+        app.waitFor { shown("mood-checkin") && !shown("mood-check-in-now") }
+        app.tap("mood:5")
+        app.waitFor { todaysMood()?.score == 5 }
     }
 }

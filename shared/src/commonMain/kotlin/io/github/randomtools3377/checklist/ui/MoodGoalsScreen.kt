@@ -37,6 +37,7 @@ import io.github.randomtools3377.checklist.core.Goal
 import io.github.randomtools3377.checklist.core.GoalMood
 import io.github.randomtools3377.checklist.core.MoodFindings
 import io.github.randomtools3377.checklist.core.MoodInsights
+import io.github.randomtools3377.checklist.core.MoodRaise
 import io.github.randomtools3377.checklist.core.Way
 import io.github.randomtools3377.checklist.core.WayKind
 
@@ -51,6 +52,8 @@ fun MoodGoalsScreen(vm: MainViewModel, onEdit: (Long) -> Unit, onBack: () -> Uni
     val findings by vm.moodFindings.collectAsStateWithLifecycle()
     val goals by vm.currentGoals.collectAsStateWithLifecycle()
     val features by vm.features.collectAsStateWithLifecycle()
+    val raises by vm.moodRaises.collectAsStateWithLifecycle()
+    val highlight by vm.moodHighlight.collectAsStateWithLifecycle()
     Scaffold(
         topBar = {
             TopAppBar(
@@ -67,8 +70,12 @@ fun MoodGoalsScreen(vm: MainViewModel, onEdit: (Long) -> Unit, onBack: () -> Uni
             padding = padding,
             onEdit = onEdit,
             onChain = { goal, after -> vm.setGoalAfter(goal.id, after.id) },
-            onPay = { goal, points -> vm.setGoalPoints(goal.id, points) },
+            onPay = { goal, points -> vm.raiseGoalPoints(goal.id, points) },
             onJournal = onJournal,
+            raises = raises,
+            onUndoPay = { goal -> vm.undoRaise(goal.id) },
+            highlight = highlight,
+            onHighlight = vm::setMoodHighlight,
         )
     }
 }
@@ -83,6 +90,10 @@ private fun MoodGoalsList(
     onChain: (Goal, Goal) -> Unit,
     onPay: (Goal, Int) -> Unit,
     onJournal: () -> Unit,
+    raises: Map<Long, MoodRaise> = emptyMap(),
+    onUndoPay: (Goal) -> Unit = {},
+    highlight: Boolean = false,
+    onHighlight: (Boolean) -> Unit = {},
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize().testTag("mood-goals"),
@@ -128,16 +139,34 @@ private fun MoodGoalsList(
                     onEdit = { onEdit(m.goal.id) },
                     onChain = { after -> onChain(m.goal, after) },
                     onPay = { points -> onPay(m.goal, points) },
+                    raise = raises[m.goal.id],
+                    onUndoPay = { onUndoPay(m.goal) },
                 )
+            }
+        }
+        if (findings.betterFactors.isNotEmpty() || findings.lowerFactors.isNotEmpty()) {
+            // Marks what is compared only among days something was noted on; the comparison stays as it is.
+            item(key = "highlight") {
+                Column(Modifier.fillMaxWidth()) {
+                    SwitchRow(MoodInsights.HIGHLIGHT_LABEL, highlight, "mood-highlight", onChange = onHighlight)
+                    if (highlight) {
+                        Text(
+                            MoodInsights.notedDaysLine(findings),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.testTag("mood-highlight-days"),
+                        )
+                    }
+                }
             }
         }
         if (findings.betterFactors.isNotEmpty()) {
             item { SectionTitle("Things that go with a better mood") }
-            items(findings.betterFactors, key = { "better-${it.factor}" }) { f -> FactorRow(f, good = true) }
+            items(findings.betterFactors, key = { "better-${it.factor}" }) { f -> FactorRow(f, good = true, marked = highlight && f.onlyNotedDays) }
         }
         if (findings.lowerFactors.isNotEmpty()) {
             item { SectionTitle("Things that go with a lower mood") }
-            items(findings.lowerFactors, key = { "lower-${it.factor}" }) { f -> FactorRow(f, good = false) }
+            items(findings.lowerFactors, key = { "lower-${it.factor}" }) { f -> FactorRow(f, good = false, marked = highlight && f.onlyNotedDays) }
         }
         if (findings.enough) {
             item {
@@ -154,8 +183,16 @@ private fun MoodGoalsList(
 
 /** A thing noted at the check-ins, and how the mood goes on days it is noted. */
 @Composable
-private fun FactorRow(f: FactorMood, good: Boolean) {
+private fun FactorRow(f: FactorMood, good: Boolean, marked: Boolean = false) {
     Column(Modifier.fillMaxWidth().testTag("mood-factor-row:${f.factor}")) {
+        if (marked) {
+            Text(
+                MoodInsights.ONLY_NOTED,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.testTag("mood-factor-marked:${f.factor}"),
+            )
+        }
         Text(MoodInsights.describe(f), style = MaterialTheme.typography.bodyLarge, color = if (good) goodColor() else MaterialTheme.colorScheme.onSurface)
         Text(MoodInsights.basis(f), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
@@ -175,7 +212,16 @@ private fun LiftRow(m: GoalMood) {
 
 /** A goal that goes with a lower mood, with up to three ways into it. */
 @Composable
-private fun WeighCard(m: GoalMood, ways: List<Way>, chainsOn: Boolean, onEdit: () -> Unit, onChain: (Goal) -> Unit, onPay: (Int) -> Unit) {
+private fun WeighCard(
+    m: GoalMood,
+    ways: List<Way>,
+    chainsOn: Boolean,
+    onEdit: () -> Unit,
+    onChain: (Goal) -> Unit,
+    onPay: (Int) -> Unit,
+    raise: MoodRaise? = null,
+    onUndoPay: () -> Unit = {},
+) {
     val name = m.goal.name
     Card(Modifier.fillMaxWidth().testTag("mood-weigh:$name")) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -188,6 +234,14 @@ private fun WeighCard(m: GoalMood, ways: List<Way>, chainsOn: Boolean, onEdit: (
             Spacer(Modifier.height(4.dp))
             Text("Ways in", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
             ways.forEach { way ->
+                // Raised from here already: what it pays now, with Undo, and no further raise.
+                if (way.kind == WayKind.PAY_MORE && raise != null) {
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.testTag("way-paid:$name")) {
+                        Text("• " + MoodInsights.nowPays(raise.new, PointsLabel.name), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("way-paid-line:$name"))
+                        TextButton(onClick = onUndoPay, modifier = Modifier.testTag("way-pay-undo:$name")) { Text("Undo") }
+                    }
+                    return@forEach
+                }
                 Text("• " + way.text, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("way:${way.kind.name}:$name"))
                 when (way.kind) {
                     WayKind.AFTER -> {
@@ -200,7 +254,7 @@ private fun WeighCard(m: GoalMood, ways: List<Way>, chainsOn: Boolean, onEdit: (
                     }
                     WayKind.SMALLER -> TextButton(onClick = onEdit, modifier = Modifier.testTag("way-smaller:$name")) { Text("Edit it") }
                     WayKind.PAY_MORE -> way.points?.let { points ->
-                        TextButton(onClick = { onPay(points) }, modifier = Modifier.testTag("way-pay:$name")) { Text("Pay $points ${pointsWord(points)}") }
+                        TextButton(onClick = { onPay(points) }, modifier = Modifier.testTag("way-pay:$name")) { Text("Pay " + pointsText(points)) }
                     }
                     WayKind.EARLY -> {}
                 }
