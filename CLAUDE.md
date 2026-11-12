@@ -875,6 +875,23 @@ Build order **(default)**, each step a Release the owner can try:
       reminders arrive like a message; the phone's own edge lighting setting decides the look).
       No new permissions. Editors ask "Discard your changes?" only when something changed, and
       "Make a copy" saves first.
+    - **0.66.0 settled these details (default):** tapping a goal in the Goals list opens its
+      own page, with "Edit" on to the editor; the page counts each time the goal was due, from
+      the day it was added, a skip never done; its marks ✓ – ✕ always show; reasons and notes on
+      it hide behind Unlock, and a private goal's page locks whole. The review keeps the date
+      when switching Day, Week, Month and Year, opens a day from the calendar or a chart, and
+      lists what was finished. Three more spreadsheets: the goal record, the mood journal and
+      the month's budget. Badges for a saving goal reached, 7- and 30-day money streaks, a month
+      within every limit, and 30 mood check-ins, shown while their extras are on. Focus time is
+      what was really focused (pauses and breaks left out), kept per session in the database
+      (version 24) and the backup file (format 28); a break of 5, 10 or 15 minutes is offered
+      after a session when set. Mood: the review's mood part is a summary with "See the notes";
+      today's mood opens in full from Today; the journal adds and deletes days, filters by chip
+      and searches notes; a mood reminder, off until a time is set, only asks how the user is
+      feeling; a first check-in after everything is done is the day's only one; on a low morning
+      the character's card carries the one suggestion, and may name a reward to look forward
+      to; "Pay more" can be undone, and a switch marks findings that come only from days
+      something was noted.
     - Not chosen: a note when a money-priced reward's price moves, celebrations for game wins,
       and carrying money over into the next month.
     - **The 0.62.0 fixes settled these details (default):** a goal counts in streaks, records,

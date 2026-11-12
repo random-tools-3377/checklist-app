@@ -22,6 +22,7 @@ enum class HelpTopic(val title: String, val intro: String, val steps: List<Strin
             "Choose, hide and reorder Today's sections in Settings → Appearance.",
             "A to-do with a date opens from its name or \"Change date\". In the grid, hold a tile for its card with Skip, Move and Focus; tap a done tile to open its card.",
             "Today, the Today widget, the quick settings tile and the morning plan all show the same goal first.",
+            "\"History\" on a goal's card opens its page. Tap \"Today: 😐\" to change today's mood, and \"Check in now\" takes \"Not today\" back.",
         ),
     ),
     PLAN(
@@ -47,6 +48,7 @@ enum class HelpTopic(val title: String, val intro: String, val steps: List<Strin
             "Tap \"Reorder\" and use the arrows. \"My order\" on Today follows this order.",
             "Tap \"Select\" to choose several goals, then change their category or difficulty, or remove them together.",
             "At the bottom, \"Done list\" holds finished projects and done to-dos, and \"removed goals\" lets you bring one back.",
+            "Tap a goal to open its own page: a calendar of its done, skipped and missed days, its runs, how often it got done, and its reasons and notes. \"Edit\" at the top opens the editor.",
         ),
     ),
     SHOP(
@@ -73,6 +75,8 @@ enum class HelpTopic(val title: String, val intro: String, val steps: List<Strin
             "In a month, the calendar marks each day: everything done, some, none, or a gap. Days still to come aren't counted yet.",
             "Below are the reasons that came up most, any gaps, and stats like your most consistent goal.",
             "Stats shows your current main streak with your best ever beside it, and the best run of each other streak. In an earlier week, month or year it shows the longest each ran in that stretch.",
+            "Tap a day on the month calendar or a day chart to open that day. \"Finished\" lists projects achieved, to-dos done and what goals with an amount came to. Tap a goal for its own page.",
+            "The Mood card sums the stretch up, and \"See the notes\" opens the journal on those days.",
             "With the mood check-in on, your moods show beside what got done.",
             "Tap \"Badges\" to see every badge, earned or still to earn.",
         ),
@@ -342,6 +346,7 @@ enum class HelpTopic(val title: String, val intro: String, val steps: List<Strin
             "A new badge shows as a card on Today.",
             "Open this page from the \"Badges\" card in the Review.",
             "With \"Character and skills\" on, there are badges for your character's levels too.",
+            "With Budget, the Budget game or the Mood check-in on, they have badges too.",
         ),
     ),
     MOOD_GOALS(
@@ -355,6 +360,7 @@ enum class HelpTopic(val title: String, val intro: String, val steps: List<Strin
             "\"Things that go with a better mood\" and \"…a lower mood\" do the same for what you pick under \"What played a part?\", like \"Slept well\".",
             "It shows what goes together, not what causes what.",
             "Open it from the card once everything is done, or from \"Mood\" in the Review. Tap \"Mood journal\" for every day's notes.",
+            "\"Pay more\" on a goal can be taken back with \"Undo\". \"Highlight days I noted something\" marks with ★ what comes only from days you noted something.",
         ),
     ),
     MOOD_JOURNAL(
@@ -368,6 +374,8 @@ enum class HelpTopic(val title: String, val intro: String, val steps: List<Strin
             "Here, tap a day to change what played a part, its notes or its faces, then \"Save\".",
             "Tap \"Edit the list\" to take things off the list or add your own. Days you already picked them on keep them.",
             "Notes never show in widgets or reminders.",
+            "\"Add a day\" fills in a day you missed, and \"Delete this day\" is in a day's box. Tap a chip to see only its days, or search your notes.",
+            "\"Save as a spreadsheet\" saves the journal for a spreadsheet app. For a daily nudge, set \"Mood reminder\" in Settings → Notifications; it only asks how you're feeling.",
         ),
     ),
     TIMELINE(
@@ -513,6 +521,7 @@ enum class HelpTopic(val title: String, val intro: String, val steps: List<Strin
             "\"Each day's spending\" charts every day of the month, bills aside, and names the biggest.",
             "\"Where it went\" shows each category's spending and its share.",
             "Use ◀ and ▶ at the top to see other months.",
+            "\"Save this month as a spreadsheet\" saves the month's spending, money in, bills and savings.",
         ),
     ),
     BUDGET_GAME(
@@ -622,6 +631,7 @@ enum class HelpTopic(val title: String, val intro: String, val steps: List<Strin
             "The same file moves your data to another phone, Android or iPhone.",
             "Today reminds you when your last backup is over a week old: tap \"Back up\" or \"Later\".",
             "\"Export history as a spreadsheet\" saves your {points} history for a spreadsheet app.",
+            "\"Export the goal record as a spreadsheet\" saves each goal each day: done, skipped or missed, with the reason.",
         ),
     ),
     FOCUS(
@@ -633,6 +643,8 @@ enum class HelpTopic(val title: String, val intro: String, val steps: List<Strin
             "When the time's up, the goal is ticked for you.",
             "Tap \"Pause\" for a break, and \"Carry on\" to go again.",
             "Done early? Tap \"Done now\". Or tap \"Stop without ticking\" to leave it for later.",
+            "The time you really focus is kept; pauses and breaks aren't counted. See it in the Review's Week or Month, under \"Focus time\".",
+            "For a rest after each session, pick 5, 10 or 15 minutes under \"Break after a focus session\" in Settings.",
         ),
     ),
     AI(
