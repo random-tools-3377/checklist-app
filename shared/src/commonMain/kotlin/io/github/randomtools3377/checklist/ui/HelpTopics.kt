@@ -392,7 +392,7 @@ enum class HelpTopic(val title: String, val intro: String, val steps: List<Strin
     ),
     DONE_LIST(
         "Done list",
-        "Finished projects and done to-dos, newest first, so you can see what you've got through.",
+        "Achieved projects and done to-dos, newest first, so you can see what you've got through.",
         listOf(
             "Open it with \"Done list\" at the bottom of the Goals tab.",
             "Each one says whether it was a project or a to-do, and the day it was done.",
@@ -549,7 +549,7 @@ enum class HelpTopic(val title: String, val intro: String, val steps: List<Strin
         listOf(
             "The main streak counts days when you did enough: 90% of the day's goals to start.",
             "Change that in Settings → Streaks, to a percentage or a number of goals.",
-            "Other streaks run beside it: No misses, No skips, Within the limit, and Perfect days.",
+            "Other streaks run beside it: Miss-free, Skip-free, Within the limit, and Perfect days.",
             "Days with nothing due neither count nor break a streak.",
             "A goal due so many times a week or month counts on the day its week or month ends.",
             "When every streak is going at once, Today shows it big.",

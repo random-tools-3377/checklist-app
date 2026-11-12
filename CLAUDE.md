@@ -338,10 +338,20 @@ The app has no network access unless the owner decides otherwise for this app.
 ## Help
 
 - There are helpful hints and guides for the different parts of the app, so no user is confused
-  about what things do or how to use them. **Details (default):** each screen has ⓘ at the top
-  for a short guide (what it's for, then how to use it, with the real button names); the first
-  time each part opens, its guide shows as a tip with "Got it" and "No more tips"; Settings →
-  Help and tips lists every guide, turns tips on or off and can show them all again.
+  about what things do or how to use them. Guides don't pop up by themselves (decided after the
+  whole-app review): screens explain themselves with small hints, and the guides wait behind ⓘ
+  and in Help. **Details (default):** each screen, the misses, penalty and gap check-in screens,
+  the focus timer and each game card has ⓘ for a short guide (what it's for, then how to use
+  it, with the real button names and the user's own numbers from "Points and rules"); each guide
+  ends with "See also" links to the parts it connects with. Settings → Help and tips lists every
+  guide in groups (Basics, Goals, Today and planning, Shop and points, Extras, Money, Mood,
+  Settings and data), with a search box and "Only extras that are on", and has a switch, off to
+  start, "Show a tip the first time each screen opens". Guides follow the device: what it can't
+  do is left out or named as not on it yet.
+- A brand-new user (no goals, nothing removed) gets a short setup instead of a tour: what to use
+  (to-dos, mood check-in, budget, the game), a first goal from five one-tap ideas or their own,
+  and when the day starts and ends; every step can be skipped. "How the app works" stays in
+  Settings; reopened with goals, it asks before adding its examples and offers Undo.
 
 ## Windows
 
@@ -626,8 +636,8 @@ Build order **(default)**, each step a Release the owner can try:
     weaker to some areas than others; ticks earn items that help beat bosses, and items from the
     area a boss is weak to hit it harder. A boss not beaten by Sunday just leaves: nothing is
     lost, a new one comes on Monday, and items are kept. Lucky ticks, which never take points
-    away. Bet on yourself: stake points on doing a goal so many times in a week, win double or
-    lose the stake. Streak shields: one is earned every 30 days of main streak, at most 2 are
+    away. Bet on yourself (removed in 0.63.0; see item 22): stake points on doing a goal so many
+    times in a week, win double or lose the stake. Streak shields: one is earned every 30 days of main streak, at most 2 are
     held, and one saves only the main streak, once.
 
     **Details (default):** everything is original to this app, its names and art included.
@@ -654,9 +664,9 @@ Build order **(default)**, each step a Release the owner can try:
     Today, and beating it pays 25 points once. Lucky ticks: one tick in ten, in the app, pays its
     points again or opens a chest of 5 to 15; undoing the tick takes the extra back. Quest,
     combo, boss and lucky points are bonuses: they add to the balance, not to experience.
-    Bets: stakes of 10, 25 or 50 points, taken when placed and never more than the balance; one
-    bet per habit a week and three at a time; reaching the count wins twice the stake straight
-    away, and undoing the tick that won it takes the win back; a week ending short loses it.
+    Bets (until 0.63.0, when they were removed and open bets gave their stake back): stakes of
+    10, 25 or 50 points, taken when placed and never more than the balance; one bet per habit a
+    week and three at a time; reaching the count won twice the stake; a week ending short lost it.
     Shields count from the day they are turned on; badges count streaks without them.
     Paths: Athlete, Healer, Scholar, Homemaker, Professional and Maker, one per area; the path's
     area gets 10% more experience, worked out over the whole history, so the path can be
@@ -854,6 +864,15 @@ Build order **(default)**, each step a Release the owner can try:
       device can't do, or say "Not on this device yet"; habit chains show "Next up" on iPhone
       and Windows too; every settings switch is read by screen readers and toggles from its
       whole row.
+    - **0.63.0 settled these details (default):** the other two streaks are called "Miss-free"
+      and "Skip-free". Finished habits (last day passed) are "Completed" and finished projects
+      "Achieved", in a closed "Completed" section at the bottom of Goals, with Extend and Remove.
+      Settings search matches word starts in a simple base form (plurals, -ing, -ed) and finds
+      Features and Appearance options, opening them at that place; with nothing found it offers
+      Help and tips. Sections, settings and "Points and rules" numbers for extras that are off
+      stay hidden unless already in use or changed. The Privacy switch is "Reasons and notes for
+      skips, misses and moods". The app calls its device a phone, an iPhone or a computer.
+      The first-run setup's "The game" turns on every game extra except the budget game.
 
 ## Talking to the owner
 
