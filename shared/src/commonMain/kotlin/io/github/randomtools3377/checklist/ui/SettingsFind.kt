@@ -24,8 +24,12 @@ internal object LookPlace {
     const val CELEBRATIONS = "celebrations"
 }
 
+/** The switch in Appearance that puts the character's face on the balance and streaks widget. */
+internal const val WIDGET_CHARACTER_TITLE = "Character on the balance and streaks widget"
+
 /** The parts of Appearance on [phone], as a Settings search finds them: only what that page shows there. */
-internal fun lookParts(phone: Phone, matchWallpaper: Boolean): List<LookPart> = listOfNotNull(
+/** [character] is whether "Character and skills" is on: its widget switch is only listed then. */
+internal fun lookParts(phone: Phone, matchWallpaper: Boolean, character: Boolean = false): List<LookPart> = listOfNotNull(
     LookPart(LookPlace.THEME, "Theme", "dark mode light black night ${phone.deviceWord}"),
     LookPart(LookPlace.COLOUR, "Colour", "colour color accent palette any picker hex" + if (matchWallpaper) " wallpaper" else ""),
     LookPart(LookPlace.COLOUR_BLIND, "Colour-blind friendly", "colour-blind color-blind colourblind colorblind accessibility"),
@@ -38,6 +42,7 @@ internal fun lookParts(phone: Phone, matchWallpaper: Boolean): List<LookPart> = 
     LookPart(LookPlace.PERSONAL, "App icon", "app icon home screen").takeIf { phone.canChangeIcon },
     LookPart(LookPlace.PERSONAL, "Widgets", "widgets widget style see-through").takeIf { phone.hasWidgets },
     LookPart(LookPlace.PERSONAL, "Calendar widget shows", "calendar widget shows hide count goals done events deadlines to-dos daily goals month clutter").takeIf { phone.hasWidgets },
+    LookPart(LookPlace.PERSONAL, WIDGET_CHARACTER_TITLE, "character face head balance streaks widget home screen").takeIf { phone.hasWidgets && character },
     LookPart(LookPlace.CELEBRATIONS, "Celebrations", "celebrations sound sounds own sound file confetti gif gifs animation edge glow lighting" + if (phone.canBuzz) " buzz vibrate vibration" else ""),
 )
 

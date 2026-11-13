@@ -108,7 +108,12 @@ fun BreakOfferScreen(minutes: Int, onStart: () -> Unit, onSkip: () -> Unit) {
         verticalArrangement = Arrangement.Center,
         modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).safeDrawingPadding().padding(24.dp).testTag("break-offer"),
     ) {
-        Text("☕", fontSize = 56.sp)
+        // Time's up: with the character on, it cheers here.
+        if (LocalCharacter.current != null) {
+            SceneCharacter(io.github.randomtools3377.checklist.core.Scene.FOCUS_DONE, if (isShort()) 72.dp else 112.dp)
+        } else {
+            Text("☕", fontSize = 56.sp)
+        }
         Text("Nice work", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
         Spacer(Modifier.height(8.dp))
         Text("That session is done. Time for a break?", style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center)
@@ -141,7 +146,9 @@ fun BreakScreen(state: FocusState, onDone: () -> Unit, onSkip: () -> Unit) {
     }
     val left = state.left(now)
     val progress = if (state.totalMillis <= 0) 0f else (1f - left.toFloat() / state.totalMillis).coerceIn(0f, 1f)
-    val ring = minOf(240.dp, screenHeight() - 120.dp).coerceAtLeast(120.dp)
+    // On a break the character has a stretch, while it is on and there is room.
+    val buddy = focusBuddy()
+    val ring = focusRing(buddy)
     val clock: @Composable () -> Unit = {
         Box(contentAlignment = Alignment.Center) {
             CircularProgressIndicator(progress = { progress }, strokeWidth = 10.dp, modifier = Modifier.size(ring))
@@ -150,6 +157,7 @@ fun BreakScreen(state: FocusState, onDone: () -> Unit, onSkip: () -> Unit) {
     }
     val rest: @Composable () -> Unit = {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            if (buddy) FocusBuddy(io.github.randomtools3377.checklist.core.Scene.BREAK)
             Text("☕ Break", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
             // A computer can't buzz: there the notification says so.
             Text(if (canBuzz) "A buzz tells you when it's over." else "You'll be told when it's over.", style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center)

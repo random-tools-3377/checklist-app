@@ -134,6 +134,45 @@ class GapForgottenTest {
     }
 }
 
+/** With the character on, it keeps the user company on the gap check-in, and brightens when a miss was a forgotten tick. */
+@RunWith(AndroidJUnit4::class)
+class GapCompanyTest {
+    /** After the quiet days are set up: "Character and skills" and "Character check-ins" turned on. */
+    class CharacterOn : ExternalResource() {
+        override fun before() = runBlocking {
+            val dao = (InstrumentationRegistry.getInstrumentation().targetContext.applicationContext as ChecklistApplication).container.db.dao()
+            listOf(io.github.randomtools3377.checklist.core.Feature.CHARACTER, io.github.randomtools3377.checklist.core.Feature.CHECKINS)
+                .forEach { dao.putSetting(SettingEntity(it.key, it.onValue)) }
+        }
+    }
+
+    private val app = createAndroidComposeRule<MainActivity>()
+
+    @get:Rule
+    val rules: RuleChain = RuleChain.outerRule(GapCheckInTest.TwoQuietDays()).around(CharacterOn()).around(app)
+
+    private fun gone(tag: String) = app.onAllNodesWithTag(tag, useUnmergedTree = true).fetchSemanticsNodes().isEmpty()
+
+    @Test
+    fun theCharacterIsThereAndBrightensWhenAMissWasAForgottenTick() {
+        val today = nowLocal().date
+        app.waitFor { !gone("gap") }
+        // At the top: the character with one kind line.
+        app.waitFor { app.shownIn("gap-list", "company:GAP") }
+        assertTrue(!gone("company-line"))
+
+        // One miss was a forgotten tick: it brightens, and the check-in stays for the other.
+        app.tapIn("gap-list", "gap-forgot:Read:${today.minusDays(2)}")
+        app.waitFor { app.shownIn("gap-list", "company:PUT_RIGHT") }
+        assertTrue(gone("company:GAP"))
+
+        // The last one too: after a moment the gap goes away, as without the character.
+        app.tapIn("gap-list", "gap-forgot:Read:${today.minusDays(1)}")
+        app.waitFor { !gone("today-list") }
+        assertTrue(gone("gap"))
+    }
+}
+
 /** A past miss is put right later, from the review's day view and from its penalty's line in the points history. */
 @RunWith(AndroidJUnit4::class)
 class PastMissTest {

@@ -150,6 +150,8 @@ internal fun HelpTopic.stepsOn(device: GuideDevice): List<String> = when (this) 
     HelpTopic.REMINDERS -> reminderSteps(device)
     // Where there is no AI helper yet, the app answers in its own words and the AI isn't mentioned.
     HelpTopic.ASK, HelpTopic.HOW_DOING -> if (device.ai) steps else steps.filterNot { "AI helper" in it }
+    // Its face on a widget only where there are widgets.
+    HelpTopic.CHARACTER -> if (device.widgets) steps else steps.filterNot { "balance and streaks widget" in it }
     else -> steps
 }
 

@@ -143,8 +143,12 @@ data class CompanionSay(
     val reason: String? = null,
 )
 
-/** Other screens the character can stand on, each with its own face and a kind line (see [Checkins.at]). */
-enum class Scene { MISSES, PENALTY, GAP, FOCUS, FOCUS_DONE, CELEBRATION, SETUP, WIDGET }
+/**
+ * Other screens the character can stand on, each with its own face and a kind line (see
+ * [Checkins.at]). [PUT_RIGHT] is a miss that turned out to be a forgotten tick, and
+ * [PENALTY_DONE] a penalty task just done: the hard screens, brightened.
+ */
+enum class Scene { MISSES, PENALTY, GAP, FOCUS, FOCUS_DONE, CELEBRATION, SETUP, WIDGET, FOCUS_PAUSED, BREAK, PUT_RIGHT, PENALTY_DONE }
 
 object Checkins {
     /** The last level the user has seen, so a new one is cheered once. */
@@ -273,14 +277,54 @@ object Checkins {
         fun pick(vararg lines: String) = lines[day.toEpochDays().mod(lines.size)]
         return when (scene) {
             Scene.MISSES -> CompanionSay(Expression.CALM, pick("It happens. Just say what got in the way.", "No blame here. A quick reason and we move on.", "Yesterday is done. Let's note it and carry on."))
-            Scene.PENALTY -> CompanionSay(Expression.DETERMINED, pick("One small task and it's behind us.", "Let's get this one done together.", "A quick one, then back to today."))
+            Scene.PENALTY -> CompanionSay(Expression.CALM, pick("One small task and it's behind us.", "Let's get this one done together.", "A quick one, then back to today."))
             Scene.GAP -> CompanionSay(Expression.HAPPY, pick("Good to see you again. What happened?", "Welcome back. Tell me about it, if you like.", "You're here now; that's what counts."), move = CharacterMove.WAVE)
             Scene.FOCUS -> CompanionSay(Expression.DETERMINED, pick("Heads down. I'm right here.", "Just this, for now.", "One thing at a time."))
-            Scene.FOCUS_DONE -> CompanionSay(Expression.RELIEVED, pick("That's the session. Nicely focused.", "Done. Take a breath.", "Time's up. Good work."), move = CharacterMove.STRETCH)
+            Scene.FOCUS_PAUSED -> CompanionSay(Expression.CALM, pick("Paused. Take your time.", "No rush. I'll wait here.", "A little pause is fine."))
+            Scene.FOCUS_DONE -> CompanionSay(Expression.CHEERING, pick("That's the session. Nicely focused!", "Done! Good work.", "Time's up. You did it!"), move = CharacterMove.HOP)
+            Scene.BREAK -> CompanionSay(Expression.RELIEVED, pick("Break time. Have a stretch.", "Rest a bit. You've earned it.", "Shoulders down, deep breath."), move = CharacterMove.STRETCH)
+            Scene.PUT_RIGHT -> CompanionSay(Expression.HAPPY, pick("That one's put right. Nice.", "Good catch. It counts after all.", "All sorted. That one counts now."), move = CharacterMove.NOD)
+            Scene.PENALTY_DONE -> CompanionSay(Expression.HAPPY, pick("Done. That's behind us now.", "All settled. On we go!", "That's that. Back to today."), move = CharacterMove.NOD)
             Scene.CELEBRATION -> CompanionSay(Expression.CHEERING, pick("Yes! Look at that!", "You did it!", "That's a big one!"), move = CharacterMove.DANCE)
             Scene.SETUP -> CompanionSay(Expression.HAPPY, pick("Hello! Let's set things up.", "Hi! This only takes a minute.", "Welcome! Let's get started."), move = CharacterMove.WAVE)
             Scene.WIDGET -> CompanionSay(Expression.CALM, pick("Ready when you are.", "Here when you need me.", "One thing at a time."))
         }
+    }
+
+    /** The focus timer's scene: heads down while it runs, at ease while it is paused. */
+    fun focusScene(running: Boolean): Scene = if (running) Scene.FOCUS else Scene.FOCUS_PAUSED
+
+    /**
+     * What the character answers when tapped on its own page: how far it is to the next level,
+     * then to the nearest piece of gear, taking turns with each [tap] (0 for the first).
+     */
+    fun pageLine(sheet: CharacterSheet, tap: Int): String {
+        val lines = buildList {
+            add(
+                if (sheet.level.toNext > 0) "${sheet.level.toNext} more experience and we're level ${sheet.level.level + 1}!"
+                else "Level ${sheet.level.level + 1} is right there!",
+            )
+            val near = gearNear(sheet)
+            if (near != null) {
+                add("${near.gear.area.label} needs ${near.left} more experience for the ${near.gear.label.lowercase()}.")
+            } else {
+                add("Every piece of gear is ours. Looking good!")
+            }
+        }
+        return lines[tap.mod(lines.size)]
+    }
+
+    /** The home-screen widget's switch, "Character on the balance and streaks widget": off unless "1". */
+    const val WIDGET_FACE = "widget_character"
+
+    /**
+     * The face on the home-screen widget, from how much of today is done and nothing else (no
+     * mood, no goal): calm with nothing done yet, happy as things get done, proud once it all is.
+     */
+    fun widgetFace(done: Int, due: Int): Expression = when {
+        due > 0 && done >= due -> Expression.PROUD
+        done > 0 -> Expression.HAPPY
+        else -> Expression.CALM
     }
 
     /**

@@ -8,9 +8,16 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import androidx.compose.ui.graphics.asAndroidBitmap
+import io.github.randomtools3377.checklist.core.Checkins
+import io.github.randomtools3377.checklist.core.Expression
+import io.github.randomtools3377.checklist.core.Feature
+import io.github.randomtools3377.checklist.core.Looks
 import io.github.randomtools3377.checklist.core.Repeat
 import io.github.randomtools3377.checklist.data.HabitDraft
 import io.github.randomtools3377.checklist.data.RewardDraft
+import io.github.randomtools3377.checklist.data.SettingEntity
+import io.github.randomtools3377.checklist.ui.headImage
 import io.github.randomtools3377.checklist.data.nowLocal
 import io.github.randomtools3377.checklist.data.toCore
 import io.github.randomtools3377.checklist.widget.StatsWidget
@@ -100,5 +107,31 @@ class MysteryAndWidgetTest {
         assertEquals(30, data.balance)
         assertEquals(2, data.due)
         assertEquals(1, data.done)
+        // The character's face is off to start.
+        assertEquals(null, data.face)
+    }
+
+    @Test
+    fun theWidgetShowsTheCharactersFaceOnceItsSwitchIsOn() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val dao = container.db.dao()
+        // The switch alone does nothing while "Character and skills" is off.
+        runBlocking { dao.putSetting(SettingEntity(Checkins.WIDGET_FACE, "1")) }
+        assertEquals(null, runBlocking { StatsWidget.load(context) }.face)
+
+        // With the character on: 1 of 2 done today, so it looks happy.
+        runBlocking { dao.putSetting(SettingEntity(Feature.CHARACTER.key, Feature.CHARACTER.onValue)) }
+        val face = runBlocking { StatsWidget.load(context) }.face!!
+        assertEquals(Expression.HAPPY, face.expression)
+
+        // Its head is drawn as a picture: clear in the corners, the skin colour on the cheek.
+        val bitmap = headImage(face.look, face.outfit, face.expression, 152).asAndroidBitmap()
+        assertEquals(152, bitmap.width)
+        assertEquals(0, android.graphics.Color.alpha(bitmap.getPixel(0, 151)))
+        val cheek = bitmap.getPixel(36, 104)
+        val skin = Looks.SKINS[face.look.skin]
+        assertEquals(255, android.graphics.Color.alpha(cheek))
+        assertEquals(android.graphics.Color.red(skin).toFloat(), android.graphics.Color.red(cheek).toFloat(), 4f)
+        assertEquals(android.graphics.Color.blue(skin).toFloat(), android.graphics.Color.blue(cheek).toFloat(), 4f)
     }
 }

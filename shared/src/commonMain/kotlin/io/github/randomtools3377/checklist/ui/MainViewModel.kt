@@ -710,6 +710,14 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
         viewModelScope.launch { repository.setSetting(show.key, show.valueOf(on)) }
     }
 
+    /** "Character on the balance and streaks widget" in Appearance: off to start; the widget redraws when it changes. */
+    val widgetCharacter: StateFlow<Boolean> =
+        dao.observeSetting(io.github.randomtools3377.checklist.core.Checkins.WIDGET_FACE).map { it == "1" }.state(false)
+
+    fun setWidgetCharacter(on: Boolean) {
+        viewModelScope.launch { repository.setSetting(io.github.randomtools3377.checklist.core.Checkins.WIDGET_FACE, if (on) "1" else "0") }
+    }
+
     // The optional AI, in the separate Checklist AI app.
 
     /** How Checklist AI stands; null until checked. */

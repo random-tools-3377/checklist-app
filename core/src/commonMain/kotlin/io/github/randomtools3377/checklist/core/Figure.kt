@@ -375,6 +375,15 @@ object Figure {
     const val RIGHT_SHOULDER_X = 85.5f
     const val SHOULDER_Y = 80f
 
+    /** The square of the drawing that holds the head, with its hair and hat: for a picture of the face alone. */
+    const val HEAD_LEFT = 22f
+    const val HEAD_TOP = 0f
+    const val HEAD_SIZE = 76f
+
+    /** The head by itself, standing still: long hair behind, then the face, hair and hat. Drawn inside the head's square. */
+    fun head(look: Look, outfit: Outfit, expression: Expression = Expression.CALM): List<Mark> =
+        parts(look, outfit, expression).let { it.hairBack + it.head }
+
     /**
      * [parts] placed for [pose], back to front: each layer's shapes with the motions to apply,
      * outermost first (the same order as an SVG transform list or canvas calls).

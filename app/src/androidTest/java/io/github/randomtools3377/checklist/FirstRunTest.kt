@@ -80,6 +80,22 @@ class FirstRunTest {
     }
 
     @Test
+    fun theCharacterWavesAndIsStyledRightThereWhenTheGameIsPicked() {
+        app.waitFor { shown("setup-step:PARTS") }
+        // The character says hello; its style is only asked for with the game picked.
+        assertTrue(shown("setup-character"))
+        assertFalse(shown("style"))
+        app.tap("setup-part:GAME")
+        app.waitFor { shown("style") && shown("style-preview") }
+        app.tap("hair:CURLY")
+        app.tap("skin:3")
+        app.waitFor { setting(io.github.randomtools3377.checklist.core.Looks.SETTING)?.startsWith("3,CURLY,") == true }
+        app.tap("setup-next")
+        app.waitFor { on(Feature.CHARACTER) && on(Feature.CHECKINS) }
+        app.waitFor { shown("setup-step:GOAL") }
+    }
+
+    @Test
     fun everyStepCanBeSkipped() {
         app.waitFor { shown("setup-step:PARTS") }
         app.tap("setup-part:BUDGET")

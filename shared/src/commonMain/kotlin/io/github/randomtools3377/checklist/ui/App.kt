@@ -99,7 +99,13 @@ fun ChecklistRoot(phone: Phone, vm: MainViewModel) {
             val picture: (@Composable () -> Unit)? = sheet?.let { level ->
                 { CharacterFigure(figureLook, remember(level) { io.github.randomtools3377.checklist.core.Outfit.of(level) }, Modifier.height(96.dp)) }
             }
-            androidx.compose.runtime.CompositionLocalProvider(LocalPayRate provides rate, LocalEmptyPicture provides picture) {
+            // The character for the other screens it stands on (see CharacterPlaces.kt): only while it is on.
+            val extras by vm.features.collectAsStateWithLifecycle()
+            val talks = io.github.randomtools3377.checklist.core.Feature.CHECKINS in extras
+            val own = sheet?.let { level ->
+                remember(level, figureLook, talks) { OwnCharacter(figureLook, io.github.randomtools3377.checklist.core.Outfit.of(level), talks) }
+            }
+            androidx.compose.runtime.CompositionLocalProvider(LocalPayRate provides rate, LocalEmptyPicture provides picture, LocalCharacter provides own) {
                 // Measures the window, for tablets and phones on their side.
                 WindowSized { ChecklistApp(vm) }
             }
@@ -443,9 +449,11 @@ fun ChecklistApp(vm: MainViewModel) {
                 val sheet by vm.character.collectAsStateWithLifecycle()
                 val look by vm.look.collectAsStateWithLifecycle()
                 val titles by vm.characterTitles.collectAsStateWithLifecycle()
+                val companion by vm.companion.collectAsStateWithLifecycle()
                 CharacterScreen(
                     sheet, look, onLook = vm::setLook, onBack = ::pop, titles = titles, onPath = vm::setPath, onTitle = vm::setTitle,
                     onIdeas = { area -> push("ideas/${area.name}") },
+                    expression = companion?.say?.expression ?: io.github.randomtools3377.checklist.core.Expression.CALM,
                 )
             }
             "ideas" -> IdeasScreen(

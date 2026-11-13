@@ -508,7 +508,7 @@ fun SettingsScreen(
     val look by vm.appearance.collectAsState()
     val budgetLockShown = Feature.BUDGET in features || settings.locks.budget
     // What it finds on the Appearance and Features pages, each opening that page at it.
-    val lookHits = if (searching) lookParts(phone, canMatchWallpaper).filter { SettingsSearch.matches(searched, "appearance look ${it.title} ${it.words}") } else emptyList()
+    val lookHits = if (searching) lookParts(phone, canMatchWallpaper, Feature.CHARACTER in features).filter { SettingsSearch.matches(searched, "appearance look ${it.title} ${it.words}") } else emptyList()
     val featureHits = if (searching) featuresOn(phone).filter { SettingsSearch.matches(searched, "features extras ${featureWords(it)}") } else emptyList()
     val showAppearance = shows("Appearance look") || lookHits.isNotEmpty()
     val showFeatures = shows("Features extras optional") || featureHits.isNotEmpty()

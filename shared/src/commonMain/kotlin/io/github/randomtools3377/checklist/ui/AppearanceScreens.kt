@@ -197,6 +197,7 @@ fun AppearanceScreen(appearance: Appearance, vm: MainViewModel, onAnyColour: () 
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 CalendarWidgetShows(vm)
+                WidgetCharacterSwitch(vm)
             }
             CelebrationSettings(appearance.celebrate, vm, Modifier.scrollPlace(target, LookPlace.CELEBRATIONS))
         }
@@ -291,6 +292,21 @@ private fun CalendarWidgetShows(vm: MainViewModel) {
     io.github.randomtools3377.checklist.core.CalendarShow.entries.forEach { show ->
         SwitchRow(show.label, show in shows.on, "calendar-show:${show.name}", hint = show.hint) { vm.setCalendarShow(show, it) }
     }
+}
+
+/** The character's face on the balance and streaks widget: a switch, off to start, shown while the character is on. */
+@Composable
+private fun WidgetCharacterSwitch(vm: MainViewModel) {
+    val features by vm.features.collectAsState()
+    if (io.github.randomtools3377.checklist.core.Feature.CHARACTER !in features) return
+    val on by vm.widgetCharacter.collectAsState()
+    SwitchRow(
+        WIDGET_CHARACTER_TITLE,
+        on,
+        "widget-character",
+        hint = "Your character's face shows how today is going: calm to start, happy as things get done, proud once everything is. " +
+            "It only goes by how much is done, never your mood or which goals.",
+    ) { vm.setWidgetCharacter(it) }
 }
 
 /** Celebrations: sound, buzz, how much confetti, and a GIF for every goal without its own. */

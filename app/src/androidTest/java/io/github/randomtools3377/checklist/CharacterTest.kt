@@ -67,6 +67,12 @@ class CharacterTest {
         app.tap("skin:4")
         app.waitFor { runBlocking { dao.setting(io.github.randomtools3377.checklist.core.Looks.SETTING) }?.startsWith("4,CURLY,") == true }
 
+        // A tap on the character gets a line: how far to the next level (150 in all), then to the next gear (Fitness's trainers, at 200).
+        app.tap("character-figure")
+        app.waitFor { text("character-says").contains("90 more experience") && text("character-says").contains("level 3") }
+        app.tap("character-figure")
+        app.waitFor { text("character-says").contains("Fitness needs 140 more experience for the trainers") }
+
         // The goal's skill, changed in its editor, is saved.
         app.activityRule.scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
         app.waitFor { shown("nav:goals") }

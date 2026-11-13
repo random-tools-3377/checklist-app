@@ -60,7 +60,10 @@ fun FocusScreen(state: FocusState, goal: Goal?, onPause: () -> Unit, onResume: (
     }
     val left = state.left(now)
     val progress = if (state.totalMillis <= 0) 0f else (1f - left.toFloat() / state.totalMillis).coerceIn(0f, 1f)
-    val ring = minOf(240.dp, screenHeight() - 120.dp).coerceAtLeast(120.dp)
+    // A focus buddy, with the character on: heads down while the timer runs, at ease while it is
+    // paused. Left out on a short window, where there is no room beside the clock.
+    val buddy = focusBuddy()
+    val ring = focusRing(buddy)
     val clock: @Composable () -> Unit = {
         Box(contentAlignment = Alignment.Center) {
             CircularProgressIndicator(progress = { progress }, strokeWidth = 10.dp, modifier = Modifier.size(ring))
@@ -70,6 +73,7 @@ fun FocusScreen(state: FocusState, goal: Goal?, onPause: () -> Unit, onResume: (
     val rest: @Composable () -> Unit = {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Spacer(Modifier.height(8.dp))
+            if (buddy) FocusBuddy(io.github.randomtools3377.checklist.core.Checkins.focusScene(state.running))
             Text(if (state.running) "Ticked for you when time's up." else "Paused", style = MaterialTheme.typography.bodyMedium)
             Spacer(Modifier.height(24.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -112,5 +116,24 @@ fun FocusScreen(state: FocusState, goal: Goal?, onPause: () -> Unit, onResume: (
             clock()
             rest()
         }
+    }
+}
+
+/** Whether the character keeps the timer company: while it is on, and the window isn't short. */
+@Composable
+internal fun focusBuddy(): Boolean = LocalCharacter.current != null && !isShort()
+
+/** The clock's size: as big as fits, a little smaller on a small screen when the character stands under it. */
+@Composable
+internal fun focusRing(buddy: Boolean): androidx.compose.ui.unit.Dp =
+    minOf(if (buddy && screenHeight() < 720.dp) 180.dp else 240.dp, screenHeight() - 120.dp).coerceAtLeast(120.dp)
+
+/** The character under the timer's clock, with the face and the move for [scene], and one short line with check-ins on. */
+@Composable
+internal fun FocusBuddy(scene: io.github.randomtools3377.checklist.core.Scene) {
+    val own = LocalCharacter.current ?: return
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(bottom = 8.dp)) {
+        SceneCharacter(scene, 64.dp)
+        if (own.talks) SpeechBubble(remember(scene) { io.github.randomtools3377.checklist.core.Checkins.at(scene, io.github.randomtools3377.checklist.data.nowLocal().date) }.line, Modifier.testTag("focus-buddy-line"))
     }
 }

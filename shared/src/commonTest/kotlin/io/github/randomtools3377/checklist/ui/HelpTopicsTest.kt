@@ -113,6 +113,17 @@ class HelpTopicsTest {
     }
 
     @Test
+    fun theCharacterGuideSaysWhereElseItShows() {
+        val onAndroid = HelpTopic.CHARACTER.text(android)
+        listOf("\"I forgot to tick it\"", "focus timer", "project achieved", "Tap it for a hop", "\"Character on the balance and streaks widget\"").forEach {
+            assertTrue(it in onAndroid, it)
+        }
+        // Its face on a widget is only told where there are widgets.
+        assertFalse("widget" in HelpTopic.CHARACTER.text(iphone) || "widget" in HelpTopic.CHARACTER.text(computer))
+        assertTrue(HelpTopic.CHARACTER in listed(computer, "focus timer clock"))
+    }
+
+    @Test
     fun theRemindersGuideSaysWhatEachDeviceCanDo() {
         val onAndroid = HelpTopic.REMINDERS.text(android)
         listOf("\"Done\"", "\"+1\"", "\"Skip\"", "\"Snooze\"", "Morning plan", "Weekly summary", "Allow exact times", "Keep reminding").forEach {

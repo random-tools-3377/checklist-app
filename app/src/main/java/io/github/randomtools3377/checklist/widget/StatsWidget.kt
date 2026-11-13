@@ -7,9 +7,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.glance.GlanceId
 import androidx.glance.GlanceModifier
 import androidx.glance.GlanceTheme
+import androidx.glance.Image
+import androidx.glance.ImageProvider
 import androidx.glance.LocalSize
 import androidx.glance.action.actionStartActivity
 import androidx.glance.action.clickable
@@ -30,15 +33,23 @@ import androidx.glance.layout.fillMaxSize
 import androidx.glance.layout.fillMaxWidth
 import androidx.glance.layout.height
 import androidx.glance.layout.padding
+import androidx.glance.layout.size
 import androidx.glance.layout.width
 import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
 import io.github.randomtools3377.checklist.ChecklistApplication
 import io.github.randomtools3377.checklist.MainActivity
+import io.github.randomtools3377.checklist.core.Checkins
 import io.github.randomtools3377.checklist.core.Days
+import io.github.randomtools3377.checklist.core.Experience
+import io.github.randomtools3377.checklist.core.Expression
 import io.github.randomtools3377.checklist.core.Feature
+import io.github.randomtools3377.checklist.core.Look
+import io.github.randomtools3377.checklist.core.Looks
 import io.github.randomtools3377.checklist.core.NearWins
+import io.github.randomtools3377.checklist.core.Outfit
+import io.github.randomtools3377.checklist.core.Paths
 import io.github.randomtools3377.checklist.core.Period
 import io.github.randomtools3377.checklist.core.Rules
 import io.github.randomtools3377.checklist.core.Shields
@@ -59,6 +70,7 @@ import io.github.randomtools3377.checklist.data.parseDayEndHour
 import io.github.randomtools3377.checklist.data.activeCoreGoals
 import io.github.randomtools3377.checklist.data.toCore
 import io.github.randomtools3377.checklist.data.toEpochDay
+import io.github.randomtools3377.checklist.ui.headImage
 import io.github.randomtools3377.checklist.ui.pointsText
 import kotlinx.datetime.LocalDate
 
@@ -72,7 +84,15 @@ data class StatsData(
     val look: WidgetLook = WidgetLook(),
     /** How many more of today's goals the main streak still needs; 0 once today counts. */
     val needs: Int = 0,
+    /** The character's face, with "Character and skills" and its switch in Appearance on. */
+    val face: WidgetFace? = null,
 )
+
+/**
+ * The character's head for the widget: how it looks, what it wears on its head and face, and
+ * today's face, which comes only from how much is done (see Checkins.widgetFace): no mood, no goal.
+ */
+data class WidgetFace(val look: Look, val outfit: Outfit, val expression: Expression)
 
 /**
  * The balance and streaks widget. Small, it shows the balance, the main streak and how much of
@@ -132,6 +152,19 @@ class StatsWidget : GlanceAppWidget() {
                 val monday = Days.periodStart(today, Period.WEEKLY)
                 WeeklyTarget.progress(dao.entries(monday.toEpochDay(), today.toEpochDay()).map { it.toCore() }, today, target)
             }
+            // The character's face: only with the character on and its switch in Appearance turned on.
+            val face = if (Feature.CHARACTER.isOn(dao.setting(Feature.CHARACTER.key)) && dao.setting(Checkins.WIDGET_FACE) == "1") {
+                // Levels, and so the gear, follow the numbers set in "Points and rules", as in the app.
+                Rules.current = Rules.decode(dao.setting(Rules.SETTING))
+                val sheet = Experience.of(dao.allEntries().map { it.toCore() }, dao.allGoals().map { it.toCore() }, Paths.decode(dao.setting(Paths.SETTING)))
+                WidgetFace(
+                    Looks.decode(dao.setting(Looks.SETTING)),
+                    Outfit.of(sheet),
+                    Checkins.widgetFace(todayRecord?.done ?: 0, todayRecord?.due ?: 0),
+                )
+            } else {
+                null
+            }
             return StatsData(
                 balance = dao.balance(),
                 streaks = Shields.streaks(records, shieldsFrom, today, streak),
@@ -140,6 +173,7 @@ class StatsWidget : GlanceAppWidget() {
                 week = week,
                 look = widgetLook(dao),
                 needs = NearWins.neededForStreak(todayRecord, streak),
+                face = face,
             )
         }
     }
@@ -165,12 +199,25 @@ private fun StatsContent(data: StatsData) {
             .clickable(actionStartActivity<MainActivity>()),
     ) {
         Column(GlanceModifier.defaultWeight()) {
-            Text("Balance", style = TextStyle(color = colors.onSurfaceVariant, fontSize = 12.sp))
-            Text(
-                pointsText(data.balance),
-                maxLines = 1,
-                style = TextStyle(color = if (data.balance < 0) colors.error else colors.primary, fontSize = 22.sp, fontWeight = FontWeight.Bold),
-            )
+            // Small, the character's face sits beside the balance; wide, it is beside the streaks' heading.
+            val faceHere = data.face.takeIf { !wide }
+            val balance = pointsText(data.balance)
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = GlanceModifier.fillMaxWidth()) {
+                Column(GlanceModifier.defaultWeight()) {
+                    Text("Balance", style = TextStyle(color = colors.onSurfaceVariant, fontSize = 12.sp))
+                    Text(
+                        balance,
+                        maxLines = 1,
+                        style = TextStyle(
+                            color = if (data.balance < 0) colors.error else colors.primary,
+                            // Beside the face there is less room, so a long balance is written smaller.
+                            fontSize = if (faceHere == null || balance.length <= 8) 22.sp else if (balance.length <= 11) 18.sp else 16.sp,
+                            fontWeight = FontWeight.Bold,
+                        ),
+                    )
+                }
+                faceHere?.let { FaceImage(it, 34) }
+            }
             Spacer(GlanceModifier.height(4.dp))
             Text(
                 if (data.streaks.done > 0) "🔥 ${days(data.streaks.done)} in a row" else "No streak yet",
@@ -206,10 +253,15 @@ private fun StatsContent(data: StatsData) {
         if (wide) {
             Spacer(GlanceModifier.width(12.dp))
             Column(GlanceModifier.defaultWeight()) {
-                Text(
-                    if (data.streaks.allRunning) "Streaks · all running!" else "Streaks",
-                    style = TextStyle(color = colors.onSurfaceVariant, fontSize = 12.sp),
-                )
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = GlanceModifier.fillMaxWidth()) {
+                    Text(
+                        if (data.streaks.allRunning) "Streaks · all running!" else "Streaks",
+                        maxLines = 1,
+                        style = TextStyle(color = colors.onSurfaceVariant, fontSize = 12.sp),
+                        modifier = GlanceModifier.defaultWeight(),
+                    )
+                    data.face?.let { FaceImage(it, 30) }
+                }
                 StreakLine("Done", data.streaks.done)
                 StreakLine("Miss-free", data.streaks.noMisses)
                 StreakLine("Skip-free", data.streaks.noSkips)
@@ -219,6 +271,20 @@ private fun StatsContent(data: StatsData) {
         }
     }
 }
+
+/** The character's head, drawn from the same shapes as in the app, [side] dp across. */
+@Composable
+private fun FaceImage(face: WidgetFace, side: Int) {
+    val bitmap = androidx.compose.runtime.remember(face) { headImage(face.look, face.outfit, face.expression, FACE_PIXELS).asAndroidBitmap() }
+    Image(
+        provider = ImageProvider(bitmap),
+        contentDescription = "Your character, looking ${face.expression.name.lowercase()}",
+        modifier = GlanceModifier.size(side.dp),
+    )
+}
+
+/** The picture's size in pixels: sharp at the size shown on any screen, and small to hand to the home screen. */
+private const val FACE_PIXELS = 144
 
 @Composable
 private fun StreakLine(label: String, days: Int) {

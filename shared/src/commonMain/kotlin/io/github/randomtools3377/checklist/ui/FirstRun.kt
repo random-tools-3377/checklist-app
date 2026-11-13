@@ -220,8 +220,12 @@ private fun PartsStep(vm: MainViewModel) {
     // Back here with the back arrow, the parts already turned on show on.
     val on by vm.features.collectAsStateWithLifecycle()
     var picked by rememberSaveable { mutableStateOf(FirstRun.picked(on).map { it.name }) }
-    Spacer(Modifier.height(16.dp))
-    Text("👋", fontSize = 48.sp)
+    // The character waves hello. Nothing is chosen yet, so it comes as it starts out: no gear, and the usual look.
+    val look by vm.look.collectAsStateWithLifecycle()
+    val starter = remember { io.github.randomtools3377.checklist.core.Outfit(emptyList(), null) }
+    val hello = remember { io.github.randomtools3377.checklist.core.Checkins.at(io.github.randomtools3377.checklist.core.Scene.SETUP, io.github.randomtools3377.checklist.data.nowLocal().date) }
+    Spacer(Modifier.height(8.dp))
+    Character(look, starter, hello.expression, hello.move, if (isShort()) 80.dp else 120.dp, Modifier.testTag("setup-character"))
     Text(
         "Welcome! Tick off your goals to earn ${pointsWord()}, then spend them on rewards you choose.",
         style = MaterialTheme.typography.bodyLarge,
@@ -238,6 +242,10 @@ private fun PartsStep(vm: MainViewModel) {
     SetupPart.entries.forEach { part ->
         SwitchRow("${part.icon} ${part.title}", part.name in picked, "setup-part:${part.name}", hint = part.hint) { on ->
             picked = if (on) picked + part.name else picked - part.name
+        }
+        // With the game picked, the character is styled right here; it can be changed later on its page.
+        if (part == SetupPart.GAME && part.name in picked) {
+            StyleCard(look, vm::setLook, title = "Your character", preview = starter)
         }
     }
     Text(

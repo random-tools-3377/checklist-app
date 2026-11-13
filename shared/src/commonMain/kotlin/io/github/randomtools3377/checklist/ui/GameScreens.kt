@@ -209,21 +209,7 @@ fun CharacterFigure(
                         }
                     }
                 }) {
-                    layer.marks.forEach { mark ->
-                        when (mark) {
-                            is Mark.Circle -> {
-                                mark.fill?.let { drawCircle(Color(it), mark.r, Offset(mark.cx, mark.cy)) }
-                                mark.stroke?.let { drawCircle(Color(it), mark.r, Offset(mark.cx, mark.cy), style = Stroke(mark.width)) }
-                            }
-                            is Mark.Oval -> drawOval(Color(mark.fill), Offset(mark.cx - mark.rx, mark.cy - mark.ry), Size(mark.rx * 2, mark.ry * 2))
-                            is Mark.Box -> drawRoundRect(Color(mark.fill), Offset(mark.x, mark.y), Size(mark.w, mark.h), CornerRadius(mark.radius))
-                            is Mark.Path -> {
-                                val path = paths.getValue(mark)
-                                mark.fill?.let { drawPath(path, Color(it)) }
-                                mark.stroke?.let { drawPath(path, Color(it), style = Stroke(mark.width, cap = StrokeCap.Round, join = StrokeJoin.Round)) }
-                            }
-                        }
-                    }
+                    drawMarks(layer.marks, paths)
                 }
             }
         }
@@ -455,6 +441,8 @@ fun CharacterScreen(
     onPath: (Path) -> Unit = {},
     onTitle: (String) -> Unit = {},
     onIdeas: (SkillArea) -> Unit = {},
+    /** Today's face, as on its card on Today. */
+    expression: Expression = Expression.CALM,
 ) {
     Scaffold(
         topBar = {
@@ -481,8 +469,38 @@ fun CharacterScreen(
                 return@Column
             }
             val outfit = remember(sheet) { Outfit.of(sheet) }
-            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                CharacterFigure(look, outfit, Modifier.height(240.dp).testTag("character-figure"))
+            // It waves when the page opens; a tap gets a hop and a line: how far to the next level, or the next gear.
+            var taps by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableIntStateOf(0) }
+            // On a short window, like a phone on its side, it is smaller, so the level card still shows under it.
+            val tall = minOf(240.dp, screenHeight() * 0.45f).coerceAtLeast(120.dp)
+            Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                CharacterFigure(
+                    look,
+                    outfit,
+                    Modifier
+                        .height(tall)
+                        .clickable(
+                            interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                            indication = null,
+                            onClickLabel = "hear how far to the next level",
+                        ) { taps++ }
+                        .testTag("character-figure"),
+                    expression = expression,
+                    move = if (taps == 0) CharacterMove.WAVE else CharacterMove.HOP,
+                    moveKey = taps,
+                )
+                if (taps > 0) {
+                    SpeechBubble(
+                        io.github.randomtools3377.checklist.core.Checkins.pageLine(sheet, taps - 1),
+                        Modifier.testTag("character-says"),
+                    )
+                } else {
+                    Text(
+                        "Tap your character to hear how far it is to the next level.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
             Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -592,10 +610,14 @@ private fun GearCard(sheet: CharacterSheet, outfit: Outfit) {
 
 /** The user's choices for how the character looks. */
 @Composable
-private fun StyleCard(look: Look, onLook: (Look) -> Unit) {
+internal fun StyleCard(look: Look, onLook: (Look) -> Unit, title: String = "Style", preview: Outfit? = null) {
     Card(Modifier.fillMaxWidth().testTag("style")) {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Style", style = MaterialTheme.typography.titleSmall)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(title, style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+                // Away from the big figure, like in the setup: a small one here shows each choice as it is made.
+                preview?.let { CharacterFigure(look, it, Modifier.height(64.dp).testTag("style-preview"), expression = Expression.HAPPY) }
+            }
             Text("Skin", style = MaterialTheme.typography.labelLarge)
             Swatches(Looks.SKINS, look.skin, "skin") { onLook(look.copy(skin = it)) }
             Text("Hair", style = MaterialTheme.typography.labelLarge)

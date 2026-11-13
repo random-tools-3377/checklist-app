@@ -269,11 +269,24 @@ private fun BigEffect(celebration: BigCelebration, amount: Float, onEnd: () -> U
         }
         // Smaller on a short screen, like a phone on its side, so the words still fit.
         val gifSize = minOf(240.dp, screenHeight() * 0.4f)
+        // With the character on, it cheers along in its gear when a project is achieved or a reward is bought:
+        // above the words, or beside them on a short screen so everything still fits.
+        val cheers = celebration !is BigCelebration.GoalFinished && LocalCharacter.current != null
+        val short = isShort()
+        androidx.compose.foundation.layout.Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterHorizontally),
+            modifier = Modifier.padding(32.dp).scale(pop.value),
+        ) {
+        if (cheers && short) SceneCharacter(io.github.randomtools3377.checklist.core.Scene.CELEBRATION, minOf(140.dp, screenHeight() * 0.45f))
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
-            modifier = Modifier.padding(32.dp).scale(pop.value),
         ) {
+            if (cheers && !short) {
+                SceneCharacter(io.github.randomtools3377.checklist.core.Scene.CELEBRATION, minOf(120.dp, screenHeight() * 0.18f))
+                Spacer(Modifier.height(8.dp))
+            }
             when (celebration) {
                 is BigCelebration.ProjectFinished -> {
                     val gif = celebration.gif
@@ -314,6 +327,7 @@ private fun BigEffect(celebration: BigCelebration, amount: Float, onEnd: () -> U
                     Text("It's waiting under Bought until you use it.", color = Color.White.copy(alpha = 0.85f), fontSize = 15.sp, textAlign = TextAlign.Center)
                 }
             }
+        }
         }
     }
 }

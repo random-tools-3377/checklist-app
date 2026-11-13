@@ -60,6 +60,7 @@ import io.github.randomtools3377.checklist.core.Lapses
 import io.github.randomtools3377.checklist.core.Penalty
 import io.github.randomtools3377.checklist.core.PenaltyTask
 import io.github.randomtools3377.checklist.core.Reason
+import io.github.randomtools3377.checklist.core.Scene
 import io.github.randomtools3377.checklist.core.SkipCheck
 import io.github.randomtools3377.checklist.core.SkipResult
 import io.github.randomtools3377.checklist.core.StreakSettings
@@ -107,8 +108,22 @@ fun MissesScreen(misses: List<Lapse>, vm: MainViewModel, hiddenGoals: Set<Long> 
     val atMost by vm.atMostGoals.collectAsStateWithLifecycle()
     val settings by vm.settings.collectAsStateWithLifecycle()
     fun slipped(miss: Lapse) = Lapses.isSlip(miss, miss.goalId in quit, settings.dayEndHour)
+    // The character keeps the user company, and brightens once a miss turns out to be a forgotten tick.
+    val company = LocalCharacter.current != null
+    var putRight by remember { mutableStateOf(false) }
+    // The last miss, put right: the screen stays a moment so the brighter face is seen, then it goes.
+    var leaving by remember { mutableStateOf<Long?>(null) }
+    LaunchedEffect(leaving) {
+        leaving?.let {
+            kotlinx.coroutines.delay(BRIGHTEN_MILLIS)
+            vm.forgotToTick(it)
+            // Should the screen stay after all, its buttons work again.
+            leaving = null
+        }
+    }
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).safeDrawingPadding().testTag("misses")) {
         Column(Modifier.padding(16.dp)) {
+            CompanyRow(if (putRight) Scene.PUT_RIGHT else Scene.MISSES, Modifier.padding(bottom = 8.dp))
             GuideTitle("What happened?", HelpTopic.SKIPS_AND_MISSES)
             Text(
                 when {
@@ -184,7 +199,14 @@ fun MissesScreen(misses: List<Lapse>, vm: MainViewModel, hiddenGoals: Set<Long> 
                                 }
                             }
                         } else if (miss.period != null) {
-                            TextButton(onClick = { vm.forgotToTick(miss.id) }, modifier = Modifier.testTag("forgot:${miss.label}:${miss.day}")) {
+                            TextButton(
+                                onClick = {
+                                    putRight = true
+                                    if (company && misses.size == 1) leaving = miss.id else vm.forgotToTick(miss.id)
+                                },
+                                enabled = leaving == null,
+                                modifier = Modifier.testTag("forgot:${miss.label}:${miss.day}"),
+                            ) {
                                 Text(if (slip) "Undo, I didn't slip" else "I did it, I forgot to tick it")
                             }
                         }
@@ -194,7 +216,7 @@ fun MissesScreen(misses: List<Lapse>, vm: MainViewModel, hiddenGoals: Set<Long> 
         }
         Button(
             onClick = { misses.forEach { miss -> reasons[miss.id]?.let { vm.explain(miss.id, it.reason, notes[miss.id], it.text) } } },
-            enabled = misses.all { reasons[it.id] != null },
+            enabled = misses.all { reasons[it.id] != null } && leaving == null,
             modifier = Modifier.fillMaxWidth().padding(16.dp).testTag("misses-done"),
         ) { Text("Carry on") }
     }
@@ -216,6 +238,18 @@ fun PenaltyScreen(
 ) {
     BackButton {} // no putting it off
     var newTask by remember { mutableStateOf("") }
+    // With the character here, "Done" brightens it for a moment before the screen goes.
+    val company = LocalCharacter.current != null
+    var finished by remember(penalty.id) { mutableStateOf(false) }
+    var finishing by remember(penalty.id) { mutableStateOf(false) }
+    LaunchedEffect(finishing) {
+        if (finishing) {
+            kotlinx.coroutines.delay(BRIGHTEN_MILLIS)
+            vm.finishPenalty(penalty.id)
+            // Should the screen stay after all, "Done" works again.
+            finishing = false
+        }
+    }
     Column(
         Modifier
             .fillMaxSize()
@@ -226,6 +260,7 @@ fun PenaltyScreen(
             .testTag("penalty"),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
+        CompanyRow(if (finished) Scene.PENALTY_DONE else Scene.PENALTY)
         GuideTitle("Penalty task", HelpTopic.PENALTY)
         Text(
             if (penalty.gapId != null) "There was a gap, so there's one penalty task for the whole stretch, to do now. It pays nothing."
@@ -270,7 +305,18 @@ fun PenaltyScreen(
                     if (hiddenGoal) TextButton(onClick = onUnlock) { Text("Unlock", color = MaterialTheme.colorScheme.onErrorContainer) }
                 }
             }
-            Button(onClick = { vm.finishPenalty(penalty.id) }, modifier = Modifier.fillMaxWidth().testTag("penalty-done")) { Text("Done") }
+            Button(
+                onClick = {
+                    if (company) {
+                        finished = true
+                        finishing = true
+                    } else {
+                        vm.finishPenalty(penalty.id)
+                    }
+                },
+                enabled = !finishing,
+                modifier = Modifier.fillMaxWidth().testTag("penalty-done"),
+            ) { Text("Done") }
             return@Column
         }
 
@@ -497,10 +543,24 @@ fun GapCheckInScreen(
     val quit by vm.quitGoals.collectAsStateWithLifecycle()
     val atMost by vm.atMostGoals.collectAsStateWithLifecycle()
     val settings by vm.settings.collectAsStateWithLifecycle()
+    // The character welcomes the user back, and brightens once a miss turns out to be a forgotten tick.
+    val company = LocalCharacter.current != null
+    var putRight by remember { mutableStateOf(false) }
+    // The last miss, put right: the screen stays a moment so the brighter face is seen, then it goes.
+    var leaving by remember { mutableStateOf<Long?>(null) }
+    LaunchedEffect(leaving) {
+        leaving?.let {
+            kotlinx.coroutines.delay(BRIGHTEN_MILLIS)
+            vm.forgotToTick(it)
+            // Should the screen stay after all, its buttons work again.
+            leaving = null
+        }
+    }
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).safeDrawingPadding().padding(16.dp).testTag("gap")) {
         LazyColumn(Modifier.weight(1f).testTag("gap-list"), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             item(key = "top") {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    CompanyRow(if (putRight) Scene.PUT_RIGHT else Scene.GAP)
                     GuideTitle("Looks like you stopped for a while", HelpTopic.GAPS)
                     Text(
                         if (gap.from == gap.to) shortDate(gap.from) else "${shortDate(gap.from)} to ${shortDate(gap.to)}",
@@ -593,7 +653,11 @@ fun GapCheckInScreen(
                                     miss.goalId in atMost -> Unit
                                     // A project's missed deadline has no tick to forget.
                                     miss.period != null -> TextButton(
-                                        onClick = { vm.forgotToTick(miss.id) },
+                                        onClick = {
+                                            putRight = true
+                                            if (company && misses.size == 1) leaving = miss.id else vm.forgotToTick(miss.id)
+                                        },
+                                        enabled = leaving == null,
                                         modifier = Modifier.testTag("gap-forgot:${miss.label}:${miss.day}"),
                                     ) { Text(if (slip) "Undo, I didn't slip" else "I forgot to tick it") }
                                 }
@@ -605,7 +669,7 @@ fun GapCheckInScreen(
         }
         Button(
             onClick = { reason?.let { vm.explainGap(gap.id, it.reason, note, it.text) } },
-            enabled = reason != null,
+            enabled = reason != null && leaving == null,
             modifier = Modifier.fillMaxWidth().padding(top = 12.dp).testTag("gap-done"),
         ) { Text("Carry on") }
     }
