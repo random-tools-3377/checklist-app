@@ -67,6 +67,9 @@ class BadgesAndTargetTest {
         app.waitFor { app.shownIn("badges", "badge:PERFECT_DAY") }
         app.waitFor { app.shownIn("badges", "badge:WEEKLY_TARGET") }
         app.waitFor { app.shownIn("badges", "badge-to-go:STREAK_7") }
+        // A badge still to earn says how far along it is, and the closest one is first, as "Next up".
+        app.waitFor { app.shownIn("badges", "badge-progress:STREAK_7") && textOf("badge-progress:STREAK_7").contains("Streak 1 of 7 days") }
+        app.waitFor { app.shownIn("badges", "badge-next-up") && textOf("badge-progress:POINTS_100").contains("30 of 100 points earned") }
         app.onNodeWithContentDescription("Back").performClick()
 
         // Seen now, so Today's card has gone; taking the tick back (Done again) doesn't take them away.

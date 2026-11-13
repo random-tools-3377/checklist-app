@@ -494,7 +494,10 @@ fun ChecklistApp(vm: MainViewModel) {
             "features" -> FeaturesScreen(vm, onAppearance = { push("appearance") }, onBack = ::pop, focus = parts.getOrNull(1))
             "appearance" -> AppearanceScreen(appearance, vm, onAnyColour = { push("colour") }, onBack = ::pop, focus = parts.getOrNull(1))
             "colour" -> AppColourScreen(appearance, onUse = { vm.setColor(it); pop() }, onBack = ::pop)
-            "badges" -> BadgesScreen(badges, onSeen = vm::badgesSeen, onBack = ::pop, on = features)
+            "badges" -> {
+                val badgeProgress by vm.badgeProgress.collectAsStateWithLifecycle()
+                BadgesScreen(badges, onSeen = vm::badgesSeen, onBack = ::pop, on = features, progress = badgeProgress)
+            }
             "history" -> HistoryScreen(
                 history,
                 gaps = if (settings.locks.gaps && !unlocked) emptyList() else allGaps,
@@ -598,6 +601,7 @@ fun ChecklistApp(vm: MainViewModel) {
                             val bestStreaks by vm.bestStreaks.collectAsStateWithLifecycle()
                             val reviewFocus by vm.reviewFocus.collectAsStateWithLifecycle()
                             val reviewDone by vm.reviewDone.collectAsStateWithLifecycle()
+                            val comebacks by vm.comebacks.collectAsStateWithLifecycle()
                             ReviewScreen(
                                 summary = review,
                                 period = reviewPeriod,
@@ -626,6 +630,7 @@ fun ChecklistApp(vm: MainViewModel) {
                                 misses = reviewMisses,
                                 onMiss = { vm.openMiss.value = it },
                                 best = bestStreaks,
+                                comebacks = comebacks,
                                 streakSettings = settings.streak,
                                 today = today?.view?.day,
                                 focus = reviewFocus,

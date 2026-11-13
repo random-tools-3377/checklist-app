@@ -13,6 +13,7 @@ enum class Badge(val icon: String, val title: String, val how: String, val tier:
     TICKS_5000("🎖️", "5,000 ticks", "Tick goals 5,000 times", Tier.GOLD),
     PERFECT_DAY("🌟", "Perfect day", "Do everything due in a day, with nothing skipped"),
     PERFECT_WEEK("🏆", "Perfect week", "Do everything due on every day of a week, Monday to Sunday, with nothing skipped"),
+    BOUNCED_BACK("🌅", "Bounced back", "Reach your day's target again the day after one that fell short"),
     STREAK_7("🔥", "A week in a row", "Keep the main streak going for 7 days"),
     STREAK_30("🔥", "A month in a row", "Keep the main streak going for 30 days", Tier.BRONZE),
     STREAK_100("☄️", "100 days in a row", "Keep the main streak going for 100 days", Tier.SILVER),
@@ -62,6 +63,12 @@ enum class Badge(val icon: String, val title: String, val how: String, val tier:
 
 data class EarnedBadge(val badge: Badge, val on: LocalDate)
 
+/** How far along a badge is: [have] of the [of] it needs, never more, with [text] like "73 of 100 ticks". */
+data class BadgeProgress(val badge: Badge, val have: Long, val of: Long, val text: String) {
+    /** From 0 to 1, for the bar. */
+    val share: Float get() = if (of <= 0) 0f else (have.toFloat() / of).coerceIn(0f, 1f)
+}
+
 object Badges {
     private val EARNED = setOf(EntryKind.TICK, EntryKind.BONUS, EntryKind.REFUND, EntryKind.PERFECT_DAY, EntryKind.CHALLENGE)
 
@@ -85,6 +92,8 @@ object Badges {
         moods: List<Mood> = emptyList(),
         money: List<MoneyEntry> = emptyList(),
         savingGoals: List<SavingGoal> = emptyList(),
+        /** The day tracking began, for the comeback badge; with none it isn't looked for. */
+        trackingSince: LocalDate? = null,
     ): List<EarnedBadge> {
         val found = mutableListOf<EarnedBadge>()
         fun add(badge: Badge, on: LocalDate?) { if (on != null) found += EarnedBadge(badge, on) }
@@ -98,6 +107,7 @@ object Badges {
         val days = records.filter { it.day <= today }.sortedBy { it.day }
         add(Badge.PERFECT_DAY, days.firstOrNull { it.perfect }?.day)
         add(Badge.PERFECT_WEEK, perfectWeek(days, today))
+        add(Badge.BOUNCED_BACK, Comebacks.days(days, today, streak, trackingSince).firstOrNull())
         val streakDays = streakReached(days, today, streak)
         add(Badge.STREAK_7, streakDays[7])
         add(Badge.STREAK_30, streakDays[30])
@@ -154,6 +164,119 @@ object Badges {
         }
         return found.sortedBy { it.badge.ordinal }
     }
+
+    /**
+     * How far along each badge with something to count is, from the same history as [earned]:
+     * ticks, the main streak running now, points earned, this week's target and weeks on target
+     * in a row, the character's level, the project nearest done, the saving goal nearest its
+     * target, the money streak and mood check-ins. A badge earned by one thing happening (a
+     * first tick, a perfect day) has no entry. What is counted never passes what is needed.
+     */
+    fun progress(
+        today: LocalDate,
+        records: List<DayRecord>,
+        streak: StreakSettings,
+        goals: List<Goal>,
+        steps: List<Step>,
+        ticks: List<Tick>,
+        entries: List<Entry>,
+        weeklyTarget: Int,
+        on: Set<Feature> = emptySet(),
+        moods: List<Mood> = emptyList(),
+        money: List<MoneyEntry> = emptyList(),
+        savingGoals: List<SavingGoal> = emptyList(),
+    ): Map<Badge, BadgeProgress> {
+        val found = LinkedHashMap<Badge, BadgeProgress>()
+        fun put(badge: Badge, have: Long, of: Long, text: (String, String) -> String) {
+            if (!badge.shownWith(on) || of <= 0) return
+            val counted = have.coerceIn(0, of)
+            found[badge] = BadgeProgress(badge, counted, of, text(grouped(counted), grouped(of)))
+        }
+
+        val tickCount = ticks.count { it.day <= today && !it.isUse }.toLong()
+        for ((badge, of) in listOf(Badge.TICKS_100 to 100L, Badge.TICKS_1000 to 1000L, Badge.TICKS_5000 to 5000L)) {
+            put(badge, tickCount, of) { have, all -> "$have of $all ticks" }
+        }
+
+        val days = records.filter { it.day <= today }.sortedBy { it.day }
+        val running = StreakCounter.count(days, today, streak).done.toLong()
+        for ((badge, of) in listOf(Badge.STREAK_7 to 7L, Badge.STREAK_30 to 30L, Badge.STREAK_100 to 100L, Badge.STREAK_365 to 365L)) {
+            put(badge, running, of) { have, all -> "Streak $have of $all days" }
+        }
+
+        val points = entries.filter { it.kind in EARNED && it.day <= today }.sumOf { it.amount.toLong() }
+        for ((badge, of) in listOf(Badge.POINTS_100 to 100L, Badge.POINTS_1000 to 1000L, Badge.POINTS_10000 to 10000L)) {
+            put(badge, points, of) { have, all -> "$have of $all points earned" }
+        }
+
+        if (Feature.CHARACTER in on) {
+            val experience = entries.filter { it.kind in Experience.KINDS && it.goalId != null && it.day <= today }.sumOf { it.amount.toLong() }
+            val level = Levels.of(experience.coerceAtLeast(0), Levels.CHARACTER_STEP).level.toLong()
+            for ((badge, of) in listOf(Badge.LEVEL_10 to 10L, Badge.LEVEL_25 to 25L, Badge.LEVEL_50 to 50L)) {
+                // Levels start at 1, so the bar counts the levels climbed.
+                put(badge, level - 1, of - 1) { _, _ -> "Level ${minOf(level, of)} of $of" }
+            }
+        }
+
+        // The project nearest done, by its steps ticked.
+        val ticked = ticks.filter { it.stepId != null && it.day <= today }.mapNotNull { it.stepId }.toSet()
+        goals.filter { it.kind == GoalKind.PROJECT && !it.archived }.mapNotNull { project ->
+            val own = steps.filter { it.goalId == project.id && !it.archived }
+            if (own.isEmpty()) null else own.count { it.id in ticked } to own.size
+        }.maxWithOrNull(compareBy({ it.first.toDouble() / it.second }, { it.first }))?.let { (done, all) ->
+            put(Badge.FIRST_PROJECT, done.toLong(), all.toLong()) { have, of -> "$have of $of steps of your nearest project" }
+        }
+
+        if (weeklyTarget > 0) {
+            val week = WeeklyTarget.progress(entries, today, weeklyTarget)
+            put(Badge.WEEKLY_TARGET, week.earned.toLong(), weeklyTarget.toLong()) { have, all -> "$have of $all points this week" }
+            // Weeks on target in a row, up to this week or, while it is still going, the last one.
+            val weeks = WeeklyTarget.reachedWeeks(entries, weeklyTarget, today).map { it.first }
+            var run = 0L
+            var expected = weeks.lastOrNull()?.takeIf { it >= week.weekStart.minusDays(7) }
+            for (monday in weeks.asReversed()) {
+                if (monday != expected) break
+                run++
+                expected = monday.minusDays(7)
+            }
+            put(Badge.WEEKLY_TARGET_4, run, 4) { have, all -> "$have of $all weeks in a row" }
+            put(Badge.WEEKLY_TARGET_12, run, 12) { have, all -> "$have of $all weeks in a row" }
+        }
+
+        // The saving goal nearest its target, as a share: money is the screen's to write out.
+        SavingProgress.of(savingGoals.filter { it.targetCents > 0 }, money.filter { it.day <= today }).maxByOrNull { it.share }?.let { nearest ->
+            put(Badge.SAVED_UP, (nearest.share * 100).toLong(), 100) { have, _ -> "$have% of the way with ${nearest.goal.name}" }
+        }
+        if (Badge.MONEY_STREAK_7.shownWith(on)) {
+            // Good money days in a row, as the game paid them; they are paid the day after, so yesterday still counts as running.
+            val good = entries.filter {
+                it.kind == EntryKind.BONUS && it.day <= today && (it.label == MoneyGame.LABEL_NO_SPEND || it.label == MoneyGame.LABEL_WITHIN)
+            }.map { it.day }.distinct().sortedDescending()
+            var run = 0L
+            var expected = good.firstOrNull()?.takeIf { it >= today.minusDays(1) }
+            for (day in good) {
+                if (day != expected) break
+                run++
+                expected = day.minusDays(1)
+            }
+            put(Badge.MONEY_STREAK_7, run, 7) { have, all -> "Money streak $have of $all days" }
+            put(Badge.MONEY_STREAK_30, run, 30) { have, all -> "Money streak $have of $all days" }
+        }
+        val moodDays = moods.map { it.day }.filter { it <= today }.distinct().size.toLong()
+        put(Badge.MOOD_30, moodDays, MOOD_DAYS.toLong()) { have, all -> "$have of $all check-ins" }
+        return found
+    }
+
+    /**
+     * The badge to show first as "Next up": of [shown], the one still to earn that is furthest
+     * along, the earlier one in the list when two are level. None while nothing has been started.
+     */
+    fun nextUp(shown: List<Badge>, earned: Set<Badge>, progress: Map<Badge, BadgeProgress>): Badge? =
+        shown.filter { it !in earned }.mapNotNull { progress[it] }.filter { it.have > 0 && it.have < it.of }
+            .sortedWith(compareByDescending<BadgeProgress> { it.share }.thenBy { it.badge.ordinal }).firstOrNull()?.badge
+
+    /** 1234 as "1,234". */
+    private fun grouped(number: Long): String = number.toString().reversed().chunked(3).joinToString(",").reversed()
 
     /** Days with a mood check-in, in all, for the mood badge. */
     const val MOOD_DAYS = 30

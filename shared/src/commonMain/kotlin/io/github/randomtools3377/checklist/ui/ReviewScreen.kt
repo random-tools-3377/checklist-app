@@ -99,6 +99,8 @@ fun ReviewScreen(
     onMiss: (Long) -> Unit = {},
     /** The best run of each streak ever, shown beside today's numbers. */
     best: Streaks? = null,
+    /** Every day that was a comeback (see Comebacks), for the count in the stats. */
+    comebacks: List<LocalDate> = emptyList(),
     /** The main streak's target, to find the longest streak within a past stretch. */
     streakSettings: io.github.randomtools3377.checklist.core.StreakSettings = io.github.randomtools3377.checklist.core.StreakSettings(),
     /** The user's day today: a stretch that ended before it is a past one. */
@@ -214,7 +216,7 @@ fun ReviewScreen(
             }
         }
         if (summary.gaps.isNotEmpty()) item { GapsCard(summary.gaps, hideGapNotes) }
-        item { StatsCard(summary, streaks, best, streakSettings, today) }
+        item { StatsCard(summary, streaks, best, streakSettings, today, comebacks) }
     }
 }
 
@@ -541,6 +543,7 @@ private fun StatsCard(
     best: Streaks?,
     streakSettings: io.github.randomtools3377.checklist.core.StreakSettings,
     today: LocalDate?,
+    comebacks: List<LocalDate> = emptyList(),
 ) {
     // A past stretch shows the longest each streak ran within it; a single past day has no streak to show.
     val past = today != null && summary.to < today
@@ -562,7 +565,8 @@ private fun StatsCard(
             // One goal's times done in a row, which the streaks below (whole days) are not.
             if (streaks != null) add("Longest run of one goal in this stretch" to (summary.goals.maxOfOrNull { g -> g.longestRun }?.toString() ?: "0"))
         }
-        if (lines.isEmpty() && streakLines.isEmpty()) Text("Not enough yet to say.", style = MaterialTheme.typography.bodyMedium)
+        val comebackLine = comebackStat(comebacks, summary.from, summary.to)
+        if (lines.isEmpty() && streakLines.isEmpty() && comebackLine == null) Text("Not enough yet to say.", style = MaterialTheme.typography.bodyMedium)
         lines.forEachIndexed { index, (label, value) ->
             if (index > 0) HorizontalDivider()
             Row(Modifier.padding(vertical = 4.dp)) {
@@ -577,8 +581,27 @@ private fun StatsCard(
                 Text(stat.value, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium, modifier = Modifier.testTag(stat.tag))
             }
         }
+        // Credit for getting back to it, with no word on the days before.
+        comebackLine?.let { value ->
+            if (lines.isNotEmpty() || streakLines.isNotEmpty()) HorizontalDivider()
+            Row(Modifier.padding(vertical = 4.dp)) {
+                Text("Comebacks", modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+                Text(value, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium, modifier = Modifier.testTag("review-comebacks"))
+            }
+        }
         Spacer(Modifier.height(2.dp))
     }
+}
+
+/**
+ * The comebacks line of the review's stats: how many of [comebacks] fall in the stretch shown
+ * ([from] to [to]), with the number in all beside it when that is more. Null while there has
+ * never been one, so nobody is shown a zero.
+ */
+internal fun comebackStat(comebacks: List<LocalDate>, from: LocalDate, to: LocalDate): String? {
+    if (comebacks.isEmpty()) return null
+    val here = comebacks.count { it in from..to }
+    return if (here == comebacks.size) "$here" else "$here · ${comebacks.size} in all"
 }
 
 /** Each day of a week or a month as bars: how much of what was due got done, and the points. */

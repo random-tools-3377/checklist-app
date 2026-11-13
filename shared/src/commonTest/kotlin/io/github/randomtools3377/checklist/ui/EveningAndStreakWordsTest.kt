@@ -97,4 +97,17 @@ class EveningAndStreakWordsTest {
         )
         assertEquals(listOf("review-streak:main", "review-streak:skip-free"), streakStats(none, some, null).map { it.tag })
     }
+
+    @Test
+    fun comebacksShowOnceThereIsOneWithTheStretchAndTheTotal() {
+        val first = kotlinx.datetime.LocalDate(2026, 11, 2)
+        val days = listOf(kotlinx.datetime.LocalDate(2026, 10, 20), kotlinx.datetime.LocalDate(2026, 11, 3), kotlinx.datetime.LocalDate(2026, 11, 5))
+        // Never one: no line, so nobody is shown a zero.
+        assertEquals(null, comebackStat(emptyList(), first, kotlinx.datetime.LocalDate(2026, 11, 8)))
+        // This week's, with the number in all beside it.
+        assertEquals("2 · 3 in all", comebackStat(days, first, kotlinx.datetime.LocalDate(2026, 11, 8)))
+        assertEquals("0 · 3 in all", comebackStat(days, kotlinx.datetime.LocalDate(2026, 11, 4), kotlinx.datetime.LocalDate(2026, 11, 4)))
+        // A stretch that holds them all: just the number.
+        assertEquals("3", comebackStat(days, kotlinx.datetime.LocalDate(2026, 1, 1), kotlinx.datetime.LocalDate(2026, 12, 31)))
+    }
 }

@@ -32,6 +32,7 @@ class MoneyGameTest {
             container.repository.setSetting(Feature.BUDGET_GAME.key, Feature.BUDGET_GAME.onValue)
             container.repository.savePay(PayPlan(3000.0, PayUnit.MONTH, List(7) { WorkHours(9 * 60, 17 * 60) }))
             container.repository.saveMoney(MoneyEntry(kind = MoneyKind.SPENT, cents = 1_234, day = nowLocal().date))
+            Unit
         }
     }
 

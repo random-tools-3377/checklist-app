@@ -55,6 +55,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -117,8 +118,21 @@ private fun rememberNow(live: Boolean): State<LocalDateTime> = produceState(nowL
 
 /** An amount of money typed in: digits and one decimal point, with the currency symbol in front. */
 @Composable
-private fun MoneyInput(value: String, onValueChange: (String) -> Unit, label: String, tag: String, modifier: Modifier = Modifier, error: String? = null) {
+private fun MoneyInput(
+    value: String,
+    onValueChange: (String) -> Unit,
+    label: String,
+    tag: String,
+    modifier: Modifier = Modifier,
+    error: String? = null,
+    /** Opens with the keyboard up. */
+    focused: Boolean = false,
+    /** What the keyboard's Done key does, when it should do more than close the keyboard. */
+    onDone: (() -> Unit)? = null,
+) {
     val symbol = remember { moneySymbol() }
+    val focus = remember { androidx.compose.ui.focus.FocusRequester() }
+    if (focused) LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
     OutlinedTextField(
         value = value,
         onValueChange = { text -> onValueChange(text.filter { it.isDigit() || it == '.' || it == ',' }.take(10)) },
@@ -127,8 +141,9 @@ private fun MoneyInput(value: String, onValueChange: (String) -> Unit, label: St
         singleLine = true,
         isError = error != null,
         supportingText = error?.let { { Text(it) } },
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-        modifier = modifier.fillMaxWidth().testTag(tag),
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = if (onDone != null) androidx.compose.ui.text.input.ImeAction.Done else androidx.compose.ui.text.input.ImeAction.Default),
+        keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = onDone?.let { done -> { done() } }),
+        modifier = modifier.fillMaxWidth().then(if (focused) Modifier.focusRequester(focus) else Modifier).testTag(tag),
     )
 }
 
@@ -766,6 +781,26 @@ fun MoneyEditor(id: Long, received: Boolean, vm: MainViewModel, onClose: () -> U
         savings.none { it.goal.id == paying && holds(it) >= Budget.cents(value) } -> "Pick a saving goal that holds enough"
         else -> null
     }
+    // New spending starts on the category used last, so the usual one needs no tap.
+    LaunchedEffect(id) {
+        if (id == 0L && categoryId == null) vm.lastSpentCategory()?.let { last -> if (categoryId == null) categoryId = last }
+    }
+    // Save, from the button at the top and from the keyboard's Done key.
+    val save: () -> Unit = {
+        if (amountError != null || categoryError != null || savingError != null) {
+            showErrors = true
+        } else {
+            vm.saveMoney(
+                MoneyEntry(
+                    id = id, kind = if (paying != null) MoneyKind.TAKEN_OUT else kind, cents = Budget.cents(value!!),
+                    categoryId = if (kind == MoneyKind.SPENT) categoryId else null,
+                    note = note, day = day.toDay(), at = at, purchaseId = purchaseId, billId = billId,
+                    savingId = paying ?: savingId, spentFromSavings = paying != null,
+                ),
+                onClose,
+            )
+        }
+    }
     EditorScaffold(
         title = when {
             savingId != null -> "Savings"
@@ -774,21 +809,7 @@ fun MoneyEditor(id: Long, received: Boolean, vm: MainViewModel, onClose: () -> U
             else -> "Spent"
         },
         onBack = onClose,
-        onSave = {
-            if (amountError != null || categoryError != null || savingError != null) {
-                showErrors = true
-            } else {
-                vm.saveMoney(
-                    MoneyEntry(
-                        id = id, kind = if (paying != null) MoneyKind.TAKEN_OUT else kind, cents = Budget.cents(value!!),
-                        categoryId = if (kind == MoneyKind.SPENT) categoryId else null,
-                        note = note, day = day.toDay(), at = at, purchaseId = purchaseId, billId = billId,
-                        savingId = paying ?: savingId, spentFromSavings = paying != null,
-                    ),
-                    onClose,
-                )
-            }
-        },
+        onSave = save,
     ) {
         if (!loaded) return@EditorScaffold
         if (savingId != null) {
@@ -797,7 +818,8 @@ fun MoneyEditor(id: Long, received: Boolean, vm: MainViewModel, onClose: () -> U
             FilterChip(selected = kind == MoneyKind.SPENT, onClick = { kind = MoneyKind.SPENT }, label = { Text("Spent") }, modifier = Modifier.testTag("money-kind:SPENT"))
             FilterChip(selected = kind == MoneyKind.RECEIVED, onClick = { kind = MoneyKind.RECEIVED }, label = { Text("Money in") }, modifier = Modifier.testTag("money-kind:RECEIVED"))
         }
-        MoneyInput(amount, { amount = it }, "How much", "field:amount", error = if (showErrors) amountError else null)
+        // A new entry opens with the keyboard up on the amount.
+        MoneyInput(amount, { amount = it }, "How much", "field:amount", error = if (showErrors) amountError else null, focused = id == 0L, onDone = save)
         val hourly = plan?.let { Pay.hourly(it) }
         if (kind == MoneyKind.SPENT && value != null && hourly != null) {
             Text(workText(Budget.cents(value), hourly), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("work-time"))
@@ -821,6 +843,8 @@ fun MoneyEditor(id: Long, received: Boolean, vm: MainViewModel, onClose: () -> U
             onValueChange = { note = it.take(80) },
             label = { Text(if (kind == MoneyKind.RECEIVED) "From (optional)" else "Note (optional)") },
             singleLine = true,
+            keyboardOptions = KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Done),
+            keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = { save() }),
             modifier = Modifier.fillMaxWidth().testTag("field:note"),
         )
         DateSetting("Day", day.toDay(), { it?.let { picked -> day = picked.toEpochDay() } }, tag = "field:day", canClear = false)

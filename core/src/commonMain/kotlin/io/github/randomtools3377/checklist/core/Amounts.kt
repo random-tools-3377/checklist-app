@@ -33,6 +33,23 @@ object Amounts {
     fun tidy(amount: Double): Double? =
         amount.takeIf { it.isFinite() && it > 0 }?.coerceAtMost(MAX)?.let { (it * 100).roundToLong() / 100.0 }?.takeIf { it > 0 }
 
+    /** How many of a goal's latest entries are looked at for its usual amounts, and how many are offered. */
+    const val USUAL_FROM = 20
+    const val USUAL_SHOWN = 3
+
+    /**
+     * The amounts the user usually enters for a goal, for one-tap buttons: from its latest
+     * [USUAL_FROM] entries in [ticks], the ones entered most often first, the more recent first
+     * when level, at most [USUAL_SHOWN]. Empty until something has been entered.
+     */
+    fun usual(ticks: List<Tick>): List<Double> {
+        val latest = ticks.filter { it.stepId == null }.sortedWith(compareByDescending<Tick> { it.at }.thenByDescending { it.id })
+            .mapNotNull { it.amount?.let(::tidy) }.take(USUAL_FROM)
+        return latest.withIndex().groupBy({ it.value }, { it.index }).entries
+            .sortedWith(compareByDescending<Map.Entry<Double, List<Int>>> { it.value.size }.thenBy { it.value.first() })
+            .take(USUAL_SHOWN).map { it.key }
+    }
+
     /** Reads what the user typed, with a point or a comma for decimals. */
     fun parse(text: String): Double? = text.trim().replace(',', '.').toDoubleOrNull()?.let { tidy(it) }
 

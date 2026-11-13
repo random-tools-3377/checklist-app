@@ -359,6 +359,8 @@ enum class HelpTopic(val title: String, val intro: String, val steps: List<Strin
         "Milestones you earn once and keep, found from your own history, like your first tick or a long streak.",
         listOf(
             "Earned badges show the day you got them; the rest say how to earn them.",
+            "A badge still to earn shows how far along you are, with a bar, like \"73 of 100 ticks\". The closest one is at the top as \"Next up\".",
+            "\"Bounced back\" is for reaching your day's target again right after a day that fell short. The Review's Stats count your comebacks.",
             "Badges in a series go bronze, silver, then gold.",
             "A new badge shows as a card on Today.",
             "Open this page from the \"Badges\" card in the Review.",
@@ -491,9 +493,10 @@ enum class HelpTopic(val title: String, val intro: String, val steps: List<Strin
         "Note down what you spend, and any money that comes in besides your pay, so the month adds up.",
         listOf(
             "Tap \"Spent\" on the Budget tab for spending, or \"Add money in\" for other income.",
-            "Type \"How much\", and for spending pick what it was for.",
+            "Type \"How much\", and for spending pick what it was for. \"Spent\" starts on the one you used last.",
             "Add a note if you like, and change the \"Day\" if it wasn't today.",
-            "Tap \"Save\". It shows in the month's list and in its category.",
+            "Tap \"Save\", or the keyboard's Done key. It shows in the month's list and in its category.",
+            "After new spending, a line at the bottom says where that leaves you: what's left of the category's limit this month, and with the Budget game on, how today stands against its line. \"Undo\" there takes the spending off again.",
             "Tap any entry later to change it, or \"Remove this\" to take it off.",
             "Shop rewards with a money value are added by themselves when bought; returning one takes it off.",
             "Turn on \"From savings\" and pick a saving goal that holds enough: the money comes out of the goal and isn't counted in the month's spending, limits or the money game.",

@@ -1,9 +1,12 @@
 package io.github.randomtools3377.checklist
 
+import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -16,7 +19,9 @@ import io.github.randomtools3377.checklist.core.WorkHours
 import io.github.randomtools3377.checklist.data.HabitDraft
 import io.github.randomtools3377.checklist.data.RewardDraft
 import io.github.randomtools3377.checklist.data.nowLocal
+import io.github.randomtools3377.checklist.data.toCore
 import kotlinx.coroutines.runBlocking
+import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.ExternalResource
@@ -107,5 +112,46 @@ class BudgetTest {
         app.onNodeWithTag("nav:budget").performClick()
         app.waitFor { app.shownIn("budget-list", "money:Food") }
         app.waitFor { !app.shownIn("budget-list", "money:Film") }
+    }
+
+    @Test
+    fun newSpendingSaysWhereThatLeavesYouAndCanBeUndone() {
+        val container = (InstrumentationRegistry.getInstrumentation().targetContext.applicationContext as ChecklistApplication).container
+        fun money() = runBlocking { container.db.dao().allMoney() }
+        fun said(text: String) = app.onAllNodesWithText(text, substring = true).fetchSemanticsNodes().isNotEmpty()
+        app.waitFor { shown("nav:budget") }
+        app.onNodeWithTag("nav:budget").performClick()
+        app.waitFor { app.shownIn("budget-list", "category:Food") }
+        // Food gets a limit of 200 a month.
+        runBlocking {
+            val food = container.db.dao().moneyCategories().first { it.name == "Food" }.toCore()
+            container.repository.saveMoneyCategory(food.copy(limitCents = 20_000))
+        }
+
+        app.onNodeWithTag("add-money").performClick()
+        app.waitFor { shown("field:amount") }
+        app.onNodeWithTag("field:amount").performTextInput("12.50")
+        app.onNodeWithTag("money-category:Food").performClick()
+        app.onNodeWithTag("save").performClick()
+        // The Undo bar says what's left of the category's limit, and Undo takes the spending off.
+        app.waitFor { said("Food: ") && said("left of") && said("this month") }
+        app.onNodeWithText("Undo").performClick()
+        app.waitFor { money().isEmpty() }
+
+        // Typed in again and kept: the next "Spent" starts on Food, so only the amount is needed.
+        app.tap("add-money")
+        app.waitFor { shown("field:amount") }
+        app.onNodeWithTag("field:amount").performTextInput("3")
+        app.onNodeWithTag("money-category:Food").performClick()
+        app.onNodeWithTag("save").performClick()
+        app.waitFor { money().size == 1 }
+        app.waitFor { shown("add-money") }
+        app.tap("add-money")
+        app.waitFor { shown("field:amount") }
+        app.waitFor { runCatching { app.onNodeWithTag("money-category:Food").assertIsSelected() }.isSuccess }
+        app.onNodeWithTag("field:amount").performTextInput("4")
+        app.onNodeWithTag("save").performClick()
+        app.waitFor { money().size == 2 }
+        assertEquals(1, money().map { it.categoryId }.distinct().size)
     }
 }

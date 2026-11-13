@@ -1473,9 +1473,10 @@ class Repository(private val db: AppDatabase, private val celebrations: GifStore
     /**
      * Saves money spent or received: a new entry when [entry]'s id is 0. Spending paid from a
      * saving goal ([MoneyEntry.spentFromSavings]) comes out of that goal when it holds enough,
-     * and is no part of the month's spending; when it doesn't, it is plain spending.
+     * and is no part of the month's spending; when it doesn't, it is plain spending. Gives back
+     * the entry's id, the new one for a new entry.
      */
-    suspend fun saveMoney(entry: MoneyEntry): Unit = db.withTransaction {
+    suspend fun saveMoney(entry: MoneyEntry): Long = db.withTransaction {
         var saved = entry.copy(cents = entry.cents.coerceAtLeast(0), note = entry.note.trim().take(80), at = entry.at.takeIf { it > 0 } ?: nowMillis())
         if (saved.spentFromSavings) {
             val goal = saved.savingId
@@ -1487,8 +1488,12 @@ class Repository(private val db: AppDatabase, private val celebrations: GifStore
                 saved.copy(kind = MoneyKind.SPENT, savingId = null, spentFromSavings = false)
             }
         }
-        if (saved.id == 0L) dao.insertMoney(saved.toEntity()) else dao.updateMoney(saved.toEntity())
-        Unit
+        if (saved.id == 0L) {
+            dao.insertMoney(saved.toEntity())
+        } else {
+            dao.updateMoney(saved.toEntity())
+            saved.id
+        }
     }
 
     suspend fun removeMoney(id: Long) = dao.deleteMoney(id)

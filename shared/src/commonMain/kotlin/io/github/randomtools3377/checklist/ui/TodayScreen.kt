@@ -66,6 +66,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.boundsInRoot
@@ -238,7 +239,7 @@ fun TodayScreen(
         if (row == null) {
             using = null
         } else {
-            UseDialog(row, onDismiss = { using = null }) { amount ->
+            UseDialog(row, usual = { vm.usualAmounts(id) }, onDismiss = { using = null }) { amount ->
                 using = null
                 vm.addUse(id, amount)
             }
@@ -340,6 +341,7 @@ fun TodayScreen(
             AmountDialog(
                 row = row,
                 seconds = request.seconds,
+                usual = { vm.usualAmounts(row.goal.id) },
                 onDismiss = { entering = null },
                 onDiscardTiming = {
                     entering = null
@@ -2105,27 +2107,50 @@ private fun AtMostCard(
     }
 }
 
+/** The amounts usually entered for a goal, each a button that enters it with one tap. Nothing until there are some. */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+private fun UsualAmounts(amounts: List<Double>, unit: String, onPick: (Double) -> Unit) {
+    if (amounts.isEmpty()) return
+    androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.testTag("usual-amounts")) {
+        amounts.forEach { amount ->
+            val text = io.github.randomtools3377.checklist.core.Amounts.format(amount)
+            androidx.compose.material3.AssistChip(
+                onClick = { onPick(amount) },
+                label = { Text(if (unit.isNotEmpty()) "$text $unit" else text) },
+                modifier = Modifier.testTag("usual-amount:$text"),
+            )
+        }
+    }
+}
+
 /** How much to add to an "at most" goal with a unit, like 45 minutes. */
 @Composable
-private fun UseDialog(row: HabitRow, onDismiss: () -> Unit, onSave: (Double) -> Unit) {
+private fun UseDialog(row: HabitRow, usual: suspend () -> List<Double> = { emptyList() }, onDismiss: () -> Unit, onSave: (Double) -> Unit) {
     val goal = row.goal
     val unit = goal.unit.orEmpty()
     var text by remember { mutableStateOf("") }
     val value = io.github.randomtools3377.checklist.core.Amounts.parse(text)
+    val focus = remember { androidx.compose.ui.focus.FocusRequester() }
+    val usually by androidx.compose.runtime.produceState(emptyList<Double>(), goal.id) { this.value = usual() }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("${goal.icon} ${goal.name}") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(io.github.randomtools3377.checklist.core.AtMost.text(row.progress, goal) + ". How much more?", style = MaterialTheme.typography.bodyMedium)
+                // Asked for here, inside the box's own window, so the box is there to take it.
+                LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
                 OutlinedTextField(
                     value = text,
                     onValueChange = { typed -> text = typed.filter { it.isDigit() || it == '.' || it == ',' }.take(9) },
                     label = { Text(if (unit.isNotEmpty()) "How much ($unit)" else "How much") },
                     singleLine = true,
-                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal),
-                    modifier = Modifier.fillMaxWidth().testTag("field:use"),
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal, imeAction = androidx.compose.ui.text.input.ImeAction.Done),
+                    keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = { value?.let(onSave) }),
+                    modifier = Modifier.fillMaxWidth().focusRequester(focus).testTag("field:use"),
                 )
+                UsualAmounts(usually, unit, onSave)
             }
         },
         confirmButton = {
@@ -2136,12 +2161,22 @@ private fun UseDialog(row: HabitRow, onDismiss: () -> Unit, onSave: (Double) -> 
 }
 
 @Composable
-private fun AmountDialog(row: HabitRow, seconds: Int?, onDismiss: () -> Unit, onDiscardTiming: () -> Unit, onSave: (Double) -> Unit) {
+private fun AmountDialog(
+    row: HabitRow,
+    seconds: Int?,
+    onDismiss: () -> Unit,
+    onDiscardTiming: () -> Unit,
+    /** The amounts usually entered for this goal, for one-tap buttons. */
+    usual: suspend () -> List<Double> = { emptyList() },
+    onSave: (Double) -> Unit,
+) {
     val goal = row.goal
     val unit = goal.unit.orEmpty()
     val left = row.amountLeft
     var text by remember { mutableStateOf("") }
     val value = io.github.randomtools3377.checklist.core.Amounts.parse(text)
+    val focus = remember { androidx.compose.ui.focus.FocusRequester() }
+    val usually by androidx.compose.runtime.produceState(emptyList<Double>(), goal.id) { this.value = usual() }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("${goal.icon} ${goal.name}") },
@@ -2154,14 +2189,19 @@ private fun AmountDialog(row: HabitRow, seconds: Int?, onDismiss: () -> Unit, on
                     io.github.randomtools3377.checklist.core.Amounts.progressText(row.progress, goal) + " so far. How much did you do?",
                     style = MaterialTheme.typography.bodyMedium,
                 )
+                // Asked for here, inside the box's own window, so the box is there to take it.
+                LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
                 OutlinedTextField(
                     value = text,
                     onValueChange = { typed -> text = typed.filter { it.isDigit() || it == '.' || it == ',' }.take(9) },
                     label = { Text(if (unit.isNotEmpty()) "How much ($unit)" else "How much") },
                     singleLine = true,
-                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal),
-                    modifier = Modifier.fillMaxWidth().testTag("field:amount"),
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal, imeAction = androidx.compose.ui.text.input.ImeAction.Done),
+                    keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = { value?.let(onSave) }),
+                    modifier = Modifier.fillMaxWidth().focusRequester(focus).testTag("field:amount"),
                 )
+                // "All … left" just below already offers what is left.
+                UsualAmounts(usually.filter { kotlin.math.abs(it - left) > 1e-6 }, unit, onSave)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     TextButton(onClick = { onSave(left) }, modifier = Modifier.testTag("amount-all")) {
                         Text("All ${io.github.randomtools3377.checklist.core.Amounts.format(left)} left")

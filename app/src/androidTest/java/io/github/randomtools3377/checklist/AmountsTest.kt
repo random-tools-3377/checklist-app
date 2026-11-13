@@ -69,6 +69,25 @@ class AmountsTest {
     }
 
     @Test
+    fun theUsualAmountIsOneTapNextTime() {
+        app.waitFor { app.shownIn("today-list", "add-amount:Read") }
+        app.tap("add-amount:Read")
+        app.waitFor { !gone("field:amount") }
+        // Nothing entered before: no usual amounts yet.
+        assertTrue(gone("usual-amounts"))
+        app.onNodeWithTag("field:amount").performTextInput("5")
+        app.onNodeWithTag("save-amount").performClick()
+        app.waitFor { textOf("amount:Read").startsWith("5 of 20 pages") }
+
+        // Next time, 5 pages is a button.
+        app.waitFor { app.shownIn("today-list", "add-amount:Read") }
+        app.tap("add-amount:Read")
+        app.waitFor { !gone("usual-amount:5") }
+        app.onNodeWithTag("usual-amount:5").performClick()
+        app.waitFor { textOf("amount:Read").startsWith("10 of 20 pages") }
+    }
+
+    @Test
     fun aTimingIsStoppedAndSavedWithItsAmount() {
         app.waitFor { app.shownIn("today-list", "start:Read") }
         app.tap("start:Read")

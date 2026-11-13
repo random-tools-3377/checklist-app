@@ -189,6 +189,8 @@ import kotlinx.coroutines.IO
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
+import io.github.randomtools3377.checklist.core.MoneyKind
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
@@ -985,6 +987,13 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
         Badges.decode(earned).keys.filter { it.name !in seenNames }.sortedBy { it.ordinal }
     }.state(emptyList())
 
+    /**
+     * How far along each badge with something to count is (see [Badges.progress]), for the bars
+     * on the badges page. Worked out with the badges themselves, a moment after each change.
+     */
+    val badgeProgress: StateFlow<Map<Badge, io.github.randomtools3377.checklist.core.BadgeProgress>> get() = badgeProgressNow
+    private val badgeProgressNow = MutableStateFlow<Map<Badge, io.github.randomtools3377.checklist.core.BadgeProgress>>(emptyMap())
+
     fun badgesSeen() {
         viewModelScope.launch {
             val earned = Badges.decode(dao.setting(SETTING_BADGES)).keys
@@ -1015,19 +1024,29 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
         // The Budget's and the mood check-in's badges need no tick: only their extras on.
         val moods = if (Feature.MOOD in on) dao.allMoods().map { it.toCore() } else emptyList()
         val budget = Feature.BUDGET in on
-        if (ticks.isEmpty() && moods.isEmpty() && !budget) return
+        if (ticks.isEmpty() && moods.isEmpty() && !budget) {
+            // Nothing to count (a fresh start, or everything erased): no bars left over from before.
+            badgeProgressNow.value = emptyMap()
+            return
+        }
         val money = if (budget) dao.allMoney().map { it.toCore() } else emptyList()
         val savingGoals = if (budget) dao.allSavingGoals().map { it.toCore() } else emptyList()
         val goals = dao.allGoals().map { it.toCore() }
         val steps = dao.allSteps().map { it.toCore() }
         val entries = dao.allEntries().map { it.toCore() }
         val lapses = dao.allLapses().map { it.toCore() }
+        // Comebacks count from the day tracking began.
+        val since = io.github.randomtools3377.checklist.core.Comebacks.since(dao.setting(io.github.randomtools3377.checklist.core.Lapses.TRACKING_SINCE))
         val earned = withContext(Dispatchers.Default) {
             val from = maxOf(ticks.minOfOrNull { it.day } ?: day, day.minusDays(STREAK_DAYS))
             val records = StreakCounter.records(from, day, goals.filter { !it.archived }, ticks.filter { it.stepId == null }, lapses)
+            badgeProgressNow.value = Badges.progress(
+                day, records, streak, goals, steps, ticks, entries, target,
+                on = on, moods = moods, money = money, savingGoals = savingGoals,
+            )
             Badges.earned(
                 day, records, streak, goals, steps, ticks, entries, target, character = Feature.CHARACTER in on,
-                on = on, moods = moods, money = money, savingGoals = savingGoals,
+                on = on, moods = moods, money = money, savingGoals = savingGoals, trackingSince = since,
             )
         }
         val kept = Badges.decode(dao.setting(SETTING_BADGES))
@@ -1181,22 +1200,38 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
      * off the same day records as the current streaks on Today. Only worked out while the review
      * is looked at.
      */
-    val bestStreaks: StateFlow<Streaks?> = today.flatMapLatest { day ->
-        combine(
-            goalRows,
-            dao.observeHabitTicksSince(Long.MIN_VALUE),
-            dao.observeLapsesSince(Long.MIN_VALUE),
-            settings.map { it.streak }.distinctUntilChanged(),
-        ) { goals, tickRows, lapseRows, streak ->
-            withContext(Dispatchers.Default) {
-                val ticks = tickRows.map { it.toCore() }
-                val lapses = lapseRows.map { it.toCore() }
-                val from = listOfNotNull(ticks.minOfOrNull { it.periodStart }, lapses.minOfOrNull { it.periodStart }, day).min()
-                val records = StreakCounter.records(from, day, goals.map { it.toCore() }, ticks, lapses)
-                io.github.randomtools3377.checklist.core.BestStreaks.of(records, streak)
+    val bestStreaks: StateFlow<Streaks?> = everyDay { records, _, streak, _ ->
+        io.github.randomtools3377.checklist.core.BestStreaks.of(records, streak)
+    }.state(null)
+
+    /**
+     * The days that were comebacks (see Comebacks), for the count in the review's stats: back on
+     * the day's target right after a day that fell short, from the day tracking began. Only
+     * worked out while the review is looked at.
+     */
+    val comebacks: StateFlow<List<LocalDate>> = everyDay { records, day, streak, since ->
+        io.github.randomtools3377.checklist.core.Comebacks.days(records, day, streak, since)
+    }.state(emptyList())
+
+    /** Something worked out from every day's record there is, up to today, with the main streak's target and the day tracking began. */
+    private fun <T> everyDay(work: (List<io.github.randomtools3377.checklist.core.DayRecord>, LocalDate, StreakSettings, LocalDate?) -> T): Flow<T> =
+        today.flatMapLatest { day ->
+            combine(
+                goalRows,
+                dao.observeHabitTicksSince(Long.MIN_VALUE),
+                dao.observeLapsesSince(Long.MIN_VALUE),
+                settings.map { it.streak }.distinctUntilChanged(),
+                dao.observeSetting(io.github.randomtools3377.checklist.core.Lapses.TRACKING_SINCE),
+            ) { goals, tickRows, lapseRows, streak, since ->
+                withContext(Dispatchers.Default) {
+                    val ticks = tickRows.map { it.toCore() }
+                    val lapses = lapseRows.map { it.toCore() }
+                    val from = listOfNotNull(ticks.minOfOrNull { it.periodStart }, lapses.minOfOrNull { it.periodStart }, day).min()
+                    val records = StreakCounter.records(from, day, goals.map { it.toCore() }, ticks, lapses)
+                    work(records, day, streak, io.github.randomtools3377.checklist.core.Comebacks.since(since))
+                }
             }
         }
-    }.state(null)
 
     // Backups: the reminder, and the automatic backup to a folder
 
@@ -3256,10 +3291,44 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
 
     fun saveMoney(entry: MoneyEntry, onDone: () -> Unit) {
         viewModelScope.launch {
-            repository.saveMoney(entry)
+            val id = repository.saveMoney(entry)
             onDone()
+            // New spending answers with where that leaves the user, and can be taken back.
+            if (entry.id == 0L) spendingNote(id)?.let { note -> offerUndo(note) { repository.removeMoney(id) } }
         }
     }
+
+    /**
+     * What the Undo bar says after the spending [id] was typed in (see SpendingNote): what's
+     * left of its category's limit, and with the budget game on how today stands against its
+     * line. Null for money in or into savings, and while the budget is locked: nothing of it
+     * shows then.
+     */
+    private suspend fun spendingNote(id: Long): String? {
+        val saved = repository.moneyEntry(id) ?: return null
+        if (saved.kind != MoneyKind.SPENT && !saved.spentFromSavings) return null
+        if (budgetLocked() && !unlocked.value) return null
+        val today = nowLocal().date
+        val category = saved.categoryId?.let { wanted -> dao.moneyCategories().firstOrNull { it.id == wanted }?.toCore() }
+        val month = Budget.monthOf(saved.day)
+        val inCategory = dao.observeMoney(month.toEpochDay(), Pay.monthDays(month).last().toEpochDay()).first()
+            .map { it.toCore() }.filter { it.kind == MoneyKind.SPENT && it.categoryId == saved.categoryId }.sumOf { it.cents }
+        val on = features.value
+        val game = if (Feature.BUDGET in on && Feature.BUDGET_GAME in on) repository.moneyGameToday(today) else null
+        return io.github.randomtools3377.checklist.core.SpendingNote.after(
+            saved, today, category, inCategory, game?.share?.let { Budget.cents(it) }, game?.spentCents ?: 0,
+        ) { cents -> moneyText(cents / 100.0) }
+    }
+
+    /** The category of the spending typed in last, for the Spent box to start on; null when there is none in use. */
+    suspend fun lastSpentCategory(): Long? {
+        val last = dao.lastSpentCategory() ?: return null
+        return dao.moneyCategories().firstOrNull { it.id == last && !it.archived }?.id
+    }
+
+    /** The amounts usually entered for [goalId], for one-tap buttons (see [Amounts.usual]). */
+    suspend fun usualAmounts(goalId: Long): List<Double> =
+        Amounts.usual(dao.latestAmounts(goalId, Amounts.USUAL_FROM).map { it.toCore() })
 
     fun removeMoney(id: Long, onDone: () -> Unit) {
         viewModelScope.launch {

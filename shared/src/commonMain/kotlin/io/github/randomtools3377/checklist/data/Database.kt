@@ -540,6 +540,9 @@ interface ChecklistDao {
     @Query("SELECT * FROM goals") suspend fun allGoals(): List<GoalEntity>
     @Query("SELECT * FROM steps") suspend fun allSteps(): List<StepEntity>
     @Query("SELECT * FROM ticks") suspend fun allTicks(): List<TickEntity>
+    /** A goal's latest entries with an amount, newest first, for its usual amounts. */
+    @Query("SELECT * FROM ticks WHERE goalId = :goalId AND stepId IS NULL AND amount IS NOT NULL ORDER BY at DESC, id DESC LIMIT :limit")
+    suspend fun latestAmounts(goalId: Long, limit: Int): List<TickEntity>
     @Query("SELECT * FROM entries") suspend fun allEntries(): List<EntryEntity>
     @Query("SELECT * FROM rewards") suspend fun allRewards(): List<RewardEntity>
     @Query("SELECT * FROM purchases") suspend fun allPurchases(): List<PurchaseEntity>
@@ -674,6 +677,9 @@ interface ChecklistDao {
     @Query("SELECT * FROM money ORDER BY day, at") suspend fun allMoney(): List<MoneyEntity>
     @Query("SELECT * FROM money WHERE id = :id") suspend fun money(id: Long): MoneyEntity?
     @Insert suspend fun insertMoney(row: MoneyEntity): Long
+    /** The category of the spending typed in last, for the Spent box to start on. */
+    @Query("SELECT categoryId FROM money WHERE categoryId IS NOT NULL AND purchaseId IS NULL AND billId IS NULL AND kind IN ('SPENT', 'TAKEN_OUT') ORDER BY at DESC, id DESC LIMIT 1")
+    suspend fun lastSpentCategory(): Long?
     @Update suspend fun updateMoney(row: MoneyEntity)
     @Query("DELETE FROM money WHERE id = :id") suspend fun deleteMoney(id: Long)
     @Query("DELETE FROM money WHERE purchaseId = :purchaseId") suspend fun deleteMoneyForPurchase(purchaseId: Long)
