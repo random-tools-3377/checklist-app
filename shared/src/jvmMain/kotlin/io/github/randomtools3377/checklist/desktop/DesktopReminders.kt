@@ -3,6 +3,7 @@ package io.github.randomtools3377.checklist.desktop
 import io.github.randomtools3377.checklist.core.Alert
 import io.github.randomtools3377.checklist.core.AlertKind
 import io.github.randomtools3377.checklist.core.Alerts
+import io.github.randomtools3377.checklist.core.AtStake
 import io.github.randomtools3377.checklist.core.MoodReminder
 import io.github.randomtools3377.checklist.core.Feature
 import io.github.randomtools3377.checklist.core.Pace
@@ -23,6 +24,7 @@ import io.github.randomtools3377.checklist.data.nextInChain
 import io.github.randomtools3377.checklist.data.nudgePlan
 import io.github.randomtools3377.checklist.data.nudgeWriter
 import io.github.randomtools3377.checklist.data.parseDayEndHour
+import io.github.randomtools3377.checklist.data.stakeWriterOrNull
 import io.github.randomtools3377.checklist.data.toCore
 import io.github.randomtools3377.checklist.data.toEpochDay
 import io.github.randomtools3377.checklist.data.toLocalDateTime
@@ -202,6 +204,8 @@ class DesktopReminders(private val phone: DesktopPhone) {
             val ticks = dao.habitTicksSince(earliest.toEpochDay()).map { it.toCore() }
             val hidePrivate = dao.setting(LOCK_PRIVATE) == "1"
             val nudges = if (alerts.any { it.kind == AlertKind.NUDGE }) nudgeWriter(dao, parts.book) else null
+            // What is at stake today, said after a reminder's own words, as on a phone.
+            val stakes = stakeWriterOrNull(dao)
             return alerts.mapNotNull { alert ->
                 val goal = goals.find { it.id == alert.goalId } ?: return@mapNotNull null
                 val window = goal.repeat?.window(alert.day) ?: return@mapNotNull null
@@ -216,7 +220,7 @@ class DesktopReminders(private val phone: DesktopPhone) {
                 DueReminder(
                     goalId = goal.id,
                     title = if (hidden) "🔒 A private goal" else "${goal.icon} ${goal.name}",
-                    text = if (hidden) Alerts.lockedWords(alert) else words(alert),
+                    text = if (hidden) Alerts.lockedWords(alert) else AtStake.with(words(alert), stakes?.reminder(goal, alert)),
                 )
             }.distinctBy { it.goalId to it.text } + deadlines
         }

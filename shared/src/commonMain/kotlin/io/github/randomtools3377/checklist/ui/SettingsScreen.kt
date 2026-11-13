@@ -250,7 +250,7 @@ private fun SwitchLine(title: String, hint: String, on: Boolean, tag: String, on
 /** The words a Settings search finds the Notifications part by. */
 internal fun notificationWords(phone: Phone): String =
     "Notifications notification reminders reminder alarm exact weekly summary snooze morning plan evening check still open light up screen edge lighting mood reminder how are you feeling late nudges nudge encouraging playful gain smaller motivate" +
-        (if (phone.hasWidgets) " widget widgets home screen calendar" else "") +
+        (if (phone.hasWidgets) " widget widgets home screen calendar confirm tick outside the app confirmation left today" else "") +
         if (phone.canKeepRunning) " keep running window closed quit start sign in windows startup" else ""
 
 /** On a computer: when reminders come, by whether the app keeps running with its window closed. */
@@ -845,6 +845,18 @@ fun SettingsScreen(
                     }
                 } else {
                     NotOnThisDevice("Light up the screen for reminders", Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
+                }
+                // Only where reminders have a "Done" button and there are widgets to tick on.
+                if (phone.canSnooze && phone.hasWidgets) {
+                    val answers by vm.tickAnswer.collectAsState()
+                    SwitchRow(
+                        "Confirm a tick made outside the app",
+                        answers,
+                        "setting:tick-answer",
+                        hint = "After \"Done\" on a reminder, or a tick on a widget, a short silent note says what was ticked and what's left today, " +
+                            "like \"2 left today\" or \"That's everything for today\". It goes away by itself.",
+                        padding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+                    ) { vm.setTickAnswer(it) }
                 }
                 // Late nudges: one switch for all of them, and the kinds of message that take turns.
                 val nudgesOn by vm.nudgesOn.collectAsState()

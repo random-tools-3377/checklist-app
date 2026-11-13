@@ -951,6 +951,14 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
         viewModelScope.launch { repository.setSetting(io.github.randomtools3377.checklist.data.SETTING_REMINDER_LIGHT, if (on) "1" else "0") }
     }
 
+    /** Android: the short, silent note after a tick made on a reminder or a widget; on unless turned off. */
+    val tickAnswer: StateFlow<Boolean> =
+        dao.observeSetting(io.github.randomtools3377.checklist.data.SETTING_TICK_ANSWER).map { io.github.randomtools3377.checklist.data.tickAnswerOn(it) }.state(true)
+
+    fun setTickAnswer(on: Boolean) {
+        viewModelScope.launch { repository.setSetting(io.github.randomtools3377.checklist.data.SETTING_TICK_ANSWER, if (on) "1" else "0") }
+    }
+
     // Late nudges (see Nudges)
 
     /** "Nudges when something is late" in Settings: on unless turned off. */

@@ -24,9 +24,10 @@ suspend fun eveningTimes(dao: ChecklistDao, from: LocalDateTime, to: LocalDateTi
 /**
  * What is still open on [day] as things stand now, for the evening check, or null when nothing
  * is. A private goal isn't named while the privacy lock covers private goals: a notification
- * can't be unlocked.
+ * can't be unlocked. When [day] is today, what is at stake is said first (see [StakeWriter]); a
+ * later day's list, handed over ahead, has none, since it can't be known yet.
  */
-suspend fun eveningList(dao: ChecklistDao, day: LocalDate): EveningList? {
+suspend fun eveningList(dao: ChecklistDao, day: LocalDate, stakes: StakeWriter? = null): EveningList? {
     val goals = dao.activeCoreGoals()
     val since = Days.earliestOpenDay(day)
     // Steps only matter for a project whose deadline is that day.
@@ -34,7 +35,8 @@ suspend fun eveningList(dao: ChecklistDao, day: LocalDate): EveningList? {
     val ticks = (dao.habitTicksSince(since.toEpochDay()) + deadlines.flatMap { dao.stepTicks(it.id) }).map { it.toCore() }
     val lapses = dao.lapsesSince(since.toEpochDay()).map { it.toCore() }
     val view = TodayList.build(day, goals, dao.allSteps().map { it.toCore() }, ticks, 0, lapses)
-    return EveningCheck.of(view, lapses, hidePrivate = dao.setting(LOCK_PRIVATE) == "1")
+    val list = EveningCheck.of(view, lapses, hidePrivate = dao.setting(LOCK_PRIVATE) == "1") ?: return null
+    return list.copy(stake = (stakes ?: stakeWriterOrNull(dao))?.evening(day))
 }
 
 /**
@@ -43,5 +45,9 @@ suspend fun eveningList(dao: ChecklistDao, day: LocalDate): EveningList? {
  * ask for the minute that just came; the iPhone asks for the days ahead when it hands its
  * reminders over, and again on every change, so the list it holds stays current.
  */
-suspend fun eveningChecks(dao: ChecklistDao, from: LocalDateTime, to: LocalDateTime): List<DueEvening> =
-    eveningTimes(dao, from, to).mapNotNull { time -> eveningList(dao, time.day)?.let { DueEvening(time.at, it) } }
+suspend fun eveningChecks(dao: ChecklistDao, from: LocalDateTime, to: LocalDateTime): List<DueEvening> {
+    val times = eveningTimes(dao, from, to)
+    if (times.isEmpty()) return emptyList()
+    val stakes = stakeWriterOrNull(dao)
+    return times.mapNotNull { time -> eveningList(dao, time.day, stakes)?.let { DueEvening(time.at, it) } }
+}

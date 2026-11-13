@@ -136,7 +136,8 @@ class DesktopPhoneTest {
         assertEquals(null, DesktopReminders.evening(phone.parts, at(today, 21, 0), at(today, 21, 1)))
         phone.parts.repository.setSetting(EveningCheck.SETTING, EveningCheck.encode(LocalTime(21, 0)))
         val shown = DesktopReminders.evening(phone.parts, at(today, 21, 0), at(today, 21, 1))
-        assertEquals("1 still open today" to "📖 Read", shown?.let { it.title to it.text })
+        // What is at stake comes first, as on a phone.
+        assertEquals("1 still open today" to "1 more and today counts for your streak\n📖 Read", shown?.let { it.title to it.text })
         assertEquals(null, DesktopReminders.evening(phone.parts, at(today, 21, 1), at(today, 21, 2)))
         // A private goal isn't named while the lock covers private goals.
         phone.parts.repository.saveHabit(
@@ -146,7 +147,7 @@ class DesktopPhoneTest {
             ),
         )
         dao.putSetting(SettingEntity(LOCK_PRIVATE, "1"))
-        assertEquals("📖 Read\n🔒 A private goal", DesktopReminders.evening(phone.parts, at(today, 21, 0), at(today, 21, 1))?.text)
+        assertEquals("2 more and today counts for your streak\n📖 Read\n🔒 A private goal", DesktopReminders.evening(phone.parts, at(today, 21, 0), at(today, 21, 1))?.text)
         // Everything done: nothing is shown.
         assertTrue(phone.parts.book.tickHabit(id) is TickResult.Ticked)
         assertTrue(phone.parts.book.tickHabit(dao.activeGoals().single { it.name == "Journal" }.id) is TickResult.Ticked)

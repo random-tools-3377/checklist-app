@@ -15,13 +15,16 @@ data class WeeklySummary(
 
     /**
      * "18 of 21 done (85%) · +320 points · 2 missed · best: 💧 Water". With a weekly points
-     * [target], whether it was reached. With the [race] on, whether the week beat the one before.
+     * [target], whether it was reached. With the [race] on, that the week beat the one before,
+     * and nothing about it when it didn't. With the week [before], how much more got done, only
+     * when it is up: "18 of 21 done (85%, up from 71%)".
      */
-    fun describe(target: Int = 0, race: RaceStanding? = null): String = buildList {
-        add(if (due == 0) "Nothing was due" else "$done of $due done ($percent%)")
+    fun describe(target: Int = 0, race: RaceStanding? = null, before: WeeklySummary? = null): String = buildList {
+        val up = before?.takeIf { due > 0 && it.due > 0 && percent > it.percent }?.let { ", up from ${it.percent}%" } ?: ""
+        add(if (due == 0) "Nothing was due" else "$done of $due done ($percent%$up)")
         add("+" + PointsName.current.amount(earned))
         if (target > 0) add(if (earned >= target) "🎯 target reached" else "🎯 $earned of $target")
-        race?.let { add(Race.result(it)) }
+        race?.takeIf { it.ahead > 0 }?.let { add(Race.result(it)) }
         if (lost > 0) add("−$lost lost")
         if (missed > 0) add(if (missed == 1) "1 missed" else "$missed missed")
         if (skipped > 0) add(if (skipped == 1) "1 skipped" else "$skipped skipped")

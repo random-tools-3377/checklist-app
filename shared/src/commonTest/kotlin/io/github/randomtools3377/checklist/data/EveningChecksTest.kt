@@ -76,7 +76,10 @@ class EveningChecksTest {
         assertEquals(nine, due.at)
         assertEquals(today, due.list.day)
         assertEquals("3 still open today", due.list.title)
-        assertEquals(listOf("🏃 Run", "📖 Read", "🦷 Floss"), due.list.lines())
+        assertEquals(listOf("🏃 Run", "📖 Read", "🦷 Floss"), due.list.lines().drop(1))
+        // What is at stake comes first: at 90%, all three are needed for today to count.
+        assertEquals("3 more and today counts for your streak", due.list.stake)
+        assertEquals(due.list.stake, due.list.lines().first())
         assertEquals(run, due.list.firstToTick?.goalId)
         // Not in the minutes around it.
         assertTrue(eveningChecks(dao, LocalDateTime(today, LocalTime(20, 59)), nine).isEmpty())
@@ -85,7 +88,7 @@ class EveningChecksTest {
         // One done and one skipped: only the third is left.
         assertTrue(book.tickHabit(run) is TickResult.Ticked)
         assertTrue(lapses.skip(read, reason = null, note = null) is SkipResult.Skipped)
-        assertEquals(listOf("🦷 Floss"), eveningChecks(dao, nine, minute(nine)).single().list.lines())
+        assertEquals(listOf("1 more and today counts for your streak", "🦷 Floss"), eveningChecks(dao, nine, minute(nine)).single().list.lines())
         assertEquals("1 still open today", eveningList(dao, today)?.title)
 
         // Everything done: nothing is sent.
@@ -99,11 +102,11 @@ class EveningChecksTest {
         addHabit("Run", "🏃")
         addHabit("Journal", "📓", private = true)
         turnOn()
-        assertEquals(listOf("🏃 Run", "📓 Journal"), eveningChecks(dao, nine, minute(nine)).single().list.lines())
+        assertEquals(listOf("2 more and today counts for your streak", "🏃 Run", "📓 Journal"), eveningChecks(dao, nine, minute(nine)).single().list.lines())
         dao.putSetting(SettingEntity(LOCK_PRIVATE, "1"))
         val locked = eveningChecks(dao, nine, minute(nine)).single().list
         assertEquals("2 still open today", locked.title)
-        assertEquals(listOf("🏃 Run", "🔒 A private goal"), locked.lines())
+        assertEquals(listOf("2 more and today counts for your streak", "🏃 Run", "🔒 A private goal"), locked.lines())
     }
 
     @Test

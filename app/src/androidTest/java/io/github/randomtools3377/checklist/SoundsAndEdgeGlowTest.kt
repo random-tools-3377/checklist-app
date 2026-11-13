@@ -11,6 +11,7 @@ import io.github.randomtools3377.checklist.core.CelebrationSounds
 import io.github.randomtools3377.checklist.data.SETTING_CELEBRATE_GLOW
 import io.github.randomtools3377.checklist.data.SETTING_CELEBRATE_GLOW_AWAY
 import io.github.randomtools3377.checklist.data.SETTING_REMINDER_LIGHT
+import io.github.randomtools3377.checklist.data.SETTING_TICK_ANSWER
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -95,6 +96,10 @@ class SoundsAndEdgeGlowTest {
         app.waitFor { !gone("reminder-light:settings") }
         app.tap("setting:reminder-light")
         app.waitFor { setting(SETTING_REMINDER_LIGHT) == "0" }
+        // The note after a tick made outside the app is on until it is switched off.
+        assertNull(setting(SETTING_TICK_ANSWER))
+        app.tap("setting:tick-answer")
+        app.waitFor { setting(SETTING_TICK_ANSWER) == "0" }
     }
 
     @Test

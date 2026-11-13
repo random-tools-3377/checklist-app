@@ -162,11 +162,13 @@ private fun reminderSteps(device: GuideDevice): List<String> {
             add("Tap \"Done\" on a reminder to tick the goal, or \"+1\" for a goal done several times a day.")
             add("Tap \"Skip\" to skip it. A skip that would go over the limit opens the app instead, to warn you and ask why.")
             add("Tap \"Snooze\" and it comes back later: after 10 minutes, 30 minutes or an hour, as set in Settings → Notifications.")
+            add("After \"Done\" on a reminder, or a tick on a widget, a short silent note answers back, like \"Done: 💧 Water, +5\" and \"2 left today\", or \"That's everything for today\". It goes away by itself. \"Confirm a tick made outside the app\" in Settings → Notifications turns it off.")
         } else {
             add("Reminders here have no buttons yet: tap one to open the app, then tick the goal or skip it on Today.")
         }
         if (device.plan) {
             add("\"Morning plan\" comes when your day starts, with today's list and the pace. \"Weekly summary\" comes on Sunday at 6 pm. Turn each on or off in Settings → Notifications.")
+            add("The morning plan starts with your streak while one is running, like \"Day 13 of your streak\". The weekly summary says when more got done than the week before, and, with \"Beat last week\" on, when the week was won.")
         }
         if (device.buttons) {
             add("A late nudge has \"Done\" and \"Stop for today\", which ends that goal's nudges until tomorrow. A \"Make it smaller\" nudge for a goal with a length also has \"Focus\", which starts its focus timer.")

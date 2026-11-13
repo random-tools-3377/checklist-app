@@ -103,6 +103,11 @@ const val SETTING_DEFAULT_GIF = "default_gif"
 const val SETTING_CELEBRATE_GLOW = "celebrate_glow"
 const val SETTING_CELEBRATE_GLOW_AWAY = "celebrate_glow_away"
 const val SETTING_REMINDER_LIGHT = "reminder_light"
+/**
+ * "0" turns off the short, silent note after a tick made on a reminder or a widget (Android),
+ * which says what was ticked and what is left today. On unless turned off.
+ */
+const val SETTING_TICK_ANSWER = "tick_answer"
 /** The app's home-screen icon (see AppIcon), and the widgets' style (see WidgetStyle). */
 const val SETTING_APP_ICON = "app_icon"
 /** The running Start and Stop timing, as "goalId|startedAt" in epoch milliseconds. */

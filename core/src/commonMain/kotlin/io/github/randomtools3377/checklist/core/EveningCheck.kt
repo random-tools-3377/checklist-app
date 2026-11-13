@@ -35,13 +35,18 @@ data class EveningList(
      * used, 1 left)": good news, said after what is open, and never counted as open.
      */
     val under: List<String> = emptyList(),
+    /**
+     * What is at stake, as one short offer said first, like "1 more keeps your 12-day streak"
+     * (see [AtStake.evening]); null when there is nothing to add, or it couldn't be known.
+     */
+    val stake: String? = null,
 ) {
     /** "3 still open today". */
     val title: String get() = if (items.size == 1) "1 still open today" else "${items.size} still open today"
 
     /**
-     * A line for each thing, [most] at the most and then "and 2 more". Private goals that aren't
-     * named come last and share one line.
+     * A line for each thing, [most] at the most and then "and 2 more". What is at [stake] comes
+     * first and is one of them. Private goals that aren't named come last and share one line.
      */
     fun lines(most: Int = EveningCheck.MOST_LINES): List<String> {
         val hidden = items.count { it.hidden }
@@ -50,7 +55,8 @@ data class EveningList(
             1 -> listOf("🔒 ${PrivateGoals.NAME}")
             else -> listOf("🔒 $hidden private goals")
         } + under
-        return if (all.size <= most) all else all.take(most) + "and ${items.size + under.size - most} more"
+        val room = if (stake == null) most else most - 1
+        return listOfNotNull(stake) + if (all.size <= room) all else all.take(room) + "and ${items.size + under.size - room} more"
     }
 
     /** The first one a button on the notification can tick: never a private goal that isn't named. */

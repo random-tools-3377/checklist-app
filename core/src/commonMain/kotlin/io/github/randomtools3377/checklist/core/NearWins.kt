@@ -38,6 +38,13 @@ object NearWins {
         return (target - record.done).coerceAtLeast(1)
     }
 
+    /** "2 more keeps your 12-day streak", or without a streak running, "2 more and today counts for your streak". */
+    fun streakOffer(needed: Int, streak: Int): String =
+        if (streak > 0) "$needed more keeps your $streak-day streak" else "$needed more and today counts for your streak"
+
+    /** "2 more for a perfect day", with what it [pays] when that is something. */
+    fun perfectOffer(left: Int, pays: Int = 0): String = "$left more for a perfect day" + if (pays > 0) " (+$pays)" else ""
+
     /**
      * The closest win, nearest first. [record] is today's so far, [streak] the main streak now,
      * [perfectBonus] the perfect-day bonus (0 when off), [combo] the combo through yesterday
@@ -58,13 +65,13 @@ object NearWins {
         val wins = mutableListOf<Win>()
         val needed = neededForStreak(record, settings)
         if (record != null && needed > 0) {
-            wins += Win(needed, if (streak > 0) "$needed more keeps your $streak-day streak" else "$needed more and today counts for your streak")
+            wins += Win(needed, streakOffer(needed, streak))
         }
         // A perfect day: only while nothing was skipped today, since a day with a skip is never one.
         if (record != null && record.due > 0 && record.skips == 0 && record.done < record.due) {
             val left = record.due - record.done
             val pays = perfectBonus + (combo?.let { Combos.pay(it + 1) } ?: 0)
-            wins += Win(left, "$left more for a perfect day" + if (pays > 0) " (+$pays)" else "")
+            wins += Win(left, perfectOffer(left, pays))
         }
         if (ticks != null) {
             TICK_BADGES.firstOrNull { (count, badge) -> badge !in earnedBadges && ticks < count }?.let { (count, badge) ->

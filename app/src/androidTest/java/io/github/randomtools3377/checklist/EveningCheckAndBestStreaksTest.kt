@@ -22,9 +22,11 @@ import io.github.randomtools3377.checklist.core.minusDays
 import io.github.randomtools3377.checklist.core.plusDays
 import io.github.randomtools3377.checklist.data.HabitDraft
 import io.github.randomtools3377.checklist.data.LOCK_PRIVATE
+import io.github.randomtools3377.checklist.data.SETTING_TICK_ANSWER
 import io.github.randomtools3377.checklist.data.eveningList
 import io.github.randomtools3377.checklist.data.nowLocal
 import io.github.randomtools3377.checklist.data.toEntity
+import io.github.randomtools3377.checklist.reminders.EdgeLights
 import io.github.randomtools3377.checklist.reminders.Reminders
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -148,7 +150,8 @@ class EveningCheckNotificationTest {
         Reminders.showEvening(context, eveningList(dao, day)!!, dayEnd = 0)
         assertTrue("The evening check should show", within { evening() != null })
         assertEquals("3 still open today", title())
-        assertEquals("🧘 Stretch\n📖 Read\n🔒 A private goal", body())
+        // What is at stake comes first: at the usual 90%, all three are needed for today to count.
+        assertEquals("3 more and today counts for your streak\n🧘 Stretch\n📖 Read\n🔒 A private goal", body())
         assertFalse(body()!!.contains("Journal"))
         assertEquals(listOf("Open Today", "Done: 🧘 Stretch"), evening()!!.actions.map { it.title.toString() })
 
@@ -156,7 +159,7 @@ class EveningCheckNotificationTest {
         app.container.book.tickHabit(stretch)
         Reminders.refreshEvening(context)
         assertTrue("The list should lose what is done", within { title() == "2 still open today" })
-        assertEquals("📖 Read\n🔒 A private goal", body())
+        assertEquals("2 more and today counts for your streak\n📖 Read\n🔒 A private goal", body())
         assertEquals(listOf("Open Today", "Done: 📖 Read"), evening()!!.actions.map { it.title.toString() })
 
         // Only the private goal left: no button names or ticks it.
@@ -197,6 +200,30 @@ class EveningCheckNotificationTest {
         forgetLastAlarm()
         Reminders.fire(context)
         assertFalse("Nothing should come on a day when everything is done", within(1_500) { evening() != null })
+    }
+
+    /** The short note after a tick made on a reminder or a widget (its notification id is EdgeLights' own). */
+    private fun answer() = manager.activeNotifications.firstOrNull { it.id == 940 }?.notification
+
+    @Test
+    fun aTickMadeOutsideTheAppAnswersBackUnlessSwitchedOff() = runBlocking {
+        app.container.db.clearAllTables()
+        manager.cancelAll()
+        val day = app.container.book.today()
+        val stretch = addHabit("Stretch", "🧘", day.minusDays(2))
+        val read = addHabit("Read", "📖", day.minusDays(2))
+
+        // As "Done" on a reminder and a tick on a widget do: tick, then answer.
+        EdgeLights.celebrate(context, stretch, app.container.book.tickHabit(stretch))
+        assertTrue("The answer should show", within { answer() != null })
+        assertEquals("Done: 🧘 Stretch, +5", answer()?.extras?.getCharSequence(Notification.EXTRA_TITLE)?.toString())
+        assertEquals("1 left today", answer()?.extras?.getCharSequence(Notification.EXTRA_TEXT)?.toString())
+
+        // Switched off in Settings → Notifications: nothing answers.
+        manager.cancelAll()
+        app.container.repository.setSetting(SETTING_TICK_ANSWER, "0")
+        EdgeLights.celebrate(context, read, app.container.book.tickHabit(read))
+        assertFalse("Nothing should answer once it is switched off", within(1_500) { answer() != null })
     }
 }
 

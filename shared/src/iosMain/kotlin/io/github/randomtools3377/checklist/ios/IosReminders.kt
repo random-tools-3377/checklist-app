@@ -5,6 +5,7 @@ package io.github.randomtools3377.checklist.ios
 import io.github.randomtools3377.checklist.core.Alert
 import io.github.randomtools3377.checklist.core.AlertKind
 import io.github.randomtools3377.checklist.core.Alerts
+import io.github.randomtools3377.checklist.core.AtStake
 import io.github.randomtools3377.checklist.core.Days
 import io.github.randomtools3377.checklist.core.Feature
 import io.github.randomtools3377.checklist.core.MoodReminder
@@ -25,6 +26,7 @@ import io.github.randomtools3377.checklist.data.nudgePlan
 import io.github.randomtools3377.checklist.data.nudgeWriter
 import io.github.randomtools3377.checklist.data.nowMillis
 import io.github.randomtools3377.checklist.data.parseDayEndHour
+import io.github.randomtools3377.checklist.data.stakeWriterOrNull
 import io.github.randomtools3377.checklist.data.toCore
 import io.github.randomtools3377.checklist.data.toEpochDay
 import io.github.randomtools3377.checklist.data.toLocalDateTime
@@ -148,6 +150,10 @@ internal object IosReminders {
             writer?.words(goal, alert, Alerts.timesDone(goal, window, ticks))?.let { alert to it }
         }.toMap()
 
+        // What is at stake, for today's reminders only: everything is handed over again on every
+        // change, so it is still true when one arrives. A later day's can't be known yet.
+        val stakes = if (waiting.isEmpty()) null else stakeWriterOrNull(dao)
+
         center.removeAllPendingNotificationRequests()
         for (alert in waiting) {
             val goal = goals.find { it.id == alert.goalId } ?: continue
@@ -156,7 +162,7 @@ internal object IosReminders {
             // The text is set through its setters: Kotlin sees the read-only parent's properties.
             val content = UNMutableNotificationContent()
             content.setTitle(nudge?.title ?: if (hidden) "🔒 A private goal" else "${goal.icon} ${goal.name}")
-            content.setBody(nudge?.text ?: if (hidden) Alerts.lockedWords(alert) else words(alert))
+            content.setBody(nudge?.text ?: if (hidden) Alerts.lockedWords(alert) else AtStake.with(words(alert), stakes?.reminder(goal, alert)))
             content.setSound(UNNotificationSound.defaultSound)
             val request = UNNotificationRequest.requestWithIdentifier(
                 "goal-${alert.goalId}-${alert.at}-${alert.kind}",

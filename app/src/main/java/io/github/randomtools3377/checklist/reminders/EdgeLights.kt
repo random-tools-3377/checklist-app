@@ -10,15 +10,19 @@ import io.github.randomtools3377.checklist.ChecklistApplication
 import io.github.randomtools3377.checklist.MainActivity
 import io.github.randomtools3377.checklist.R
 import io.github.randomtools3377.checklist.core.TickResult
-import io.github.randomtools3377.checklist.data.LOCK_PRIVATE
 import io.github.randomtools3377.checklist.data.SETTING_CELEBRATE_GLOW_AWAY
+import io.github.randomtools3377.checklist.data.SETTING_TICK_ANSWER
+import io.github.randomtools3377.checklist.data.tickAnswer
+import io.github.randomtools3377.checklist.data.tickAnswerOn
 
 /**
  * Lighting the edges of the screen from outside the app. A phone with edge lighting (as on
  * Samsung) lights its edges for a notification that pops up, so both of these are notifications
  * on their own types, which the user can change in the phone's settings:
  * reminders that come like a message, for "Light up the screen for reminders", and a short,
- * silent "Done" after a tick made on a widget or a reminder, which goes away by itself.
+ * silent "Done" after a tick made on a widget or a reminder, which goes away by itself. That
+ * same note is the answer to a tick made outside the app ("Confirm a tick made outside the app"),
+ * which adds what is left today.
  * Neither needs a permission beyond showing notifications.
  */
 object EdgeLights {
@@ -26,8 +30,8 @@ object EdgeLights {
     const val CELEBRATION_CHANNEL = "celebrations"
     private const val CELEBRATION_ID = 940
 
-    /** How long the "Done" notification stays, in milliseconds. */
-    private const val GONE_AFTER = 4_000L
+    /** How long the "Done" notification stays, in milliseconds: long enough to read what is left. */
+    private const val GONE_AFTER = 5_000L
 
     /** The app's green, for phones with a notification light. */
     private const val LIGHT = 0xFF2E7D32.toInt()
@@ -42,8 +46,8 @@ object EdgeLights {
             .build()
         // Silent: it only pops up for a moment, which is what lights the edges.
         val celebrations = NotificationChannelCompat.Builder(CELEBRATION_CHANNEL, NotificationManagerCompat.IMPORTANCE_HIGH)
-            .setName("Celebrations")
-            .setDescription("A short, silent note after a tick made away from the app, to light the edges of the screen")
+            .setName("Tick confirmations")
+            .setDescription("A short, silent note after a tick made on a reminder or a widget: what was ticked and what is left today")
             .setLightsEnabled(true)
             .setLightColor(LIGHT)
             .setVibrationEnabled(false)
@@ -60,21 +64,19 @@ object EdgeLights {
         .setLights(LIGHT, 500, 1500)
 
     /**
-     * A tick was made on a widget or a reminder. With "Also light the edges when the app isn't on
-     * screen" on, a short, silent "Done" pops up and goes by itself. A private goal behind the
-     * lock isn't named.
+     * A tick was made on a widget or a reminder. With "Confirm a tick made outside the app" on, a
+     * short, silent note answers back and goes by itself: "Done: 💧 Water, +5" and "2 left today"
+     * or "That's everything for today". With only "Also light the edges when the app isn't on
+     * screen" on, it is just the "Done" that lights the edges. A private goal behind the lock
+     * isn't named, and says nothing more.
      */
     suspend fun celebrate(context: Context, goalId: Long, result: TickResult) {
         if (result !is TickResult.Ticked || !Reminders.canNotify(context)) return
-        val paid = result.points + result.bonus
-        // One item of a routine isn't the routine done, and pays nothing: no celebration yet.
-        if (!result.finished && paid == 0) return
-        val container = (context.applicationContext as ChecklistApplication).container
-        val dao = container.db.dao()
-        if (dao.setting(SETTING_CELEBRATE_GLOW_AWAY) != "1") return
-        val goal = container.repository.goal(goalId) ?: return
-        val hidden = goal.private && dao.setting(LOCK_PRIVATE) == "1"
-        val title = "Done: " + (if (hidden) "🔒 A private goal" else "${goal.icon} ${goal.name}") + (if (paid > 0) ", +$paid" else "")
+        val dao = (context.applicationContext as ChecklistApplication).container.db.dao()
+        val answers = tickAnswerOn(dao.setting(SETTING_TICK_ANSWER))
+        if (!answers && dao.setting(SETTING_CELEBRATE_GLOW_AWAY) != "1") return
+        // Nothing for one item of a routine: it isn't the routine done, and pays nothing.
+        val answer = tickAnswer(dao, goalId, result, stakes = answers) ?: return
         createChannels(context)
         val open = PendingIntent.getActivity(
             context,
@@ -84,7 +86,8 @@ object EdgeLights {
         )
         val notification = NotificationCompat.Builder(context, CELEBRATION_CHANNEL)
             .setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle(title)
+            .setContentTitle(answer.title)
+            .setContentText(answer.text)
             .setContentIntent(open)
             .setAutoCancel(true)
             .setTimeoutAfter(GONE_AFTER)

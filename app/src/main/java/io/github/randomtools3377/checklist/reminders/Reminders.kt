@@ -19,6 +19,7 @@ import io.github.randomtools3377.checklist.R
 import io.github.randomtools3377.checklist.core.Alert
 import io.github.randomtools3377.checklist.core.AlertKind
 import io.github.randomtools3377.checklist.core.Alerts
+import io.github.randomtools3377.checklist.core.AtStake
 import io.github.randomtools3377.checklist.core.Days
 import io.github.randomtools3377.checklist.core.DeadlineReminder
 import io.github.randomtools3377.checklist.core.EveningList
@@ -32,14 +33,11 @@ import io.github.randomtools3377.checklist.core.Nudges
 import io.github.randomtools3377.checklist.core.Goal
 import io.github.randomtools3377.checklist.core.Pace
 import io.github.randomtools3377.checklist.core.SkipCheck
-import io.github.randomtools3377.checklist.data.SETTING_WEEKLY_TARGET
 import io.github.randomtools3377.checklist.data.LOCK_PRIVATE
 import io.github.randomtools3377.checklist.core.plusDays
 import io.github.randomtools3377.checklist.core.MorningPlan
-import io.github.randomtools3377.checklist.core.Review
 import io.github.randomtools3377.checklist.core.WeeklySummary
 import io.github.randomtools3377.checklist.core.minusDays
-import io.github.randomtools3377.checklist.data.LOCK_REVIEW
 import io.github.randomtools3377.checklist.data.SETTING_WEEKLY
 import io.github.randomtools3377.checklist.core.PaceSettings
 import io.github.randomtools3377.checklist.core.TodayList
@@ -59,6 +57,8 @@ import io.github.randomtools3377.checklist.data.eveningTimes
 import io.github.randomtools3377.checklist.data.moodReminders
 import io.github.randomtools3377.checklist.data.nudgePlan
 import io.github.randomtools3377.checklist.data.nudgeWriter
+import io.github.randomtools3377.checklist.data.stakeWriterOrNull
+import io.github.randomtools3377.checklist.data.weeklyWords
 import io.github.randomtools3377.checklist.data.toTime
 import io.github.randomtools3377.checklist.ui.minutesText
 import io.github.randomtools3377.checklist.data.nowLocal
@@ -249,6 +249,8 @@ object Reminders {
             val container = (context.applicationContext as ChecklistApplication).container
             // Late nudges are worded with what there is to gain right now.
             val nudges = if (due.any { it.kind == AlertKind.NUDGE }) nudgeWriter(dao, container.book) else null
+            // What is at stake today ("Last one for today"), said after a reminder's own words.
+            val stakes = stakeWriterOrNull(dao)
             for (alert in due) {
                 val goal = goals.find { it.id == alert.goalId } ?: continue
                 val window = goal.repeat?.window(alert.day) ?: continue
@@ -261,7 +263,10 @@ object Reminders {
                     continue
                 }
                 val skip = container.lapses.checkSkip(goal.id) as? SkipCheck.Allowed
-                show(context, goal, alert, Alerts.timesDone(goal, window, ticks), hidden = hidePrivate && goal.private, skip = skip, dayEnd = dayEnd, light = light)
+                show(
+                    context, goal, alert, Alerts.timesDone(goal, window, ticks), hidden = hidePrivate && goal.private, skip = skip, dayEnd = dayEnd, light = light,
+                    stake = stakes?.reminder(goal, alert),
+                )
             }
         }
         prefs.edit().putLong(LAST_FIRED, until).apply()
@@ -331,7 +336,10 @@ object Reminders {
         } catch (e: Exception) {
             null
         }
+        // The streak today's goals keep going ("Day 13 of your streak"); left out behind the review's lock.
+        val stake: String? = stakeWriterOrNull(dao)?.morning(today.day)
         val text = buildList {
+            stake?.let { add(it) }
             plan.first?.let { first ->
                 val goal = first.row.goal
                 val at = first.time?.let { if (first.fixed) " at ${timeText(it.time)}" else "" } ?: ""
@@ -381,25 +389,9 @@ object Reminders {
     private suspend fun showWeekly(context: Context, day: kotlinx.datetime.LocalDate) {
         if (!canNotify(context)) return
         val dao = (context.applicationContext as ChecklistApplication).container.db.dao()
-        if (dao.activeGoals().isEmpty()) return
-        val (from, to) = Review.range(day, io.github.randomtools3377.checklist.core.Period.WEEKLY)
-        val since = Days.earliestOpenDay(from).minusDays(7)
-        val review = Review.summarize(
-            from = from,
-            to = to,
-            today = day,
-            goals = dao.allGoals().map { it.toCore() },
-            ticks = dao.habitTicksSince(since.toEpochDay()).map { it.toCore() },
-            lapses = dao.lapsesSince(since.toEpochDay()).map { it.toCore() },
-            entries = dao.entries(from.toEpochDay(), to.toEpochDay()).map { it.toCore() },
-            gaps = dao.allGaps().map { it.toCore() },
-            // A notification can't be unlocked, so private goals stay out while they are locked.
-            hidePrivate = dao.setting(LOCK_PRIVATE) == "1",
-        )
-        val locked = dao.setting(LOCK_REVIEW) == "1"
-        // A private goal is never named while the lock covers private goals.
-        val hidePrivate = dao.setting(LOCK_PRIVATE) == "1"
-        val text = if (locked) "Your weekly review is ready." else WeeklySummary.of(review, hidePrivate).describe(dao.setting(SETTING_WEEKLY_TARGET)?.toIntOrNull() ?: 0)
+        // The week in words, as worked out in the shared code: against the week before only when
+        // it is up, and with the race's result only when the week was won.
+        val text = weeklyWords(dao, day) ?: return
         val open = PendingIntent.getActivity(
             context,
             WEEKLY_ID,
@@ -684,8 +676,12 @@ object Reminders {
      * Shows a notification, or replaces it. [hidden] leaves the goal's name out (privacy lock).
      * It goes when the alert's day ends at [dayEnd], as its buttons act on the day they're tapped.
      * With [light] ("Light up the screen for reminders") it comes as a message would (see EdgeLights).
+     * [stake] is what is at stake right now, said last ("Last one for today"); never for a hidden goal.
      */
-    fun show(context: Context, goal: Goal, alert: Alert, count: Int, hidden: Boolean, skip: SkipCheck.Allowed?, dayEnd: Int, light: Boolean = false) {
+    fun show(
+        context: Context, goal: Goal, alert: Alert, count: Int, hidden: Boolean, skip: SkipCheck.Allowed?, dayEnd: Int, light: Boolean = false,
+        stake: String? = null,
+    ) {
         if (!canNotify(context)) return
         val endsIn = LocalDateTime(alert.day.plusDays(1), LocalTime(dayEnd, 0)).millis() - System.currentTimeMillis()
         if (endsIn <= 0) return
@@ -710,7 +706,7 @@ object Reminders {
             goal.minutes?.let { add("$it min") }
             add("+${goal.points}")
             if (goal.target > 1) add("$count of ${goal.target}")
-        }.joinToString(" · ")
+        }.joinToString(" · ").let { AtStake.with(it, stake) }
 
         val id = notificationId(goal.id)
         val open = PendingIntent.getActivity(
