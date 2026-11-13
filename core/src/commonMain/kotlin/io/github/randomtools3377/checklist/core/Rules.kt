@@ -117,6 +117,9 @@ data class Rules(
     val nudgeEveryMinutes: Int = 30,
     /** The most nudges for one time of a goal in a day, so a forgotten goal doesn't buzz all night. */
     val nudgeMost: Int = 12,
+    // The character's check-ins (see Checkins)
+    /** The character says it is getting late from this many hours before the user's day ends (6 is 6 pm for a day that ends at midnight). */
+    val companionLateHours: Int = 6,
 ) {
     /** Every value brought into its range (see [FIELDS]), and a lucky chest's least no more than its most. */
     fun sane(): Rules {
@@ -176,6 +179,7 @@ data class Rules(
         private const val BALANCE = "Balance check"
         private const val SUGGESTIONS = "Suggestions"
         private const val MOOD = "Mood and your goals"
+        private const val CHARACTER = "Character check-ins"
 
         /** The group of the late nudges' numbers, shown while nudges are on (see [Nudges.SETTING]). */
         const val NUDGES = "Late nudges"
@@ -260,6 +264,7 @@ data class Rules(
             field("nudgeLateMinutes", NUDGES, "The first nudge comes once a goal is this late", "minutes", 0, 720, { it.nudgeLateMinutes }) { r, v -> r.copy(nudgeLateMinutes = v) },
             field("nudgeEveryMinutes", NUDGES, "Then a nudge comes every", "minutes", 5, 720, { it.nudgeEveryMinutes }) { r, v -> r.copy(nudgeEveryMinutes = v) },
             field("nudgeMost", NUDGES, "Nudges at most, for each time of a goal in a day", "nudges", 1, 48, { it.nudgeMost }) { r, v -> r.copy(nudgeMost = v) },
+            field("companionLateHours", CHARACTER, "The character says it's getting late this many hours before your day ends", "hours", 1, 12, { it.companionLateHours }) { r, v -> r.copy(companionLateHours = v) },
         )
     }
 }

@@ -567,6 +567,7 @@ fun TodayScreen(
                             lookForward = lookForward,
                             onCheered = vm::levelSeen,
                             onIdeas = onIdeas,
+                            onGreeted = vm::greeted,
                         )
                         Spacer(Modifier.height(12.dp))
                     }

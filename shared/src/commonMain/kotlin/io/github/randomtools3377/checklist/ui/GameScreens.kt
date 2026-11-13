@@ -47,7 +47,6 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.scale
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.PathParser
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -59,7 +58,13 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import io.github.randomtools3377.checklist.core.CharacterMove
+import io.github.randomtools3377.checklist.core.CharacterMoves
 import io.github.randomtools3377.checklist.core.CharacterSheet
+import io.github.randomtools3377.checklist.core.Expression
+import io.github.randomtools3377.checklist.core.Motion
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.graphics.drawscope.withTransform
 import io.github.randomtools3377.checklist.core.Eyes
 import io.github.randomtools3377.checklist.core.Figure
 import io.github.randomtools3377.checklist.core.HairStyle
@@ -120,29 +125,69 @@ fun SkillField(skill: String?, onSkill: (String?) -> Unit, name: String, categor
     }
 }
 
-/** The character, drawn: [look] as the user styled it, wearing [outfit]. */
+/**
+ * The character, drawn: [look] as the user styled it, wearing [outfit], with the face for
+ * [expression]. It breathes and blinks while [alive], and plays [move] once each time [move]
+ * or [moveKey] changes (a move that has started plays to its end). With [still], which follows
+ * the device's "remove animations" setting unless given, nothing moves at all.
+ *
+ * Its size comes from [modifier]: give it a height (or a width) and it keeps its shape.
+ * See [Character] for one that takes a size, and [CharacterFor] for one fed from the view model.
+ */
 @Composable
 fun CharacterFigure(
     look: Look,
     outfit: Outfit,
     modifier: Modifier = Modifier,
-    expression: io.github.randomtools3377.checklist.core.Expression = io.github.randomtools3377.checklist.core.Expression.CALM,
-    jump: Boolean = false,
-    /** Changes to hop again, like each new win on a hard day. */
-    jumpKey: Any? = null,
+    expression: Expression = Expression.CALM,
+    move: CharacterMove = CharacterMove.NONE,
+    /** Changes to play [move] again, like each new win on a hard day. */
+    moveKey: Any? = null,
+    alive: Boolean = true,
+    still: Boolean = LocalPhone.current.reducedMotion(),
 ) {
-    val marks = remember(look, outfit, expression) { Figure.marks(look, outfit, expression) }
-    val paths = remember(marks) {
-        marks.filterIsInstance<Mark.Path>().associateWith { PathParser().parsePathString(it.d).toPath() }
+    val open = remember(look, outfit, expression) { Figure.parts(look, outfit, expression) }
+    val shut = remember(look, outfit, expression) { Figure.parts(look, outfit, expression, blink = true) }
+    val rest = remember(expression) { Figure.rest(expression) }
+    val paths = remember(open, shut) {
+        (open.all + shut.head).filterIsInstance<Mark.Path>().distinct().associateWith { PathParser().parsePathString(it.d).toPath() }
     }
     val wearing = outfit.gear.joinToString { it.label }.ifEmpty { "everyday clothes" }
-    // Jumping for joy: three little hops, each time it starts.
-    val lift = remember { androidx.compose.animation.core.Animatable(0f) }
-    androidx.compose.runtime.LaunchedEffect(jump, jumpKey) {
-        if (jump) {
-            repeat(3) {
-                lift.animateTo(-0.14f, androidx.compose.animation.core.tween(160))
-                lift.animateTo(0f, androidx.compose.animation.core.tween(220, easing = androidx.compose.animation.core.FastOutSlowInEasing))
+    // The move being played and how far in it is; -1 when none. Only the drawing reads these, so a frame redraws and nothing more.
+    var playing by remember { mutableStateOf(CharacterMove.NONE) }
+    var request by remember { androidx.compose.runtime.mutableIntStateOf(0) }
+    var moveMs by remember { androidx.compose.runtime.mutableIntStateOf(-1) }
+    var idleMs by remember { androidx.compose.runtime.mutableLongStateOf(-1L) }
+    LaunchedEffect(move, moveKey, still) {
+        if (move != CharacterMove.NONE && !still) {
+            playing = move
+            request++
+        }
+    }
+    LaunchedEffect(request, still) {
+        if (request == 0 || still) {
+            moveMs = -1
+            return@LaunchedEffect
+        }
+        val length = CharacterMoves.duration(playing)
+        val start = androidx.compose.runtime.withFrameMillis { it }
+        try {
+            do {
+                moveMs = (androidx.compose.runtime.withFrameMillis { it } - start).toInt()
+            } while (moveMs < length)
+        } finally {
+            moveMs = -1
+        }
+    }
+    // Breathing and blinking, for as long as it is on screen. Like every endless animation, it stops by itself in UI tests.
+    LaunchedEffect(alive, still) {
+        idleMs = -1L
+        if (alive && !still) {
+            val start = androidx.compose.animation.core.withInfiniteAnimationFrameMillis { it }
+            try {
+                while (true) idleMs = androidx.compose.animation.core.withInfiniteAnimationFrameMillis { it } - start
+            } finally {
+                idleMs = -1L
             }
         }
     }
@@ -150,28 +195,76 @@ fun CharacterFigure(
     Canvas(
         modifier
             .aspectRatio(Figure.WIDTH / Figure.HEIGHT)
-            .graphicsLayer { translationY = lift.value * size.height }
             .semantics { contentDescription = "Your character, looking $feeling, wearing $wearing" },
     ) {
+        val pose = CharacterMoves.pose(rest, playing, moveMs, idleMs.takeIf { it >= 0 })
         val s = size.width / Figure.WIDTH
         scale(scale = s, pivot = Offset.Zero) {
-            marks.forEach { mark ->
-                when (mark) {
-                    is Mark.Circle -> {
-                        mark.fill?.let { drawCircle(Color(it), mark.r, Offset(mark.cx, mark.cy)) }
-                        mark.stroke?.let { drawCircle(Color(it), mark.r, Offset(mark.cx, mark.cy), style = Stroke(mark.width)) }
+            Figure.layers(if (pose.blink) shut else open, pose).forEach { layer ->
+                withTransform({
+                    layer.motions.forEach { motion ->
+                        when (motion) {
+                            is Motion.Shift -> translate(motion.dx, motion.dy)
+                            is Motion.Turn -> rotate(motion.degrees, Offset(motion.px, motion.py))
+                        }
                     }
-                    is Mark.Oval -> drawOval(Color(mark.fill), Offset(mark.cx - mark.rx, mark.cy - mark.ry), Size(mark.rx * 2, mark.ry * 2))
-                    is Mark.Box -> drawRoundRect(Color(mark.fill), Offset(mark.x, mark.y), Size(mark.w, mark.h), CornerRadius(mark.radius))
-                    is Mark.Path -> {
-                        val path = paths.getValue(mark)
-                        mark.fill?.let { drawPath(path, Color(it)) }
-                        mark.stroke?.let { drawPath(path, Color(it), style = Stroke(mark.width, cap = StrokeCap.Round, join = StrokeJoin.Round)) }
+                }) {
+                    layer.marks.forEach { mark ->
+                        when (mark) {
+                            is Mark.Circle -> {
+                                mark.fill?.let { drawCircle(Color(it), mark.r, Offset(mark.cx, mark.cy)) }
+                                mark.stroke?.let { drawCircle(Color(it), mark.r, Offset(mark.cx, mark.cy), style = Stroke(mark.width)) }
+                            }
+                            is Mark.Oval -> drawOval(Color(mark.fill), Offset(mark.cx - mark.rx, mark.cy - mark.ry), Size(mark.rx * 2, mark.ry * 2))
+                            is Mark.Box -> drawRoundRect(Color(mark.fill), Offset(mark.x, mark.y), Size(mark.w, mark.h), CornerRadius(mark.radius))
+                            is Mark.Path -> {
+                                val path = paths.getValue(mark)
+                                mark.fill?.let { drawPath(path, Color(it)) }
+                                mark.stroke?.let { drawPath(path, Color(it), style = Stroke(mark.width, cap = StrokeCap.Round, join = StrokeJoin.Round)) }
+                            }
+                        }
                     }
                 }
             }
         }
     }
+}
+
+/**
+ * The character at a given [size] (its height), for any screen: its face is [expression], and
+ * it plays [move] once whenever [move] or [moveKey] changes. Pick the face and move with the
+ * core's pure functions (Checkins.say, Checkins.at).
+ */
+@Composable
+fun Character(
+    look: Look,
+    outfit: Outfit,
+    expression: Expression,
+    move: CharacterMove,
+    size: androidx.compose.ui.unit.Dp,
+    modifier: Modifier = Modifier,
+    moveKey: Any? = null,
+    alive: Boolean = true,
+) {
+    CharacterFigure(look, outfit, modifier.height(size), expression, move, moveKey, alive)
+}
+
+/**
+ * The user's own character (its look and the gear its skills have earned), at [size], for a
+ * screen that only has the view model. Draws nothing while "Character and skills" is off.
+ */
+@Composable
+fun CharacterFor(
+    vm: MainViewModel,
+    expression: Expression,
+    move: CharacterMove,
+    size: androidx.compose.ui.unit.Dp,
+    modifier: Modifier = Modifier,
+    moveKey: Any? = null,
+) {
+    val sheet by vm.character.collectAsState()
+    val look by vm.look.collectAsState()
+    sheet?.let { Character(look, remember(it) { Outfit.of(it) }, expression, move, size, modifier, moveKey) }
 }
 
 /** On Today, with the character on: its level and how far to the next. Tap for the character page. */
@@ -191,8 +284,19 @@ fun LevelCard(
     lookForward: String? = null,
     onCheered: () -> Unit = {},
     onIdeas: (SkillArea) -> Unit = {},
+    /** The character has waved hello for today. */
+    onGreeted: () -> Unit = {},
 ) {
     val say = companion?.say
+    // The first look of the day: a wave, once. Told back once it has had time to play.
+    val greet = companion?.greet == true
+    LaunchedEffect(greet) {
+        if (greet) {
+            kotlinx.coroutines.delay(CharacterMoves.duration(CharacterMove.WAVE).toLong())
+            onGreeted()
+        }
+    }
+    val move = say?.move?.takeIf { it != CharacterMove.NONE } ?: if (greet) CharacterMove.WAVE else CharacterMove.NONE
     Card(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onOpen).testTag("level-card"),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer),
@@ -202,10 +306,11 @@ fun LevelCard(
         CharacterFigure(
             look,
             remember(sheet) { Outfit.of(sheet) },
-            Modifier.height(56.dp).testTag("companion-face:${(say?.expression ?: io.github.randomtools3377.checklist.core.Expression.CALM).name}"),
-            expression = say?.expression ?: io.github.randomtools3377.checklist.core.Expression.CALM,
-            jump = say?.jumps == true,
-            jumpKey = say?.wins,
+            Modifier.height(56.dp).testTag("companion-face:${(say?.expression ?: Expression.CALM).name}"),
+            expression = say?.expression ?: Expression.CALM,
+            move = move,
+            // Each new line with a move plays it again: a nod for each tick, a hop for each win.
+            moveKey = say?.line,
         )
         Column(Modifier.padding(horizontal = 10.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -275,6 +380,15 @@ fun LevelCard(
                             (if (counted) "+1  " else "✓ Done:  ") + "${row.goal.icon} ${row.goal.name}",
                             maxLines = 1,
                             overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                        )
+                    }
+                    // Why this one, from what the app knows.
+                    say.reason?.let { reason ->
+                        Text(
+                            "Why this one: $reason.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onTertiaryContainer,
+                            modifier = Modifier.testTag("companion-reason"),
                         )
                     }
                 }
@@ -462,7 +576,7 @@ private fun GearCard(sheet: CharacterSheet, outfit: Outfit) {
             )
             Outfit.next(sheet).forEach { gear ->
                 Text(
-                    "${gear.area.icon} ${gear.area.label} level ${gear.level}: ${gear.label}",
+                    "${gear.area.icon} ${gear.area.label} level ${gear.level}: ${gear.label} · ${Outfit.left(sheet, gear)} experience to go",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

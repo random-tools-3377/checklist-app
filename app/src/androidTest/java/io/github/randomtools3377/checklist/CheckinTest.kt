@@ -75,6 +75,8 @@ class CheckinTest {
         // The "What's behind it?" card now sits above the character's card, so scroll down to it.
         app.waitFor { app.shownIn("today-list", "level-card") && shown("companion-do") && label("companion-do").contains("Water plants") }
         assert(shown("companion-face:CALM"))
+        // Its suggestion says why: here, the quickest one left.
+        app.waitFor { text("companion-reason").contains("Why this one") && text("companion-reason").contains("quickest") }
         // One gentle line names a reward to look forward to, on the same card; no second suggestion elsewhere.
         app.waitFor { text("companion-look-forward").contains("Coffee") }
         assert(!shown("mood-start-with") && !shown("mood-look-forward"))

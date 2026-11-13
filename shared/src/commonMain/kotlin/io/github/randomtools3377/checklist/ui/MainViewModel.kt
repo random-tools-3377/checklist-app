@@ -249,6 +249,8 @@ data class CompanionView(
     val suggestion: HabitRow?,
     /** An area to offer ideas for, on a day with everything done or nothing due. */
     val ideaArea: io.github.randomtools3377.checklist.core.SkillArea? = null,
+    /** The first look today: it waves hello, once (see [MainViewModel.greeted]). */
+    val greet: Boolean = false,
 )
 
 /**
@@ -294,6 +296,28 @@ data class TodayState(
     val daysAway: Int = 0,
     /** Today is perfect so far, by the same test that pays the perfect-day bonus (see PerfectDays). */
     val perfectSoFar: Boolean = false,
+    /** For the character: the minute of the day each goal is usually ticked at, from the user's own ticks. */
+    val usualMinute: Map<Long, Int> = emptyMap(),
+    /** For the character: more is done today than on any earlier day this week. */
+    val bestDayThisWeek: Boolean = false,
+)
+
+/** For the character: what the user has already seen, and what happened a moment ago. */
+private data class CompanionSeen(
+    val level: String?,
+    val skills: String?,
+    val waved: String?,
+    val justNow: io.github.randomtools3377.checklist.core.JustNow?,
+    val event: io.github.randomtools3377.checklist.core.CompanionEvent?,
+)
+
+/** For the character: the user's day, and the numbers it may mention. */
+private data class CompanionKnows(
+    val settings: Settings,
+    val lateHours: Int,
+    val week: WeekProgress?,
+    val race: io.github.randomtools3377.checklist.core.RaceStanding?,
+    val saving: SavingFor?,
 )
 
 /** What Today needs besides goals and ticks. */
@@ -579,6 +603,12 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
                 leftYesterday = io.github.randomtools3377.checklist.core.Checkins.leftYesterday(tracked, day),
                 daysAway = io.github.randomtools3377.checklist.core.Checkins.daysAway(tracked, day),
                 perfectSoFar = records.lastOrNull()?.takeIf { it.day == day }?.let(PerfectDays::isPerfect) == true,
+                usualMinute = raw.usual,
+                bestDayThisWeek = Days.periodStart(day, Period.WEEKLY).let { monday ->
+                    val earlier = tracked.filter { it.day >= monday && it.day < day && it.due > 0 }
+                    val done = records.lastOrNull()?.takeIf { it.day == day }?.done ?: 0
+                    earlier.isNotEmpty() && done > earlier.maxOf { it.done }
+                },
             )
         }
     }.state(null)
@@ -1480,7 +1510,11 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
             // limit the penalty task fills the screen instead, and offers "Take back the skip" itself.
             if (result is SkipResult.Skipped && result.penaltyId == null) {
                 val skipId = result.lapse.id
-                offerUndo("Skipped ${result.lapse.label}") { lapses.takeBackSkipById(skipId) }
+                noteJustNow(io.github.randomtools3377.checklist.core.JustNow(io.github.randomtools3377.checklist.core.JustNow.Kind.SKIP, repository.goal(goalId)?.let(::sayable)))
+                offerUndo("Skipped ${result.lapse.label}") {
+                    noteJustNow(null)
+                    lapses.takeBackSkipById(skipId)
+                }
             }
         }
     }
@@ -1686,23 +1720,70 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
         undoBar.tryEmit(Undoable(message) { viewModelScope.launch { undo() } })
     }
 
+    /** For the character: what was ticked or skipped a moment ago, gone after a few seconds or on Undo. */
+    private val justNow = MutableStateFlow<io.github.randomtools3377.checklist.core.JustNow?>(null)
+
+    /** For the character: something in the game that happened a moment ago (a lucky tick, a quest, a hit on the boss). */
+    private val gameEvent = MutableStateFlow<io.github.randomtools3377.checklist.core.CompanionEvent?>(null)
+    private var justNowJob: kotlinx.coroutines.Job? = null
+    private var gameEventJob: kotlinx.coroutines.Job? = null
+
+    private fun noteJustNow(just: io.github.randomtools3377.checklist.core.JustNow?) {
+        justNowJob?.cancel()
+        justNow.value = just
+        if (just != null) {
+            justNowJob = viewModelScope.launch {
+                delay(io.github.randomtools3377.checklist.core.Checkins.JUST_NOW_MS)
+                justNow.value = null
+            }
+        }
+    }
+
+    private fun noteGameEvent(event: io.github.randomtools3377.checklist.core.CompanionEvent?) {
+        gameEventJob?.cancel()
+        gameEvent.value = event
+        if (event != null) {
+            gameEventJob = viewModelScope.launch {
+                delay(io.github.randomtools3377.checklist.core.Checkins.JUST_NOW_MS)
+                gameEvent.value = null
+            }
+        }
+    }
+
+    /** A goal's name for the character to say: never a private goal's while they are locked. */
+    private fun sayable(goal: Goal): String? = goal.name.takeIf { !(goal.private && settings.value.locks.privateGoals && !unlocked.value) }
+
+    /** Whether [goalId] is running late on Today right now: asked before it is ticked. */
+    private fun runningLate(goalId: Long): Boolean = todayState.value?.plan?.any { it.row.goal.id == goalId && it.late } == true
+
     private suspend fun offerTickUndo(
         goalId: Long,
         result: TickResult,
         luck: io.github.randomtools3377.checklist.data.Repository.LuckPaid? = null,
+        late: Boolean = false,
         undo: suspend () -> Unit,
     ) {
         if (result !is TickResult.Ticked) return
         // A goal done: the next in its habit chain is reminded.
         if (result.finished) phone.afterDone(goalId)
-        val name = repository.goal(goalId)?.name ?: return
+        val goal = repository.goal(goalId) ?: return
+        val name = goal.name
+        // The character says a line about it for a few seconds; Undo takes the line back too.
+        noteJustNow(io.github.randomtools3377.checklist.core.JustNow(io.github.randomtools3377.checklist.core.JustNow.Kind.TICK, sayable(goal), late = late && result.finished, finished = result.finished))
+        // Only a lucky tick is noted here: a plain tick must not wipe a quest it has just finished, which is noted on its own.
+        luck?.let { noteGameEvent(io.github.randomtools3377.checklist.core.CompanionEvent.Lucky(it.points, it.double)) }
         val paid = result.points + result.bonus
         val lucky = luck?.let { if (it.double) " · 🍀 lucky, twice the points: +${it.points}" else " · 🍀 lucky chest: +${it.points}" }.orEmpty()
-        offerUndo((if (paid > 0) "$name · +$paid" else "$name ticked") + lucky, undo)
+        offerUndo((if (paid > 0) "$name · +$paid" else "$name ticked") + lucky) {
+            noteJustNow(null)
+            noteGameEvent(null)
+            undo()
+        }
     }
 
     fun tickHabit(goalId: Long, onResult: (TickResult) -> Unit = {}) {
         viewModelScope.launch {
+            val late = runningLate(goalId)
             val result = book.tickHabit(goalId)
             celebrating(goalId)
             onResult(result)
@@ -1712,7 +1793,7 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
             } else {
                 null
             }
-            offerTickUndo(goalId, result, luck) {
+            offerTickUndo(goalId, result, luck, late) {
                 book.undoHabitTick(goalId)
                 luck?.let { repository.removeEntry(it.entryId) }
             }
@@ -1768,11 +1849,12 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
     /** Enters how much of a goal's amount was done; a timing from Start and Stop ends with it. */
     fun logAmount(goalId: Long, amount: Double, seconds: Int?, onResult: (TickResult) -> Unit = {}) {
         viewModelScope.launch {
+            val late = runningLate(goalId)
             val result = book.logAmount(goalId, amount, seconds)
             if (seconds != null) repository.setSetting(SETTING_STOPWATCH, "")
             celebrating(goalId)
             onResult(result)
-            offerTickUndo(goalId, result) {
+            offerTickUndo(goalId, result, late = late) {
                 book.undoHabitTick(goalId)
             }
         }
@@ -1863,10 +1945,11 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
     /** "Done" on a routine: every item still open, and so the routine. */
     fun finishRoutine(goalId: Long, onResult: (TickResult) -> Unit = {}) {
         viewModelScope.launch {
+            val late = runningLate(goalId)
             val result = book.finishRoutine(goalId)
             celebrating(goalId)
             onResult(result)
-            offerTickUndo(goalId, result) {
+            offerTickUndo(goalId, result, late = late) {
                 book.undoRoutine(goalId)
             }
         }
@@ -2240,7 +2323,18 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
     init {
         // A finished quest pays its bonus once.
         viewModelScope.launch {
-            quests.collect { day -> day?.list?.filter { it.complete }?.forEach { repository.payQuest(day.day, it.quest) } }
+            // The character notices a quest finished while the app is open.
+            var seen: Pair<LocalDate, Int>? = null
+            quests.collect { day ->
+                day?.list?.filter { it.complete }?.forEach { repository.payQuest(day.day, it.quest) }
+                if (day != null) {
+                    val complete = day.list.count { it.complete }
+                    seen?.let { (on, before) ->
+                        if (on == day.day && complete > before) noteGameEvent(io.github.randomtools3377.checklist.core.CompanionEvent.QuestDone(day.list.size - complete))
+                    }
+                    seen = day.day to complete
+                }
+            }
         }
     }
 
@@ -2264,7 +2358,11 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
 
     /** Uses every item in hand on this week's boss; [onDone] says what it did. */
     fun attackBoss(onDone: (io.github.randomtools3377.checklist.core.Attack?) -> Unit) {
-        viewModelScope.launch { onDone(repository.attackBoss(currentDay())) }
+        viewModelScope.launch {
+            val attack = repository.attackBoss(currentDay())
+            attack?.let { noteGameEvent(io.github.randomtools3377.checklist.core.CompanionEvent.BossHit(it.dealt, it.beaten)) }
+            onDone(attack)
+        }
     }
 
     /** How the user has styled the character: skin, hair and eyes. */
@@ -2286,23 +2384,37 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
         combine(
             combine(character, features) { sheet, on -> sheet to (Feature.CHECKINS in on) },
             todayState,
-            todayMood,
-            askMood,
-            dao.observeSetting(io.github.randomtools3377.checklist.core.Checkins.LEVEL_SEEN),
-        ) { (sheet, talks), state, mood, ask, seen ->
+            combine(todayMood, askMood) { mood, ask -> mood to ask },
+            combine(
+                dao.observeSetting(io.github.randomtools3377.checklist.core.Checkins.LEVEL_SEEN),
+                dao.observeSetting(io.github.randomtools3377.checklist.core.Checkins.SKILLS_SEEN),
+                dao.observeSetting(io.github.randomtools3377.checklist.core.Checkins.WAVED),
+                justNow,
+                gameEvent,
+            ) { level, skills, waved, just, event -> CompanionSeen(level, skills, waved, just, event) },
+            combine(settings, rules, weekProgress, race, savingFor) { s, rules, week, race, saving -> CompanionKnows(s, rules.companionLateHours, week, race, saving) },
+        ) { (sheet, talks), state, (mood, ask), seen, knows ->
             if (sheet == null || state == null) return@combine null
+            val checkins = io.github.randomtools3377.checklist.core.Checkins
             val level = sheet.level.level
-            val seenLevel = seen?.toIntOrNull()
+            val seenLevel = seen.level?.toIntOrNull()
             if (seenLevel == null) {
                 // The first look: start from here, no cheer.
-                repository.setSetting(io.github.randomtools3377.checklist.core.Checkins.LEVEL_SEEN, level.toString())
+                repository.setSetting(checkins.LEVEL_SEEN, level.toString())
+            }
+            // Each skill's level is cheered once too, with the gear it brought.
+            val seenSkills = checkins.decodeSkills(seen.skills)
+            if (seenSkills == null) {
+                repository.setSetting(checkins.SKILLS_SEEN, checkins.encodeSkills(io.github.randomtools3377.checklist.core.SkillArea.entries.associateWith { sheet.skillLevel(it).level }))
             }
             // A goal skipped today counts neither as done nor as left: it isn't done, and nothing is left of it.
             val rows = state.view.dueToday.filter { !it.skipped }
             val left = rows.filter { !it.done && !it.goal.quit && !it.goal.hasAmount }
-            val say = io.github.randomtools3377.checklist.core.Checkins.say(
+            val day = state.view.day
+            val s = knows.settings
+            val say = checkins.say(
                 io.github.randomtools3377.checklist.core.CompanionFacts(
-                    day = state.view.day,
+                    day = day,
                     now = state.now.time,
                     left = left.map { it.goal },
                     doneToday = rows.count { it.done },
@@ -2314,6 +2426,28 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
                     daysAway = state.daysAway,
                     newLevel = level.takeIf { seenLevel != null && it > seenLevel },
                     skippedToday = state.view.dueToday.count { it.skipped },
+                    dayStart = s.dayStart,
+                    dayEndHour = s.dayEndHour,
+                    lateHours = knows.lateHours,
+                    justNow = seen.justNow,
+                    event = seen.event,
+                    skillUp = checkins.skillUp(sheet, seenSkills),
+                    shortBy = state.pace?.shortBy,
+                    streakRule = state.streakSettings,
+                    shieldSaved = state.shields?.saved?.contains(day.minusDays(1)) == true,
+                    hints = state.plan.filter { !it.row.settled }.associate { planned ->
+                        planned.row.goal.id to io.github.randomtools3377.checklist.core.SuggestHint(state.usualMinute[planned.row.goal.id], planned.late)
+                    },
+                    level = level,
+                    toNextLevel = sheet.level.toNext,
+                    gearNear = checkins.gearNear(sheet),
+                    weekEarned = knows.week?.earned,
+                    weekTarget = knows.week?.target,
+                    raceAhead = knows.race?.ahead,
+                    // The starred reward is only named while the shop isn't locked (savingFor is null then).
+                    savingName = knows.saving?.reward?.name,
+                    savingLeft = knows.saving?.left,
+                    bestDayThisWeek = state.bestDayThisWeek,
                 ),
             )
             // With everything done, or nothing due, it offers ideas for the area furthest behind.
@@ -2321,8 +2455,14 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
             CompanionView(
                 say, talks, say.suggestion?.let { goal -> left.firstOrNull { it.goal.id == goal.id } },
                 ideaArea = if (restful) io.github.randomtools3377.checklist.core.Ideas.weakest(sheet) else null,
+                greet = seen.waved != day.toString(),
             )
         }.state(null)
+
+    /** The character has waved hello today. */
+    fun greeted() {
+        viewModelScope.launch { repository.setSetting(io.github.randomtools3377.checklist.core.Checkins.WAVED, currentDay().toString()) }
+    }
 
     // Mood and your goals
 
@@ -2567,7 +2707,13 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
     /** The new level has been cheered. */
     fun levelSeen() {
         viewModelScope.launch {
-            character.value?.let { repository.setSetting(io.github.randomtools3377.checklist.core.Checkins.LEVEL_SEEN, it.level.level.toString()) }
+            character.value?.let { sheet ->
+                repository.setSetting(io.github.randomtools3377.checklist.core.Checkins.LEVEL_SEEN, sheet.level.level.toString())
+                repository.setSetting(
+                    io.github.randomtools3377.checklist.core.Checkins.SKILLS_SEEN,
+                    io.github.randomtools3377.checklist.core.Checkins.encodeSkills(io.github.randomtools3377.checklist.core.SkillArea.entries.associateWith { sheet.skillLevel(it).level }),
+                )
+            }
         }
     }
 

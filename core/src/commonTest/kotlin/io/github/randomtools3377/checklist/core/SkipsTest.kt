@@ -314,10 +314,10 @@ class SkipCountingTest {
         )
         val full = Checkins.say(facts(0))
         assertEquals(Expression.PROUD, full.expression)
-        assertTrue(full.jumps)
+        assertEquals(CharacterMove.DANCE, full.move)
         val withSkip = Checkins.say(facts(1))
         assertEquals(Expression.HAPPY, withSkip.expression)
-        assertFalse(withSkip.jumps)
+        assertEquals(CharacterMove.NONE, withSkip.move)
         assertFalse(withSkip.line.contains("Everything done") || withSkip.line.contains("All done"))
     }
 

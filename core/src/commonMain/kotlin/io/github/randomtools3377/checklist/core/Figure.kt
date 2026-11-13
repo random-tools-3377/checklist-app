@@ -81,6 +81,10 @@ data class Outfit(val gear: List<Gear>, val shirt: SkillArea?) {
             val level = sheet.skillLevel(area).level
             Gear.entries.filter { it.area == area && it.level > level }.minByOrNull { it.level }
         }
+
+        /** The experience [gear]'s skill still needs before it is earned; 0 once it is. */
+        fun left(sheet: CharacterSheet, gear: Gear): Long =
+            (Levels.needed(gear.level, Levels.SKILL_STEP) - (sheet.skills[gear.area] ?: 0)).coerceAtLeast(0)
     }
 }
 
@@ -110,13 +114,33 @@ object Figure {
     private val WHITE = 0xFFFFFFFF.toInt()
     private val GOLD = 0xFFF2C14E.toInt()
 
-    /** The shapes for [look] wearing [outfit], with the face for [expression], back to front. */
-    fun marks(look: Look, outfit: Outfit, expression: Expression = Expression.CALM): List<Mark> {
+    /**
+     * The shapes for [look] wearing [outfit], with the face for [expression], back to front,
+     * standing still with its arms down. To move it, use [parts] and [layers].
+     */
+    fun marks(look: Look, outfit: Outfit, expression: Expression = Expression.CALM): List<Mark> = parts(look, outfit, expression).all
+
+    /** How the character stands for [expression] when it isn't moving: arms up for a cheer. */
+    fun rest(expression: Expression): Pose = if (expression == Expression.CHEERING) Pose(leftArm = 150f, rightArm = 150f) else Pose()
+
+    /**
+     * The drawing in parts that can move on their own: the ground's shadow and things beside,
+     * long hair behind, legs, body, each arm with what it holds, and the head. With [blink] the
+     * eyes are shut for a moment.
+     */
+    fun parts(look: Look, outfit: Outfit, expression: Expression = Expression.CALM, blink: Boolean = false): FigureParts {
         val skin = Looks.SKINS[look.skin]
         val hair = Looks.HAIR[look.hairColour]
         val shirt = outfit.shirt?.let(::colour) ?: 0xFF8AA8A1.toInt()
         val worn = outfit.gear.associateBy { it.slot }
-        val m = mutableListOf<Mark>()
+        val ground = mutableListOf<Mark>()
+        val hairBack = mutableListOf<Mark>()
+        val legs = mutableListOf<Mark>()
+        val torso = mutableListOf<Mark>()
+        val leftArm = mutableListOf<Mark>()
+        val rightArm = mutableListOf<Mark>()
+        // Where the shapes go next: each section below points it at its own part.
+        val m = Sink(ground)
 
         // Behind: the ground's shadow, things beside, and long hair.
         m += Mark.Oval(60f, 152f, 32f, 5f, 0x22000000)
@@ -130,9 +154,10 @@ object Figure {
             Gear.HEART -> m += Mark.Path("M104,30 C104,24 112,22 112,29 C112,22 120,24 120,30 C120,36 112,40 112,44 C112,40 104,36 104,30 Z", 0xFFE8505B.toInt())
             else -> Unit
         }
-        if (look.hair == HairStyle.LONG) m += Mark.Box(31f, 30f, 58f, 50f, 14f, hair)
+        if (look.hair == HairStyle.LONG) hairBack += Mark.Box(31f, 30f, 58f, 50f, 14f, hair)
 
         // Legs and shoes.
+        m.into = legs
         val trousers = if (outfit.shirt == SkillArea.WORK || worn[GearSlot.BODY] == Gear.BLAZER) 0xFF33384A.toInt() else 0xFF3B4A6B.toInt()
         m += Mark.Box(46f, 112f, 11f, 36f, 4f, trousers)
         m += Mark.Box(63f, 112f, 11f, 36f, 4f, trousers)
@@ -146,9 +171,10 @@ object Figure {
             m += Mark.Oval(69f, 148f, 8f, 4.5f, 0xFF5B4636.toInt())
         }
 
-        // Arms, body and neck.
-        m += Mark.Box(29f, 76f, 11f, 34f, 5.5f, shirt)
-        m += Mark.Box(80f, 76f, 11f, 34f, 5.5f, shirt)
+        // Arms (each its own part, so it can be raised), body and neck.
+        leftArm += Mark.Box(29f, 76f, 11f, 34f, 5.5f, shirt)
+        rightArm += Mark.Box(80f, 76f, 11f, 34f, 5.5f, shirt)
+        m.into = torso
         m += Mark.Box(40f, 72f, 40f, 46f, 12f, shirt)
         m += Mark.Box(55f, 62f, 10f, 12f, 3f, skin)
         when (worn[GearSlot.BODY]) {
@@ -162,8 +188,8 @@ object Figure {
                 m += Mark.Path("M40,84 Q40,72 52,72 L58,72 L60,98 L60,118 L46,118 Q40,118 40,112 Z", jacket)
                 m += Mark.Path("M80,84 Q80,72 68,72 L62,72 L60,98 L60,118 L74,118 Q80,118 80,112 Z", jacket)
                 m += Mark.Path("M52,72 L58,72 L60,90 Z M68,72 L62,72 L60,90 Z", 0xFF24304A.toInt())
-                m += Mark.Box(29f, 76f, 11f, 34f, 5.5f, jacket)
-                m += Mark.Box(80f, 76f, 11f, 34f, 5.5f, jacket)
+                leftArm += Mark.Box(29f, 76f, 11f, 34f, 5.5f, jacket)
+                rightArm += Mark.Box(80f, 76f, 11f, 34f, 5.5f, jacket)
             }
             else -> Unit
         }
@@ -185,6 +211,7 @@ object Figure {
         }
 
         // Things in the hands, then the hands.
+        m.into = leftArm
         when (worn[GearSlot.LEFT_HAND]) {
             Gear.BOTTLE -> {
                 m += Mark.Box(29f, 102f, 9f, 20f, 3f, 0xFF9AD4F0.toInt())
@@ -200,6 +227,7 @@ object Figure {
             }
             else -> Unit
         }
+        m.into = rightArm
         when (worn[GearSlot.RIGHT_HAND]) {
             Gear.BOOK -> {
                 m += Mark.Box(81f, 98f, 15f, 18f, 1.5f, colour(SkillArea.MIND))
@@ -211,36 +239,54 @@ object Figure {
             }
             else -> Unit
         }
-        m += Mark.Circle(34.5f, 112f, 5.5f, skin)
-        m += Mark.Circle(85.5f, 112f, 5.5f, skin)
+        leftArm += Mark.Circle(34.5f, 112f, 5.5f, skin)
+        rightArm += Mark.Circle(85.5f, 112f, 5.5f, skin)
 
         // Head: ears, face, then hair on top.
+        val head = mutableListOf<Mark>()
+        m.into = head
         m += Mark.Circle(34f, 46f, 5f, skin)
         m += Mark.Circle(86f, 46f, 5f, skin)
         m += Mark.Circle(60f, 44f, 26f, skin)
-        // Proud: eyes closed in a smile; tired: eyes half shut. Otherwise the eyes picked.
+        val smiling = "M47,47 Q51,42 55,47 M65,47 Q69,42 73,47"
+        val shut = "M47,46 Q51,49.5 55,46 M65,46 Q69,49.5 73,46"
+        // Proud, relieved and cheering: eyes closed in a smile; tired: half shut; sleepy: shut;
+        // surprised: wide. Otherwise the eyes picked, shut for the moment of a blink.
         when {
-            expression == Expression.PROUD -> m += Mark.Path("M47,47 Q51,42 55,47 M65,47 Q69,42 73,47", null, INK, 2.2f)
+            expression == Expression.PROUD || expression == Expression.RELIEVED || expression == Expression.CHEERING ->
+                m += Mark.Path(smiling, null, INK, 2.2f)
+            expression == Expression.SLEEPY || blink -> m += Mark.Path(shut, null, INK, 2.2f)
             expression == Expression.TIRED -> {
                 m += Mark.Path("M47,46 Q51,50 55,46 M65,46 Q69,50 73,46", null, INK, 2.2f)
                 m += Mark.Path("M47,46 L55,46 M65,46 L73,46", null, INK, 1.4f)
+            }
+            expression == Expression.SURPRISED -> {
+                m += Mark.Circle(51f, 46f, 4.6f, WHITE, INK, 1.4f)
+                m += Mark.Circle(69f, 46f, 4.6f, WHITE, INK, 1.4f)
+                m += Mark.Circle(51f, 46f, 2.2f, INK)
+                m += Mark.Circle(69f, 46f, 2.2f, INK)
             }
             look.eyes == Eyes.DOTS -> {
                 m += Mark.Circle(51f, 46f, 3f, INK)
                 m += Mark.Circle(69f, 46f, 3f, INK)
             }
-            look.eyes == Eyes.HAPPY -> m += Mark.Path("M47,47 Q51,42 55,47 M65,47 Q69,42 73,47", null, INK, 2.2f)
+            look.eyes == Eyes.HAPPY -> m += Mark.Path(smiling, null, INK, 2.2f)
             else -> {
                 m += Mark.Circle(51f, 46f, 3f, INK)
                 m += Mark.Path("M65,47 Q69,42 73,47", null, INK, 2.2f)
             }
         }
         // Eyebrows, in the hair's colour (ink with no hair): raised in the middle when worried,
-        // higher when happy or proud, lower when tired.
+        // higher when happy, proud or cheering, highest when surprised, lower when tired or
+        // sleepy, set down toward the middle when determined, eased when relieved.
         val brows = when (expression) {
             Expression.WORRIED -> "M47,39 Q51,38 55,35 M65,35 Q69,38 73,39"
-            Expression.HAPPY, Expression.PROUD -> "M47,37 Q51,34 55,37 M65,37 Q69,34 73,37"
+            Expression.HAPPY, Expression.PROUD, Expression.CHEERING -> "M47,37 Q51,34 55,37 M65,37 Q69,34 73,37"
+            Expression.SURPRISED -> "M47,35 Q51,31 55,34 M65,34 Q69,31 73,35"
             Expression.TIRED -> "M47,41 Q51,40 55,41 M65,41 Q69,40 73,41"
+            Expression.SLEEPY -> "M47,41 Q51,41.5 55,42 M65,42 Q69,41.5 73,41"
+            Expression.DETERMINED -> "M46,37 L55,40 M65,40 L74,37"
+            Expression.RELIEVED -> "M47,38 Q51,36 55,38.5 M65,38.5 Q69,36 73,38"
             Expression.CALM -> "M47,39 Q51,37 55,39 M65,39 Q69,37 73,39"
         }
         if (look.hair != HairStyle.NONE) {
@@ -252,18 +298,42 @@ object Figure {
             m += Mark.Circle(45f, 54f, 4.5f, 0x66F06A7A)
             m += Mark.Circle(75f, 54f, 4.5f, 0x66F06A7A)
         }
+        val mouthInside = 0xFF8C2F39.toInt()
+        val tongue = 0xFFE8707A.toInt()
         when (expression) {
             Expression.CALM -> m += Mark.Path("M54,56 Q60,62 66,56", null, INK, 2f)
             // An open smile.
             Expression.HAPPY, Expression.PROUD -> {
-                m += Mark.Path("M52,55 Q60,66 68,55 Z", 0xFF8C2F39.toInt(), INK, 1.6f)
-                m += Mark.Path("M55,61 Q60,64 65,61", null, 0xFFE8707A.toInt(), 2f)
+                m += Mark.Path("M52,55 Q60,66 68,55 Z", mouthInside, INK, 1.6f)
+                m += Mark.Path("M55,61 Q60,64 65,61", null, tongue, 2f)
+            }
+            // A cheer: the mouth wide open.
+            Expression.CHEERING -> {
+                m += Mark.Path("M50,54 Q60,71 70,54 Z", mouthInside, INK, 1.6f)
+                m += Mark.Path("M54,62 Q60,67 66,62", null, tongue, 2.4f)
             }
             Expression.TIRED -> m += Mark.Path("M55,58 Q60,60 65,58", null, INK, 2f)
             // A little frown, and a drop of sweat.
             Expression.WORRIED -> {
                 m += Mark.Path("M54,59 Q60,55 66,59", null, INK, 2f)
                 m += Mark.Path("M81,34 Q84,40 81,42 Q78,40 81,34 Z", 0xFF9AD4F0.toInt())
+            }
+            // A small yawn, and a "z" drifting off.
+            Expression.SLEEPY -> {
+                m += Mark.Oval(60f, 59f, 3f, 3.6f, mouthInside)
+                m += Mark.Path("M88,24 L95,24 L88,32 L95,32", null, 0xFF7C8AA8.toInt(), 1.8f)
+                m += Mark.Path("M98,14 L103,14 L98,20 L103,20", null, 0xFF7C8AA8.toInt(), 1.4f)
+            }
+            // An "oh!".
+            Expression.SURPRISED -> m += Mark.Oval(60f, 60f, 3.6f, 4.6f, mouthInside)
+            // A set mouth, one corner up.
+            Expression.DETERMINED -> m += Mark.Path("M54,58 L63,58 Q66,58 67,56", null, INK, 2.2f)
+            // A soft smile, and a breath let out: phew.
+            Expression.RELIEVED -> {
+                m += Mark.Path("M54,57 Q60,61 66,57", null, INK, 2f)
+                m += Mark.Oval(76f, 61f, 3f, 2.2f, 0x889AD4F0.toInt())
+                m += Mark.Oval(82f, 58f, 2.2f, 1.6f, 0x669AD4F0)
+                m += Mark.Oval(86.5f, 55f, 1.5f, 1.1f, 0x449AD4F0)
             }
         }
         if (worn[GearSlot.FACE] == Gear.GLASSES) {
@@ -297,26 +367,212 @@ object Figure {
             }
             else -> Unit
         }
-        return m
+        return FigureParts(ground, hairBack, legs, torso, leftArm, rightArm, head)
+    }
+
+    /** Where each arm turns: its shoulder. */
+    const val LEFT_SHOULDER_X = 34.5f
+    const val RIGHT_SHOULDER_X = 85.5f
+    const val SHOULDER_Y = 80f
+
+    /**
+     * [parts] placed for [pose], back to front: each layer's shapes with the motions to apply,
+     * outermost first (the same order as an SVG transform list or canvas calls).
+     */
+    fun layers(parts: FigureParts, pose: Pose): List<Layer> {
+        val whole = listOf(Motion.Shift(0f, -pose.lift), Motion.Turn(pose.lean, WIDTH / 2, 150f))
+        val upper = whole + Motion.Shift(0f, -pose.rise)
+        val head = upper + Motion.Shift(0f, pose.headDy) + Motion.Turn(pose.headTilt, WIDTH / 2, 68f)
+        return listOf(
+            Layer(parts.ground, emptyList()),
+            Layer(parts.hairBack, head),
+            Layer(parts.legs, whole),
+            Layer(parts.body, upper),
+            Layer(parts.leftArm, upper + Motion.Turn(pose.leftArm, LEFT_SHOULDER_X, SHOULDER_Y)),
+            Layer(parts.rightArm, upper + Motion.Turn(-pose.rightArm, RIGHT_SHOULDER_X, SHOULDER_Y)),
+            Layer(parts.head, head),
+        ).filter { it.marks.isNotEmpty() }.map { layer -> layer.copy(motions = layer.motions.filter { !it.still }) }
+    }
+
+    /** The drawing in [pose] as SVG, for checking it by eye. */
+    fun svg(parts: FigureParts, pose: Pose, scale: Float = 2f): String = buildString {
+        append("<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"${WIDTH * scale}\" height=\"${HEIGHT * scale}\" viewBox=\"0 0 $WIDTH $HEIGHT\">")
+        layers(parts, pose).forEach { layer ->
+            val transform = layer.motions.joinToString(" ") { motion ->
+                when (motion) {
+                    is Motion.Shift -> "translate(${motion.dx} ${motion.dy})"
+                    is Motion.Turn -> "rotate(${motion.degrees} ${motion.px} ${motion.py})"
+                }
+            }
+            append("<g transform=\"$transform\">")
+            layer.marks.forEach { append(shape(it)) }
+            append("</g>")
+        }
+        append("</svg>")
     }
 
     /** The drawing as SVG, for checking it by eye. */
     fun svg(marks: List<Mark>, scale: Float = 2f): String = buildString {
+        append("<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"${WIDTH * scale}\" height=\"${HEIGHT * scale}\" viewBox=\"0 0 $WIDTH $HEIGHT\">")
+        marks.forEach { append(shape(it)) }
+        append("</svg>")
+    }
+
+    private fun shape(mark: Mark): String {
         fun colourAttr(name: String, argb: Int?): String {
             if (argb == null) return "$name=\"none\""
             val a = (argb ushr 24) and 0xFF
             val rgb = (argb and 0xFFFFFF).toString(16).padStart(6, '0')
             return "$name=\"#$rgb\" $name-opacity=\"${a / 255.0}\""
         }
-        append("<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"${WIDTH * scale}\" height=\"${HEIGHT * scale}\" viewBox=\"0 0 $WIDTH $HEIGHT\">")
-        marks.forEach { mark ->
-            when (mark) {
-                is Mark.Circle -> append("<circle cx=\"${mark.cx}\" cy=\"${mark.cy}\" r=\"${mark.r}\" ${colourAttr("fill", mark.fill)} ${colourAttr("stroke", mark.stroke)} stroke-width=\"${mark.width}\"/>")
-                is Mark.Oval -> append("<ellipse cx=\"${mark.cx}\" cy=\"${mark.cy}\" rx=\"${mark.rx}\" ry=\"${mark.ry}\" ${colourAttr("fill", mark.fill)}/>")
-                is Mark.Box -> append("<rect x=\"${mark.x}\" y=\"${mark.y}\" width=\"${mark.w}\" height=\"${mark.h}\" rx=\"${mark.radius}\" ${colourAttr("fill", mark.fill)}/>")
-                is Mark.Path -> append("<path d=\"${mark.d}\" ${colourAttr("fill", mark.fill)} ${colourAttr("stroke", mark.stroke)} stroke-width=\"${mark.width}\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>")
+        return when (mark) {
+            is Mark.Circle -> "<circle cx=\"${mark.cx}\" cy=\"${mark.cy}\" r=\"${mark.r}\" ${colourAttr("fill", mark.fill)} ${colourAttr("stroke", mark.stroke)} stroke-width=\"${mark.width}\"/>"
+            is Mark.Oval -> "<ellipse cx=\"${mark.cx}\" cy=\"${mark.cy}\" rx=\"${mark.rx}\" ry=\"${mark.ry}\" ${colourAttr("fill", mark.fill)}/>"
+            is Mark.Box -> "<rect x=\"${mark.x}\" y=\"${mark.y}\" width=\"${mark.w}\" height=\"${mark.h}\" rx=\"${mark.radius}\" ${colourAttr("fill", mark.fill)}/>"
+            is Mark.Path -> "<path d=\"${mark.d}\" ${colourAttr("fill", mark.fill)} ${colourAttr("stroke", mark.stroke)} stroke-width=\"${mark.width}\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>"
+        }
+    }
+}
+
+/** Collects shapes into whichever part is being drawn. */
+private class Sink(var into: MutableList<Mark>) {
+    operator fun plusAssign(mark: Mark) {
+        into.add(mark)
+    }
+}
+
+/** The drawing in parts, back to front, so the arms, the head and the body can move on their own. */
+data class FigureParts(
+    /** The ground's shadow and things beside: they stay put. */
+    val ground: List<Mark>,
+    /** Long hair behind the body: it moves with the head. */
+    val hairBack: List<Mark>,
+    val legs: List<Mark>,
+    val body: List<Mark>,
+    /** The arm on the left of the drawing, with its sleeve, hand and what it holds. */
+    val leftArm: List<Mark>,
+    val rightArm: List<Mark>,
+    val head: List<Mark>,
+) {
+    val all: List<Mark> get() = ground + hairBack + legs + body + leftArm + rightArm + head
+}
+
+/**
+ * How the character is standing at one moment, on the drawing's grid (y goes down).
+ * [lift] is how far it is off the ground; [rise] how far the body, arms and head are raised
+ * (a breath, a stretch); [leftArm] and [rightArm] how far each arm is raised outward, in degrees
+ * (0 hangs down, 180 points straight up); [headDy] how far the head dips; [headTilt] and [lean]
+ * are degrees clockwise, for the head and for the whole figure about its feet.
+ */
+data class Pose(
+    val lift: Float = 0f,
+    val rise: Float = 0f,
+    val leftArm: Float = 0f,
+    val rightArm: Float = 0f,
+    val headDy: Float = 0f,
+    val headTilt: Float = 0f,
+    val lean: Float = 0f,
+    val blink: Boolean = false,
+)
+
+/** One step in placing a layer: a shift, or a turn of [Turn.degrees] clockwise about a point. */
+sealed interface Motion {
+    val still: Boolean
+
+    data class Shift(val dx: Float, val dy: Float) : Motion {
+        override val still: Boolean get() = dx == 0f && dy == 0f
+    }
+
+    data class Turn(val degrees: Float, val px: Float, val py: Float) : Motion {
+        override val still: Boolean get() = degrees == 0f
+    }
+}
+
+/** Shapes that move together, with their [motions], outermost first. */
+data class Layer(val marks: List<Mark>, val motions: List<Motion>)
+
+/**
+ * The character's moves, as poses over time, so every device plays them the same. Each move is
+ * a short sequence; breathing and blinking go on underneath. Nothing here moves by itself: the
+ * screen asks for the pose at a time, and asks for none when animations are turned off.
+ */
+object CharacterMoves {
+    /** How long [move] takes, in milliseconds. */
+    fun duration(move: CharacterMove): Int = when (move) {
+        CharacterMove.NONE -> 0
+        CharacterMove.HOP -> 1140
+        CharacterMove.WAVE -> 1500
+        CharacterMove.NOD -> 720
+        CharacterMove.STRETCH -> 2200
+        CharacterMove.DANCE -> 2400
+    }
+
+    /** A breath in and out takes this long. */
+    const val BREATH_MS = 3600
+
+    /** The eyes blink once in this long, and twice every third time. */
+    const val BLINK_EVERY_MS = 4300
+    const val BLINK_MS = 140
+
+    private const val PI = kotlin.math.PI.toFloat()
+    private fun sin(x: Float) = kotlin.math.sin(x)
+
+    /** Eases in and out over the first and last [edge] of a move, so it starts and ends at rest. */
+    private fun envelope(t: Float, edge: Float = 0.15f): Float = minOf(1f, t / edge, (1f - t) / edge).coerceAtLeast(0f)
+
+    /** [move] at [ms] milliseconds in. At rest before it starts and once it is over. */
+    fun pose(move: CharacterMove, ms: Int): Pose {
+        val length = duration(move)
+        if (move == CharacterMove.NONE || ms < 0 || ms >= length) return Pose()
+        val t = ms.toFloat() / length
+        return when (move) {
+            CharacterMove.NONE -> Pose()
+            // Three little hops.
+            CharacterMove.HOP -> Pose(lift = 22f * sin(PI * ((t * 3f) % 1f)))
+            // The right arm goes up and waves, the head a little to the side.
+            CharacterMove.WAVE -> envelope(t).let { e -> Pose(rightArm = e * (140f + 18f * sin(2 * PI * 3f * t)), headTilt = 4f * e) }
+            // The head dips twice.
+            CharacterMove.NOD -> Pose(headDy = 3.2f * sin(PI * ((t * 2f) % 1f)))
+            // Both arms up and a long reach, held, then down.
+            CharacterMove.STRETCH -> envelope(t, 0.3f).let { e -> Pose(leftArm = 165f * e, rightArm = 165f * e, rise = 3f * e, lean = 2f * e * sin(2 * PI * t)) }
+            // A sway from side to side, arms going up in turn, with small bounces.
+            CharacterMove.DANCE -> envelope(t).let { e ->
+                val beat = sin(2 * PI * 3f * t)
+                Pose(
+                    lift = 6f * e * kotlin.math.abs(beat),
+                    lean = 7f * e * beat,
+                    leftArm = e * (90f + 50f * beat),
+                    rightArm = e * (90f - 50f * beat),
+                )
             }
         }
-        append("</svg>")
+    }
+
+    /** Standing there, alive: a slow breath and now and then a blink, [ms] milliseconds in. */
+    fun idle(ms: Long): Pose {
+        val breath = 0.5f - 0.5f * kotlin.math.cos(2 * PI * (ms % BREATH_MS) / BREATH_MS)
+        val into = ms % BLINK_EVERY_MS
+        val twice = (ms / BLINK_EVERY_MS) % 3 == 2L
+        val blink = into >= BLINK_EVERY_MS - BLINK_MS || (twice && into in (BLINK_EVERY_MS - 3 * BLINK_MS) until (BLINK_EVERY_MS - 2 * BLINK_MS))
+        return Pose(rise = 0.9f * breath, blink = blink)
+    }
+
+    /**
+     * The pose to draw: [rest] (see [Figure.rest]), with the breath and blink of [idleMs] (null
+     * for none) and [move] at [moveMs] on top. An arm goes as high as the highest of them asks.
+     */
+    fun pose(rest: Pose, move: CharacterMove = CharacterMove.NONE, moveMs: Int = -1, idleMs: Long? = null): Pose {
+        val moving = pose(move, moveMs)
+        val idle = idleMs?.let(::idle) ?: Pose()
+        return Pose(
+            lift = rest.lift + moving.lift,
+            rise = rest.rise + moving.rise + idle.rise,
+            leftArm = maxOf(rest.leftArm, moving.leftArm),
+            rightArm = maxOf(rest.rightArm, moving.rightArm),
+            headDy = rest.headDy + moving.headDy,
+            headTilt = rest.headTilt + moving.headTilt,
+            lean = rest.lean + moving.lean,
+            blink = rest.blink || idle.blink,
+        )
     }
 }

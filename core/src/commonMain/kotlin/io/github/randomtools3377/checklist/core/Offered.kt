@@ -91,6 +91,7 @@ object Offered {
         "rewardHugeDays" to Feature.SUGGESTIONS,
         "moodMinDays" to Feature.MOOD,
         "moodNotableTenths" to Feature.MOOD,
+        "companionLateHours" to Feature.CHECKINS,
     )
 
     /**

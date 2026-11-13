@@ -205,6 +205,7 @@ private fun ruleNumbers(rules: Rules): Map<String, Int> = mapOf(
     "shieldEvery" to rules.shieldEveryDays,
     "shieldsMost" to rules.shieldsMost,
     "pathBonus" to rules.pathBonusPercent,
+    "lateHours" to rules.companionLateHours,
     "goodMoneyDay" to rules.goodMoneyDay,
     "noSpendDay" to rules.noSpendDay,
     "monthBonus" to rules.moneyMonthBonus,
