@@ -334,3 +334,44 @@ fun Modifier.goalStrip(color: Int?): Modifier {
 /** A photo's bytes as an image to draw. */
 @OptIn(org.jetbrains.compose.resources.ExperimentalResourceApi::class)
 fun decodeImage(bytes: ByteArray): androidx.compose.ui.graphics.ImageBitmap = bytes.decodeToImageBitmap()
+
+/**
+ * The picture an empty screen shows above its line: the user's character while the character is
+ * on (set once for the whole app), and nothing otherwise.
+ */
+val LocalEmptyPicture = androidx.compose.runtime.compositionLocalOf<(@Composable () -> Unit)?> { null }
+
+/**
+ * What a screen with nothing on it shows: one clear line, [more] under it when there is
+ * something to add (like what tomorrow brings), and at most one button.
+ */
+@Composable
+fun EmptyState(
+    text: String,
+    tag: String,
+    modifier: Modifier = Modifier,
+    more: String? = null,
+    button: String? = null,
+    buttonTag: String = "$tag-button",
+    onClick: () -> Unit = {},
+) {
+    Column(modifier.fillMaxWidth().padding(top = 36.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        LocalEmptyPicture.current?.let { picture ->
+            picture()
+            Spacer(Modifier.padding(top = 12.dp))
+        }
+        Text(text, textAlign = androidx.compose.ui.text.style.TextAlign.Center, modifier = Modifier.testTag(tag))
+        if (more != null) {
+            Text(
+                more,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                modifier = Modifier.padding(top = 6.dp).testTag("$tag-more"),
+            )
+        }
+        if (button != null) {
+            androidx.compose.material3.Button(onClick = onClick, modifier = Modifier.padding(top = 12.dp).testTag(buttonTag)) { Text(button) }
+        }
+    }
+}

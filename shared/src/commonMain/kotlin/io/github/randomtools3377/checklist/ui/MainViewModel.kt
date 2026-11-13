@@ -14,6 +14,7 @@ import io.github.randomtools3377.checklist.data.BackupCrypto
 import io.github.randomtools3377.checklist.data.BackupKey
 import io.github.randomtools3377.checklist.data.WrongPassphraseException
 import io.github.randomtools3377.checklist.core.BuyResult
+import io.github.randomtools3377.checklist.core.DayRecord
 import io.github.randomtools3377.checklist.core.Days
 import io.github.randomtools3377.checklist.core.YearReview
 import io.github.randomtools3377.checklist.core.Effort
@@ -296,6 +297,14 @@ data class TodayState(
     val daysAway: Int = 0,
     /** Today is perfect so far, by the same test that pays the perfect-day bonus (see PerfectDays). */
     val perfectSoFar: Boolean = false,
+    /** Today's record so far, as the streaks count it. */
+    val todayRecord: DayRecord? = null,
+    /** Yesterday's record, once tracking had begun by then; for the morning card. */
+    val yesterdayRecord: DayRecord? = null,
+    /** The best the main streak has stood at over the days counted, never below the streak now. */
+    val bestStreak: Int = 0,
+    /** The last day that counted before today broke the main streak. */
+    val brokeBefore: Boolean = false,
     /** For the character: the minute of the day each goal is usually ticked at, from the user's own ticks. */
     val usualMinute: Map<Long, Int> = emptyMap(),
     /** For the character: more is done today than on any earlier day this week. */
@@ -324,7 +333,15 @@ private data class CompanionKnows(
 private data class Extras(val lapses: List<Lapse>, val checks: List<Check>, val boostOn: Boolean, val events: List<Busy>, val streakBonusOn: Boolean)
 
 /** Something just done, which the Undo bar can take back for a few seconds. */
-class Undoable(val message: String, val undo: () -> Unit)
+class Undoable(val message: String, val undo: () -> Unit, /** What to say went back, once it is undone. */ val undone: String? = null)
+
+/** How things stood just before a tick, to say what the tick changed. */
+private class BeforeTick(
+    val state: TodayState?,
+    val quests: io.github.randomtools3377.checklist.core.DayQuests?,
+    val week: WeekProgress?,
+    val race: io.github.randomtools3377.checklist.core.RaceStanding?,
+)
 
 /** Which extras are on: the boost, the perfect-day bonus (0 is off) and repeat-buy prices. */
 data class Boosts(val boost: Boolean = false, val perfectDayBonus: Int = 0, val repeatPrice: Boolean = false)
@@ -609,6 +626,11 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
                     val done = records.lastOrNull()?.takeIf { it.day == day }?.done ?: 0
                     earlier.isNotEmpty() && done > earlier.maxOf { it.done }
                 },
+                todayRecord = records.lastOrNull()?.takeIf { it.day == day },
+                yesterdayRecord = tracked.lastOrNull { it.day == day.minusDays(1) },
+                bestStreak = maxOf(io.github.randomtools3377.checklist.core.BestStreaks.of(records, s.streak).done, streaks.done),
+                brokeBefore = tracked.lastOrNull { it.day < day && StreakCounter.mainDay(it, s.streak) != null }
+                    ?.let { StreakCounter.mainDay(it, s.streak) == false } == true,
             )
         }
     }.state(null)
@@ -1511,7 +1533,7 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
             if (result is SkipResult.Skipped && result.penaltyId == null) {
                 val skipId = result.lapse.id
                 noteJustNow(io.github.randomtools3377.checklist.core.JustNow(io.github.randomtools3377.checklist.core.JustNow.Kind.SKIP, repository.goal(goalId)?.let(::sayable)))
-                offerUndo("Skipped ${result.lapse.label}") {
+                offerUndo("Skipped ${result.lapse.label}", undone = "Skip taken back: ${result.lapse.label}") {
                     noteJustNow(null)
                     lapses.takeBackSkipById(skipId)
                 }
@@ -1716,8 +1738,58 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
     /** What the Undo bar offers to take back: the last tick, skip, removed goal or purchase. */
     val undoBar = kotlinx.coroutines.flow.MutableSharedFlow<Undoable>(extraBufferCapacity = 4)
 
-    private fun offerUndo(message: String, undo: suspend () -> Unit) {
-        undoBar.tryEmit(Undoable(message) { viewModelScope.launch { undo() } })
+    private fun offerUndo(message: String, undone: String? = null, undo: suspend () -> Unit) {
+        undoBar.tryEmit(Undoable(message, { viewModelScope.launch { undo() } }, undone))
+    }
+
+    /** How things stand now, taken just before a tick (see [offerTickUndo]). */
+    private fun beforeTick() = BeforeTick(todayState.value, quests.value, weekProgress.value, race.value)
+
+    /**
+     * What a tick of [goal] is changing, from how things stood [before] it (see TickNews). The
+     * goal's own run and times done are looked up only when the tick finished it.
+     */
+    private suspend fun tickMoment(goal: Goal, result: TickResult.Ticked, before: BeforeTick?): io.github.randomtools3377.checklist.core.TickMoment {
+        val state = before?.state
+        val day = state?.view?.day ?: currentDay()
+        val view = state?.view
+        val row = view?.let { v -> (v.dueToday + v.limits + v.thisWeek + v.thisMonth + v.thisYear).firstOrNull { it.goal.id == goal.id } }
+        val onList = state?.plan?.any { it.row.goal.id == goal.id } == true
+        // The goal's own history: how many times in a row, and in all.
+        val runs = if (result.finished && goal.isHabitLike && goal.repeat != null && !goal.atMost) {
+            withContext(Dispatchers.Default) {
+                val ticks = dao.habitTicksSince(Long.MIN_VALUE).filter { it.goalId == goal.id }.map { it.toCore() }
+                val lapses = dao.lapses(goal.id, Long.MIN_VALUE, Long.MAX_VALUE).map { it.toCore() }
+                val times = GoalPage.times(goal, day, ticks, lapses)
+                val last = times.lastOrNull()?.takeIf { it.state == io.github.randomtools3377.checklist.core.TimeState.DONE }
+                if (last == null) null else Triple(GoalPage.runs(times, day).first, GoalPage.runs(times.dropLast(1), day).second, times.count { it.state == io.github.randomtools3377.checklist.core.TimeState.DONE })
+            }
+        } else {
+            null
+        }
+        val now = nowLocal()
+        return io.github.randomtools3377.checklist.core.TickMoment(
+            finished = result.finished,
+            paid = result.points + result.bonus,
+            onTodaysList = onList,
+            leftBefore = state?.plan?.count { !it.row.settled } ?: 0,
+            countsToday = row?.window?.end == day,
+            record = state?.todayRecord,
+            streak = state?.streakSettings ?: settings.value.streak,
+            streakBefore = state?.streaks?.done ?: 0,
+            quests = before?.quests?.takeIf { it.day == day }?.list.orEmpty(),
+            area = io.github.randomtools3377.checklist.core.SkillArea.of(goal),
+            goalId = goal.id,
+            skippedBefore = row?.skipped == true,
+            firstTickToday = row?.count == 0,
+            time = LocalTime(now.hour, now.minute),
+            dayEndHour = settings.value.dayEndHour,
+            week = before?.week,
+            race = before?.race,
+            run = runs?.first,
+            bestRunBefore = runs?.second,
+            timesDone = runs?.third,
+        )
     }
 
     /** For the character: what was ticked or skipped a moment ago, gone after a few seconds or on Undo. */
@@ -1761,6 +1833,7 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
         result: TickResult,
         luck: io.github.randomtools3377.checklist.data.Repository.LuckPaid? = null,
         late: Boolean = false,
+        before: BeforeTick? = null,
         undo: suspend () -> Unit,
     ) {
         if (result !is TickResult.Ticked) return
@@ -1773,8 +1846,14 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
         // Only a lucky tick is noted here: a plain tick must not wipe a quest it has just finished, which is noted on its own.
         luck?.let { noteGameEvent(io.github.randomtools3377.checklist.core.CompanionEvent.Lucky(it.points, it.double)) }
         val paid = result.points + result.bonus
-        val lucky = luck?.let { if (it.double) " · 🍀 lucky, twice the points: +${it.points}" else " · 🍀 lucky chest: +${it.points}" }.orEmpty()
-        offerUndo((if (paid > 0) "$name · +$paid" else "$name ticked") + lucky) {
+        val lucky = luck?.let { if (it.double) "🍀 lucky, twice the points: +${it.points}" else "🍀 lucky chest: +${it.points}" }
+        // The one thing the tick changed, in words (see TickNews). A private goal is never named
+        // by it while private goals are locked.
+        val moment = runCatching { tickMoment(goal, result, before) }.getOrNull()
+        val named = !(goal.private && settings.value.locks.privateGoals && !unlocked.value)
+        val news = io.github.randomtools3377.checklist.core.TickNews
+        val phrase = moment?.let { news.phrase(it, name.takeIf { named }) }
+        offerUndo(news.line(name, paid, lucky, phrase), undone = news.undone(name, paid + (luck?.points ?: 0), moment)) {
             noteJustNow(null)
             noteGameEvent(null)
             undo()
@@ -1784,6 +1863,7 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
     fun tickHabit(goalId: Long, onResult: (TickResult) -> Unit = {}) {
         viewModelScope.launch {
             val late = runningLate(goalId)
+            val before = beforeTick()
             val result = book.tickHabit(goalId)
             celebrating(goalId)
             onResult(result)
@@ -1793,7 +1873,7 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
             } else {
                 null
             }
-            offerTickUndo(goalId, result, luck, late) {
+            offerTickUndo(goalId, result, luck, late, before) {
                 book.undoHabitTick(goalId)
                 luck?.let { repository.removeEntry(it.entryId) }
             }
@@ -1809,7 +1889,7 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
         viewModelScope.launch {
             val result = lapses.use(goalId, amount) as? io.github.randomtools3377.checklist.core.UseResult.Added ?: return@launch
             val goal = repository.goal(goalId) ?: return@launch
-            offerUndo("${goal.name} · ${io.github.randomtools3377.checklist.core.AtMost.text(result.used, goal)}") { lapses.undoUse(goalId) }
+            offerUndo("${goal.name} · ${io.github.randomtools3377.checklist.core.AtMost.text(result.used, goal)}", undone = "${goal.name}: the last one taken back") { lapses.undoUse(goalId) }
         }
     }
 
@@ -1824,9 +1904,10 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
      */
     fun confirmAtMost(goalId: Long) {
         viewModelScope.launch {
+            val before = beforeTick()
             val result = book.tickHabit(goalId)
             celebrating(goalId)
-            offerTickUndo(goalId, result) { book.undoHabitTick(goalId) }
+            offerTickUndo(goalId, result, before = before) { book.undoHabitTick(goalId) }
         }
     }
 
@@ -1850,11 +1931,12 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
     fun logAmount(goalId: Long, amount: Double, seconds: Int?, onResult: (TickResult) -> Unit = {}) {
         viewModelScope.launch {
             val late = runningLate(goalId)
+            val before = beforeTick()
             val result = book.logAmount(goalId, amount, seconds)
             if (seconds != null) repository.setSetting(SETTING_STOPWATCH, "")
             celebrating(goalId)
             onResult(result)
-            offerTickUndo(goalId, result, late = late) {
+            offerTickUndo(goalId, result, late = late, before = before) {
                 book.undoHabitTick(goalId)
             }
         }
@@ -1929,7 +2011,7 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
             celebrating(step?.goalId)
             onResult(result)
             if (step != null && result is TickResult.Ticked) {
-                offerUndo("${step.name} ticked") {
+                offerUndo("${step.name} ticked", undone = "${step.name} taken back") {
                     book.uncheckItem(stepId)
                 }
             }
@@ -1946,10 +2028,11 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
     fun finishRoutine(goalId: Long, onResult: (TickResult) -> Unit = {}) {
         viewModelScope.launch {
             val late = runningLate(goalId)
+            val before = beforeTick()
             val result = book.finishRoutine(goalId)
             celebrating(goalId)
             onResult(result)
-            offerTickUndo(goalId, result, late = late) {
+            offerTickUndo(goalId, result, late = late, before = before) {
                 book.undoRoutine(goalId)
             }
         }
@@ -1969,7 +2052,10 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
             onResult(result)
             if (step != null && result is TickResult.Ticked) {
                 val paid = result.points + result.bonus
-                offerUndo(if (paid > 0) "${step.name} · +$paid" else "${step.name} ticked") { book.undoStep(stepId) }
+                offerUndo(
+                    if (paid > 0) "${step.name} · +$paid" else "${step.name} ticked",
+                    undone = io.github.randomtools3377.checklist.core.TickNews.undone(step.name, paid),
+                ) { book.undoStep(stepId) }
             }
         }
     }
@@ -1985,7 +2071,7 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
             if (result is BuyResult.Bought) {
                 val name = result.prize ?: repository.reward(rewardId)?.name ?: return@launch
                 countRewardSpending(result.purchaseId, rewardId, name, fromSaving)
-                offerUndo("Bought $name · −${result.price}") { returnAndUncount(result.purchaseId) }
+                offerUndo("Bought $name · −${result.price}", undone = "$name returned · +${result.price}") { returnAndUncount(result.purchaseId) }
             }
         }
     }
@@ -1994,7 +2080,7 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
         viewModelScope.launch {
             if (!book.use(purchaseId)) return@launch
             val name = dao.purchase(purchaseId)?.name ?: return@launch
-            offerUndo("Used $name") { dao.unmarkUsed(purchaseId) }
+            offerUndo("Used $name", undone = "$name is back with your rewards") { dao.unmarkUsed(purchaseId) }
         }
     }
 
@@ -2349,6 +2435,79 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
                     )
                 }
             }.state(null)
+
+    /**
+     * While behind in the race: the fewest of today's goals that would take the lead. Only goals
+     * on Today's list are picked, so a private goal is never named while it is locked.
+     */
+    val raceCatchUp: StateFlow<io.github.randomtools3377.checklist.core.CatchUp?> =
+        combine(race, todayState, currentDifficulty) { standing, state, rate ->
+            if (standing == null || state == null) null else io.github.randomtools3377.checklist.core.Race.catchUp(standing, state.plan.map { it.row }) { row ->
+                val each = io.github.randomtools3377.checklist.core.payFor(row.goal.points, rate, state.boostedGoalId == row.goal.id, state.streakPercent)
+                // A routine or a goal with an amount pays once it is done; a counted one for each tick left.
+                each * (if (row.isRoutine || row.goal.hasAmount) 1 else row.left.coerceAtLeast(1))
+            }
+        }.state(null)
+
+    /** The run of perfect days through yesterday, while combos are on; null when off. */
+    val comboCount: StateFlow<Int?> = combine(features, dao.observeSetting(io.github.randomtools3377.checklist.core.Combos.COUNT)) { on, count ->
+        if (Feature.COMBOS in on) count?.toIntOrNull() ?: 0 else null
+    }.state(null)
+
+    /** Today's line about the combo (see Combos.line), in the numbers set in "Points and rules". */
+    val comboLine: StateFlow<String?> = combine(comboCount, todayState, rules) { combo, state, _ ->
+        combo?.let { io.github.randomtools3377.checklist.core.Combos.line(it, state?.todayRecord) }
+    }.state(null)
+
+    /** The closest win on Today, as one short line (see NearWins); null when nothing is near. */
+    val nearWin: StateFlow<String?> = combine(
+        todayState, boosts, comboCount, combine(dao.observeGoalTickCount(), badges) { ticks, earned -> ticks to earned.keys }, combine(weekProgress, rules) { week, _ -> week },
+    ) { state, boost, combo, (ticks, earned), week ->
+        state?.let {
+            io.github.randomtools3377.checklist.core.NearWins.line(
+                it.todayRecord, it.streakSettings, it.streaks.done, perfectBonus = boost.perfectDayBonus, combo = combo, ticks = ticks, earnedBadges = earned, week = week,
+            )
+        }
+    }.state(null)
+
+    /**
+     * The morning card: what yesterday came to and what was paid overnight, until it is closed.
+     * Hidden while the points history is behind the lock.
+     */
+    val overnight: StateFlow<String?> = combine(
+        todayState, dao.observeSetting(io.github.randomtools3377.checklist.core.Overnight.SETTING), dao.observeSetting(io.github.randomtools3377.checklist.core.Overnight.SEEN), settings, unlocked,
+    ) { state, paid, seen, s, isUnlocked ->
+        val O = io.github.randomtools3377.checklist.core.Overnight
+        when {
+            state == null || (s.locks.history && !isUnlocked) || seen == state.view.day.toString() -> null
+            else -> O.line(state.view.day, state.yesterdayRecord, O.decode(paid), state.streakSettings, state.streaks.done)
+        }
+    }.state(null)
+
+    fun overnightSeen() {
+        viewModelScope.launch { repository.setSetting(io.github.randomtools3377.checklist.core.Overnight.SEEN, currentDay().toString()) }
+    }
+
+    /**
+     * The recap once everything due today is done; null while something is left. What stands out
+     * against other days is left out while the points history or the review is locked.
+     */
+    val dayRecap: StateFlow<io.github.randomtools3377.checklist.core.DayRecap?> = combine(
+        todayState,
+        today.flatMapLatest { day -> dao.observeEntries(LocalDate(day.year, day.monthNumber, 1).toEpochDay(), day.toEpochDay()) },
+        boosts, combine(comboCount, rules) { combo, _ -> combo }, combine(settings, unlocked) { s, isUnlocked -> (s.locks.history || s.locks.review) && !isUnlocked },
+    ) { state, entries, boost, combo, locked ->
+        state?.let {
+            io.github.randomtools3377.checklist.core.DayRecaps.of(
+                it.view.day, it.plan.map { planned -> planned.row }, it.todayRecord, entries.map { e -> e.toCore() }, it.streakSettings, it.streaks,
+                perfectBonus = boost.perfectDayBonus, combo = combo, highlights = !locked,
+            )
+        }
+    }.state(null)
+
+    /** Tomorrow's first few goals, for the recap and a day off; private ones are left out while locked. */
+    val comingUp: StateFlow<io.github.randomtools3377.checklist.core.ComingUp?> =
+        planDays.map { days -> io.github.randomtools3377.checklist.core.Upcoming.of(days.getOrNull(1)) }.state(null)
 
     /** This week's boss and the items in hand, while items and bosses are on; null when off. */
     val boss: StateFlow<io.github.randomtools3377.checklist.core.BossView?> =
@@ -2811,7 +2970,7 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
     fun addExamples(onDone: () -> Unit = {}) {
         viewModelScope.launch {
             val added = repository.addExamples(currentDay())
-            offerUndo("Examples added") { repository.removeExamples(added) }
+            offerUndo("Examples added", undone = "Examples taken away again") { repository.removeExamples(added) }
             onDone()
         }
     }
@@ -2865,7 +3024,7 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
     fun removeGoals(ids: List<Long>) {
         viewModelScope.launch {
             ids.forEach { repository.removeGoal(it) }
-            offerUndo(if (ids.size == 1) "Removed 1 goal" else "Removed ${ids.size} goals") { ids.forEach { repository.restoreGoal(it, currentDay(), freshStart = false) } }
+            offerUndo(if (ids.size == 1) "Removed 1 goal" else "Removed ${ids.size} goals", undone = if (ids.size == 1) "1 goal brought back" else "${ids.size} goals brought back") { ids.forEach { repository.restoreGoal(it, currentDay(), freshStart = false) } }
         }
     }
 
@@ -2874,7 +3033,7 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
             val name = repository.goal(id)?.name
             repository.removeGoal(id)
             onDone()
-            if (name != null) offerUndo("Removed $name") { repository.restoreGoal(id, currentDay(), freshStart = false) }
+            if (name != null) offerUndo("Removed $name", undone = "$name brought back") { repository.restoreGoal(id, currentDay(), freshStart = false) }
         }
     }
 

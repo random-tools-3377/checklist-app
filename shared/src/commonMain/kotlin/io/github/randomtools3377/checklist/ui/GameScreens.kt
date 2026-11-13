@@ -680,7 +680,7 @@ fun QuestsCard(quests: List<QuestProgress>) {
 
 /** On Today, with the race on: this week against last week by the same time. */
 @Composable
-fun RaceCard(race: RaceStanding) {
+fun RaceCard(race: RaceStanding, catchUp: io.github.randomtools3377.checklist.core.CatchUp? = null) {
     Card(Modifier.fillMaxWidth().testTag("race")) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
             Text("🏁", fontSize = 24.sp, modifier = Modifier.width(40.dp))
@@ -700,6 +700,10 @@ fun RaceCard(race: RaceStanding) {
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                // Behind or level: a way into the lead from today's list.
+                catchUp?.let {
+                    Text(it.text(), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.testTag("race-catch-up"))
+                }
             }
             GuideButton(HelpTopic.RACE)
         }

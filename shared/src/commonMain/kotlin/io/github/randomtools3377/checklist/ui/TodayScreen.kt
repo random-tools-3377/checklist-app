@@ -88,6 +88,8 @@ import io.github.randomtools3377.checklist.core.ProjectRow
 import io.github.randomtools3377.checklist.core.StepRow
 import io.github.randomtools3377.checklist.core.TickResult
 import io.github.randomtools3377.checklist.core.TodayPace
+import io.github.randomtools3377.checklist.core.Pace
+import io.github.randomtools3377.checklist.core.PaceState
 import io.github.randomtools3377.checklist.core.dateText
 import io.github.randomtools3377.checklist.core.ordinal
 import io.github.randomtools3377.checklist.data.ORDER_OWN
@@ -158,6 +160,15 @@ fun TodayScreen(
     }
     val newBadges by vm.newBadges.collectAsStateWithLifecycle()
     val boosts by vm.boosts.collectAsStateWithLifecycle()
+    // Today reacting to how the day goes: what is within reach, what yesterday came to, the
+    // combo, the recap of a done day, what tomorrow brings, and a way into the lead in the race.
+    val nearWin by vm.nearWin.collectAsStateWithLifecycle()
+    val overnight by vm.overnight.collectAsStateWithLifecycle()
+    val comboLine by vm.comboLine.collectAsStateWithLifecycle()
+    val dayRecap by vm.dayRecap.collectAsStateWithLifecycle()
+    val comingUp by vm.comingUp.collectAsStateWithLifecycle()
+    val raceCatchUp by vm.raceCatchUp.collectAsStateWithLifecycle()
+    val anyGoals by vm.currentGoals.collectAsStateWithLifecycle()
     val features by vm.features.collectAsStateWithLifecycle()
     val askMood by vm.askMood.collectAsStateWithLifecycle()
     val showWeekPlan by vm.showWeekPlan.collectAsStateWithLifecycle()
@@ -172,6 +183,9 @@ fun TodayScreen(
     val isUnlocked by vm.unlocked.collectAsStateWithLifecycle()
     // Moods sit behind the lock with reasons and notes, so what they show about goals does too.
     val moodsLocked = lockSettings.locks.reasons && !isUnlocked
+    // A low morning (a mood of 1 or 2) softens how the pace card reads, in the app only. While
+    // moods are locked it reads as usual, so the card doesn't give the mood away.
+    val softDay = io.github.randomtools3377.checklist.core.Feature.MOOD in features && !moodsLocked && (todayMood?.score ?: 0) in 1..2
     // Today's mood opened in full: from its line on Today, or from the mood reminder.
     val moodStartRow by vm.moodStartRow.collectAsStateWithLifecycle()
     val lookForward by vm.lookForward.collectAsStateWithLifecycle()
@@ -385,6 +399,20 @@ fun TodayScreen(
                     modifier = Modifier.padding(bottom = 8.dp).testTag("streak-bonus"),
                 )
             }
+            // What is within reach, as one short offer.
+            nearWin?.let { line ->
+                Text(
+                    "✨ $line",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(bottom = 8.dp).testTag("near-win"),
+                )
+            }
+            // The first time Today opens on a new day: what yesterday came to.
+            overnight?.let { line ->
+                OvernightCard(line, onClose = vm::overnightSeen)
+                Spacer(Modifier.height(12.dp))
+            }
             if (newBadges.isNotEmpty()) {
                 NewBadgesCard(newBadges, onSee = onBadges, onDismiss = vm::badgesSeen)
                 Spacer(Modifier.height(12.dp))
@@ -426,13 +454,21 @@ fun TodayScreen(
             }
             if (view.isEmpty) {
                 item(key = "empty") {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        modifier = Modifier.fillMaxWidth().padding(top = 36.dp),
-                    ) {
-                        Text("Nothing due today. Add a goal, then tick it off here.", textAlign = TextAlign.Center, modifier = Modifier.testTag("today-empty"))
-                        Spacer(Modifier.height(12.dp))
-                        Button(onClick = onAddGoal, modifier = Modifier.testTag("today-add-goal")) { Text("Add a goal") }
+                    val going = anyGoals.any { it.kind == GoalKind.HABIT && io.github.randomtools3377.checklist.core.Completed.habitLastDay(it, view.day) == null }
+                    if (going || screen.hiddenPrivate > 0) {
+                        // A day off: there are goals, only none of them today. What's next, not "Add a goal".
+                        EmptyState("Nothing due today. Enjoy it.", tag = "today-empty", more = comingUp?.let { "Tomorrow: ${it.text()}" })
+                    } else if (anyGoals.isNotEmpty()) {
+                        // Everything so far is completed or done: the way to the next one.
+                        EmptyState(
+                            "Nothing due today. Add a goal for what's next.", tag = "today-empty",
+                            button = "Add a goal", buttonTag = "today-add-goal", onClick = onAddGoal,
+                        )
+                    } else {
+                        EmptyState(
+                            "No goals yet. Add one, then tick it off here.", tag = "today-empty",
+                            button = "Add a goal", buttonTag = "today-add-goal", onClick = onAddGoal,
+                        )
                     }
                 }
             }
@@ -580,7 +616,7 @@ fun TodayScreen(
                 }
                 TodaySection.RACE -> if (race != null) item(key = "race") {
                     race?.let { standing ->
-                        RaceCard(standing)
+                        RaceCard(standing, raceCatchUp)
                         Spacer(Modifier.height(12.dp))
                     }
                 }
@@ -601,7 +637,12 @@ fun TodayScreen(
                 // Nothing to count yet: no streak card.
                 TodaySection.STREAKS -> if (!(view.isEmpty && screen.streaks.done == 0 && screen.streaks.perfect == 0)) {
                     item(key = "streaks") {
-                        StreakCard(screen.streaks, screen.streakSettings)
+                        StreakCard(
+                            screen.streaks, screen.streakSettings,
+                            today = io.github.randomtools3377.checklist.core.NearWins.streakToday(
+                                screen.todayRecord, screen.streakSettings, screen.streaks.done, screen.bestStreak, screen.brokeBefore,
+                            ),
+                        )
                         // With streak shields on: those held, and the last day one saved.
                         screen.shields?.let { shields ->
                             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
@@ -627,7 +668,12 @@ fun TodayScreen(
                         }
                     }
                     if (screen.plan.isNotEmpty()) item(key = "pace") {
-                        PaceCard(screen, onSettings)
+                        PaceCard(
+                            screen, onSettings,
+                            settings = io.github.randomtools3377.checklist.core.PaceSettings(lockSettings.dayEndHour, lockSettings.defaultFinish, lockSettings.dayStart),
+                            soft = softDay,
+                            onMove = { moving = it },
+                        )
                         Spacer(Modifier.height(12.dp))
                         OrderSwitch(screen.recommended) { vm.setTodayOrder(if (it) ORDER_RECOMMENDED else ORDER_OWN) }
                     }
@@ -637,7 +683,42 @@ fun TodayScreen(
                     if (plan.isNotEmpty()) item(key = "title-today") { SectionTitle("Today") }
                     // Everything due today done (with goals whose week, month or year ends today), none
                     // skipped: the perfect-day bonus comes when the day ends.
-                    if (filter == null && boosts.perfectDayBonus > 0 && screen.perfectSoFar) {
+                    val recap = dayRecap?.takeIf { filter == null }
+                    // Everything due is done: the day so far, what tonight adds, and tomorrow's first few.
+                    if (recap != null) {
+                        item(key = "day-recap") {
+                            DayRecapCard(recap, comingUp)
+                            Spacer(Modifier.height(10.dp))
+                        }
+                    }
+                    // A day off among goals due this week or later: what's next.
+                    if (filter == null && screen.plan.isEmpty() && view.limits.isEmpty() && !view.isEmpty && screen.hiddenPrivate == 0 && anyGoals.any { it.kind == GoalKind.HABIT }) {
+                        item(key = "day-off") {
+                            Column(Modifier.padding(bottom = 8.dp)) {
+                                Text("Nothing due today. Enjoy it.", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("day-off"))
+                                comingUp?.let {
+                                    Text(
+                                        "Tomorrow: ${it.text()}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.testTag("day-off-tomorrow"),
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    // With combos on: the run of perfect days, and what tonight is worth. The recap says it once the day is done.
+                    if (filter == null && recap == null) comboLine?.let { line ->
+                        item(key = "combo") {
+                            Text(
+                                "🔗 $line",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(bottom = 8.dp).testTag("combo-line"),
+                            )
+                        }
+                    }
+                    if (filter == null && recap == null && boosts.perfectDayBonus > 0 && screen.perfectSoFar) {
                         item(key = "perfect-day") {
                             Text(
                                 "🌟 Perfect day so far: +${boosts.perfectDayBonus} when the day ends",
@@ -1127,12 +1208,27 @@ private fun LazyListScope.habitSection(
     }
 }
 
-/** How fast to go to get through what is left today. */
+/**
+ * How fast to go to get through what is left today, with a thin bar for how much of the day is
+ * done. It says so when things go well, and when time is short it offers a way out the rules
+ * already allow: moving one goal to another day of this week, or starting with the shortest. It
+ * never suggests a skip. On a [soft] day (a low morning mood) it drops the red warning.
+ */
 @Composable
-private fun PaceCard(screen: TodayState, onSettings: () -> Unit) {
+private fun PaceCard(
+    screen: TodayState,
+    onSettings: () -> Unit,
+    settings: io.github.randomtools3377.checklist.core.PaceSettings,
+    soft: Boolean = false,
+    onMove: (Goal) -> Unit = {},
+) {
     val pace: TodayPace? = screen.pace
+    val rows = screen.plan.map { it.row }
     // Each time still to do, so "8 glasses" with 2 done counts 6, as the pace shares the time out.
-    val left = screen.plan.sumOf { it.row.left }
+    val left = rows.sumOf { it.left }
+    // The bar counts goals: skipped ones are left out, neither done nor still to do.
+    val counted = rows.filter { !it.skipped }
+    val doneCount = counted.count { it.done }
     Card(
         modifier = Modifier.fillMaxWidth().testTag("pace"),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
@@ -1140,7 +1236,7 @@ private fun PaceCard(screen: TodayState, onSettings: () -> Unit) {
         Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
             val color = MaterialTheme.colorScheme.onSecondaryContainer
             when {
-                left == 0 && screen.plan.any { it.row.skipped } -> Text("That's everything for today.", color = color, style = MaterialTheme.typography.titleSmall)
+                left == 0 && rows.any { it.skipped } -> Text("That's everything for today.", color = color, style = MaterialTheme.typography.titleSmall)
                 left == 0 -> Text("Everything due today is done. 🎉", color = color, style = MaterialTheme.typography.titleSmall)
                 pace == null -> {
                     Text("$left left today", color = color, style = MaterialTheme.typography.titleSmall)
@@ -1168,18 +1264,111 @@ private fun PaceCard(screen: TodayState, onSettings: () -> Unit) {
                     if (pace.busyMinutes > 0) {
                         Text("Leaves out ${minutesText(pace.busyMinutes)} in your calendar", color = color, style = MaterialTheme.typography.bodySmall)
                     }
-                    if (pace.shortBy > 0) {
-                        Text(
-                            "Not enough time: ${minutesText(pace.shortBy)} short",
-                            color = MaterialTheme.colorScheme.error,
+                    val state = Pace.state(pace, screen.now, day, rows, settings, late = screen.plan.any { it.late && !it.row.settled })
+                    when (state) {
+                        PaceState.AHEAD -> Text(
+                            if (pace.untimedLeft == 0 && pace.spareMinutes > 0) "Ahead of pace: ${minutesText(pace.spareMinutes)} to spare" else "Ahead of pace: time to spare",
+                            color = color,
                             style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.Bold,
+                            modifier = Modifier.testTag("pace-ahead"),
                         )
+                        PaceState.SHORT, PaceState.TIGHT -> {
+                            if (soft) {
+                                // A low morning: no red warning, in the app only. Nothing else changes.
+                                Text("Whatever you manage today is fine.", color = color, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("pace-soft"))
+                            } else if (state == PaceState.SHORT) {
+                                Text(
+                                    "Not enough time: ${minutesText(pace.shortBy)} short",
+                                    color = MaterialTheme.colorScheme.error,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.testTag("pace-short"),
+                                )
+                            } else {
+                                Text("It still fits, with little time to spare.", color = color, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("pace-tight"))
+                            }
+                            // A way out the rules already allow. Never a skip.
+                            val help = Pace.help(rows, day)
+                            help.shortest?.let { goal ->
+                                Text(
+                                    "Start with the shortest: ${goal.icon} ${goal.name}" + (goal.minutes?.let { " (${minutesText(it)})" } ?: ""),
+                                    color = color,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    modifier = Modifier.testTag("pace-shortest"),
+                                )
+                            }
+                            help.move?.let { goal ->
+                                TextButton(onClick = { onMove(goal) }, modifier = Modifier.testTag("pace-move")) {
+                                    Text("Move ${goal.icon} ${goal.name} to another day this week")
+                                }
+                            }
+                        }
+                        PaceState.STEADY -> {}
                     }
                     if (pace.unpaced > 0) {
                         Text("${pace.unpaced} without a finish time aren't counted", color = color, style = MaterialTheme.typography.bodySmall)
                     }
                 }
+            }
+            // A slim bar for the day, filling with each goal done.
+            if (counted.isNotEmpty()) {
+                Spacer(Modifier.height(8.dp))
+                LinearProgressIndicator(
+                    progress = { doneCount.toFloat() / counted.size },
+                    modifier = Modifier.fillMaxWidth().height(4.dp).testTag("pace-bar"),
+                )
+                Text(
+                    "$doneCount of ${counted.size} done",
+                    color = color,
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(top = 4.dp).testTag("pace-done"),
+                )
+            }
+        }
+    }
+}
+
+/** The morning card: what yesterday came to and what was paid overnight. One tap closes it. */
+@Composable
+private fun OvernightCard(line: String, onClose: () -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth().clickable(onClickLabel = "Close", onClick = onClose).testTag("overnight"),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 16.dp, top = 4.dp, bottom = 4.dp, end = 4.dp)) {
+            Text(
+                "🌅 $line",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onTertiaryContainer,
+                modifier = Modifier.weight(1f).padding(vertical = 8.dp).testTag("overnight-text"),
+            )
+            TextButton(onClick = onClose, modifier = Modifier.testTag("overnight-ok")) { Text("OK") }
+        }
+    }
+}
+
+/** Once everything due today is done: the day so far, what tonight adds, and a look at tomorrow. */
+@Composable
+private fun DayRecapCard(recap: io.github.randomtools3377.checklist.core.DayRecap, coming: io.github.randomtools3377.checklist.core.ComingUp?) {
+    Card(
+        modifier = Modifier.fillMaxWidth().testTag("day-recap"),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+    ) {
+        Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+            val color = MaterialTheme.colorScheme.onPrimaryContainer
+            Text(if (recap.perfect) "🌟 Today: a perfect day so far" else "Today", color = color, style = MaterialTheme.typography.titleSmall)
+            Text(recap.headline(), color = color, style = MaterialTheme.typography.titleMedium, modifier = Modifier.testTag("day-recap-headline"))
+            recap.tonight()?.let { Text(it, color = color, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("day-recap-tonight")) }
+            recap.streakLine()?.let { Text("🔥 $it", color = color, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("day-recap-streak")) }
+            recap.highlight?.let { Text("✨ $it", color = color, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("day-recap-highlight")) }
+            coming?.let {
+                Text(
+                    "Tomorrow: ${it.text()}",
+                    color = color,
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(top = 6.dp).testTag("day-recap-tomorrow"),
+                )
             }
         }
     }

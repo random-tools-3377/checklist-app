@@ -41,6 +41,32 @@ data class TodayPace(
     val unpaced: Int,
     /** Minutes taken by events in the phone's calendar before the finish, which pacing leaves out. */
     val busyMinutes: Int = 0,
+    /**
+     * Minutes to spare: the least free time before any finish time still to come, after the
+     * lengths set and the calendar. 0 when there is none, or when time is short.
+     */
+    val spareMinutes: Int = 0,
+)
+
+/** How today is going against the clock. */
+enum class PaceState {
+    /** More of the day's goals done than of the day gone, and nothing late. */
+    AHEAD,
+    STEADY,
+
+    /** It still fits, only just. */
+    TIGHT,
+
+    /** More to do than there is time for. */
+    SHORT,
+}
+
+/** Ways to make a full day fit that the rules already allow. A skip is never one of them. */
+data class PaceHelp(
+    /** A goal that can move to another day of this week for free: the longest one still to do. */
+    val move: Goal? = null,
+    /** The quickest goal still to do, to start with. */
+    val shortest: Goal? = null,
 )
 
 /** The pace for a goal that spans days: a "times per" habit or a project with a deadline. */
@@ -139,6 +165,7 @@ object Pace {
         var untimed = 0
         var best = Double.POSITIVE_INFINITY
         var short = 0L
+        var spare = Long.MAX_VALUE
         for ((due, group) in units.groupBy { it.at }.entries.sortedBy { it.key }.map { it.key to it.value }) {
             for (unit in group) {
                 val minutes = unit.minutes
@@ -148,6 +175,7 @@ object Pace {
             // Something already late isn't a shortage of time: its own card says it is late. Only
             // what is still to come can fail to fit.
             if (due >= now && free < 0) short = maxOf(short, -free)
+            if (due >= now) spare = minOf(spare, free)
             if (untimed > 0) best = minOf(best, free.toDouble() / untimed)
         }
         val each = if (untimed == 0) null else best.coerceAtLeast(0.0).toInt()
@@ -160,7 +188,50 @@ object Pace {
             shortBy = short.toInt(),
             unpaced = unpaced,
             busyMinutes = BusyTime.minutes(busy, now, units.maxOf { it.at }).toInt(),
+            spareMinutes = if (short > 0 || spare == Long.MAX_VALUE) 0 else spare.coerceIn(0, Int.MAX_VALUE.toLong()).toInt(),
         )
+    }
+
+    /** Under this many minutes each, or to spare, a day that still fits is tight. */
+    const val TIGHT_MINUTES = 10
+
+    /**
+     * How today is going. [rows] are today's goals and [late] whether one of them is already
+     * late. Ahead means a bigger share of the day's ticks is done than of the day has gone,
+     * counted from when the user's day starts (or, until that is set, from when the day begins)
+     * to the last finish time.
+     */
+    fun state(pace: TodayPace, now: LocalDateTime, day: LocalDate, rows: List<HabitRow>, settings: PaceSettings, late: Boolean = false): PaceState {
+        if (pace.shortBy > 0) return PaceState.SHORT
+        // Something already late, or a finish time that has passed: its own card says so, and
+        // "it still fits" would not be true.
+        if (late || pace.finishAt < now) return PaceState.STEADY
+        val tight = if (pace.untimedLeft > 0) (pace.minutesEach ?: 0) < TIGHT_MINUTES else pace.spareMinutes < TIGHT_MINUTES
+        if (tight) return PaceState.TIGHT
+        // Skipped goals are left out: they are neither done nor still to do.
+        val counted = rows.filter { !it.skipped }
+        val all = counted.sumOf { it.goal.target }
+        val done = counted.sumOf { it.count.coerceAtMost(it.goal.target) }
+        if (done == 0 || all == 0) return PaceState.STEADY
+        val start = on(day, settings.dayStart ?: LocalTime(settings.dayEndHour.coerceIn(0, Days.MAX_DAY_END_HOUR), 0), settings.dayEndHour)
+        val whole = minutesBetween(start, pace.finishAt)
+        val gone = minutesBetween(start, now)
+        if (whole <= 0 || gone <= 0) return PaceState.AHEAD
+        return if (done.toLong() * whole > gone * all) PaceState.AHEAD else PaceState.STEADY
+    }
+
+    /**
+     * Ways out when time is short or tight, from [rows], today's goals: the longest one that can
+     * move to another day of this week (see [Moves]), and the quickest one to start with. Goals
+     * done or skipped are left out. It never offers a skip.
+     */
+    fun help(rows: List<HabitRow>, day: LocalDate): PaceHelp {
+        val open = rows.filter { !it.settled }
+        val move = open.filter { Moves.choices(it.goal, day, day).isNotEmpty() }
+            .sortedWith(compareByDescending<HabitRow> { it.goal.minutes ?: 0 }.thenBy { it.goal.at != null })
+            .firstOrNull()?.goal
+        val shortest = open.filter { it.goal.minutes != null }.minByOrNull { it.goal.minutes!! }?.goal?.takeIf { open.size > 1 }
+        return PaceHelp(move, shortest)
     }
 
     /** The day a "times per" habit should be finished by in its current window, if the user set one. */

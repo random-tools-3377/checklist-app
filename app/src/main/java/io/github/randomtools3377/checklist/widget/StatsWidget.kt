@@ -38,6 +38,7 @@ import io.github.randomtools3377.checklist.ChecklistApplication
 import io.github.randomtools3377.checklist.MainActivity
 import io.github.randomtools3377.checklist.core.Days
 import io.github.randomtools3377.checklist.core.Feature
+import io.github.randomtools3377.checklist.core.NearWins
 import io.github.randomtools3377.checklist.core.Period
 import io.github.randomtools3377.checklist.core.Rules
 import io.github.randomtools3377.checklist.core.Shields
@@ -62,7 +63,16 @@ import io.github.randomtools3377.checklist.ui.pointsText
 import kotlinx.datetime.LocalDate
 
 /** What the balance and streaks widget shows, read from the database each time it is drawn. */
-data class StatsData(val balance: Int, val streaks: Streaks, val due: Int, val done: Int, val week: WeekProgress?, val look: WidgetLook = WidgetLook())
+data class StatsData(
+    val balance: Int,
+    val streaks: Streaks,
+    val due: Int,
+    val done: Int,
+    val week: WeekProgress?,
+    val look: WidgetLook = WidgetLook(),
+    /** How many more of today's goals the main streak still needs; 0 once today counts. */
+    val needs: Int = 0,
+)
 
 /**
  * The balance and streaks widget. Small, it shows the balance, the main streak and how much of
@@ -129,6 +139,7 @@ class StatsWidget : GlanceAppWidget() {
                 done = todayRecord?.done ?: 0,
                 week = week,
                 look = widgetLook(dao),
+                needs = NearWins.neededForStreak(todayRecord, streak),
             )
         }
     }
@@ -175,7 +186,12 @@ private fun StatsContent(data: StatsData) {
                     backgroundColor = colors.secondaryContainer,
                 )
                 Spacer(GlanceModifier.height(4.dp))
-                Text("${data.done} of ${data.due} done today", maxLines = 1, style = TextStyle(color = colors.onSurfaceVariant, fontSize = 12.sp))
+                // What today still needs for the streak, as on Today's streak card; else how much is done.
+                Text(
+                    if (data.needs > 0) "${data.done} of ${data.due} · ${data.needs} more 🔥" else "${data.done} of ${data.due} done today",
+                    maxLines = 1,
+                    style = TextStyle(color = colors.onSurfaceVariant, fontSize = 12.sp),
+                )
             } else {
                 Text("Nothing due today", maxLines = 1, style = TextStyle(color = colors.onSurfaceVariant, fontSize = 12.sp))
             }

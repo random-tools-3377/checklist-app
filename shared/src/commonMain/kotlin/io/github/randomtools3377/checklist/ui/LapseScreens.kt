@@ -382,7 +382,7 @@ fun SkipDialog(goal: Goal, vm: MainViewModel, onDone: () -> Unit) {
 
 /** The current streaks. When every one is running at once, it is shown big and flashy. */
 @Composable
-fun StreakCard(streaks: Streaks, settings: StreakSettings) {
+fun StreakCard(streaks: Streaks, settings: StreakSettings, today: io.github.randomtools3377.checklist.core.StreakToday? = null) {
     val all = streaks.allRunning
     val pop = remember { Animatable(if (all) 0.6f else 1f) }
     LaunchedEffect(all) { if (all) pop.animateTo(1f, tween(600)) }
@@ -409,8 +409,17 @@ fun StreakCard(streaks: Streaks, settings: StreakSettings) {
                 Spacer(Modifier.padding(start = 8.dp))
                 Column {
                     Text(if (streaks.done == 1) "day in a row" else "days in a row", style = MaterialTheme.typography.titleSmall)
-                    Text(settings.describe(), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(
+                        settings.describe() + (today?.best?.let { " · best $it" } ?: ""),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.testTag("streak-target"),
+                    )
                 }
+            }
+            // What today is for the streak: it counts, what it still needs, or a new run.
+            today?.line?.let {
+                Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 4.dp).testTag("streak-today"))
             }
             if (all) {
                 Text(

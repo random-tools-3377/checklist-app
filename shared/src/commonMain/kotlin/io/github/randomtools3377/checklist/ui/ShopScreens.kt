@@ -132,10 +132,10 @@ fun ShopScreen(
             if (!showBought) {
                 if (view.rewards.isEmpty()) {
                     item {
-                        Column(Modifier.fillMaxWidth().padding(top = 32.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text("The shop is empty. Add a treat to earn, at a price you choose.", textAlign = TextAlign.Center, modifier = Modifier.testTag("shop-empty"))
-                            Button(onClick = onNew, modifier = Modifier.padding(top = 12.dp).testTag("shop-empty-add")) { Text("New reward") }
-                        }
+                        EmptyState(
+                            "The shop is empty. Add a treat to earn, at a price you choose.", tag = "shop-empty",
+                            button = "New reward", buttonTag = "shop-empty-add", onClick = onNew,
+                        )
                     }
                 }
                 itemsIndexed(view.rewards, key = { _, row -> row.reward.id }) { index, row ->

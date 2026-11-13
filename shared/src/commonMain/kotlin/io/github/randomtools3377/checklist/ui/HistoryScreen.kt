@@ -32,7 +32,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import io.github.randomtools3377.checklist.core.Entry
 import io.github.randomtools3377.checklist.core.EntryKind
@@ -102,11 +101,7 @@ fun HistoryScreen(
         ) {
             if (entries.isEmpty()) {
                 item {
-                    Text(
-                        "No ${pointsWord()} yet. Tick a goal and it shows up here.",
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.fillMaxWidth().padding(top = 48.dp),
-                    )
+                    EmptyState("No ${pointsWord()} yet. Tick a goal and it shows up here.", tag = "history-empty", button = "Back", onClick = onBack)
                 }
             }
             // Newest day first: a bonus paid later for an earlier day goes with that day.

@@ -186,6 +186,22 @@ class Combos(private val store: Store, private val book: Book) {
 
         /** What a combo of [combo] days pays. */
         fun pay(combo: Int): Int = combo.coerceAtMost(MOST) * PER_STEP
+
+        /**
+         * Today's line about the combo: [combo] is the run of perfect days through yesterday,
+         * [today] today's record so far. "Combo ×3 · a perfect day today pays +8", or with none
+         * running "A perfect day today starts a new combo (+2)". Null on a day with nothing due,
+         * or with a skip, which is never a perfect day.
+         */
+        fun line(combo: Int, today: DayRecord?): String? {
+            if (today == null || today.due == 0 || today.skips > 0) return null
+            val next = combo.coerceAtLeast(0) + 1
+            return when {
+                today.perfect -> "Combo ×$next tonight: +${pay(next)} when the day ends"
+                combo > 0 -> "Combo ×$combo · a perfect day today pays +${pay(next)}"
+                else -> "A perfect day today starts a new combo (+${pay(next)})"
+            }
+        }
     }
 
     /** Pays for every day that ended since the last time, if combos are on. Returns what was paid. */
@@ -240,8 +256,46 @@ data class RaceStanding(val thisWeek: Int, val lastWeek: Int) {
     val ahead: Int get() = thisWeek - lastWeek
 }
 
+/** A way to take the lead in the race: [points] more are needed, and [goals], when few are enough, would earn them. */
+data class CatchUp(val points: Int, val goals: List<Goal> = emptyList()) {
+    /** "📖 Reading and 🚶 Walk would put you ahead", or "8 more points today takes the lead". */
+    fun text(): String = when (goals.size) {
+        0 -> "${PointsName.current.amount(points).replaceFirst(" ", " more ")} today takes the lead"
+        1 -> "${name(goals[0])} would put you ahead"
+        else -> goals.dropLast(1).joinToString(", ") { name(it) } + " and ${name(goals.last())} would put you ahead"
+    }
+
+    private fun name(goal: Goal) = "${goal.icon} ${goal.name}"
+}
+
 object Race {
     private val EARNED = setOf(EntryKind.TICK, EntryKind.BONUS, EntryKind.REFUND, EntryKind.PERFECT_DAY, EntryKind.CHALLENGE)
+
+    /** Goals are named in a catch-up only when this few are enough. */
+    const val NAMED = 3
+
+    /**
+     * When behind or level: the fewest of [rows] that would take the lead. [rows] are today's
+     * goals as Today shows them (so never a private goal while it is locked); those done or
+     * skipped are left out, and [pays] says what finishing one still pays. When it takes more
+     * than [NAMED] goals, or today's goals aren't enough, only the points are given. Null when
+     * ahead already.
+     */
+    fun catchUp(standing: RaceStanding, rows: List<HabitRow>, pays: (HabitRow) -> Int): CatchUp? {
+        if (standing.ahead > 0) return null
+        val needed = -standing.ahead + 1
+        val open = rows.filter { !it.settled }.map { it to pays(it) }.filter { it.second > 0 }.sortedByDescending { it.second }
+        var sum = 0
+        val picked = open.takeWhile { (_, points) -> (sum < needed).also { if (it) sum += points } }
+        return if (sum >= needed && picked.size <= NAMED) CatchUp(needed, picked.map { it.first.goal }) else CatchUp(needed)
+    }
+
+    /** How the week's race ended, for the weekly summary: "🏁 beat last week by 12". */
+    fun result(standing: RaceStanding): String = when {
+        standing.ahead > 0 -> "🏁 beat last week by ${standing.ahead}"
+        standing.ahead == 0 -> "🏁 level with last week"
+        else -> "🏁 ${-standing.ahead} behind last week"
+    }
 
     /**
      * Points earned from Monday until [nowMillis] on [today], against last week from its Monday

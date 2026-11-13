@@ -2,6 +2,7 @@
 
 package io.github.randomtools3377.checklist.ui
 
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.ui.focus.focusRequester
 import kotlinx.coroutines.launch
@@ -92,7 +93,13 @@ fun ChecklistRoot(phone: Phone, vm: MainViewModel) {
         val appearance by vm.appearance.collectAsStateWithLifecycle()
         val rate by vm.currentDifficulty.collectAsStateWithLifecycle()
         ChecklistTheme(appearance) {
-            androidx.compose.runtime.CompositionLocalProvider(LocalPayRate provides rate) {
+            // Empty screens show the user's character as their picture while it is on.
+            val sheet by vm.character.collectAsStateWithLifecycle()
+            val figureLook by vm.look.collectAsStateWithLifecycle()
+            val picture: (@Composable () -> Unit)? = sheet?.let { level ->
+                { CharacterFigure(figureLook, remember(level) { io.github.randomtools3377.checklist.core.Outfit.of(level) }, Modifier.height(96.dp)) }
+            }
+            androidx.compose.runtime.CompositionLocalProvider(LocalPayRate provides rate, LocalEmptyPicture provides picture) {
                 // Measures the window, for tablets and phones on their side.
                 WindowSized { ChecklistApp(vm) }
             }
@@ -127,7 +134,11 @@ fun ChecklistApp(vm: MainViewModel) {
                 }
                 val result = undoHost.showSnackbar(offer.message, actionLabel = "Undo", duration = androidx.compose.material3.SnackbarDuration.Indefinite)
                 timer.cancel()
-                if (result == androidx.compose.material3.SnackbarResult.ActionPerformed) offer.undo()
+                if (result == androidx.compose.material3.SnackbarResult.ActionPerformed) {
+                    offer.undo()
+                    // Undo says what went back, for a moment.
+                    offer.undone?.let { undoHost.showSnackbar(it, duration = androidx.compose.material3.SnackbarDuration.Short) }
+                }
             }
         }
     }

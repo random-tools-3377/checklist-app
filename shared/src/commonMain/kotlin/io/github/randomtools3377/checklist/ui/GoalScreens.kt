@@ -172,10 +172,10 @@ fun GoalsScreen(
     ) {
         if (view.goals.isEmpty()) {
             item {
-                Column(Modifier.fillMaxWidth().padding(top = 48.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("No goals yet. Add a habit, like drinking water every day.", textAlign = TextAlign.Center, modifier = Modifier.testTag("goals-empty"))
-                    androidx.compose.material3.Button(onClick = onNew, modifier = Modifier.padding(top = 12.dp).testTag("goals-empty-add")) { Text("Add a goal") }
-                }
+                EmptyState(
+                    "No goals yet. Add a habit, like drinking water every day.", tag = "goals-empty",
+                    button = "Add a goal", buttonTag = "goals-empty-add", onClick = onNew,
+                )
             }
         }
         if (view.hiddenPrivate > 0) {

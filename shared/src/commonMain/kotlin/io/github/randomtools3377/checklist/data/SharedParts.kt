@@ -7,6 +7,7 @@ import io.github.randomtools3377.checklist.core.Combos
 import io.github.randomtools3377.checklist.core.Gaps
 import io.github.randomtools3377.checklist.core.Interest
 import io.github.randomtools3377.checklist.core.Lapses
+import io.github.randomtools3377.checklist.core.Overnight
 import io.github.randomtools3377.checklist.core.PerfectDays
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -43,9 +44,13 @@ class SharedParts(val db: AppDatabase, val gifs: GifStore, val photo: PhotoStore
         db.withTransaction {
             lapses.closeDays()
             gaps.find()
-            interest.pay()
-            perfectDays.pay()
-            combos.pay()
+            // What the day's end paid is kept for the morning card on Today (see Overnight).
+            val paid = interest.pay() + perfectDays.pay() + combos.pay()
+            if (paid.isNotEmpty()) {
+                val dao = db.dao()
+                val kept = Overnight.decode(dao.setting(Overnight.SETTING))
+                dao.putSetting(SettingEntity(Overnight.SETTING, Overnight.encode(Overnight.paid(book.today(), paid, kept))))
+            }
             bets.giveBackOpen()
         }
     }

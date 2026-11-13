@@ -356,6 +356,10 @@ interface ChecklistDao {
     @Query("SELECT COUNT(*) FROM ticks")
     fun observeTickCount(): Flow<Int>
 
+    /** Ticks of goals and steps, as the tick badges count them: adding to an "at most" goal isn't one. */
+    @Query("SELECT COUNT(*) FROM ticks WHERE NOT (stepId IS NULL AND period IS NULL)")
+    fun observeGoalTickCount(): Flow<Int>
+
     @Query("SELECT * FROM goals WHERE id = :id")
     suspend fun goal(id: Long): GoalEntity?
 
