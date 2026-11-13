@@ -7,7 +7,14 @@ import kotlinx.datetime.LocalTime
 /** The kinds of message a late nudge can be. They take turns, so no two in a row read the same. */
 enum class NudgeTone(val label: String, val hint: String) {
     ENCOURAGING("Encouraging", "Warm and short: there's still time."),
-    GAIN("What you'd gain", "The points it pays, your streak, and how close a reward is."),
+
+    /**
+     * Why it's good: the goal's own reason, in the user's words ([Goal.why]), and the main
+     * streak. Never what the tick pays or how close a reward is: this was "What you'd gain"
+     * until reminders became about the task and why it is good (decided after 0.71.0). It keeps
+     * the name GAIN, as the setting for the kinds that are on ([Nudges.TONES]) holds it by name.
+     */
+    GAIN("Why it's good", "The goal's own reason, in your words, and your streak."),
     SMALLER("Make it smaller", "Just start, with the smallest bit of it."),
     PLAYFUL("Playful", "Light and kind."),
 }
@@ -36,18 +43,13 @@ data class NudgePlan(
     }
 }
 
-/** What a nudge has to go on besides the goal: only real numbers, as they are when it is written. */
+/**
+ * What a nudge has to go on besides the goal: only real numbers, as they are when it is written.
+ * Nothing about points, prices or rewards: nudges are about the task and why it is good.
+ */
 data class NudgeFacts(
-    /** What one tick of the goal pays right now, with the difficulty, the boost and the streak bonus. */
-    val points: Int,
-    /** What the user calls points. */
-    val name: PointsName = PointsName.current,
-    /** The main streak, in days. */
+    /** The main streak, in days; 0 when it can't be told (a later day's nudge, or while the review is locked). */
     val streak: Int = 0,
-    /** The reward the user starred to save for, with its icon; null with none, or while the shop is locked. */
-    val reward: String? = null,
-    /** Points still missing for [reward]. */
-    val rewardLeft: Int = 0,
     /** For a goal done several times a day: how many are done. */
     val count: Int = 0,
 )
@@ -187,8 +189,8 @@ object Nudges {
      * What the [nth] nudge of the day says for [goal], [late] minutes late. The title is the goal
      * and how late it is; the text takes the tone whose turn it is, worded differently each time.
      * With [locked], for a private goal behind the privacy lock, nothing is named: not the goal,
-     * not its numbers, not a reward. Nothing in any of it blames, and every number is a real one
-     * from [facts].
+     * not its reason, not its numbers. Nothing in any of it blames, nothing says what the goal
+     * pays, and every number is a real one from [facts].
      */
     fun words(goal: Goal, day: LocalDate, nth: Int, late: Int, facts: NudgeFacts, tones: List<NudgeTone> = NudgeTone.entries, locked: Boolean = false): NudgeWords {
         val tone = tone(goal.id, day, nth, tones)
@@ -197,7 +199,7 @@ object Nudges {
         val name = goal.name
         val text = when (tone) {
             NudgeTone.ENCOURAGING -> encouraging(name, turn)
-            NudgeTone.GAIN -> gain(name, facts, turn) ?: encouraging(name, turn)
+            NudgeTone.GAIN -> why(goal, facts, turn) ?: encouraging(name, turn)
             NudgeTone.SMALLER -> smaller(goal, facts, turn)
             NudgeTone.PLAYFUL -> playful(name, turn)
         }
@@ -232,30 +234,46 @@ object Nudges {
         turn,
     )
 
-    /** Only what is really there to gain; null when the goal pays nothing. */
-    private fun gain(name: String, facts: NudgeFacts, turn: Int): String? {
-        if (facts.points <= 0) return null
-        val pay = facts.name.amount(facts.points)
+    /**
+     * Why it's good: the goal's own reason first, in the user's words, then the main streak from
+     * 2 days. Null with neither, for an encouraging one instead. Never what the tick pays or how
+     * close a reward is.
+     */
+    private fun why(goal: Goal, facts: NudgeFacts, turn: Int): String? {
+        val name = goal.name
+        val own = Why.tidy(goal.why)
+        val streak = facts.streak.takeIf { it >= 2 }
+        if (own == null) {
+            if (streak == null) return null
+            return pick(
+                listOf(
+                    "$name helps keep your $streak-day streak going.",
+                    "$name is one more step for your $streak-day streak.",
+                    "Your $streak-day streak is still going, and $name helps it along.",
+                    "Keep your $streak-day streak growing: $name is still open.",
+                    "$name today helps your $streak-day streak along.",
+                ),
+                turn,
+            )
+        }
+        val reason = Why.sentence(own)
         val first = pick(
             listOf(
-                "+$pay for $name, waiting for you.",
-                "$name is worth $pay today.",
-                "Tick $name and $pay are yours.".let { if (facts.points == 1) "Tick $name and $pay is yours." else it },
-                "$pay on the table for $name.",
-                "One tick of $name: +$pay.",
+                "Why $name: $reason",
+                "Remember why: $reason",
+                "What $name is for: $reason",
+                "Still time for $name, and here's why: $reason",
+                "In your own words: $reason",
             ),
             turn,
         )
-        val more = buildList {
-            if (facts.streak >= 2) add("It helps keep your ${facts.streak}-day streak going.")
-            if (facts.reward != null && facts.rewardLeft > 0) {
-                add(
-                    if (facts.points >= facts.rewardLeft) "That's all you need for ${facts.reward}."
-                    else "That's ${facts.name.amount(facts.points)} closer to ${facts.reward}.",
-                )
-            }
-        }
-        return if (more.isEmpty()) first else "$first ${more[(turn / 5) % more.size]}"
+        if (streak == null) return first
+        val more = listOf(
+            "It helps keep your $streak-day streak going too.",
+            "And it helps your $streak-day streak along.",
+            "Your $streak-day streak is still going, too.",
+        )
+        return "$first ${more[(turn / 5) % more.size]}"
     }
 
     private fun smaller(goal: Goal, facts: NudgeFacts, turn: Int): String {

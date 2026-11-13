@@ -46,6 +46,7 @@ import io.github.randomtools3377.checklist.core.RepeatKind
 import io.github.randomtools3377.checklist.core.Days
 import io.github.randomtools3377.checklist.core.LapseKind
 import io.github.randomtools3377.checklist.core.Window
+import io.github.randomtools3377.checklist.core.Why
 import io.github.randomtools3377.checklist.core.Reward
 import io.github.randomtools3377.checklist.core.Step
 import kotlinx.datetime.LocalDate
@@ -213,6 +214,8 @@ data class HabitDraft(
     val after: Long? = null,
     /** Its skill area for the character; null to guess it. */
     val skill: io.github.randomtools3377.checklist.core.SkillArea? = null,
+    /** "Why it's good", as the user typed it; tidied on saving (see Why). Only ever the user's own words. */
+    val why: String? = null,
 )
 
 /** One step in the project editor. [id] is 0 for a new step. */
@@ -244,6 +247,8 @@ data class ProjectDraft(
      * [Reminder.at] is a time picked for it, and [Reminder.onTime] off is no reminder.
      */
     val reminder: Reminder? = null,
+    /** "Why it's good", as the user typed it; tidied on saving (see Why). Only ever the user's own words. */
+    val why: String? = null,
 )
 
 /** What the to-do editor and the quick add on Today save. [id] is 0 for a new to-do. */
@@ -395,6 +400,7 @@ class Repository(private val db: AppDatabase, private val celebrations: GifStore
             challengeFrom = challenge?.from?.toEpochDay(),
             afterGoal = draft.after?.takeIf { it != draft.id },
             skill = draft.skill?.name,
+            why = Why.tidy(draft.why),
         )
         val goalId = if (existing == null) dao.insertGoal(row) else row.id.also { dao.updateGoal(row) }
         // Switched between single days and "so many times a week, month or year": what was
@@ -472,6 +478,7 @@ class Repository(private val db: AppDatabase, private val celebrations: GifStore
                     effort = draft.effort?.name,
                     skill = draft.skill?.name,
                     reminder = draft.reminder?.let { RepeatText.encodeReminder(it) },
+                    why = Why.tidy(draft.why),
                 ),
             )
         } else {
@@ -490,6 +497,7 @@ class Repository(private val db: AppDatabase, private val celebrations: GifStore
                     color = draft.color,
                     effort = draft.effort?.name,
                     reminder = draft.reminder?.let { RepeatText.encodeReminder(it) },
+                    why = Why.tidy(draft.why),
                 ),
             )
             existing.id

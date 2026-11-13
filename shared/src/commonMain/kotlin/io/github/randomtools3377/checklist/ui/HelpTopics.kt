@@ -166,6 +166,7 @@ enum class HelpTopic(val title: String, val intro: String, val steps: List<Strin
         "A habit is something you do again and again, like drinking water or reading. Changes apply from now on, never to the past.",
         listOf(
             "Tap \"Choose icon\", fill in \"Name\" and the {points} each tick pays, then tap \"Save\".",
+            "Under \"Why it's good\", write why it matters to you, in your own words, like \"so I sleep better\". It's optional. Its reminders start with it, and so do the \"Why it's good\" nudges.",
             "Under \"How often\", tap \"Change\" to pick every day, chosen days, so many times a week, and more.",
             "Set \"Times each day it's due\" above 1 for a counted goal, like 8 glasses, with a bonus for finishing.",
             "Add a checklist to make it a routine, or an amount, like 20 pages, to fill in as you go.",
@@ -181,7 +182,7 @@ enum class HelpTopic(val title: String, val intro: String, val steps: List<Strin
         "A project",
         "A project is done once, step by step, like painting a room. Each step pays, and finishing pays a bonus.",
         listOf(
-            "Tap \"Choose icon\" and fill in \"Name\".",
+            "Tap \"Choose icon\" and fill in \"Name\". \"Why it's good\" is for your own reason, if you like; its deadline reminders start with it.",
             "Write each step with its {points}, and tap \"Add a step\" for more.",
             "Set \"Bonus for finishing the project\", paid when the last step is ticked.",
             "Add a \"Deadline\" and Today shows how many steps a day it takes. Missing it counts as a miss.",
@@ -446,11 +447,12 @@ enum class HelpTopic(val title: String, val intro: String, val steps: List<Strin
             "For one check in the evening, set a time under \"Evening check\" in Settings → Notifications. One notification then lists what's still open today, so you can do it before it counts as a miss. Nothing comes on a day when everything is done.",
             "A project with a deadline reminds you the day before and on the day. Pick its time, or turn it off, in the project's editor.",
             "They follow the day too. One for a goal can say what's at stake right then, like \"Last one for today\" or \"This one makes today count for your streak\", and the evening check starts with the closest win, like \"1 more keeps your 12-day streak\". Streaks are left out while the review is locked.",
+            "A goal's reminder starts with its \"Why it's good\", if you wrote one in its editor, then when it's for, how long it takes and how many are done. Reminders are about the goal, so they don't say what it pays.",
             "On Android, the morning plan and the weekly summary have their own notification types, so you can make them quiet in the phone's settings. \"Light up the screen for reminders\" in Settings → Notifications makes goal reminders come like a message.",
             "A habit with a set time, or its own \"Finish by\" time, is nudged when it's late: first once it's {nudgeLate} minutes late, then every {nudgeEvery} minutes until it's done, skipped or the day ends ({nudgeMost} at most). Each nudge is worded differently.",
             "To stop a goal's nudges for the day, tap \"No more nudges today\" on its card on Today. To stop them for good, turn off \"Nudge me when it's late\" in its editor. Once a goal is late, nudges take over from \"Keep reminding\".",
-            "\"Nudges when something is late\" in Settings → Notifications turns them all on or off, and picks the kinds of message: Encouraging, What you'd gain, Make it smaller and Playful. Their numbers are in Points and rules.",
-            "While private goals are locked, their reminders say \"A private goal\".",
+            "\"Nudges when something is late\" in Settings → Notifications turns them all on or off, and picks the kinds of message: Encouraging, Why it's good (the goal's own reason and your streak), Make it smaller and Playful. Their numbers are in Points and rules.",
+            "While private goals are locked, their reminders say \"A private goal\", without their reason.",
         ),
     ),
     DONE_LIST(

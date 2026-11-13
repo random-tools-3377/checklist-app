@@ -48,7 +48,9 @@ data class Backup(
      * format 25 bills and saving goals;
      * format 26 a second mood each day, once everything due is done;
      * format 27 the mood journal: a note at the second check-in, and what was behind each day's mood;
-     * format 28 focus time: the minutes really spent in each focus session.
+     * format 28 focus time: the minutes really spent in each focus session;
+     * format 29 dated pay plans, money in and reminders on bills, and spending from savings;
+     * format 30 each goal's "Why it's good", in the user's own words.
      */
     val checks: List<Check> = emptyList(),
     /** The user's own photo behind Today, in base64 (format 10). */
@@ -77,9 +79,10 @@ data class Backup(
         /**
          * Raised whenever the file's layout changes in a way older versions can't read. Format 29:
          * the pay setting can hold dated pay plans, bills can be regular money in and have a
-         * reminder, and spending can be paid from a saving goal.
+         * reminder, and spending can be paid from a saving goal. Format 30: each goal's "Why it's
+         * good" ([Goal.why]); a file from before it has none, and its goals import without one.
          */
-        const val FORMAT = 29
+        const val FORMAT = 30
 
         private val json = Json {
             prettyPrint = true

@@ -268,7 +268,7 @@ class NudgesTest {
 
     // Words
 
-    private val facts = NudgeFacts(points = 5)
+    private val facts = NudgeFacts()
 
     private fun texts(g: Goal, facts: NudgeFacts = this.facts, tones: List<NudgeTone> = NudgeTone.entries, locked: Boolean = false, day: LocalDate = this.day) =
         (1..12).map { Nudges.words(g, day, it, it * 30, facts, tones, locked) }
@@ -290,11 +290,12 @@ class NudgesTest {
             goal(at = LocalTime(9, 0)).copy(minutes = 3),
             goal(at = LocalTime(9, 0)).copy(minutes = 45, amount = 20.0, unit = "pages"),
             goal(times = listOf(LocalTime(9, 0), LocalTime(12, 0), LocalTime(18, 0)), target = 3),
+            goal(at = LocalTime(9, 0)).copy(why = "so I sleep better"),
         )
         val toneSets = listOf(NudgeTone.entries) + NudgeTone.entries.map { listOf(it) } +
             listOf(listOf(NudgeTone.ENCOURAGING, NudgeTone.GAIN), listOf(NudgeTone.GAIN, NudgeTone.SMALLER, NudgeTone.PLAYFUL), emptyList())
         for (g in goals) for (tones in toneSets) for (offset in 0..6) for (locked in listOf(false, true)) {
-            val f = NudgeFacts(points = g.points, streak = 12, reward = "🎬 Cinema", rewardLeft = 40, count = 1)
+            val f = NudgeFacts(streak = 12, count = 1)
             val said = texts(g, f, tones, locked, day.plusDays(offset)).map { it.text }
             assertTrue(said.zipWithNext().all { (a, b) -> a != b }, "$tones on day +$offset: $said")
         }
@@ -309,51 +310,66 @@ class NudgesTest {
             assertTrue(said.map { it.text }.toSet().size >= 5, "$tone: ${said.map { it.text }.toSet()}")
         }
         assertTrue((1..40).map { Nudges.words(g, day, it, 30, facts, locked = true).text }.toSet().size >= 5)
+        // Why it's good, with a reason of the goal's own: worded differently too, with and without a streak.
+        val why = g.copy(why = "so I sleep better")
+        for (f in listOf(NudgeFacts(), NudgeFacts(streak = 12))) {
+            assertTrue((1..40).map { Nudges.words(why, day, it, 30, f, listOf(NudgeTone.GAIN)).text }.toSet().size >= 5)
+        }
     }
 
     @Test
-    fun whatYouWouldGainUsesOnlyRealNumbers() {
-        val g = goal(at = LocalTime(9, 0))
-        val gain = listOf(NudgeTone.GAIN)
-        // Points alone: no streak under 2 days, no reward.
-        val plain = texts(g, NudgeFacts(points = 5, streak = 1), gain).map { it.text }
-        assertTrue(plain.all { "5 points" in it })
-        assertTrue(plain.none { "streak" in it || "closer" in it || "all you need" in it }, "$plain")
-        // A streak of 2 or more is named with its real length.
-        val streak = texts(g, NudgeFacts(points = 5, streak = 12), gain).map { it.text }
-        assertTrue(streak.all { "12-day streak" in it })
-        // A starred reward: how much closer, or that it is enough.
-        val closer = texts(g, NudgeFacts(points = 5, reward = "🎬 Cinema", rewardLeft = 40), gain).map { it.text }
-        assertTrue(closer.all { "That's 5 points closer to 🎬 Cinema." in it }, "$closer")
-        val enough = texts(g, NudgeFacts(points = 5, reward = "🎬 Cinema", rewardLeft = 4), gain).map { it.text }
-        assertTrue(enough.all { "That's all you need for 🎬 Cinema." in it })
-        // Already affordable: nothing to get closer to.
-        assertTrue(texts(g, NudgeFacts(points = 5, reward = "🎬 Cinema", rewardLeft = 0), gain).none { "Cinema" in it.text })
-        // With both, each has its turn.
-        val both = (1..12).map { Nudges.words(g, day, it, 30, NudgeFacts(points = 5, streak = 3, reward = "🎬 Cinema", rewardLeft = 40), gain).text }
-        assertTrue(both.any { "3-day streak" in it } && both.any { "Cinema" in it })
+    fun whyItsGoodLeadsWithTheGoalsOwnReasonThenTheStreak() {
+        val g = goal(at = LocalTime(9, 0)).copy(why = "so I sleep better")
+        val why = listOf(NudgeTone.GAIN)
+        assertEquals("Why it's good", NudgeTone.GAIN.label)
+        // The reason alone: no streak under 2 days.
+        val plain = texts(g, NudgeFacts(streak = 1), why).map { it.text }
+        assertTrue(plain.all { "so I sleep better." in it }, "$plain")
+        assertTrue(plain.none { "streak" in it || "1" in it }, "$plain")
+        // A streak of 2 or more comes after the reason, with its real length.
+        val streak = texts(g, NudgeFacts(streak = 12), why).map { it.text }
+        assertTrue(streak.all { "12-day streak" in it && it.indexOf("so I sleep better") < it.indexOf("streak") }, "$streak")
+        // The user's own words are kept as they are, with no second full stop after their own.
+        val own = texts(g.copy(why = "  To feel\n calm!  "), NudgeFacts(), why).map { it.text }
+        assertTrue(own.all { it.endsWith("To feel calm!") }, "$own")
         // No number that wasn't given.
         val digits = Regex("\\d+")
-        assertTrue(plain.all { text -> digits.findAll(text).all { it.value == "5" } }, "$plain")
+        assertTrue(streak.all { text -> digits.findAll(text).all { it.value == "12" } }, "$streak")
     }
 
     @Test
-    fun aGoalThatPaysNothingGetsAnEncouragingTextInstead() {
-        val g = goal(at = LocalTime(9, 0), points = 0)
-        val said = texts(g, NudgeFacts(points = 0, streak = 30, reward = "🎬 Cinema", rewardLeft = 40), listOf(NudgeTone.GAIN)).map { it.text }
+    fun whyItsGoodWithNoReasonUsesTheStreak() {
+        val g = goal(at = LocalTime(9, 0))
+        val said = texts(g, NudgeFacts(streak = 12), listOf(NudgeTone.GAIN)).map { it.text }
+        assertTrue(said.all { "Reading" in it && "12-day streak" in it }, "$said")
+        assertTrue(said.toSet().size >= 5, "$said")
+    }
+
+    @Test
+    fun aGoalWithNeitherAReasonNorAStreakGetsAnEncouragingTextInstead() {
+        val g = goal(at = LocalTime(9, 0))
+        val said = texts(g, NudgeFacts(streak = 1), listOf(NudgeTone.GAIN)).map { it.text }
         val encouraging = (1..14).map { Nudges.words(g, day, it, 30, facts, listOf(NudgeTone.ENCOURAGING)).text }.toSet()
         assertTrue(said.all { it in encouraging }, "$said")
-        assertTrue(said.none { "point" in it || "streak" in it || "Cinema" in it })
+        assertTrue(said.none { "point" in it || "streak" in it })
+        // A reason that is only spaces is none.
+        assertEquals(said, texts(g.copy(why = "   "), NudgeFacts(streak = 1), listOf(NudgeTone.GAIN)).map { it.text })
     }
 
     @Test
-    fun pointsAreCalledWhatTheUserCallsThem() {
-        val coins = PointsName("coin", "coins", "🪙")
-        val g = goal(at = LocalTime(9, 0))
-        val said = texts(g, NudgeFacts(points = 5, name = coins, reward = "🎬 Cinema", rewardLeft = 40), listOf(NudgeTone.GAIN)).map { it.text }
-        assertTrue(said.all { "5 coins 🪙" in it && "point" !in it }, "$said")
-        val one = texts(g, NudgeFacts(points = 1, name = coins), listOf(NudgeTone.GAIN)).map { it.text }
-        assertTrue(one.all { "1 coin 🪙" in it && "coins" !in it }, "$one")
+    fun noNudgeSaysWhatTheGoalPays() {
+        val goals = listOf(
+            goal(at = LocalTime(9, 0), points = 25),
+            goal(at = LocalTime(9, 0), points = 25).copy(why = "so I sleep better"),
+            goal(at = LocalTime(9, 0), points = 25).copy(minutes = 3),
+            goal(times = listOf(LocalTime(9, 0), LocalTime(12, 0), LocalTime(18, 0)), target = 3, points = 25),
+        )
+        for (g in goals) for (offset in 0..6) {
+            for (words in texts(g, NudgeFacts(streak = 9, count = 1), day = day.plusDays(offset))) {
+                val low = words.text.lowercase()
+                assertFalse("point" in low || "coin" in low || "+" in low || "25" in low || "reward" in low || "closer" in low, words.text)
+            }
+        }
     }
 
     @Test
@@ -376,12 +392,12 @@ class NudgesTest {
 
     @Test
     fun aLockedPrivateGoalIsNeverNamed() {
-        val g = goal(at = LocalTime(9, 0)).copy(private = true, name = "Therapy homework", icon = "🧠", minutes = 20)
-        val f = NudgeFacts(points = 7, streak = 12, reward = "🎬 Cinema", rewardLeft = 40)
+        val g = goal(at = LocalTime(9, 0), points = 7).copy(private = true, name = "Therapy homework", icon = "🧠", minutes = 20, why = "so my head is clearer")
+        val f = NudgeFacts(streak = 12)
         for (words in texts(g, f, locked = true)) {
             assertEquals("🔒 A private goal", words.title)
             val all = words.title + " " + words.text
-            assertFalse("Therapy" in all || "🧠" in all || "Cinema" in all || "7" in all || "12" in all || "streak" in all, all)
+            assertFalse("Therapy" in all || "🧠" in all || "head" in all || "7" in all || "12" in all || "streak" in all, all)
         }
         assertEquals("Still to do", Alerts.lockedWords(Alert(1, day, from, AlertKind.NUDGE)))
     }
@@ -391,7 +407,7 @@ class NudgesTest {
         val goals = listOf(goal(at = LocalTime(9, 0)), goal(at = LocalTime(9, 0)).copy(minutes = 30, amount = 3.0, unit = "km"))
         val bad = listOf("fail", "miss", "penalt", "reason", "mood", "should have", "lazy", "again?", "forgot", "behind", "shame", "guilt", "disappoint")
         val said = goals.flatMap { g ->
-            (0..6).flatMap { offset -> texts(g, NudgeFacts(points = 5, streak = 9, reward = "🎬 Cinema", rewardLeft = 40), day = day.plusDays(offset)) } +
+            (0..6).flatMap { offset -> texts(g, NudgeFacts(streak = 9), day = day.plusDays(offset)) } +
                 (0..6).flatMap { offset -> texts(g, locked = true, day = day.plusDays(offset)) }
         }
         for (words in said) {

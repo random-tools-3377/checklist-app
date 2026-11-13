@@ -1,9 +1,7 @@
 package io.github.randomtools3377.checklist.desktop
 
-import io.github.randomtools3377.checklist.core.Alert
 import io.github.randomtools3377.checklist.core.AlertKind
 import io.github.randomtools3377.checklist.core.Alerts
-import io.github.randomtools3377.checklist.core.AtStake
 import io.github.randomtools3377.checklist.core.MoodReminder
 import io.github.randomtools3377.checklist.core.Feature
 import io.github.randomtools3377.checklist.core.Pace
@@ -203,7 +201,7 @@ class DesktopReminders(private val phone: DesktopPhone) {
             val earliest = alerts.minOf { it.day }.minusDays(366)
             val ticks = dao.habitTicksSince(earliest.toEpochDay()).map { it.toCore() }
             val hidePrivate = dao.setting(LOCK_PRIVATE) == "1"
-            val nudges = if (alerts.any { it.kind == AlertKind.NUDGE }) nudgeWriter(dao, parts.book) else null
+            val nudges = if (alerts.any { it.kind == AlertKind.NUDGE }) nudgeWriter(dao) else null
             // What is at stake today, said after a reminder's own words, as on a phone.
             val stakes = stakeWriterOrNull(dao)
             return alerts.mapNotNull { alert ->
@@ -220,7 +218,11 @@ class DesktopReminders(private val phone: DesktopPhone) {
                 DueReminder(
                     goalId = goal.id,
                     title = if (hidden) "🔒 A private goal" else "${goal.icon} ${goal.name}",
-                    text = if (hidden) Alerts.lockedWords(alert) else AtStake.with(words(alert), stakes?.reminder(goal, alert)),
+                    // Led by the goal's own reason, never what it pays; a locked private goal only says when.
+                    text = Alerts.goalWords(
+                        goal, alert, Alerts.timesDone(goal, window, ticks), ::timeText,
+                        stake = stakes?.reminder(goal, alert), hidden = hidden,
+                    ),
                 )
             }.distinctBy { it.goalId to it.text } + deadlines
         }
@@ -243,20 +245,5 @@ class DesktopReminders(private val phone: DesktopPhone) {
 
         /** How many lines of the evening check fit a message from the notification area. */
         private const val EVENING_LINES = 4
-
-        private fun words(alert: Alert): String = when (alert.kind) {
-            AlertKind.ON_TIME -> "Now"
-            AlertKind.BEFORE -> "In ${alert.minutesBefore} min, at ${timeText(alert.at.time)}"
-            AlertKind.REMINDER -> "Reminder"
-            AlertKind.MORNING -> "Your plan for today"
-            AlertKind.AGAIN -> "Still to do"
-            AlertKind.WEEKLY -> "Your week"
-            AlertKind.FOCUS_DONE -> "Time's up"
-            AlertKind.USUAL -> "About now, as usual"
-            AlertKind.NEXT -> "Next up"
-            AlertKind.DEADLINE -> "Due soon"
-            AlertKind.BILL -> "Due soon"
-            AlertKind.NUDGE -> "Still to do"
-        }
     }
 }

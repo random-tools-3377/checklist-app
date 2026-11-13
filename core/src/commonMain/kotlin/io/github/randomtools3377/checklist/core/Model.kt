@@ -93,6 +93,12 @@ data class Goal(
     val after: Long? = null,
     /** The skill area it belongs to, for the character (see [SkillArea]); null to guess it. */
     val skill: SkillArea? = null,
+    /**
+     * "Why it's good": the user's own reason for it, like "so I sleep better", which its
+     * reminders and late nudges lead with (see [Why]). Optional, and only ever the user's own
+     * words: the app never writes one, the AI helper included.
+     */
+    val why: String? = null,
     val archived: Boolean = false,
     val position: Int = 0,
     val createdAt: Long = 0,

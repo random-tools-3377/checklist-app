@@ -234,7 +234,14 @@ The app has no network access unless the owner decides otherwise for this app.
   because they are about getting it done. A goal with no reason reads as before, without the
   points. A locked private goal's reminder still names nothing, its reason included. Points
   still show once something is ticked ("ticked, +5") and inside the app. The morning plan, the
-  evening check and the Sunday summary are not changed by this.
+  evening check and the Sunday summary are not changed by this. **0.72.0 settled these details
+  (default):** "Why it's good" sits under the name in the habit and project editors, one line of
+  up to 120 characters, kept as typed; to-dos, which stay quick, have none. A project's deadline
+  reminders lead with it too. A goal's reminder reads the same on every device, like "so I sleep
+  better · Now · 10 min · 1 of 2", so the iPhone and Windows now also give the length and the
+  count. While the review is locked, late nudges name no streak, like the other reminders. The
+  "Why it's good" switch keeps its stored name, so settings carry over. It is in the database
+  (version 26) and the backup file (format 30); older files import without it.
 - Nudges when a goal is late, to help get it done (decided after 0.68.0): the app keeps at it,
   each nudge worded differently, going round four kinds (encouraging; why it's good: the
   goal's own reason and the streak, changed after 0.71.0 from what the tick pays; make it

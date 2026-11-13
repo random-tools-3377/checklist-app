@@ -117,6 +117,7 @@ import io.github.randomtools3377.checklist.data.toTime
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.isoDayNumber
 import io.github.randomtools3377.checklist.core.Pace
+import io.github.randomtools3377.checklist.core.Why
 import kotlinx.datetime.LocalTime
 
 // The list of goals
@@ -713,6 +714,8 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Long)
     var after by rememberSaveable { mutableStateOf<Long?>(null) }
     // Its skill area for the character; null to guess it.
     var skill by rememberSaveable { mutableStateOf<String?>(null) }
+    // "Why it's good", in the user's own words. Nothing ever fills it in but the user.
+    var why by rememberSaveable { mutableStateOf("") }
     var showErrors by rememberSaveable { mutableStateOf(false) }
     var choosingRepeat by remember { mutableStateOf(false) }
     // What the editor held when it opened, to ask before throwing changes away.
@@ -722,7 +725,7 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Long)
         minutes, atMinute, eachTimeOn, eachTimes, items.filter { it.id != 0L || it.name.isNotBlank() }.map { it.id to it.name },
         finishByMinute, finishDay, notifyOnTime, alertBefore, remindAtMinute, keepReminding, allowance, allowancePer, isPrivate,
         celebration, sound, category, color, amountText, unit, effort, quit, challengeOn, challengeDays, challengeBonus, after, skill,
-        atMost, limitText, nudge,
+        atMost, limitText, nudge, why,
     )
     val phone = LocalPhone.current
     val askPermission = rememberAsk(Ask.NOTIFICATIONS) { onClose() }
@@ -767,6 +770,7 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Long)
                 limitText = goal.limit?.let { Amounts.format(it) }.orEmpty()
                 after = goal.after
                 skill = goal.skill?.name
+                why = goal.why.orEmpty()
                 goal.challenge?.let { c ->
                     challengeOn = true
                     challengeDays = c.days.toString()
@@ -942,6 +946,7 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Long)
                     limit = if (atMost) limitValue else null,
                     after = after,
                     skill = skill?.let { io.github.randomtools3377.checklist.core.SkillArea.valueOf(it) },
+                    why = why,
                     challenge = challengeDays.toIntOrNull()?.takeIf { hasChallenge && it in 2..3650 }?.let { days ->
                         Challenge(days, challengeBonus.toIntOrNull() ?: 0, challengeFrom?.toDay() ?: vm.currentDay())
                     },
@@ -1009,6 +1014,7 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Long)
             supportingText = if (showErrors && nameError != null) ({ Text(nameError) }) else null,
             modifier = Modifier.fillMaxWidth().testTag("field:name"),
         )
+        WhyField(why) { why = it }
         NumberField(
             label = "${pointsTitle()} for each tick",
             value = points,
@@ -1579,13 +1585,15 @@ fun ProjectEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Lon
     var category by rememberSaveable { mutableStateOf("") }
     var color by rememberSaveable { mutableStateOf<Int?>(null) }
     var effort by rememberSaveable { mutableStateOf<String?>(null) }
+    // "Why it's good", in the user's own words. Nothing ever fills it in but the user.
+    var why by rememberSaveable { mutableStateOf("") }
     var nextKey by rememberSaveable { mutableStateOf(2L) }
     val steps = rememberSaveable(saver = StepFieldsSaver) { mutableListOf(StepField(1L, 0L, "", "")).toMutableStateList() }
     var showErrors by rememberSaveable { mutableStateOf(false) }
     // What the editor held when it opened, to ask before throwing changes away.
     var baseline by rememberSaveable { mutableStateOf<String?>(null) }
     fun snapshot(): String = editorSnapshot(
-        name, icon, bonus, deadline, finishByMinute, allowance, isPrivate, celebration, sound, skill, category, color, effort, remind, remindAtMinute,
+        name, icon, bonus, deadline, finishByMinute, allowance, isPrivate, celebration, sound, skill, category, color, effort, remind, remindAtMinute, why,
         steps.filter { it.id != 0L || it.name.isNotBlank() }.map { Triple(it.id, it.name, it.points) },
     )
 
@@ -1607,6 +1615,7 @@ fun ProjectEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Lon
                 color = goal.color
                 effort = goal.effort?.name
                 skill = goal.skill?.name
+                why = goal.why.orEmpty()
                 steps.clear()
                 existingSteps.forEach { steps += StepField(nextKey++, it.id, it.name, it.points.toString()) }
                 if (steps.isEmpty()) steps += StepField(nextKey++, 0L, "", "")
@@ -1649,6 +1658,7 @@ fun ProjectEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Lon
                     skill = skill?.let { io.github.randomtools3377.checklist.core.SkillArea.valueOf(it) },
                     // Nothing kept while it is as it starts: on, when the day starts.
                     reminder = if (remind && remindAtMinute == null) null else Reminder(onTime = remind, at = remindAtMinute?.toTime()),
+                    why = why,
                 ),
                 onDone = {
                     baseline = snapshot()
@@ -1675,6 +1685,7 @@ fun ProjectEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Lon
             supportingText = if (showErrors && nameError != null) ({ Text(nameError) }) else null,
             modifier = Modifier.fillMaxWidth().testTag("field:name"),
         )
+        WhyField(why) { why = it }
         CategoryField(category, { category = it }, vm)
         SkillField(skill, { skill = it }, name, category, vm)
         GoalColourField(color, { color = it }, vm)
@@ -2200,6 +2211,25 @@ private fun PrivateSwitch(isPrivate: Boolean, onPrivate: (Boolean) -> Unit) {
         "field:private",
         hint = "Hidden behind the privacy lock, if it's on for private goals (Settings → Privacy).",
         onChange = onPrivate,
+    )
+}
+
+/**
+ * "Why it's good": the goal's own reason, in the user's words, like "so I sleep better". Its
+ * reminders and late nudges lead with it (see Why in the shared code). Optional, and only ever
+ * typed by the user: no idea, sentence or AI suggestion fills it in.
+ */
+@Composable
+private fun WhyField(value: String, onValue: (String) -> Unit) {
+    OutlinedTextField(
+        value = value,
+        // One line's worth of words, kept on one line: it leads a reminder.
+        onValueChange = { onValue(it.replace('\n', ' ').take(Why.LENGTH)) },
+        label = { Text("Why it's good") },
+        placeholder = { Text("Like: so I sleep better") },
+        supportingText = { Text("Optional, in your own words. Its reminders start with this.") },
+        maxLines = 3,
+        modifier = Modifier.fillMaxWidth().testTag("field:why"),
     )
 }
 

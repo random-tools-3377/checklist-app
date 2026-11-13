@@ -30,10 +30,10 @@ class DesktopStakesTest {
         folder.deleteRecursively()
     }
 
-    private suspend fun habit(name: String, at: LocalTime, private: Boolean = false) = phone.parts.repository.saveHabit(
+    private suspend fun habit(name: String, at: LocalTime, private: Boolean = false, why: String? = null, minutes: Int? = null) = phone.parts.repository.saveHabit(
         HabitDraft(
             id = 0, name = name, icon = "📖", points = 5, repeat = Repeat.everyDay(nowLocal().date.minusDays(1)), target = 1, bonus = 0,
-            minutes = null, at = at, finishBy = null, finishDay = null, private = private,
+            minutes = minutes, at = at, finishBy = null, finishDay = null, private = private, why = why,
         ),
     )
 
@@ -55,5 +55,16 @@ class DesktopStakesTest {
         // A locked private goal keeps its plain words.
         dao.putSetting(SettingEntity(LOCK_PRIVATE, "1"))
         assertEquals(listOf("🔒 A private goal" to "Due now"), at(today, 10).filter { "late" !in it.first })
+    }
+
+    @Test
+    fun aReminderLeadsWithTheGoalsOwnReasonAndNeverItsPoints() = runTest {
+        val tomorrow = Days.dayOf(nowLocal(), 0).plusDays(1)
+        habit("Reading", LocalTime(9, 0), why = "so I fall asleep easier", minutes = 20)
+        assertEquals(listOf("📖 Reading" to "so I fall asleep easier · Now · 20 min"), at(tomorrow, 9))
+        // A locked private goal names nothing, its reason included.
+        habit("Journal", LocalTime(10, 0), private = true, why = "so my head is clearer")
+        dao.putSetting(SettingEntity(LOCK_PRIVATE, "1"))
+        assertEquals(listOf("🔒 A private goal" to "Due now"), at(tomorrow, 10).filter { "late" !in it.first })
     }
 }

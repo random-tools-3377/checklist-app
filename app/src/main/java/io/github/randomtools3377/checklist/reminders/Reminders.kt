@@ -19,7 +19,6 @@ import io.github.randomtools3377.checklist.R
 import io.github.randomtools3377.checklist.core.Alert
 import io.github.randomtools3377.checklist.core.AlertKind
 import io.github.randomtools3377.checklist.core.Alerts
-import io.github.randomtools3377.checklist.core.AtStake
 import io.github.randomtools3377.checklist.core.Days
 import io.github.randomtools3377.checklist.core.DeadlineReminder
 import io.github.randomtools3377.checklist.core.EveningList
@@ -41,7 +40,6 @@ import io.github.randomtools3377.checklist.core.minusDays
 import io.github.randomtools3377.checklist.data.SETTING_WEEKLY
 import io.github.randomtools3377.checklist.core.PaceSettings
 import io.github.randomtools3377.checklist.core.TodayList
-import io.github.randomtools3377.checklist.core.ordinal
 import io.github.randomtools3377.checklist.data.SETTING_DAY_END_HOUR
 import io.github.randomtools3377.checklist.data.SETTING_DAY_START
 import io.github.randomtools3377.checklist.data.SETTING_DEFAULT_FINISH
@@ -247,8 +245,8 @@ object Reminders {
             val hidePrivate = dao.setting(LOCK_PRIVATE) == "1"
             val light = dao.setting(SETTING_REMINDER_LIGHT) == "1"
             val container = (context.applicationContext as ChecklistApplication).container
-            // Late nudges are worded with what there is to gain right now.
-            val nudges = if (due.any { it.kind == AlertKind.NUDGE }) nudgeWriter(dao, container.book) else null
+            // Late nudges are worded with the goal's own reason and the streak as it is right now.
+            val nudges = if (due.any { it.kind == AlertKind.NUDGE }) nudgeWriter(dao) else null
             // What is at stake today ("Last one for today"), said after a reminder's own words.
             val stakes = stakeWriterOrNull(dao)
             for (alert in due) {
@@ -673,10 +671,12 @@ object Reminders {
     }
 
     /**
-     * Shows a notification, or replaces it. [hidden] leaves the goal's name out (privacy lock).
-     * It goes when the alert's day ends at [dayEnd], as its buttons act on the day they're tapped.
-     * With [light] ("Light up the screen for reminders") it comes as a message would (see EdgeLights).
-     * [stake] is what is at stake right now, said last ("Last one for today"); never for a hidden goal.
+     * Shows a notification, or replaces it. Its words lead with the goal's own reason and never
+     * say what it pays (see Alerts.goalWords). [hidden] leaves the goal's name and reason out
+     * (privacy lock). It goes when the alert's day ends at [dayEnd], as its buttons act on the day
+     * they're tapped. With [light] ("Light up the screen for reminders") it comes as a message
+     * would (see EdgeLights). [stake] is what is at stake right now, said last ("Last one for
+     * today"); never for a hidden goal.
      */
     fun show(
         context: Context, goal: Goal, alert: Alert, count: Int, hidden: Boolean, skip: SkipCheck.Allowed?, dayEnd: Int, light: Boolean = false,
@@ -686,27 +686,7 @@ object Reminders {
         val endsIn = LocalDateTime(alert.day.plusDays(1), LocalTime(dayEnd, 0)).millis() - System.currentTimeMillis()
         if (endsIn <= 0) return
         val title = if (hidden) "🔒 A private goal" else "${goal.icon} ${goal.name}"
-        val whenText = when (alert.kind) {
-            AlertKind.ON_TIME -> "Now"
-            AlertKind.BEFORE -> "In ${alert.minutesBefore} min, at ${timeText(alert.at.time)}"
-            AlertKind.REMINDER -> "Reminder"
-            AlertKind.MORNING -> "Your plan for today"
-            AlertKind.AGAIN -> "Still to do"
-            AlertKind.WEEKLY -> "Your week"
-            AlertKind.FOCUS_DONE -> "Time's up"
-            AlertKind.USUAL -> "About now, as usual"
-            AlertKind.NEXT -> "Next up"
-            AlertKind.DEADLINE -> "Due soon"
-            AlertKind.BILL -> "Due soon"
-            AlertKind.NUDGE -> "Still to do"
-        }
-        val details = buildList {
-            add(whenText)
-            if (alert.number > 0) add("the ${ordinal(alert.number)} of ${goal.target}")
-            goal.minutes?.let { add("$it min") }
-            add("+${goal.points}")
-            if (goal.target > 1) add("$count of ${goal.target}")
-        }.joinToString(" · ").let { AtStake.with(it, stake) }
+        val details = Alerts.goalWords(goal, alert, count, ::timeText, stake = stake, hidden = hidden)
 
         val id = notificationId(goal.id)
         val open = PendingIntent.getActivity(
@@ -728,7 +708,9 @@ object Reminders {
         val builder = NotificationCompat.Builder(context, if (light) EdgeLights.REMINDER_CHANNEL else CHANNEL)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(title)
-            .setContentText(if (hidden) Alerts.lockedWords(alert) else details)
+            .setContentText(details)
+            // A reason can be longer than one line: it opens out in full.
+            .setStyle(NotificationCompat.BigTextStyle().bigText(details))
             .setContentIntent(open)
             .addAction(0, if (goal.quit) "Avoided" else if (goal.target > 1) "+1" else "Done", done)
             .setAutoCancel(true)

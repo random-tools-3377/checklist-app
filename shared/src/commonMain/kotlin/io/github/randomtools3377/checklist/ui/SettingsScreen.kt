@@ -249,7 +249,7 @@ private fun SwitchLine(title: String, hint: String, on: Boolean, tag: String, on
 
 /** The words a Settings search finds the Notifications part by. */
 internal fun notificationWords(phone: Phone): String =
-    "Notifications notification reminders reminder alarm exact weekly summary snooze morning plan evening check still open light up screen edge lighting mood reminder how are you feeling late nudges nudge encouraging playful gain smaller motivate" +
+    "Notifications notification reminders reminder alarm exact weekly summary snooze morning plan evening check still open light up screen edge lighting mood reminder how are you feeling late nudges nudge encouraging why it's good reason streak playful smaller motivate" +
         (if (phone.hasWidgets) " widget widgets home screen calendar confirm tick outside the app confirmation left today" else "") +
         if (phone.canKeepRunning) " keep running window closed quit start sign in windows startup" else ""
 

@@ -2,10 +2,8 @@
 
 package io.github.randomtools3377.checklist.ios
 
-import io.github.randomtools3377.checklist.core.Alert
 import io.github.randomtools3377.checklist.core.AlertKind
 import io.github.randomtools3377.checklist.core.Alerts
-import io.github.randomtools3377.checklist.core.AtStake
 import io.github.randomtools3377.checklist.core.Days
 import io.github.randomtools3377.checklist.core.Feature
 import io.github.randomtools3377.checklist.core.MoodReminder
@@ -143,7 +141,7 @@ internal object IosReminders {
         val waiting = Alerts.keep(stillToDo, (MOST - evenings.size - deadlines.size - moods.size).coerceAtLeast(0))
 
         // What each late nudge says, worked out before anything waiting is taken back.
-        val writer = if (waiting.any { it.kind == AlertKind.NUDGE }) nudgeWriter(dao, parts.book) else null
+        val writer = if (waiting.any { it.kind == AlertKind.NUDGE }) nudgeWriter(dao) else null
         val nudgeWords = waiting.filter { it.kind == AlertKind.NUDGE }.mapNotNull { alert ->
             val goal = goals.find { it.id == alert.goalId } ?: return@mapNotNull null
             val window = goal.repeat?.window(alert.day) ?: return@mapNotNull null
@@ -162,7 +160,10 @@ internal object IosReminders {
             // The text is set through its setters: Kotlin sees the read-only parent's properties.
             val content = UNMutableNotificationContent()
             content.setTitle(nudge?.title ?: if (hidden) "🔒 A private goal" else "${goal.icon} ${goal.name}")
-            content.setBody(nudge?.text ?: if (hidden) Alerts.lockedWords(alert) else AtStake.with(words(alert), stakes?.reminder(goal, alert)))
+            // Led by the goal's own reason, never what it pays; a locked private goal only says when.
+            val window = goal.repeat?.window(alert.day)
+            val count = window?.let { Alerts.timesDone(goal, it, ticks) } ?: 0
+            content.setBody(nudge?.text ?: Alerts.goalWords(goal, alert, count, ::timeText, stake = stakes?.reminder(goal, alert), hidden = hidden))
             content.setSound(UNNotificationSound.defaultSound)
             val request = UNNotificationRequest.requestWithIdentifier(
                 "goal-${alert.goalId}-${alert.at}-${alert.kind}",
@@ -230,21 +231,6 @@ internal object IosReminders {
             )
             center.addNotificationRequest(request, withCompletionHandler = null)
         }
-    }
-
-    private fun words(alert: Alert): String = when (alert.kind) {
-        AlertKind.ON_TIME -> "Now"
-        AlertKind.BEFORE -> "In ${alert.minutesBefore} min, at ${timeText(alert.at.time)}"
-        AlertKind.REMINDER -> "Reminder"
-        AlertKind.MORNING -> "Your plan for today"
-        AlertKind.AGAIN -> "Still to do"
-        AlertKind.WEEKLY -> "Your week"
-        AlertKind.FOCUS_DONE -> "Time's up"
-        AlertKind.USUAL -> "About now, as usual"
-        AlertKind.NEXT -> "Next up"
-        AlertKind.DEADLINE -> "Due soon"
-        AlertKind.BILL -> "Due soon"
-        AlertKind.NUDGE -> "Still to do"
     }
 
     private fun components(at: LocalDateTime): NSDateComponents = NSDateComponents().apply {

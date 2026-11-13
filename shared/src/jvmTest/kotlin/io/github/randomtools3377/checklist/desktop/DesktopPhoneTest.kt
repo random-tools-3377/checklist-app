@@ -71,7 +71,8 @@ class DesktopPhoneTest {
         addRead(LocalTime(9, 0))
         val tomorrow = nowLocal().date.plus(DatePeriod(days = 1))
         val due = DesktopReminders.due(phone.parts, at(tomorrow, 9, 0), at(tomorrow, 9, 1))
-        assertEquals(listOf("📖 Read" to "Now"), due.map { it.title to it.text })
+        // The same words as on a phone: when, and how long it takes. Never what it pays.
+        assertEquals(listOf("📖 Read" to "Now · 10 min"), due.map { it.title to it.text })
         assertTrue(DesktopReminders.due(phone.parts, at(tomorrow, 9, 1), at(tomorrow, 9, 2)).isEmpty())
         assertTrue(DesktopReminders.due(phone.parts, at(tomorrow, 8, 59), at(tomorrow, 9, 0)).isEmpty())
     }

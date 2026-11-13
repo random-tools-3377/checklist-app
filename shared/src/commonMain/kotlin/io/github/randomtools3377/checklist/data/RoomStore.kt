@@ -166,6 +166,7 @@ fun GoalEntity.toCore(limits: Map<Long, Double> = AtMostLimits.current) = Goal(
     challenge = if (challengeDays != null && challengeDays > 0 && challengeFrom != null) Challenge(challengeDays, challengeBonus ?: 0, challengeFrom.toDay()) else null,
     after = afterGoal,
     skill = io.github.randomtools3377.checklist.core.SkillArea.entries.firstOrNull { it.name == skill },
+    why = why?.takeIf { it.isNotBlank() },
     archived = archived,
     position = position,
     createdAt = createdAt,
@@ -207,6 +208,8 @@ fun Goal.toEntity() = GoalEntity(
     challengeFrom = challenge?.from?.toEpochDay(),
     afterGoal = after,
     skill = skill?.name,
+    // Tidied, also when it comes from a backup file.
+    why = io.github.randomtools3377.checklist.core.Why.tidy(why),
 )
 
 fun FocusSessionEntity.toCore() = io.github.randomtools3377.checklist.core.FocusSession(

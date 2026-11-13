@@ -65,6 +65,9 @@ class MigrationTest {
                 assertEquals(1, dao.balance()) // the ledger is untouched
                 assertNull(dao.purchase(1)!!.returnedAt)
                 assertNull(water.reminder) // version 3: default notifications
+                // Version 26: every goal is kept, with no "Why it's good" until the user writes one.
+                assertEquals(listOf(1L, 2L, 3L, 4L), dao.allGoals().map { it.id }.sorted())
+                assertNull(water.why)
             }
         } finally {
             db.close()

@@ -3,7 +3,6 @@ package io.github.randomtools3377.checklist.data
 import io.github.randomtools3377.checklist.core.Alert
 import io.github.randomtools3377.checklist.core.AlertKind
 import io.github.randomtools3377.checklist.core.Alerts
-import io.github.randomtools3377.checklist.core.Book
 import io.github.randomtools3377.checklist.core.NudgePlan
 import io.github.randomtools3377.checklist.core.NudgeTone
 import io.github.randomtools3377.checklist.core.Nudges
@@ -35,7 +34,6 @@ class LateNudgesDataTest {
     }
 
     private val repository = Repository(db, NoGifs())
-    private val book = Book(RoomStore(db))
 
     /** Tomorrow, so nothing depends on the time the test runs at. */
     private val day get() = nowLocal().date.plusDays(1)
@@ -43,11 +41,11 @@ class LateNudgesDataTest {
     @AfterTest
     fun close() = db.close()
 
-    private suspend fun habit(name: String = "Reading", private: Boolean = false, reminder: Reminder? = null, minutes: Int? = null): Long {
+    private suspend fun habit(name: String = "Reading", private: Boolean = false, reminder: Reminder? = null, minutes: Int? = null, why: String? = null): Long {
         repository.saveHabit(
             HabitDraft(
                 id = 0, name = name, icon = "📖", points = 5, repeat = Repeat.everyDay(nowLocal().date.minusDays(1)), target = 1, bonus = 0,
-                minutes = minutes, at = LocalTime(9, 0), finishBy = null, finishDay = null, reminder = reminder, private = private,
+                minutes = minutes, at = LocalTime(9, 0), finishBy = null, finishDay = null, reminder = reminder, private = private, why = why,
             ),
         )
         return dao.activeGoals().single { it.name == name }.id
@@ -110,47 +108,55 @@ class LateNudgesDataTest {
     }
 
     @Test
-    fun theWordsUseWhatIsReallyThere() = runTest {
-        val id = habit(minutes = 20)
+    fun whyItsGoodUsesTheGoalsOwnReasonAndNeverWhatItPays() = runTest {
+        val id = habit(minutes = 20, why = "  so I read\n more  ")
         val goal = dao.activeCoreGoals().single { it.id == id }
-        repository.setSetting(Nudges.TONES, Nudges.encodeTones(setOf(NudgeTone.GAIN)))
+        // Saved tidied, in the user's own words.
+        assertEquals("so I read more", goal.why)
+        // The switch for this kind keeps its stored name, so nobody's settings change.
+        repository.setSetting(Nudges.TONES, "GAIN")
+        assertEquals(listOf(NudgeTone.GAIN), Nudges.tones(dao.setting(Nudges.TONES)))
         repository.setSetting(SETTING_POINTS_NAME, PointsName.encode(PointsName("coin", "coins", "")))
+        // A starred reward out of reach is never named either.
+        repository.saveReward(RewardDraft(id = 0, name = "Cinema", icon = "🎬", price = 50))
+        repository.setSetting(SavingFor.SETTING, dao.activeRewards().single().id.toString())
         // A nudge for today: the writer's own day.
         val later = nudges().first()
         val alert = later.copy(day = nowLocal().date)
-        // No streak yet and nothing starred: the coins alone.
-        val plain = nudgeWriter(dao, book).words(goal, alert)
-        assertEquals("📖 Reading · 30 min late", plain.title)
-        assertEquals(NudgeTone.GAIN, plain.tone)
-        assertTrue("5 coins" in plain.text, plain.text)
-        assertFalse("streak" in plain.text || "closer" in plain.text, plain.text)
+        val today = nudgeWriter(dao).words(goal, alert)
+        assertEquals("📖 Reading · 30 min late", today.title)
+        assertEquals(NudgeTone.GAIN, today.tone)
+        assertTrue("so I read more." in today.text, today.text)
+        assertFalse("coin" in today.text || "5" in today.text || "Cinema" in today.text || "closer" in today.text, today.text)
+        // A nudge written ahead for a later day (the iPhone's) names only the goal and its reason.
+        val ahead = nudgeWriter(dao).words(goal, later)
+        assertEquals("📖 Reading · 30 min late", ahead.title)
+        assertTrue("so I read more." in ahead.text, ahead.text)
+        assertFalse("streak" in ahead.text || "coin" in ahead.text || "Cinema" in ahead.text, ahead.text)
 
-        // A starred reward out of reach is named with what the tick brings.
-        repository.saveReward(RewardDraft(id = 0, name = "Cinema", icon = "🎬", price = 50))
-        repository.setSetting(SavingFor.SETTING, dao.activeRewards().single().id.toString())
-        val closer = nudgeWriter(dao, book).words(goal, alert)
-        assertTrue("That's 5 coins closer to 🎬 Cinema." in closer.text, closer.text)
-        // A nudge written ahead for a later day can't know that day's balance: the coins alone.
-        val ahead = nudgeWriter(dao, book).words(goal, later)
-        assertTrue("5 coins" in ahead.text, ahead.text)
-        assertFalse("Cinema" in ahead.text, ahead.text)
-
-        // With the shop behind the lock, no reward is named.
-        repository.setSetting(LOCK_SHOP, "1")
-        assertFalse("Cinema" in nudgeWriter(dao, book).words(goal, alert).text)
+        // No reason and no streak: an encouraging one instead, still without what it pays.
+        val plainId = habit("Stretch")
+        val plain = dao.activeCoreGoals().single { it.id == plainId }
+        val words = nudgeWriter(dao).words(plain, alert.copy(goalId = plainId))
+        assertEquals(NudgeTone.GAIN, words.tone)
+        assertTrue("Stretch" in words.text, words.text)
+        assertFalse("coin" in words.text || "5" in words.text || "streak" in words.text, words.text)
     }
 
     @Test
     fun aLockedPrivateGoalsNudgeNamesNothing() = runTest {
-        val id = habit("Secret plan", private = true)
+        val id = habit("Secret plan", private = true, why = "so the chores get done")
         val goal = dao.activeCoreGoals().single { it.id == id }
         val alert = nudges().first()
-        assertEquals("📖 Secret plan · 30 min late", nudgeWriter(dao, book).words(goal, alert).title)
+        assertEquals("📖 Secret plan · 30 min late", nudgeWriter(dao).words(goal, alert).title)
         repository.setSetting(LOCK_PRIVATE, "1")
-        val writer = nudgeWriter(dao, book)
+        val writer = nudgeWriter(dao)
         assertTrue(writer.hidden(goal))
-        val words = writer.words(goal, alert)
-        assertEquals("🔒 A private goal", words.title)
-        assertFalse("Secret" in words.text || "5" in words.text, words.text)
+        // Every kind of nudge, Why it's good included: nothing named, its reason neither.
+        for (nth in 1..8) {
+            val words = writer.words(goal, alert.copy(nth = nth))
+            assertEquals("🔒 A private goal", words.title)
+            assertFalse("Secret" in words.text || "5" in words.text || "chores" in words.text, words.text)
+        }
     }
 }

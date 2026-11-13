@@ -131,6 +131,7 @@ on one and import the file on the other. Reminders show only while the app is op
 - 0.69.0: nudges when a goal is late, worded differently each time, with Stop for today.
 - 0.70.0: Ask a question and How am I doing?; a Today that says what each tick changed and what is within reach; a character that moves and reacts; badge progress.
 - 0.71.0: animations with a Less motion switch, swipe to tick and drag to reorder; the character on more screens; reminders that say what is at stake.
+- 0.72.0: reminders about the goal and why it's good, not the points: each goal can have its own "Why it's good".
 
 Every step in CLAUDE.md's build order is built. The iPhone app is installed with SideStore or
 AltStore (see the 0.55.0 release notes).

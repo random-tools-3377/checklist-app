@@ -226,7 +226,8 @@ object Alerts {
     /**
      * The deadline reminders to show from [from] (included) to [to] (not included), in words,
      * as things stand: a project whose steps are all ticked has none. [steps] and [stepTicks]
-     * may hold other goals'. With [hidePrivate], a private project is only "A private goal".
+     * may hold other goals'. Each starts with the project's own reason, if it has one. With
+     * [hidePrivate], a private project is only "A private goal", without its reason.
      */
     fun deadlineReminders(
         goals: List<Goal>,
@@ -251,7 +252,10 @@ object Alerts {
                 day = alert.day,
                 at = alert.at,
                 title = if (hidden) "🔒 ${PrivateGoals.NAME}" else "${goal.icon} ${goal.name}",
-                text = deadlineWords(goal, alert, left.takeIf { !hidden }),
+                // Led by the project's own reason, as a goal's reminders are; never while it is locked.
+                text = deadlineWords(goal, alert, left.takeIf { !hidden }).let { words ->
+                    Why.tidy(goal.why)?.takeIf { !hidden }?.let { "$it · $words" } ?: words
+                },
             )
         }
     }
@@ -334,6 +338,44 @@ object Alerts {
         val (repeats, firsts) = alerts.sortedBy { it.at }.partition { it.kind == AlertKind.AGAIN || it.kind == AlertKind.NUDGE }
         val kept = firsts.take(most)
         return (kept + repeats.take(most - kept.size)).sortedBy { it.at }
+    }
+
+    /** When a goal's reminder is for, in words: "Now", "In 10 min, at 9:00 am", "Still to do". [time] writes a clock time as the device does. */
+    fun whenWords(alert: Alert, time: (LocalTime) -> String): String = when (alert.kind) {
+        AlertKind.ON_TIME -> "Now"
+        AlertKind.BEFORE -> "In ${alert.minutesBefore} min, at ${time(alert.at.time)}"
+        AlertKind.REMINDER -> "Reminder"
+        AlertKind.MORNING -> "Your plan for today"
+        AlertKind.AGAIN -> "Still to do"
+        AlertKind.WEEKLY -> "Your week"
+        AlertKind.FOCUS_DONE -> "Time's up"
+        AlertKind.USUAL -> "About now, as usual"
+        AlertKind.NEXT -> "Next up"
+        AlertKind.DEADLINE -> "Due soon"
+        AlertKind.BILL -> "Due soon"
+        AlertKind.NUDGE -> "Still to do"
+    }
+
+    /**
+     * What a goal's reminder says under its title (the goal's icon and name), the same on every
+     * phone and the computer: the goal's own reason ("Why it's good") first, then when, which of
+     * its times this is, how long it takes and how many are done, and last what is at stake
+     * right then ([stake], "Last one for today"). Never what the goal pays: reminders are about
+     * the task and why it is good (decided after 0.71.0). A goal with no reason simply starts
+     * with when. [count] is how many of its times are done; [time] writes a clock time as the
+     * device does. With [hidden], for a private goal behind the privacy lock, it only says when
+     * (see [lockedWords]): no reason and no stake.
+     */
+    fun goalWords(goal: Goal, alert: Alert, count: Int, time: (LocalTime) -> String, stake: String? = null, hidden: Boolean = false): String {
+        if (hidden) return lockedWords(alert)
+        val details = buildList {
+            Why.tidy(goal.why)?.let { add(it) }
+            add(whenWords(alert, time))
+            if (alert.number > 0) add("the ${ordinal(alert.number)} of ${goal.target}")
+            goal.minutes?.let { add("$it min") }
+            if (goal.target > 1) add("$count of ${goal.target}")
+        }.joinToString(" · ")
+        return AtStake.with(details, stake)
     }
 
     /** What a reminder for a locked private goal says: only when, nothing about the goal. */

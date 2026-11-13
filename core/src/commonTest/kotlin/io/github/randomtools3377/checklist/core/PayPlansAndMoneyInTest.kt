@@ -187,7 +187,7 @@ class PayPlansAndMoneyInTest {
             bills = listOf(Bill(id = 4, name = "Pension", icon = "💵", cents = 60_000, first = rise, moneyIn = true, remindDays = 3)),
         )
         val text = Backup.encode(backup)
-        assertEquals(29, Backup.FORMAT)
+        assertTrue(Backup.FORMAT >= 29)
         assertEquals(backup, Backup.decode(text))
         // A file from before: no such fields, one plan in the setting.
         val older = text.replace("\"format\": 29", "\"format\": 28")
