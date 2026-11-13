@@ -68,6 +68,65 @@ data class GoalIdea(
     val unit: String? = null,
 )
 
+/** What the app would suggest for a goal read from a sentence: its points and skill area, with why. */
+data class IdeaSuggestion(val points: Int, val effort: Effort, val area: SkillArea, val reason: String)
+
+private val dayShort = listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+
+/** "9:00 pm", for text the shared code makes itself. */
+fun clockText(time: LocalTime): String {
+    val hour = if (time.hour % 12 == 0) 12 else time.hour % 12
+    return "$hour:${time.minute.toString().padStart(2, '0')} ${if (time.hour < 12) "am" else "pm"}"
+}
+
+/** "Mon to Fri", "Mon, Wed, Fri" or "Sat and Sun", from ISO day numbers. */
+fun daysText(days: List<Int>): String {
+    val sorted = days.filter { it in 1..7 }.distinct().sorted()
+    return when {
+        sorted.size >= 3 && sorted.last() - sorted.first() == sorted.size - 1 -> "${dayShort[sorted.first() - 1]} to ${dayShort[sorted.last() - 1]}"
+        sorted.size == 2 -> "${dayShort[sorted[0] - 1]} and ${dayShort[sorted[1] - 1]}"
+        else -> sorted.joinToString(", ") { dayShort[it - 1] }
+    }
+}
+
+/** What was understood, in plain words: "Read · Mon to Fri · 9:00 pm · 20 pages". */
+fun GoalIdea.describe(): String = listOfNotNull(
+    listOfNotNull(icon, name).joinToString(" "),
+    when (repeat) {
+        IdeaRepeat.EVERY_DAY -> "Every day"
+        IdeaRepeat.DAYS_OF_WEEK -> daysText(days)
+        IdeaRepeat.TIMES_PER_WEEK -> timesPerWeek?.let { if (it == 1) "Once a week" else "$it times a week" }
+    },
+    time?.let(::clockText),
+    minutes?.let { "$it min" },
+    amount?.let { Amounts.format(it) + (unit?.let { u -> " $u" } ?: "") },
+).joinToString(" · ")
+
+/** What the sentence didn't say, for the user to set by hand if they want: "No time given". */
+fun GoalIdea.missing(): List<String> = listOfNotNull(
+    "No time given".takeIf { time == null },
+    "No length given".takeIf { minutes == null },
+    "No amount given".takeIf { amount == null },
+)
+
+/**
+ * The points and skill area the app suggests for this goal, by its own rules (never the AI's):
+ * the difficulty from its length, the points from [Suggest.points], the area from its name.
+ */
+fun GoalIdea.suggestion(): IdeaSuggestion {
+    val effort = when {
+        minutes == null -> Effort.MEDIUM
+        minutes <= 10 -> Effort.EASY
+        minutes <= 30 -> Effort.MEDIUM
+        minutes <= 60 -> Effort.HARD
+        else -> Effort.VERY_HARD
+    }
+    val points = Suggest.points(effort, minutes)
+    val area = SkillArea.guess(name, null)
+    val why = if (minutes == null) "${effort.label}, as no length was given" else "${effort.label} for $minutes minutes"
+    return IdeaSuggestion(points, effort, area, "${PointsName.current.amount(points)}: $why. Skill: ${area.label}, from its name.")
+}
+
 /** "Read 20 pages every weekday at 9pm" into a goal: what the AI is asked, and reading its answer. */
 object GoalFromSentence {
     const val MAX_TOKENS = 200
@@ -114,6 +173,10 @@ object GoalFromSentence {
      * The goal in the AI's [answer], checked field by field: anything missing, odd or out of
      * range is left out rather than guessed. Null when there isn't even a name.
      */
+    fun parse(answer: String, sentence: String): GoalIdea? =
+        parse(answer)?.let { SentenceReader.merge(it, SentenceReader.read(sentence)) }
+
+    /** The goal in the AI's [answer] alone, before the app's own reading puts it right. */
     fun parse(answer: String): GoalIdea? {
         val start = answer.indexOf('{')
         val end = answer.lastIndexOf('}')

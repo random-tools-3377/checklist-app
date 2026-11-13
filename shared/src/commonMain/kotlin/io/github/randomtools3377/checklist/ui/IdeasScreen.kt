@@ -66,6 +66,7 @@ fun IdeasScreen(vm: MainViewModel, start: SkillArea, onAdd: (AreaIdea) -> Unit, 
     var aiIdeas by remember(areaName) { mutableStateOf<List<AreaIdea>>(emptyList()) }
     var shownNames by remember(areaName) { mutableStateOf<List<String>>(emptyList()) }
     var thinking by remember(areaName) { mutableStateOf(false) }
+    var aiJob by remember(areaName) { mutableStateOf<kotlinx.coroutines.Job?>(null) }
     var message by remember(areaName) { mutableStateOf<String?>(null) }
     val level = sheet?.skillLevel(area)?.level ?: 1
     val steps = remember(goals, area) { Ideas.stepUps(goals, area) }
@@ -155,16 +156,18 @@ fun IdeasScreen(vm: MainViewModel, start: SkillArea, onAdd: (AreaIdea) -> Unit, 
                     Text(status.describe(), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 } else {
                     aiIdeas.forEach { idea ->
-                        IdeaCard(idea, primary = "Add", onPrimary = { onAdd(idea) }, tag = "idea:${idea.key}")
+                        // Why it fits, worked out by the app: what it would pay, and how long to the next level.
+                        IdeaCard(idea, primary = "Add", onPrimary = { onAdd(idea) }, tag = "idea:${idea.key}", why = idea.why(sheet?.skillLevel(area)))
                     }
-                    message?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
+                    message?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         Button(
                             onClick = {
                                 thinking = true
                                 message = null
-                                vm.aiIdeas(area, shownNames) { list, error ->
+                                aiJob = vm.aiIdeas(area, shownNames) { list, error ->
                                     thinking = false
+                                    aiJob = null
                                     if (list.isNotEmpty()) {
                                         aiIdeas = list
                                         shownNames = (shownNames + list.map { it.goal.name }).distinct()
@@ -175,7 +178,14 @@ fun IdeasScreen(vm: MainViewModel, start: SkillArea, onAdd: (AreaIdea) -> Unit, 
                             enabled = !thinking,
                             modifier = Modifier.testTag("ideas-ai"),
                         ) { Text(if (aiIdeas.isEmpty()) "Make new ideas" else "Make more") }
-                        if (thinking) CircularProgressIndicator(Modifier.width(24.dp))
+                    }
+                    if (thinking) {
+                        AiWaiting(onStop = {
+                            aiJob?.cancel()
+                            aiJob = null
+                            thinking = false
+                            message = "Stopped waiting. The app's own ideas are above."
+                        })
                     }
                 }
             }
@@ -197,6 +207,7 @@ private fun IdeaCard(
     tag: String,
     secondary: String? = null,
     onSecondary: () -> Unit = {},
+    why: String? = null,
 ) {
     Card(Modifier.fillMaxWidth().testTag(tag)) {
         Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -208,6 +219,7 @@ private fun IdeaCard(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                why?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.testTag("$tag:why")) }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     FilledTonalButton(onClick = onPrimary, modifier = Modifier.testTag("$tag:use")) { Text(primary) }
                     secondary?.let { TextButton(onClick = onSecondary, modifier = Modifier.testTag("$tag:hide")) { Text(it) } }

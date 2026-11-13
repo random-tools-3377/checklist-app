@@ -124,6 +124,8 @@ fun TodayScreen(
     skipRequest: Long?,
     onSkipRequestHandled: () -> Unit,
     padding: PaddingValues,
+    /** Opens the "How am I doing?" summary. */
+    onHowDoing: () -> Unit = {},
 ) {
     if (screen == null) return
     val view = screen.view
@@ -583,7 +585,8 @@ fun TodayScreen(
                         saving = savingFor,
                         onShop = onShop,
                     )
-                    Spacer(Modifier.height(12.dp))
+                    TextButton(onClick = onHowDoing, modifier = Modifier.testTag("how-doing-open")) { Text("How am I doing?") }
+                    Spacer(Modifier.height(4.dp))
                 }
                 TodaySection.CHARACTER -> if (character != null) item(key = "character") {
                     // With the character on: its level, under the balance.

@@ -62,7 +62,7 @@ internal fun featureWords(feature: Feature): String = listOf(
         Feature.BOSSES -> "boss items game"
         Feature.BUDGET -> "budget money pay spending bills savings"
         Feature.BUDGET_GAME -> "budget money game"
-        Feature.AI -> "ai artificial intelligence voice speech"
+        Feature.AI -> "ai artificial intelligence voice speech ask question chat"
         else -> ""
     },
 ).joinToString(" ")

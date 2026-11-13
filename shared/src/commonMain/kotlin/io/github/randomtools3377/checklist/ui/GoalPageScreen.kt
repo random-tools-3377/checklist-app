@@ -80,6 +80,8 @@ fun GoalPageScreen(
     /** Opens a skip or miss to change its reason or say it was a forgotten tick. */
     onMiss: (Long) -> Unit,
     onBack: () -> Unit,
+    /** The "How is it going?" button, which opens the summary for this goal. */
+    howDoing: @Composable (Goal) -> Unit = {},
 ) {
     val view by remember(goalId) { vm.goalPage(goalId) }.collectAsStateWithLifecycle(null)
     val shown = view
@@ -105,6 +107,7 @@ fun GoalPageScreen(
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = padding.calculateTopPadding() + 8.dp, bottom = padding.calculateBottomPadding() + 24.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            if (!shown.goal.archived && shown.goal.kind == GoalKind.HABIT) item(key = "how-doing") { howDoing(shown.goal) }
             item(key = "calendar") { GoalCalendar(shown) }
             item(key = "numbers") { GoalNumbers(shown) }
             if (shown.goal.kind == GoalKind.PROJECT) item(key = "steps") { GoalSteps(shown) }

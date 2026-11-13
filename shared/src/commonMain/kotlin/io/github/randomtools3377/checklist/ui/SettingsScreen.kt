@@ -515,7 +515,7 @@ fun SettingsScreen(
     // Points and rules is found by the groups it shows, which leave out extras that are off.
     val ruleGroups = Offered.rules(Rules.FIELDS, features, rules).map { it.group }.distinct()
     val showRules = shows("Points and rules numbers penalty penalties bonus bonuses percent quest combo boss lucky shield path budget game prices balance check suggested difficulty " + ruleGroups.joinToString(" "))
-    val showHelp = shows("Help and tips guides how to what does info search reminders game")
+    val showHelp = shows("Help and tips guides how to what does info search reminders game ask a question answers")
     val showGuide = shows("How the app works guide tour examples help")
     // Tabs hidden from the bottom bar are still here.
     val hiddenTabs = look.tabs.hidden.filter { it != io.github.randomtools3377.checklist.core.AppTabKind.BUDGET || Feature.BUDGET in features }.sortedBy { it.ordinal }
@@ -668,7 +668,7 @@ fun SettingsScreen(
             ) {
                 Text("Help and tips", style = MaterialTheme.typography.bodyLarge)
                 Text(
-                    "A guide to every part of the app, in groups, with search. Tips the first time are here too.",
+                    "A guide to every part of the app, in groups, with search, and \"Ask a question\" for an answer in a few words. Tips the first time are here too.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.primary,
                 )

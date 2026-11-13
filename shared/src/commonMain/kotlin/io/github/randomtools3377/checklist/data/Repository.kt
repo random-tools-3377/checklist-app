@@ -748,6 +748,13 @@ class Repository(private val db: AppDatabase, private val celebrations: GifStore
         true
     }
 
+    /** Changes a goal's reminder with [change], from the offer after saving a described goal. */
+    suspend fun setGoalReminder(id: Long, change: (Reminder) -> Reminder): Unit = db.withTransaction {
+        val row = dao.goal(id) ?: return@withTransaction
+        val now = row.reminder?.let { RepeatText.decodeReminder(it) } ?: Reminder()
+        dao.updateGoal(row.copy(reminder = RepeatText.encodeReminder(change(now))))
+    }
+
     /** Gives a goal a clock time for [day] only (from the timeline), or back to its usual time with null. */
     suspend fun retimeGoal(goalId: Long, day: LocalDate, minute: Int?, today: LocalDate): Unit = db.withTransaction {
         val row = dao.goal(goalId) ?: return@withTransaction

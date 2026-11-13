@@ -89,6 +89,7 @@ fun helpTopicFor(route: String): HelpTopic? = when (route.substringBefore("/")) 
     "bill" -> HelpTopic.BILL_EDITOR
     "budget-report" -> HelpTopic.BUDGET_REPORT
     "focus" -> HelpTopic.FOCUS
+    "ask" -> HelpTopic.ASK
     else -> null
 }
 
@@ -147,6 +148,8 @@ internal fun HelpTopic.stepsOn(device: GuideDevice): List<String> = when (this) 
         }
     }
     HelpTopic.REMINDERS -> reminderSteps(device)
+    // Where there is no AI helper yet, the app answers in its own words and the AI isn't mentioned.
+    HelpTopic.ASK, HelpTopic.HOW_DOING -> if (device.ai) steps else steps.filterNot { "AI helper" in it }
     else -> steps
 }
 
@@ -355,7 +358,7 @@ fun FirstTimeTip(route: String, vm: MainViewModel) {
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HelpScreen(vm: MainViewModel, onBack: () -> Unit) {
+fun HelpScreen(vm: MainViewModel, onBack: () -> Unit, onAsk: () -> Unit = {}) {
     val device = LocalPhone.current.guideDevice()
     val tips by vm.tips.collectAsStateWithLifecycle()
     val features by vm.features.collectAsStateWithLifecycle()
@@ -406,6 +409,15 @@ fun HelpScreen(vm: MainViewModel, onBack: () -> Unit) {
         ) {
             item(key = "top") {
                 Column {
+                    // Ask: a question in the user's own words, answered from these guides and their own numbers.
+                    Column(Modifier.fillMaxWidth().clickable(onClick = onAsk).padding(vertical = 10.dp).testTag("help-ask")) {
+                        Text("💬 Ask a question", style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            "Type what you want to know, about your day or about the app, and get a short answer with the guide it came from.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                     SwitchRow(
                         "Show a tip the first time each screen opens",
                         tips?.on ?: false,

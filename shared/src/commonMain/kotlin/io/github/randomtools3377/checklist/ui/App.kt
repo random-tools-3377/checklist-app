@@ -132,7 +132,7 @@ fun ChecklistApp(vm: MainViewModel) {
                     kotlinx.coroutines.delay(UNDO_MILLIS)
                     undoHost.currentSnackbarData?.dismiss()
                 }
-                val result = undoHost.showSnackbar(offer.message, actionLabel = "Undo", duration = androidx.compose.material3.SnackbarDuration.Indefinite)
+                val result = undoHost.showSnackbar(offer.message, actionLabel = offer.action, duration = androidx.compose.material3.SnackbarDuration.Indefinite)
                 timer.cancel()
                 if (result == androidx.compose.material3.SnackbarResult.ActionPerformed) {
                     offer.undo()
@@ -160,6 +160,11 @@ fun ChecklistApp(vm: MainViewModel) {
         reorderGoals = false
         selectGoals = false
         reorderRewards = false
+    }
+    // Opens a screen by its route, from a button under an answer: a tab, or a page on top.
+    fun open(next: String) {
+        val tab = AppTab.entries.firstOrNull { it.route == next }
+        if (tab != null) goTo(tab) else push(next)
     }
 
     BackButton(enabled = stack.size > 1 || route != AppTab.TODAY.route) { pop() }
@@ -201,11 +206,23 @@ fun ChecklistApp(vm: MainViewModel) {
     }
     var voiceCommand by remember { mutableStateOf<io.github.randomtools3377.checklist.core.VoiceCommand?>(null) }
     var voiceProblem by remember { mutableStateOf<String?>(null) }
+    // A question said by voice, for the Ask page to answer as it opens; and the "How am I
+    // doing?" sheet, for the day (0) or one goal.
+    var askFirst by remember { mutableStateOf<String?>(null) }
+    var howDoing by remember { mutableStateOf<Long?>(null) }
     val listen = rememberVoice(
         onHeard = { heard ->
-            // Goals due today, by name, to match what was said.
-            val choices = vm.todayState.value?.view?.dueToday.orEmpty().map { it.goal.id to it.goal.name }
-            voiceCommand = io.github.randomtools3377.checklist.core.VoiceCommand.parse(heard, choices)
+            // Goals due today and open to-dos, not done yet, by name, to match what was said.
+            val view = vm.todayState.value?.view
+            val choices = view?.dueToday.orEmpty().filter { !it.settled }.map { it.goal.id to it.goal.name }
+            val todos = view?.todos.orEmpty().filter { !it.done }.map { it.goal.id to it.goal.name }
+            val parsed = io.github.randomtools3377.checklist.core.VoiceCommand.parse(heard, choices, todos)
+            if (parsed is io.github.randomtools3377.checklist.core.VoiceCommand.Question) {
+                askFirst = parsed.question
+                stack.add("ask")
+            } else {
+                voiceCommand = parsed
+            }
         },
         onProblem = { voiceProblem = it },
     )
@@ -464,6 +481,9 @@ fun ChecklistApp(vm: MainViewModel) {
                     onEdit = { goal -> pop(); push(editRoute(goal)) },
                     onMiss = { vm.openMiss.value = it },
                     onBack = ::pop,
+                    howDoing = { goal ->
+                        TextButton(onClick = { howDoing = goal.id }, modifier = Modifier.testTag("how-doing-open")) { Text("How is it going?") }
+                    },
                 )
             }
             "done" -> DoneListScreen(doneList, onOpen = { goal -> push(editRoute(goal)) }, onBack = ::pop)
@@ -477,7 +497,27 @@ fun ChecklistApp(vm: MainViewModel) {
             "bill" -> androidx.compose.runtime.key(route) { BillEditor(id, vm, onClose = ::pop) }
             "budget-report" -> BudgetReportScreen(vm, onBack = ::pop)
             "rules" -> RulesScreen(vm, onBack = ::pop)
-            "help" -> HelpScreen(vm, onBack = ::pop)
+            "help" -> HelpScreen(
+                vm, onBack = ::pop,
+                onAsk = {
+                    askFirst = null
+                    push("ask")
+                },
+            )
+            "ask" -> AskScreen(
+                vm,
+                first = askFirst,
+                onOpen = ::open,
+                onFill = { idea ->
+                    vm.useIdea(idea)
+                    push("habit/${idea.goalId ?: 0}")
+                },
+                onUnlock = unlock,
+                onBack = {
+                    askFirst = null
+                    pop()
+                },
+            )
             "settings" -> SettingsScreen(
                 settings, vm,
                 onAppearance = { push("appearance") },
@@ -517,11 +557,21 @@ fun ChecklistApp(vm: MainViewModel) {
                     snackbarHost = { androidx.compose.material3.SnackbarHost(undoHost, modifier = Modifier.testTag("undo-bar")) },
                     actions = {
                         // Voice, with the AI helper on and Checklist AI's speech file added.
+                        // Ask: a question about the day or the app, with the AI helper on (it is in Help for everyone).
+                        if (tab == AppTab.TODAY && io.github.randomtools3377.checklist.core.Feature.AI in features) {
+                            IconButton(
+                                onClick = {
+                                    askFirst = null
+                                    push("ask")
+                                },
+                                modifier = Modifier.testTag("ask-open"),
+                            ) { Text("💬", modifier = Modifier.spoken("Ask a question")) }
+                        }
                         if (tab == AppTab.TODAY && io.github.randomtools3377.checklist.core.Feature.AI in features && aiStatus?.speechReady == true && listen != null) {
                             IconButton(
                                 onClick = listen,
                                 modifier = Modifier.testTag("voice"),
-                            ) { Text("🎙", modifier = Modifier.spoken("Speak to tick a goal or add a to-do")) }
+                            ) { Text("🎙", modifier = Modifier.spoken("Speak to tick a goal, add a to-do or ask a question")) }
                         }
                         if (tab == AppTab.GOALS && (goals?.goals?.size ?: 0) > 1 && !reorderGoals) {
                             TextButton(onClick = { selectGoals = !selectGoals }, modifier = Modifier.testTag("select")) {
@@ -574,6 +624,7 @@ fun ChecklistApp(vm: MainViewModel) {
                                 skipRequest = skipRequest,
                                 onSkipRequestHandled = vm::clearSkipRequest,
                                 padding = padding,
+                                onHowDoing = { howDoing = 0L },
                             )
                         }
                         AppTab.GOALS -> GoalsScreen(
@@ -619,7 +670,16 @@ fun ChecklistApp(vm: MainViewModel) {
                                 onBadges = { push("badges") },
                                 padding = padding,
                                 moods = moods,
-                                coachCard = { week -> AiCoachCard(vm, week, hideReasons = settings.locks.reasons && !unlocked) },
+                                coachCard = { week ->
+                                    AiCoachCard(
+                                        vm, week, hideReasons = settings.locks.reasons && !unlocked,
+                                        onAdvice = { idea ->
+                                            vm.useIdea(idea)
+                                            push("habit/${idea.goalId ?: 0}")
+                                        },
+                                    )
+                                    TextButton(onClick = { howDoing = 0L }, modifier = Modifier.testTag("how-doing-open")) { Text("How am I doing?") }
+                                },
                                 character = io.github.randomtools3377.checklist.core.Feature.CHARACTER in features,
                                 onMoodGoals = { push("mood-goals") },
                                 onMoodJournal = { push("mood-journal") },
@@ -674,10 +734,32 @@ fun ChecklistApp(vm: MainViewModel) {
         voiceCommand?.let { command ->
             VoiceDialog(
                 command,
-                onTick = { id -> vm.tickHabit(id) },
+                // A to-do with steps is done by finishing its steps.
+                onTick = { id, _ ->
+                    if (vm.todayState.value?.view?.todos.orEmpty().any { it.goal.id == id && it.items.isNotEmpty() }) vm.finishRoutine(id) else vm.tickHabit(id)
+                },
                 onAdd = { todo -> vm.addTodo(todo) },
                 onDismiss = { voiceCommand = null },
+                onType = {
+                    askFirst = null
+                    push("ask")
+                },
             )
+        }
+        howDoing?.let { goalId ->
+            val goal = if (goalId == 0L) null else vm.currentGoals.collectAsStateWithLifecycle().value.firstOrNull { it.id == goalId }
+            if (goalId == 0L || goal != null) {
+                HowDoingDialog(
+                    vm, goal,
+                    onOpen = ::open,
+                    onFill = { idea ->
+                        vm.useIdea(idea)
+                        push("habit/${idea.goalId ?: 0}")
+                    },
+                    onUnlock = unlock,
+                    onDismiss = { howDoing = null },
+                )
+            }
         }
         voiceProblem?.let { problem ->
             androidx.compose.material3.AlertDialog(

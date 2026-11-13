@@ -111,8 +111,8 @@ enum class HelpTopic(val title: String, val intro: String, val steps: List<Strin
             "\"Appearance\" changes colours, Today's layout and the tabs; \"Features\" turns extras on or off.",
             "\"Points and rules\" holds every number for {points}, penalties and bonuses.",
             "\"Help and tips\" has every guide like this one, and \"How the app works\" is a short tour.",
-            "Under \"Your day\", set when your day ends, when it starts, and when to finish each day's goals.",
-            "Further down: streaks, the weekly target, penalty tasks, your own reasons, gaps and notifications, with the nudges for when something is late.",
+            "Under \"Your day\", \"My day ends at\" sets when your day ends, so a late night still counts; \"My day starts at\" and \"Finish each day's goals by\" set when it starts and when to be done.",
+            "Further down: streaks, penalty tasks, your own reasons, gaps and notifications, with the nudges for when something is late. Under \"Weekly target\", set a number of {points} to aim for each week; Today shows how far along you are.",
             "Back up your data under \"Backup\", and choose what's locked under \"Privacy\".",
         ),
     ),
@@ -687,11 +687,42 @@ enum class HelpTopic(val title: String, val intro: String, val steps: List<Strin
         listOf(
             "It needs the separate Checklist AI app. Tap \"Get Checklist AI\" to find it on the Releases page.",
             "Open Checklist AI once to download and add its AI file, then tap \"Check again\".",
-            "On a new habit, type a sentence under \"Describe it\" and tap \"Fill in\".",
-            "In a project, tap \"Suggest steps\", tick the ones to keep, and tap \"Add these\".",
-            "In the review's week, tap \"Write a note\" for a short note on your week.",
-            "With its speech file added, tap 🎙 on Today and say \"done reading\" or \"add buy milk\".",
+            "On a new habit, type a sentence under \"Describe it\" and tap \"Fill in\". The card says what it understood and what is still to set, and suggests how many {points} it could pay, with a button to use that.",
+            "In a project or a to-do, tap \"Suggest steps\", tick the ones to keep, and tap \"Add these\". Add a hint to steer it, and tap \"Suggest different ones\" for others.",
+            "In the review's week, tap \"Write a note\" for a short note on your week. It stays there, and its suggestion comes with a button.",
+            "Tap 💬 on Today to ask a question, about your day or about the app. The AI puts the app's answer into words.",
+            "On the ideas page for a skill, tap \"Make new ideas\". Each one says what it would pay and how long to the next level.",
+            "In \"How am I doing?\", tap \"Say it in words\" for the same summary as a friendly paragraph.",
+            "With its speech file added, tap 🎙 on Today and say \"done reading\", \"add buy milk\" or \"what's next\".",
+            "While it thinks, the card says how long it has been. Tap \"Stop waiting\" to carry on by hand.",
             "It always asks you first: nothing is saved, ticked or spent on its own.",
+        ),
+    ),
+    ASK(
+        "Ask a question",
+        "Type a question in your own words, about your day or about the app, and get a short answer, like chatting.",
+        listOf(
+            "Open it from Settings → Help and tips → \"Ask a question\".",
+            "With the AI helper on, 💬 on Today opens it too.",
+            "Ask about your own numbers: \"What's left today?\", \"What's next?\", \"How am I doing this week?\", \"How is Reading going?\", \"How close is my reward?\", \"What's my streak?\".",
+            "Ask how something works: \"What does a skip cost?\", \"How do I back up?\". The answer comes from the guides, and \"From:\" under it opens the guide.",
+            "Ask for guidance: \"How do I get better at Fitness?\", \"How do I keep my streak?\", \"How do I earn more?\". The answer uses your own record.",
+            "Tap a suggested question to ask it. A follow-up like \"and how do I change that?\" carries on from the answer before.",
+            "The chips under an answer are the app's own figures, and the buttons open the place it talks about. Nothing is ticked, spent or saved from here.",
+            "Typing \"done reading\" or \"add buy milk\" works too, and asks before doing it.",
+            "With the AI helper ready, the AI puts the answer into words; without it, the app answers in its own words. Either way the facts are the app's own.",
+            "What's behind the privacy lock is left out, with \"Unlock\" to ask again. Nothing you ask is kept: the page forgets it when you leave.",
+        ),
+    ),
+    HOW_DOING(
+        "How am I doing?",
+        "A short summary from your own numbers: today, this week beside last week, your streak, the goal going best and the one that could use a hand.",
+        listOf(
+            "Tap \"How am I doing?\" under your balance on Today, or under the note in the Review's Week.",
+            "On a goal's own page, \"How is it going?\" sums up that goal: this week, the last 4 weeks and what could help.",
+            "It ends with one next step, picked by the app from your record, with a button that opens it. A change to a goal opens its editor filled in, for you to check and save.",
+            "With the AI helper ready, \"Say it in words\" writes the same facts as a friendly paragraph. The figures stay the app's own.",
+            "Private goals and anything else behind the privacy lock are left out until you tap \"Unlock\".",
         ),
     ),
     WIDGETS(
@@ -715,7 +746,10 @@ enum class HelpTopic(val title: String, val intro: String, val steps: List<Strin
 enum class HelpGroup(val title: String, val topics: List<HelpTopic>) {
     BASICS(
         "Basics",
-        listOf(HelpTopic.TODAY, HelpTopic.GOALS, HelpTopic.REVIEW, HelpTopic.STREAKS, HelpTopic.SKIPS_AND_MISSES, HelpTopic.PENALTY, HelpTopic.GAPS, HelpTopic.BADGES),
+        listOf(
+            HelpTopic.TODAY, HelpTopic.GOALS, HelpTopic.REVIEW, HelpTopic.STREAKS, HelpTopic.SKIPS_AND_MISSES, HelpTopic.PENALTY, HelpTopic.GAPS, HelpTopic.BADGES,
+            HelpTopic.HOW_DOING, HelpTopic.ASK,
+        ),
     ),
     GOALS(
         "Goals",
@@ -821,6 +855,8 @@ val HelpTopic.seeAlso: List<HelpTopic>
         HelpTopic.PRIVACY -> listOf(HelpTopic.MOOD_JOURNAL, HelpTopic.BUDGET, HelpTopic.HISTORY, HelpTopic.REMINDERS)
         HelpTopic.BACKUP -> listOf(HelpTopic.PRIVACY, HelpTopic.HISTORY)
         HelpTopic.FOCUS -> listOf(HelpTopic.HABIT_EDITOR, HelpTopic.TODAY)
-        HelpTopic.AI -> listOf(HelpTopic.HABIT_EDITOR, HelpTopic.PROJECT_EDITOR, HelpTopic.REVIEW)
+        HelpTopic.AI -> listOf(HelpTopic.ASK, HelpTopic.HOW_DOING, HelpTopic.HABIT_EDITOR, HelpTopic.PROJECT_EDITOR, HelpTopic.REVIEW)
+        HelpTopic.ASK -> listOf(HelpTopic.HOW_DOING, HelpTopic.AI, HelpTopic.PRIVACY)
+        HelpTopic.HOW_DOING -> listOf(HelpTopic.ASK, HelpTopic.REVIEW, HelpTopic.BALANCE_CHECK)
         HelpTopic.WIDGETS -> listOf(HelpTopic.TODAY, HelpTopic.APPEARANCE, HelpTopic.PRIVACY)
     }

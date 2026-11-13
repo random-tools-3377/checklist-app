@@ -135,7 +135,8 @@ private fun AiScreen() {
     ) {
         Text("✨ Checklist AI", style = MaterialTheme.typography.headlineSmall)
         Text(
-            "This app runs a small AI on your phone for the Checklist app: filling in a goal from a sentence you type, and more to come. " +
+            "This app runs a small AI on your phone for the Checklist app: filling in a goal from a sentence you type, suggesting steps and new ideas, " +
+                "writing a note on your week, putting answers to your questions into words, and listening for a short command. " +
                 "It has no internet access, so nothing you write leaves the phone.",
             style = MaterialTheme.typography.bodyMedium,
         )

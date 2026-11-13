@@ -790,9 +790,13 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Long)
         }
     }
 
+    // Whether the fields were filled in from a sentence or an idea, for the offer after saving.
+    var described by rememberSaveable { mutableStateOf(false) }
+
     // A goal idea fills in the fields, for the user to check and save: from the AI helper, or
     // from the ideas to level up a skill.
     fun fill(idea: io.github.randomtools3377.checklist.core.GoalIdea) {
+        described = true
         name = idea.name
         idea.icon?.let { icon = it }
         when (idea.repeat) {
@@ -808,11 +812,10 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Long)
             }
         }
         atMinute = idea.time?.let { it.hour * 60 + it.minute }
-        idea.minutes?.let { minutes = it.toString() }
-        idea.amount?.let { amount ->
-            amountText = io.github.randomtools3377.checklist.core.Amounts.format(amount)
-            unit = idea.unit.orEmpty()
-        }
+        // A second try starts clean: a length or an amount from the first one doesn't linger.
+        minutes = idea.minutes?.toString().orEmpty()
+        amountText = idea.amount?.let { io.github.randomtools3377.checklist.core.Amounts.format(it) }.orEmpty()
+        unit = if (idea.amount != null) idea.unit.orEmpty() else ""
     }
 
     // An idea to level up a skill, chosen on the ideas page: a new goal filled in, or this
@@ -831,6 +834,7 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Long)
             idea.goal.minutes?.let { minutes = it.toString() }
             idea.goal.amount?.let { amountText = io.github.randomtools3377.checklist.core.Amounts.format(it) }
             idea.goal.timesPerWeek?.let { target = it.toString() }
+            idea.points?.let { points = it.toString() }
         }
         // From here on, anything different is a change the user made.
         if (baseline == null) baseline = snapshot()
@@ -944,6 +948,8 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Long)
                 ),
                 onDone = {
                     baseline = snapshot()
+                    // A new goal made from a sentence or an idea: one small next step is offered.
+                    if (id == 0L && described) vm.offerFollowUp(name.trim())
                     if (then != null) return@saveHabit then()
                     val wantsNotifications = when {
                         eachTimesSet.isNotEmpty() || (!severalADay && atMinute != null) -> notifyOnTime || alertBefore != null
@@ -968,7 +974,14 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Long)
         if (!loaded) return@EditorScaffold
         if (id == 0L) {
             // With the AI helper on: a sentence fills in the fields below, to check and save.
-            AiDescribeCard(vm) { idea -> fill(idea) }
+            AiDescribeCard(
+                vm,
+                onSuggest = { suggested ->
+                    points = suggested.points.toString()
+                    effort = suggested.effort.name
+                    skill = suggested.area.name
+                },
+            ) { idea -> fill(idea) }
         }
         IconPicker(icon) { icon = it }
         OutlinedTextField(
@@ -1686,7 +1699,7 @@ fun ProjectEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Lon
             modifier = Modifier.testTag("add-step"),
         ) { Text("Add a step") }
         // With the AI helper on: steps suggested from the name, into empty steps first.
-        AiStepsCard(vm, projectName = name) { suggested ->
+        AiStepsCard(vm, projectName = name, existing = steps.map { it.name }) { suggested ->
             val points = steps.lastOrNull()?.points.orEmpty()
             val empty = steps.indices.filter { steps[it].name.isBlank() }.toMutableList()
             suggested.forEach { step ->
@@ -1942,6 +1955,14 @@ fun TodoEditor(id: Long, vm: MainViewModel, onClose: () -> Unit) {
             }
         }
         TextButton(onClick = { steps += StepField(nextKey++, 0L, "", "") }, modifier = Modifier.testTag("add-step")) { Text("Add a step") }
+        // With the AI helper on: steps suggested from the name, into empty steps first.
+        AiStepsCard(vm, projectName = name, existing = steps.map { it.name }, what = "to-do") { suggested ->
+            val empty = steps.indices.filter { steps[it].name.isBlank() }.toMutableList()
+            suggested.forEach { step ->
+                val at = empty.removeFirstOrNull()
+                if (at != null) steps[at] = steps[at].copy(name = step) else steps += StepField(nextKey++, 0L, step, "")
+            }
+        }
         DateSetting("Due on", date?.toDay(), { date = it?.toEpochDay() }, "field:date", emptyText = "No date")
         if (showErrors && dateError != null) {
             Text(dateError, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)

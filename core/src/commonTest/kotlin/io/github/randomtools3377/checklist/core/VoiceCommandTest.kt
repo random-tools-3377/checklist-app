@@ -25,7 +25,8 @@ class VoiceCommandTest {
     @Test
     fun anythingElseIsNotUnderstood() {
         assertEquals(VoiceCommand.NotUnderstood("hello there"), VoiceCommand.parse("hello there", goals))
-        assertEquals(VoiceCommand.NotUnderstood("done swimming"), VoiceCommand.parse("done swimming", goals))
+        // "Done" with no goal recognised: not understood, with the open goals to pick from.
+        assertEquals(VoiceCommand.NotUnderstood("done swimming", goals), VoiceCommand.parse("done swimming", goals))
         assertEquals(VoiceCommand.NotUnderstood(""), VoiceCommand.parse("", goals))
         assertEquals(VoiceCommand.NotUnderstood("add"), VoiceCommand.parse("add", goals))
     }

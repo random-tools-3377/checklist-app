@@ -38,7 +38,31 @@ data class AreaIdea(
     val goalId: Long? = null,
     /** For a step-up: what it was, like "30 min". */
     val from: String? = null,
+    /** For a suggestion to pay differently: the goal's new points. */
+    val points: Int? = null,
 ) {
+    /** How often it is done in a week. */
+    val perWeek: Int
+        get() = when (goal.repeat) {
+            IdeaRepeat.EVERY_DAY -> 7
+            IdeaRepeat.TIMES_PER_WEEK -> goal.timesPerWeek ?: 1
+            IdeaRepeat.DAYS_OF_WEEK -> goal.days.size.coerceAtLeast(1)
+        }
+
+    /**
+     * Why it fits, worked out by the app: what it would pay in a week by the app's points rule,
+     * and how long that takes to the skill's next level, like "about 35 points a week · roughly
+     * 3 weeks to Fitness level 6". [skill] is the area's level now.
+     */
+    fun why(skill: Level?): String {
+        val weekly = Suggest.points(effort, goal.minutes) * perWeek
+        val earn = "about ${PointsName.current.amount(weekly)} a week"
+        if (skill == null || weekly <= 0) return earn
+        val weeks = ((skill.toNext + weekly - 1) / weekly).coerceAtLeast(1)
+        val time = if (weeks == 1L) "about a week" else "roughly $weeks weeks"
+        return "$earn · $time to ${area.label} level ${skill.level + 1}"
+    }
+
     /** "3 times a week · 20 min", for under the name. */
     val detail: String
         get() = listOfNotNull(

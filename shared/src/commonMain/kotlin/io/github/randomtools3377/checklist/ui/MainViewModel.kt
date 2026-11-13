@@ -188,6 +188,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import io.github.randomtools3377.checklist.core.MoneyKind
@@ -335,7 +337,8 @@ private data class CompanionKnows(
 private data class Extras(val lapses: List<Lapse>, val checks: List<Check>, val boostOn: Boolean, val events: List<Busy>, val streakBonusOn: Boolean)
 
 /** Something just done, which the Undo bar can take back for a few seconds. */
-class Undoable(val message: String, val undo: () -> Unit, /** What to say went back, once it is undone. */ val undone: String? = null)
+/** [action] is the word on its button: "Undo", unless it is an offer of something else. */
+class Undoable(val message: String, /** What to say went back, once it is undone. */ val undone: String? = null, val action: String = "Undo", val undo: () -> Unit)
 
 /** How things stood just before a tick, to say what the tick changed. */
 private class BeforeTick(
@@ -716,35 +719,165 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
         viewModelScope.launch { aiStatus.value = phone.aiStatus() }
     }
 
-    /** Asks the AI to read a goal from [sentence]; [onResult] gets the goal, or why there isn't one. */
-    fun goalFromSentence(sentence: String, onResult: (io.github.randomtools3377.checklist.core.GoalIdea?, String?) -> Unit) {
+    /**
+     * One question for the AI. The app stops waiting after two minutes, or when the job this is
+     * called from is dropped ("Stop waiting"); Checklist AI finishes on its own and the answer
+     * is thrown away. A failure never carries the engine's own words past [AiTrouble.plain].
+     */
+    private suspend fun ai(system: String, prompt: String, schema: String?, maxTokens: Int): Result<String> {
+        val asked = viewModelScope.async { phone.askAi(system, prompt, schema, maxTokens) }
+        return kotlinx.coroutines.withTimeoutOrNull(io.github.randomtools3377.checklist.core.AiTrouble.TIMEOUT_MILLIS) { asked.await() }
+            ?: Result.failure(IllegalStateException(io.github.randomtools3377.checklist.core.AiTrouble.TIMED_OUT))
+    }
+
+    private fun trouble(e: Throwable): String = io.github.randomtools3377.checklist.core.AiTrouble.plain(e.message)
+
+    private var aiWarmed = false
+
+    /** Loads the AI the first time one of its cards shows, so the first real answer comes sooner. */
+    fun warmAi() {
+        if (aiWarmed) return
+        viewModelScope.launch {
+            val status = aiStatus.value ?: phone.aiStatus().also { aiStatus.value = it }
+            if (!status.usable || aiWarmed) return@launch
+            aiWarmed = true
+            runCatching { phone.askAi("Reply with OK.", "OK?", null, 16) }
+        }
+    }
+
+    /**
+     * Reads a goal from [sentence]: with [useAi], the AI's reading put right by the app's own;
+     * without, or when the AI can't answer, the app's own reading with the name as typed.
+     * [onResult] gets the goal, whether the AI took part, and a note when something went wrong.
+     */
+    fun goalFromSentence(sentence: String, useAi: Boolean = true, onResult: (io.github.randomtools3377.checklist.core.GoalIdea?, Boolean, String?) -> Unit): Job =
         viewModelScope.launch {
             val ask = io.github.randomtools3377.checklist.core.GoalFromSentence
-            phone.askAi(ask.SYSTEM, ask.prompt(sentence), ask.SCHEMA, ask.MAX_TOKENS).fold(
-                onSuccess = { answer -> onResult(ask.parse(answer), null) },
-                onFailure = { e -> onResult(null, "The AI couldn't answer: ${e.message ?: "unknown error"}.") },
+            val own = io.github.randomtools3377.checklist.core.SentenceReader.idea(sentence)
+            if (!useAi) return@launch onResult(own, false, null)
+            ai(ask.SYSTEM, ask.prompt(sentence), ask.SCHEMA, ask.MAX_TOKENS).fold(
+                onSuccess = { answer -> ask.parse(answer, sentence)?.let { onResult(it, true, null) } ?: onResult(own, false, null) },
+                onFailure = { e -> onResult(own, false, trouble(e)) },
             )
         }
+
+    /**
+     * Asks the AI for steps for a project or to-do called [name], steered by [hint], different
+     * from the steps [existing] and those already [shown]; [onResult] gets them, or why there are none.
+     */
+    fun projectSteps(
+        name: String,
+        existing: List<String> = emptyList(),
+        shown: List<String> = emptyList(),
+        hint: String = "",
+        onResult: (List<String>, String?) -> Unit,
+    ): Job = viewModelScope.launch {
+        val ask = io.github.randomtools3377.checklist.core.ProjectSteps
+        ai(ask.SYSTEM, ask.prompt(name, existing, shown, hint), ask.SCHEMA, ask.MAX_TOKENS).fold(
+            onSuccess = { answer -> onResult(ask.parse(answer, existing + shown), null) },
+            onFailure = { e -> onResult(emptyList(), trouble(e)) },
+        )
     }
 
-    /** Asks the AI for steps for a project called [name]; [onResult] gets them, or why there are none. */
-    fun projectSteps(name: String, onResult: (List<String>, String?) -> Unit) {
-        viewModelScope.launch {
-            val ask = io.github.randomtools3377.checklist.core.ProjectSteps
-            phone.askAi(ask.SYSTEM, ask.prompt(name), ask.SCHEMA, ask.MAX_TOKENS).fold(
-                onSuccess = { answer -> onResult(ask.parse(answer), null) },
-                onFailure = { e -> onResult(emptyList(), "The AI couldn't answer: ${e.message ?: "unknown error"}.") },
-            )
-        }
-    }
+    /** The notes on a week that were written and kept, in this app only. */
+    val coachNotes: StateFlow<List<io.github.randomtools3377.checklist.core.KeptNote>> =
+        dao.observeSetting(io.github.randomtools3377.checklist.core.CoachNotes.SETTING).map { io.github.randomtools3377.checklist.core.CoachNotes.decode(it) }.state(emptyList())
 
-    /** Asks the AI for a note on the week in [summary]; [onResult] gets it, or why there isn't one. */
-    fun coachNote(summary: io.github.randomtools3377.checklist.core.ReviewSummary, hideReasons: Boolean, onResult: (String?, String?) -> Unit) {
+    /**
+     * Asks the AI for a note on the week in [summary], with what else the app knows in [more];
+     * a note that comes is kept for that week. [onResult] gets it, or why there isn't one.
+     */
+    fun coachNote(summary: ReviewSummary, hideReasons: Boolean, more: io.github.randomtools3377.checklist.core.WeekMore = io.github.randomtools3377.checklist.core.WeekMore(), onResult: (String?, String?) -> Unit): Job =
         viewModelScope.launch {
             val ask = io.github.randomtools3377.checklist.core.CoachNote
-            phone.askAi(ask.SYSTEM, ask.prompt(summary, hideReasons), null, ask.MAX_TOKENS).fold(
-                onSuccess = { answer -> onResult(ask.clean(answer), null) },
-                onFailure = { e -> onResult(null, "The AI couldn't answer: ${e.message ?: "unknown error"}.") },
+            ai(ask.SYSTEM, ask.prompt(summary, hideReasons, more), null, ask.MAX_TOKENS).fold(
+                onSuccess = { answer ->
+                    val text = ask.clean(answer)
+                    if (text != null) {
+                        val kept = io.github.randomtools3377.checklist.core.CoachNotes.decode(dao.setting(io.github.randomtools3377.checklist.core.CoachNotes.SETTING))
+                        val note = io.github.randomtools3377.checklist.core.KeptNote(summary.from, text, reasons = !hideReasons && summary.reasons.isNotEmpty())
+                        repository.setSetting(io.github.randomtools3377.checklist.core.CoachNotes.SETTING, io.github.randomtools3377.checklist.core.CoachNotes.encode(io.github.randomtools3377.checklist.core.CoachNotes.put(kept, note)))
+                    }
+                    onResult(text, null)
+                },
+                onFailure = { e -> onResult(null, trouble(e)) },
+            )
+        }
+
+    /** What else a note on the week starting [weekStart] can mention: the week before, the streak, the target, new badges, and the app's own suggestion. */
+    fun weekMore(summary: ReviewSummary): io.github.randomtools3377.checklist.core.WeekMore {
+        val thisWeek = thisWeek.value?.from == summary.from
+        val earned = badges.value.filter { (_, day) -> day >= summary.from && day <= summary.to }.keys.filter { it.shownWith(features.value) }
+        return io.github.randomtools3377.checklist.core.WeekMore(
+            lastWeek = lastWeek.value?.takeIf { thisWeek },
+            streak = todayState.value?.streaks?.done?.takeIf { thisWeek },
+            target = weekProgress.value?.takeIf { thisWeek },
+            badges = earned.map { it.title },
+            advice = io.github.randomtools3377.checklist.core.WeekAdvices.pick(summary, balanceCheck.value?.goals.orEmpty()),
+        )
+    }
+
+    /** This Monday-to-Sunday week so far, whatever the review is showing: for "How am I doing?" and Ask. */
+    val thisWeek: StateFlow<ReviewSummary?> = today.flatMapLatest { day ->
+        val (from, to) = Review.range(day, Period.WEEKLY)
+        val windowsFrom = Days.earliestOpenDay(from).minusDays(7)
+        combine(
+            combine(goalRows, hidingPrivate) { goals, hide -> goals to hide },
+            dao.observeHabitTicksSince(windowsFrom.toEpochDay()),
+            dao.observeLapsesSince(windowsFrom.toEpochDay()),
+            dao.observeEntries(from.toEpochDay(), to.toEpochDay()),
+            dao.observeGaps(),
+        ) { (goals, hide), ticks, lapsesRows, entries, gapRows ->
+            Review.summarize(
+                from = from, to = to, today = day, goals = goals.map { it.toCore() }, ticks = ticks.map { it.toCore() },
+                lapses = lapsesRows.map { it.toCore() }, entries = entries.map { it.toCore() }, gaps = gapRows.map { it.toCore() },
+                hidePrivate = hide,
+            )
+        }
+    }.state(null)
+
+    /**
+     * Puts the facts of an Ask [answer] into words with the AI. [onSaid] gets the AI's words, or
+     * null when it can't answer or slipped on a number, so the app's own answer shows instead.
+     * Nothing asked or answered is kept anywhere.
+     */
+    fun askInWords(question: String, answer: io.github.randomtools3377.checklist.core.AskAnswer, earlier: List<io.github.randomtools3377.checklist.core.AskTurn>, onSaid: (String?) -> Unit): Job =
+        viewModelScope.launch {
+            val ask = io.github.randomtools3377.checklist.core.Asker
+            val prompt = ask.prompt(question, answer, earlier) ?: return@launch onSaid(null)
+            onSaid(ai(ask.SYSTEM, prompt, null, ask.MAX_TOKENS).getOrNull()?.let { ask.clean(it, answer.facts, question) })
+        }
+
+    /** "Say it in words": the facts of [answer] as a friendly paragraph from the AI, or null. */
+    fun sayInWords(answer: io.github.randomtools3377.checklist.core.AskAnswer, onSaid: (String?, String?) -> Unit): Job = viewModelScope.launch {
+        val ask = io.github.randomtools3377.checklist.core.Asker
+        val prompt = ask.wordsPrompt(answer) ?: return@launch onSaid(null, null)
+        ai(ask.SYSTEM_WORDS, prompt, null, ask.MAX_TOKENS).fold(
+            onSuccess = { said -> onSaid(ask.clean(said, answer.facts), null) },
+            onFailure = { e -> onSaid(null, trouble(e)) },
+        )
+    }
+
+    /**
+     * After a goal made with "Describe it" or from an idea is saved: one small next step in the
+     * bar at the bottom, like a reminder a little before its time. Leaving the bar alone is "No thanks".
+     */
+    fun offerFollowUp(name: String) {
+        viewModelScope.launch {
+            val goals = dao.allGoals().map { it.toCore() }.filter { !it.archived }
+            val goal = goals.filter { it.name == name }.maxByOrNull { it.id } ?: return@launch
+            val offer = io.github.randomtools3377.checklist.core.FollowUp.pick(goal, goals, features.value) ?: return@launch
+            undoBar.tryEmit(
+                Undoable(offer.question, action = offer.button) {
+                    viewModelScope.launch {
+                        when (offer) {
+                            is io.github.randomtools3377.checklist.core.FollowUp.After -> repository.setGoalAfter(offer.goalId, offer.afterId)
+                            is io.github.randomtools3377.checklist.core.FollowUp.RemindAt -> repository.setGoalReminder(offer.goalId) { it.copy(onTime = true) }
+                            is io.github.randomtools3377.checklist.core.FollowUp.RemindBefore -> repository.setGoalReminder(offer.goalId) { it.copy(onTime = true, minutesBefore = offer.minutes) }
+                        }
+                        runCatching { phone.rescheduleReminders() }
+                    }
+                },
             )
         }
     }
@@ -1774,7 +1907,7 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
     val undoBar = kotlinx.coroutines.flow.MutableSharedFlow<Undoable>(extraBufferCapacity = 4)
 
     private fun offerUndo(message: String, undone: String? = null, undo: suspend () -> Unit) {
-        undoBar.tryEmit(Undoable(message, { viewModelScope.launch { undo() } }, undone))
+        undoBar.tryEmit(Undoable(message, undone) { viewModelScope.launch { undo() } })
     }
 
     /** How things stand now, taken just before a tick (see [offerTickUndo]). */
@@ -2883,20 +3016,19 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
     }
 
     /** Asks the AI for new ideas for [area]; [onResult] gets them, or why there are none. */
-    fun aiIdeas(area: io.github.randomtools3377.checklist.core.SkillArea, shown: List<String>, onResult: (List<io.github.randomtools3377.checklist.core.AreaIdea>, String?) -> Unit) {
+    fun aiIdeas(area: io.github.randomtools3377.checklist.core.SkillArea, shown: List<String>, onResult: (List<io.github.randomtools3377.checklist.core.AreaIdea>, String?) -> Unit): Job =
         viewModelScope.launch {
             val ask = io.github.randomtools3377.checklist.core.AreaIdeasFromAi
             val level = character.value?.skillLevel(area)?.level ?: 1
             val prompt = ask.prompt(area, level, currentGoals.value, shown)
-            phone.askAi(ask.SYSTEM, prompt, ask.SCHEMA, ask.MAX_TOKENS).fold(
+            ai(ask.SYSTEM, prompt, ask.SCHEMA, ask.MAX_TOKENS).fold(
                 onSuccess = { answer ->
                     val ideas = ask.parse(answer, area, shown + currentGoals.value.map { it.name })
-                    onResult(ideas, if (ideas.isEmpty()) "The AI's ideas didn't make sense. Try again." else null)
+                    onResult(ideas, if (ideas.isEmpty()) "The AI's ideas didn't come out right this time. The app's own ideas are above, or try again." else null)
                 },
-                onFailure = { e -> onResult(emptyList(), "The AI couldn't answer: ${e.message ?: "unknown error"}.") },
+                onFailure = { e -> onResult(emptyList(), trouble(e) + " The app's own ideas are above.") },
             )
         }
-    }
 
     /** The new level has been cheered. */
     fun levelSeen() {

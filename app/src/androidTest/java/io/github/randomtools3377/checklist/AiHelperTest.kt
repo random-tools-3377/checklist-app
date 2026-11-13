@@ -5,6 +5,7 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import io.github.randomtools3377.checklist.core.Feature
@@ -62,7 +63,14 @@ class AiHelperTest {
         app.onNodeWithTag("new-habit").performClick()
         app.waitFor { shown("ai-describe") }
         app.waitFor { shown("field:name") }
-        assert(!shown("ai-fill")) { "Fill in shows only when Checklist AI is ready" }
+        // Until Checklist AI is there, the app reads the sentence itself, with the name as typed,
+        // and says what it understood and what is still to set.
+        app.waitFor { shown("ai-fill") }
+        app.onNodeWithTag("ai-sentence").performTextInput("stretch every weekday at 7am for 10 minutes")
+        app.tap("ai-fill")
+        app.waitFor { text("ai-understood-text").contains("Stretch · Mon to Fri · 7:00 am · 10 min") }
+        app.waitFor { text("ai-missing").contains("No amount given") }
+        app.waitFor { shown("ai-use-suggested") }
     }
 
     @Test
