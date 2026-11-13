@@ -1040,6 +1040,30 @@ Build order **(default)**, each step a Release the owner can try:
         category's limit or today's line; never while the budget is locked. Amount and Spent
         boxes open with the keyboard up, offer up to three usual amounts, and Spent starts on
         the category used last.
+    - **0.71.0 settled these details (default):**
+      - **Motion.** One "Less motion" switch (Settings → Appearance) that every animation
+        follows; it starts on the device's own setting, stays on the device and out of the
+        backup. With it on, things simply change and confetti is a still "+10". Rows glide,
+        bars and the balance animate, the tick button pops, Today's cards fold, screens slide,
+        and Today and Goals keep their scroll place. Buzzes differ by what happened and follow
+        the Buzz switch. "Swipe a card to tick it" is on to start: a right swipe past a third
+        of the card does what its button does, never a skip or a take-back, and not on "at
+        most" cards, projects or tiles. Drag to reorder works wherever the arrows do, which
+        stay. Screens show faint card shapes while loading.
+      - **The character on other screens** shows while "Character and skills" is on, and its
+        words with "Character check-ins" on: its own page (today's face, a wave, a line on a
+        tap), the misses, penalty and gap screens (calm, never blaming, never naming a goal,
+        brighter once something is put right), the project and reward celebrations, the focus
+        timer, and, off to start, its face on the balance and streaks widget, which goes only
+        by how much of today is done. The setup's welcome wave shows to every new user.
+      - **Notifications follow the day.** A goal's reminder can say "Last one for today" or
+        that it makes today count for the streak (the streak wins when both hold); the morning
+        plan names the streak's day; the evening check starts with the closest win; the Sunday
+        summary compares with the week before only when it is up, and says the race was won
+        only when it was. A phrase is only given for the user's day now, so the iPhone gets
+        none for later days. No streak is mentioned while the review is locked, and a locked
+        private goal keeps its plain words. On Android a tick from a reminder or a widget is
+        answered by a short silent note ("Confirm a tick made outside the app", on to start).
 
 ## Talking to the owner
 

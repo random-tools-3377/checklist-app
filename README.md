@@ -130,6 +130,7 @@ on one and import the file on the other. Reminders show only while the app is op
 - 0.68.0: quick Spent, bill reminders, pay from a date; a reward to save for on Today; a passphrase for backups and Erase everything; Windows backup folder and reminders with the window closed; at most goals.
 - 0.69.0: nudges when a goal is late, worded differently each time, with Stop for today.
 - 0.70.0: Ask a question and How am I doing?; a Today that says what each tick changed and what is within reach; a character that moves and reacts; badge progress.
+- 0.71.0: animations with a Less motion switch, swipe to tick and drag to reorder; the character on more screens; reminders that say what is at stake.
 
 Every step in CLAUDE.md's build order is built. The iPhone app is installed with SideStore or
 AltStore (see the 0.55.0 release notes).
