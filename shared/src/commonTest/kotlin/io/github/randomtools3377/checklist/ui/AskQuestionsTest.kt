@@ -186,7 +186,7 @@ class AskQuestionsTest {
         guide("how do I make a new habit", "GOALS", "Tap \"New goal\"")
         guide("how do I delete a goal", "REMOVED_GOALS", "To remove a goal, open it and tap")
         guide("how do I mark a goal as done", "TODAY", "Tap \"Done\" to tick a goal")
-        guide("how do I undo a tick", "TODAY", "Tap it again to take it back")
+        guide("how do I undo a tick", "TODAY", "takes it back")
         guide("how do I move a goal to another day", "PLAN", "Tap \"Move\"")
         guide("how do I change how many points a goal pays", "HABIT_EDITOR", "the points each tick pays")
         guide("how do I add a reward", "SHOP", "Tap \"New reward\"")

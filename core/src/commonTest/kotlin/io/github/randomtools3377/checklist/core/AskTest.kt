@@ -277,7 +277,7 @@ class AskTest {
         assertTrue(next.text.startsWith("Stretch got done 1 of 3 times."), next.text)
         val action = assertIs<AskAction.Fill>(next.action)
         assertEquals(2L, action.idea.goalId)
-        assertTrue(NearWins.of(done).any { "7 in a row" in it })
+        assertTrue(AskNearWins.of(done).any { "7 in a row" in it })
     }
 
     @Test

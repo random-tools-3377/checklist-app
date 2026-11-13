@@ -135,13 +135,13 @@ data class HowDoing(val lines: List<String>, val figures: List<AskFigure>, val n
                     return NextStep(advice.text, if (advice.button != null && idea != null) AskAction.Fill(advice.button, idea) else null)
                 }
             }
-            return NearWins.of(state).firstOrNull()?.let { NextStep(it, null) }
+            return AskNearWins.of(state).firstOrNull()?.let { NextStep(it, null) }
         }
     }
 }
 
 /** Things that are close: a streak milestone, the weekly target, a reward, a level. */
-object NearWins {
+object AskNearWins {
     private val milestones = listOf(7, 30, 100, 365)
 
     /** "2 more days make it 7 in a row." when a milestone is 3 days away or less. */

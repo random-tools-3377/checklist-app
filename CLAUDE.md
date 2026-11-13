@@ -997,6 +997,50 @@ Build order **(default)**, each step a Release the owner can try:
       skips, misses and moods". The app calls its device a phone, an iPhone or a computer.
       The first-run setup's "The game" turns on every game extra except the budget game.
 
+23. Then a second sweep for quality of life, after the late nudges (0.69.0; see "Notifications
+    and the widget"). Decided: the app is very reactive to how things are going and to what the
+    user does; the character has more animations and expressions; there are more motivating
+    factors; and the AI answers questions about the app and gives guidance for each area, as
+    much like a conversation as the small AI allows. The owner said yes to all 48 ideas of the
+    sweep. Still not chosen: full-screen celebrations for levels and game wins, anything about
+    a mood in a notification, and swiping to skip.
+    - **0.70.0 settled these details (default):**
+      - **Ask.** "Ask a question" (Settings → Help and tips on every device; 💬 on Today with the
+        AI helper on) answers typed questions about the user's numbers, the app (from the Help
+        guides) and how to get better at an area. The app finds every fact and the AI only
+        words it; with no AI, or when it fails, the app's own answer shows. An AI answer with a
+        number it wasn't given is thrown away. Under each answer: the app's figures, "From:"
+        links and buttons the app picked, which only open screens. Locked parts never reach an
+        answer or the AI, and the answer offers Unlock. The conversation is kept in memory
+        only. Typing "done …" or "add …" asks first, like voice.
+      - **How am I doing?** on Today, the Review's Week and each goal's page: the app's own
+        summary and one next step; "Say it in words" with the AI. "A note on your week" always
+        shows the app's own note with one suggestion and a button; the AI's note is kept (the
+        latest 8 weeks, in a setting). "Describe it" reads days, times, lengths, times a week
+        and amounts itself, wins over the AI where it did, works without the AI, and says what
+        it understood. "Suggest steps" is on to-dos too. The app stops waiting for the AI after
+        2 minutes and never shows engine error text.
+      - **Today.** A tick's bar says the one thing that changed, the rarest first, and Undo
+        says what went back. A line at the top names the closest win, always as an offer,
+        never a skip. A morning card says what yesterday came to (hidden with the points
+        history lock). The pace card knows ahead, tight and short, names the shortest to start
+        with and offers the free move; on a morning mood of 1 or 2, unless moods are locked, its
+        warning becomes "Whatever you manage today is fine." A recap heads the list once all is
+        done; a day off shows tomorrow's first few. The combo and the race's catch-up show
+        with their extras on. No new Today sections were added.
+      - **The character** breathes, blinks, waves, nods, stretches and dances (still with
+        animations off), has ten faces, says a line for about 6 seconds after a tick, notices
+        skills, gear and the game, follows the user's own day ("getting late" is 6 hours before
+        the day ends, in "Points and rules"), says why it suggests a goal, and varies its
+        lines by the day with real numbers only. It never names a locked private goal.
+      - **Badges** show progress and a "Next up"; "Bounced back" is for reaching the day's
+        target right after the last day with something to do fell short; comebacks are counted
+        in the Review's Stats.
+      - **Money and amounts.** New spending answers in the Undo bar with where it leaves the
+        category's limit or today's line; never while the budget is locked. Amount and Spent
+        boxes open with the keyboard up, offer up to three usual amounts, and Spent starts on
+        the category used last.
+
 ## Talking to the owner
 
 - Short and plain. The owner is not an Android developer. Say what changed, what to try, and what

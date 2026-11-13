@@ -505,7 +505,7 @@ object Asker {
                 streaks.perfect.takeIf { it > 0 }?.let { "perfect days ${days(it)}" },
             )
             if (others.isNotEmpty()) append(" Also running: ${listText(others)}.")
-            NearWins.streak(streaks.done)?.let { append(" $it") }
+            AskNearWins.streak(streaks.done)?.let { append(" $it") }
         }
         val figures = buildList {
             add(AskFigure("Main streak", days(streaks.done)))
@@ -644,7 +644,7 @@ object Asker {
                 val open = state.open.size
                 if (open > 0) add("Today has $open left, so today still counts if you get to ${if (open == 1) "it" else "them"}.")
                 state.missedMost?.let { add("${it.name} is the goal missed most lately. Making it smaller, or giving it a time and a reminder, protects the streak most.") }
-                streaks?.let { NearWins.streak(it.done) }?.let { add(it) }
+                streaks?.let { AskNearWins.streak(it.done) }?.let { add(it) }
                 if (Feature.SHIELDS !in state.features) add("The \"Streak shields\" extra can save the main streak on a day that would break it.")
             }
             AskAnswer(
@@ -739,7 +739,7 @@ object Asker {
         }
         Topic.GENERAL -> {
             val doing = HowDoing.of(state)
-            val lines = doing.lines + NearWins.of(state).take(2)
+            val lines = doing.lines + AskNearWins.of(state).take(2)
             AskAnswer(
                 AskKind.BETTER, lines.joinToString(" "), facts = lines.joinToString("\n"), figures = doing.figures,
                 actions = listOfNotNull(doing.next?.action, AskAction.Open("Open the Review", "review")),
