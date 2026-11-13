@@ -190,7 +190,7 @@ fun TimelineScreen(
                             onClick = { picking = row },
                             label = { Text("${row.goal.icon} ${row.goal.name}" + if (row.done) " ✓" else if (row.settled) " · skipped" else "") },
                             trailingIcon = if (onTick != null && !row.settled) {
-                                { TickButton(tickLabel(row), short = false, tag = "timeline-tick:${row.goal.name}", name = row.goal.name) { onTick(row) } }
+                                { TickButton(tickLabel(row), short = false, tag = "timeline-tick:${row.goal.name}", name = row.goal.name, count = row.count) { onTick(row) } }
                             } else {
                                 null
                             },
@@ -203,7 +203,7 @@ fun TimelineScreen(
                             enabled = false,
                             label = { Text("${row.goal.icon} ${row.goal.name} · ${row.count} of ${row.goal.target}" + if (row.done) " ✓" else if (row.settled) " · skipped" else "") },
                             trailingIcon = if (onTick != null && !row.settled) {
-                                { TickButton(tickLabel(row), short = false, tag = "timeline-tick:${row.goal.name}", name = row.goal.name) { onTick(row) } }
+                                { TickButton(tickLabel(row), short = false, tag = "timeline-tick:${row.goal.name}", name = row.goal.name, count = row.count) { onTick(row) } }
                             } else {
                                 null
                             },
@@ -251,7 +251,7 @@ fun TimelineScreen(
 
 /** A goal's small button on the timeline. [short] shows only a mark where there is little room; it still reads as [label]. */
 @Composable
-private fun TickButton(label: String, short: Boolean, tag: String, name: String, onClick: () -> Unit) {
+private fun TickButton(label: String, short: Boolean, tag: String, name: String, count: Int = 0, onClick: () -> Unit) {
     Text(
         if (short && label != "+1") "✓" else label,
         style = MaterialTheme.typography.labelMedium,
@@ -259,6 +259,8 @@ private fun TickButton(label: String, short: Boolean, tag: String, name: String,
         maxLines = 1,
         modifier = Modifier
             .testTag(tag)
+            // Each "+1" lands with a small bounce.
+            .pop(count)
             .clip(CircleShape)
             .background(MaterialTheme.colorScheme.primary)
             .clickable(role = Role.Button, onClickLabel = "$label: $name", onClick = onClick)
@@ -345,7 +347,7 @@ private fun Hours(
                 val extra = (dragY / hourPx * 60).roundToInt()
                 val timeLine = minuteText((minute + extra).coerceIn(0, last)) + of
                 val button: (@Composable () -> Unit)? = if (onTick != null && block.isNext) {
-                    { TickButton(tickLabel(row), short = boxWidth < NARROW, tag = "timeline-tick:${block.tag}", name = row.goal.name) { onTick(row) } }
+                    { TickButton(tickLabel(row), short = boxWidth < NARROW, tag = "timeline-tick:${block.tag}", name = row.goal.name, count = row.count) { onTick(row) } }
                 } else {
                     null
                 }

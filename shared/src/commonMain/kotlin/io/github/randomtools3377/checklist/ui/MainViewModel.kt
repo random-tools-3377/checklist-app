@@ -656,6 +656,7 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
             SETTING_FONT, SETTING_CELEBRATE_SOUND, SETTING_CELEBRATE_BUZZ, SETTING_CONFETTI, SETTING_DEFAULT_GIF,
             SETTING_APP_ICON, SETTING_WIDGET_STYLE, io.github.randomtools3377.checklist.core.ColourBlind.SETTING,
             io.github.randomtools3377.checklist.data.SETTING_TAB_ORDER,
+            io.github.randomtools3377.checklist.core.LessMotion.SETTING, io.github.randomtools3377.checklist.core.SwipeTick.SETTING,
         ).map { dao.observeSetting(it) },
     ) { v ->
         Appearance(
@@ -680,6 +681,8 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
             icon = AppIcon.entries.firstOrNull { it.name == v[17] } ?: AppIcon.GARDEN,
             widgetStyle = WidgetStyle.entries.firstOrNull { it.name == v[18] } ?: WidgetStyle.SOLID,
             colourBlind = v[19] == "1",
+            lessMotion = io.github.randomtools3377.checklist.core.LessMotion.choice(v[21]),
+            swipeTick = io.github.randomtools3377.checklist.core.SwipeTick.on(v[22]),
             loaded = true,
         )
     }.stateIn(viewModelScope, SharingStarted.Eagerly, Appearance())
@@ -899,6 +902,16 @@ class MainViewModel(private val phone: Phone) : ViewModel() {
     }
 
     // Each celebration setting is saved on its own, so quick taps on two of them can't undo each other.
+
+    /** "Less motion" in Appearance: from now on the switch decides, not the device's own setting. */
+    fun setLessMotion(on: Boolean) {
+        viewModelScope.launch { repository.setSetting(io.github.randomtools3377.checklist.core.LessMotion.SETTING, io.github.randomtools3377.checklist.core.LessMotion.encode(on)) }
+    }
+
+    /** "Swipe a card to tick it" in Appearance. */
+    fun setSwipeTick(on: Boolean) {
+        viewModelScope.launch { repository.setSetting(io.github.randomtools3377.checklist.core.SwipeTick.SETTING, if (on) "1" else "0") }
+    }
 
     fun setCelebrationSound(on: Boolean) {
         viewModelScope.launch { repository.setSetting(SETTING_CELEBRATE_SOUND, if (on) "1" else "0") }

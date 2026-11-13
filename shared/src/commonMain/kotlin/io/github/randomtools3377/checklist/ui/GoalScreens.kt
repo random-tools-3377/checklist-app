@@ -142,8 +142,14 @@ fun GoalsScreen(
     onNew: () -> Unit = {},
     /** The day each finished project was finished, which puts it under Completed. */
     finishedProjects: Map<Long, LocalDate> = emptyMap(),
+    /** Where the list is scrolled to; kept by the app, so coming back to Goals returns to the same place. */
+    listState: androidx.compose.foundation.lazy.LazyListState = androidx.compose.foundation.lazy.rememberLazyListState(),
 ) {
-    if (view == null) return
+    if (view == null) {
+        // The split second before the goals are read: faint card shapes, not a blank screen.
+        PlaceholderCards(Modifier.padding(padding))
+        return
+    }
     // Goals chosen while selecting, to change or remove together.
     var selected by rememberSaveable { mutableStateOf(listOf<Long>()) }
     LaunchedEffect(selecting) { if (!selecting) selected = emptyList() }
@@ -161,7 +167,12 @@ fun GoalsScreen(
     val todos = found.filter { goal ->
         goal.kind == GoalKind.TODO && Todos.dateOf(goal).let { it == null || view.today == null || it >= view.today }
     }
+    // Reorder: each list's rows can be held and dragged; a drop moves the goal to the place of the one it landed on.
+    val dragHabits = rememberDragList(habits.map { it.id }) { from, to -> onMove(habits[from], habits[to]) }
+    val dragProjects = rememberDragList(projects.map { it.id }) { from, to -> onMove(projects[from], projects[to]) }
+    val dragTodos = rememberDragList(todos.map { it.id }) { from, to -> onMove(todos[from], todos[to]) }
     LazyColumn(
+        state = listState,
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(
             start = 16.dp,
@@ -224,7 +235,7 @@ fun GoalsScreen(
         if (reordering && view.goals.isNotEmpty()) {
             item {
                 Text(
-                    "Use the arrows to change the order. \"My order\" on Today follows it.",
+                    "Hold a goal and drag it, or use the arrows, to change the order. \"My order\" on Today follows it.",
                     style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.padding(top = 8.dp),
                 )
@@ -241,9 +252,9 @@ fun GoalsScreen(
                 )
             }
         }
-        goalSection("Habits", habits, view, reordering, onOpen, onMove, pick, selected)
-        goalSection("Projects", projects, view, reordering, onOpen, onMove, pick, selected)
-        goalSection("To-dos", todos, view, reordering, onOpen, onMove, pick, selected)
+        goalSection("Habits", habits, view, reordering, onOpen, onMove, pick, selected, dragHabits)
+        goalSection("Projects", projects, view, reordering, onOpen, onMove, pick, selected, dragProjects)
+        goalSection("To-dos", todos, view, reordering, onOpen, onMove, pick, selected, dragTodos)
         completedSection(
             completedFound,
             // Open while searching, so what is found shows.
@@ -356,7 +367,7 @@ private fun LazyListScope.completedSection(
             modifier = Modifier.padding(bottom = 8.dp),
         )
     }
-    items(completed, key = { "completed-${it.goal.id}" }) { done -> CompletedCard(done, onEdit, onRemove) }
+    glidingItems(completed, key = { "completed-${it.goal.id}" }) { done -> CompletedCard(done, onEdit, onRemove) }
 }
 
 @Composable
@@ -480,7 +491,7 @@ fun RemovedGoalsScreen(goals: List<Goal>, onRestore: (Goal) -> Unit, onBack: () 
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = padding.calculateTopPadding() + 8.dp, bottom = padding.calculateBottomPadding() + 24.dp),
         ) {
             if (goals.isEmpty()) item { Text("Nothing removed.", modifier = Modifier.padding(top = 24.dp)) }
-            items(goals, key = { it.id }) { goal ->
+            glidingItems(goals, key = { it.id }) { goal ->
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
                     Text(goal.icon, fontSize = 26.sp, modifier = Modifier.width(40.dp))
                     Text(goal.name, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
@@ -500,12 +511,17 @@ private fun LazyListScope.goalSection(
     onMove: (Goal, Goal) -> Unit,
     onPick: ((Goal) -> Unit)? = null,
     picked: List<Long> = emptyList(),
+    /** Dragging this list's rows to reorder them, while reordering. */
+    drag: DragList? = null,
 ) {
     if (goals.isEmpty()) return
     item { SectionTitle(title) }
     itemsIndexed(goals, key = { _, goal -> goal.id }) { index, goal ->
         Card(
             modifier = Modifier
+                // Held and dragged while reordering; otherwise it glides to its place when the list changes.
+                .then(if (drag != null) Modifier.dragPlace(drag, index).dragHandle(drag, index, enabled = reordering) else Modifier)
+                .then(if (drag?.glides == false) Modifier else glide())
                 .fillMaxWidth()
                 .padding(bottom = 10.dp)
                 .clickable(enabled = !reordering) { if (onPick != null) onPick(goal) else onEdit(goal) }
@@ -1207,9 +1223,11 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Long)
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+        // Hold a row's arrows and drag to move it; the arrows themselves move it one place.
+        val dragItems = rememberDragList(items.map { it.key }) { from, to -> Reorder.move(items, from, to - from) }
         items.forEachIndexed { index, item ->
             key(item.key) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.dragPlace(dragItems, index)) {
                     OutlinedTextField(
                         value = item.name,
                         onValueChange = { items[index] = item.copy(name = it.take(60)) },
@@ -1217,7 +1235,7 @@ fun HabitEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Long)
                         singleLine = true,
                         modifier = Modifier.weight(1f).testTag("field:item-$index"),
                     )
-                    MoveArrows(index, items.size, "item") { by -> Reorder.move(items, index, by) }
+                    MoveArrows(index, items.size, "item", Modifier.dragHandle(dragItems, index)) { by -> Reorder.move(items, index, by) }
                     IconButton(onClick = { items.removeAt(index) }) {
                         Icon(Icons.Filled.Close, contentDescription = "Remove item ${index + 1}")
                     }
@@ -1661,9 +1679,11 @@ fun ProjectEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Lon
         SkillField(skill, { skill = it }, name, category, vm)
         GoalColourField(color, { color = it }, vm)
         Text("Steps", style = MaterialTheme.typography.titleSmall)
+        // Hold a step's arrows and drag to move it; the arrows themselves move it one place.
+        val dragSteps = rememberDragList(steps.map { it.key }) { from, to -> Reorder.move(steps, from, to - from) }
         steps.forEachIndexed { index, step ->
             key(step.key) {
-                Row(verticalAlignment = Alignment.Top) {
+                Row(verticalAlignment = Alignment.Top, modifier = Modifier.dragPlace(dragSteps, index)) {
                     OutlinedTextField(
                         value = step.name,
                         onValueChange = { steps[index] = step.copy(name = it.take(60)) },
@@ -1680,7 +1700,7 @@ fun ProjectEditor(id: Long, vm: MainViewModel, onClose: () -> Unit, onOpen: (Lon
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         modifier = Modifier.width(96.dp).testTag("field:step-points-$index"),
                     )
-                    MoveArrows(index, steps.size, "step") { by -> Reorder.move(steps, index, by) }
+                    MoveArrows(index, steps.size, "step", Modifier.dragHandle(dragSteps, index)) { by -> Reorder.move(steps, index, by) }
                     IconButton(
                         onClick = { steps.removeAt(index) },
                         enabled = steps.size > 1,
@@ -1937,9 +1957,10 @@ fun TodoEditor(id: Long, vm: MainViewModel, onClose: () -> Unit) {
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+        val dragSteps = rememberDragList(steps.map { it.key }) { from, to -> Reorder.move(steps, from, to - from) }
         steps.forEachIndexed { index, step ->
             key(step.key) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.dragPlace(dragSteps, index)) {
                     OutlinedTextField(
                         value = step.name,
                         onValueChange = { steps[index] = step.copy(name = it.take(60)) },
@@ -1947,7 +1968,7 @@ fun TodoEditor(id: Long, vm: MainViewModel, onClose: () -> Unit) {
                         singleLine = true,
                         modifier = Modifier.weight(1f).testTag("field:step-name-$index"),
                     )
-                    MoveArrows(index, steps.size, "step") { by -> Reorder.move(steps, index, by) }
+                    MoveArrows(index, steps.size, "step", Modifier.dragHandle(dragSteps, index)) { by -> Reorder.move(steps, index, by) }
                     IconButton(onClick = { steps.removeAt(index) }) {
                         Icon(Icons.Filled.Close, contentDescription = "Remove step ${index + 1}")
                     }
@@ -2116,8 +2137,8 @@ internal fun editorSnapshot(vararg fields: Any?): String = fields.joinToString("
  * leave room for the name. What moves keeps its id, so a ticked step keeps its tick.
  */
 @Composable
-internal fun MoveArrows(index: Int, count: Int, what: String, onMove: (Int) -> Unit) {
-    Column {
+internal fun MoveArrows(index: Int, count: Int, what: String, modifier: Modifier = Modifier, onMove: (Int) -> Unit) {
+    Column(modifier) {
         listOf(-1 to "up", 1 to "down").forEach { (by, word) ->
             val enabled = index + by in 0 until count
             Box(

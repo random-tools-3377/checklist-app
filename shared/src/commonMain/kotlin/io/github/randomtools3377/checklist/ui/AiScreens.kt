@@ -108,7 +108,8 @@ fun AiWaiting(onStop: () -> Unit) {
         }
     }
     Column(verticalArrangement = Arrangement.spacedBy(2.dp), modifier = Modifier.testTag("ai-waiting")) {
-        LinearProgressIndicator(Modifier.fillMaxWidth())
+        // The moving bar is left out with less motion; the words beside it say the same.
+        if (!LocalCalm.current) LinearProgressIndicator(Modifier.fillMaxWidth())
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 AiTrouble.waiting(seconds),

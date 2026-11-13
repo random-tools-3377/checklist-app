@@ -21,7 +21,6 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -123,8 +122,8 @@ private fun BadgeRow(badge: Badge, on: LocalDate?, progress: BadgeProgress? = nu
                 // Still to earn, with something to count: how far along it is.
                 if (on == null && progress != null) {
                     Spacer(Modifier.height(6.dp))
-                    LinearProgressIndicator(
-                        progress = { progress.share },
+                    SmoothBar(
+                        progress = progress.share,
                         // The words below say the same, so a screen reader reads it once.
                         modifier = Modifier.fillMaxWidth().height(8.dp).clearAndSetSemantics {},
                     )

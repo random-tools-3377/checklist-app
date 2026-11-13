@@ -8,7 +8,6 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.wrapContentWidth
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -46,7 +45,10 @@ import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -117,6 +119,20 @@ fun ReviewScreen(
     done: io.github.randomtools3377.checklist.core.StretchDone? = null,
     onDoneList: () -> Unit = {},
 ) {
+    // Stepping to another stretch keeps the one on screen, dimmed, until the new one is ready.
+    var waitingOn by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<ReviewSummary?>(null) }
+    val waiting = waitingOn != null && waitingOn === summary
+    androidx.compose.runtime.LaunchedEffect(waitingOn) {
+        // Nothing new came (the same stretch was asked for again): back to full strength.
+        if (waitingOn != null) {
+            kotlinx.coroutines.delay(1500)
+            waitingOn = null
+        }
+    }
+    val strength = if (LocalCalm.current) (if (waiting) 0.5f else 1f) else {
+        val moving by androidx.compose.animation.core.animateFloatAsState(if (waiting) 0.5f else 1f, androidx.compose.animation.core.tween(MotionTimes.ROLL), label = "review-dim")
+        moving
+    }
     // A goal with several misses in the stretch: the box that asks which one to open.
     val choosing = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<Long?>(null) }
     choosing.value?.let { goalId ->
@@ -129,7 +145,7 @@ fun ReviewScreen(
         }
     }
     LazyColumn(
-        modifier = Modifier.fillMaxSize().testTag("review"),
+        modifier = Modifier.fillMaxSize().graphicsLayer { alpha = strength }.testTag("review"),
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = padding.calculateTopPadding() + 8.dp, bottom = padding.calculateBottomPadding() + 24.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
@@ -138,7 +154,10 @@ fun ReviewScreen(
                 listOf(Period.DAILY to "Day", Period.WEEKLY to "Week", Period.MONTHLY to "Month", Period.YEARLY to "Year").forEachIndexed { index, (value, label) ->
                     SegmentedButton(
                         selected = period == value,
-                        onClick = { onPeriod(value) },
+                        onClick = {
+                            if (value != period) waitingOn = summary
+                            onPeriod(value)
+                        },
                         shape = SegmentedButtonDefaults.itemShape(index = index, count = 4),
                         modifier = Modifier.testTag("review:$label"),
                     ) { Text(label) }
@@ -162,10 +181,14 @@ fun ReviewScreen(
                 }
             }
         }
-        if (summary == null) return@LazyColumn
+        if (summary == null) {
+            // The split second before the first stretch is read: faint card shapes.
+            item { PlaceholderCards() }
+            return@LazyColumn
+        }
         item {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = { onStep(-1) }, modifier = Modifier.testTag("review:back")) {
+                IconButton(onClick = { waitingOn = summary; onStep(-1) }, modifier = Modifier.testTag("review:back")) {
                     Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "Earlier")
                 }
                 Text(
@@ -174,7 +197,7 @@ fun ReviewScreen(
                     textAlign = TextAlign.Center,
                     modifier = Modifier.weight(1f).testTag("review:range"),
                 )
-                IconButton(onClick = { onStep(1) }) {
+                IconButton(onClick = { waitingOn = summary; onStep(1) }) {
                     Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "Later")
                 }
             }
@@ -330,8 +353,8 @@ private fun YearCard(summary: ReviewSummary, moods: List<io.github.randomtools33
                     if (share == null) {
                         Text("–", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
                     } else {
-                        androidx.compose.material3.LinearProgressIndicator(
-                            progress = { share.toFloat() },
+                        SmoothBar(
+                            progress = share.toFloat(),
                             modifier = Modifier.weight(1f).height(8.dp),
                         )
                         Text("${(share * 100).toInt()}%", style = MaterialTheme.typography.bodySmall, modifier = Modifier.width(44.dp).padding(start = 6.dp))
@@ -748,7 +771,7 @@ private fun CategoriesCard(summary: ReviewSummary) {
                 Text("+${category.points}", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, textAlign = TextAlign.End, modifier = Modifier.width(56.dp))
             }
             if (category.due > 0) {
-                LinearProgressIndicator(progress = { category.consistency.toFloat() }, modifier = Modifier.fillMaxWidth())
+                SmoothBar(progress = category.consistency.toFloat(), modifier = Modifier.fillMaxWidth())
             }
         }
         Text("${pointsTitle()} come from ticks and bonuses.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

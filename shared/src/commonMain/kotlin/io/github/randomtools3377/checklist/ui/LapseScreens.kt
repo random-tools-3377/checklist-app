@@ -386,7 +386,8 @@ fun SkipDialog(goal: Goal, vm: MainViewModel, onDone: () -> Unit) {
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 when {
-                    check == null -> Text("…")
+                    // The split second while the allowance is read. It names no count of free skips.
+                    check == null -> Text("Checking your allowance…", modifier = Modifier.testTag("skip-checking"))
                     allowed == null -> Text("It can't be skipped now: it's done, or not due today.")
                     !allowed.overLimit -> Text(
                         "That uses ${allowed.used + 1} of the ${allowed.allowed} skips and misses allowed " +
@@ -430,8 +431,10 @@ fun SkipDialog(goal: Goal, vm: MainViewModel, onDone: () -> Unit) {
 @Composable
 fun StreakCard(streaks: Streaks, settings: StreakSettings, today: io.github.randomtools3377.checklist.core.StreakToday? = null) {
     val all = streaks.allRunning
-    val pop = remember { Animatable(if (all) 0.6f else 1f) }
-    LaunchedEffect(all) { if (all) pop.animateTo(1f, tween(600)) }
+    // The pop when every streak runs at once; with less motion the card is simply there.
+    val calm = LocalCalm.current
+    val pop = remember { Animatable(if (all && !calm) 0.6f else 1f) }
+    LaunchedEffect(all) { if (all && !calm) pop.animateTo(1f, tween(600)) else pop.snapTo(1f) }
     val shape = RoundedCornerShape(16.dp)
     val modifier = if (all) {
         Modifier.background(

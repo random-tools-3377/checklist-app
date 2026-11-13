@@ -17,12 +17,17 @@ internal object LookPlace {
     const val COLOUR = "colour"
     const val COLOUR_BLIND = "colour-blind"
     const val TEXT = "text"
+    const val MOTION = "motion"
     const val TODAY = "today"
     const val SECTIONS = "sections"
     const val TABS = "tabs"
     const val PERSONAL = "personal"
     const val CELEBRATIONS = "celebrations"
 }
+
+/** The switches in Appearance for holding still, and for swiping a card on Today. */
+internal const val LESS_MOTION_TITLE = "Less motion"
+internal const val SWIPE_TICK_TITLE = "Swipe a card to tick it"
 
 /** The switch in Appearance that puts the character's face on the balance and streaks widget. */
 internal const val WIDGET_CHARACTER_TITLE = "Character on the balance and streaks widget"
@@ -34,6 +39,8 @@ internal fun lookParts(phone: Phone, matchWallpaper: Boolean, character: Boolean
     LookPart(LookPlace.COLOUR, "Colour", "colour color accent palette any picker hex" + if (matchWallpaper) " wallpaper" else ""),
     LookPart(LookPlace.COLOUR_BLIND, "Colour-blind friendly", "colour-blind color-blind colourblind colorblind accessibility"),
     LookPart(LookPlace.TEXT, "Text size", "text size bigger larger smaller accessibility"),
+    LookPart(LookPlace.MOTION, LESS_MOTION_TITLE, "motion animation animations animated reduce reduced remove still calm moving movement slide sliding confetti dizzy accessibility"),
+    LookPart(LookPlace.TODAY, SWIPE_TICK_TITLE, "swipe swiping slide gesture tick done card finger"),
     LookPart(LookPlace.TODAY, "Today's look", "layout grid tiles list cards card size background photo gradient picture dim"),
     LookPart(LookPlace.SECTIONS, "Today's sections", "sections order hide show move"),
     LookPart(LookPlace.TABS, "Tabs", "tabs tab hidden opens on first bottom bar"),

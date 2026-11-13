@@ -28,6 +28,8 @@ import io.github.randomtools3377.checklist.core.payFor
 import io.github.randomtools3377.checklist.core.TodaySection
 import io.github.randomtools3377.checklist.core.WeekProgress
 import io.github.randomtools3377.checklist.core.Badge
+import io.github.randomtools3377.checklist.core.BuzzKind
+import io.github.randomtools3377.checklist.core.SwipeTick
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.background
 import androidx.compose.ui.draw.drawBehind
@@ -47,7 +49,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedIconButton
@@ -126,8 +127,14 @@ fun TodayScreen(
     padding: PaddingValues,
     /** Opens the "How am I doing?" summary. */
     onHowDoing: () -> Unit = {},
+    /** Where the list is scrolled to; kept by the app, so coming back to Today returns to the same place. */
+    listState: androidx.compose.foundation.lazy.LazyListState = androidx.compose.foundation.lazy.rememberLazyListState(),
 ) {
-    if (screen == null) return
+    if (screen == null) {
+        // The split second before today's list is read: faint card shapes, not a blank screen.
+        PlaceholderCards(Modifier.padding(padding))
+        return
+    }
     val view = screen.view
     val backup by vm.backupState.collectAsStateWithLifecycle()
     val week by vm.weekProgress.collectAsStateWithLifecycle()
@@ -262,8 +269,13 @@ fun TodayScreen(
     val todos = view.todos.filter { Categories.shows(filter, it.goal) }
 
     fun celebrateTick(result: TickResult, spot: Spot, bigWhenFinished: Boolean) {
-        if (result !is TickResult.Ticked) return
-        celebrations.buzz(haptics)
+        if (result !is TickResult.Ticked) {
+            // Not taken, like a goal that isn't due any more: a soft double tap.
+            if (result != TickResult.NotFound) celebrations.buzz(haptics, BuzzKind.REFUSED)
+            return
+        }
+        // The fuller buzz for finishing; a light click for one of several.
+        celebrations.buzz(haptics, if (result.finished) BuzzKind.DONE else BuzzKind.LIGHT)
         val total = result.points + result.bonus
         celebrations.burst(spot.center, "+$total", big = bigWhenFinished && result.finished)
     }
@@ -282,9 +294,17 @@ fun TodayScreen(
         }
     }
 
+    /** A tick, an item or a step taken back: a small tick of a buzz, then [action]. */
+    fun takeBack(action: () -> Unit) {
+        celebrations.buzz(haptics, BuzzKind.BACK)
+        action()
+    }
+
     /** A routine's item; the last one finishes the routine and celebrates like a tick. */
     fun checkItem(row: HabitRow, item: StepRow, spot: Spot) {
         vm.checkItem(item.step.id) { result ->
+            // One item of several: a light click. The last one celebrates below.
+            if (result is TickResult.Ticked && !result.finished) celebrations.buzz(haptics, BuzzKind.LIGHT)
             if (result is TickResult.Ticked && result.finished) {
                 val gif = row.goal.celebration?.takeIf { Celebration.isValid(it) } ?: celebrations.style.defaultGif
                 if (gif != null) {
@@ -313,13 +333,13 @@ fun TodayScreen(
                         paceLine = screen.longPaces[id]?.let { paceText(it) },
                         nextLine = nextLine(row, screen),
                         onTick = { spot -> tick(row, spot) },
-                        onUndo = { if (row.isRoutine) vm.undoRoutine(id) else vm.undoHabitTick(id) },
+                        onUndo = { takeBack { if (row.isRoutine) vm.undoRoutine(id) else vm.undoHabitTick(id) } },
                         onSkip = {
                             details = null
                             skipping = row.goal
                         },
                         onItem = { item, spot -> checkItem(row, item, spot) },
-                        onUncheck = { item -> vm.uncheckItem(item.step.id) },
+                        onUncheck = { item -> takeBack { vm.uncheckItem(item.step.id) } },
                         onFocus = row.goal.minutes?.let { minutes -> { details = null; vm.startFocus(id, minutes) } },
                         lastTick = screen.lastTicks[id],
                         onNote = { details = null; editingTick = it },
@@ -376,6 +396,7 @@ fun TodayScreen(
     Box(Modifier.fillMaxSize()) {
     TodayBackdrop(look)
     LazyColumn(
+        state = listState,
         modifier = Modifier.fillMaxSize().readable().testTag("today-list"),
         contentPadding = PaddingValues(
             start = 16.dp,
@@ -391,20 +412,23 @@ fun TodayScreen(
                     TextButton(onClick = onTimeline, modifier = Modifier.testTag("open-timeline")) { Text("Timeline") }
                 }
             }
-            if (showWeekPlan) {
-                WeekPlanCard(onPlan = onPlanWeek, onLater = vm::weekPlanned)
-                Spacer(Modifier.height(12.dp))
+            // Each of these folds open and closed as it comes and goes, so the list below doesn't lurch.
+            Fold(showWeekPlan) {
+                Column {
+                    WeekPlanCard(onPlan = onPlanWeek, onLater = vm::weekPlanned)
+                    Spacer(Modifier.height(12.dp))
+                }
             }
-            if (screen.streakPercent > 100) {
+            Fold(screen.streakPercent.takeIf { it > 100 }) { percent ->
                 Text(
-                    "🔥 Streak bonus: goals pay ${screen.streakPercent - 100}% more today",
+                    "🔥 Streak bonus: goals pay ${percent - 100}% more today",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.padding(bottom = 8.dp).testTag("streak-bonus"),
                 )
             }
             // What is within reach, as one short offer.
-            nearWin?.let { line ->
+            Fold(nearWin) { line ->
                 Text(
                     "✨ $line",
                     style = MaterialTheme.typography.bodyMedium,
@@ -413,23 +437,31 @@ fun TodayScreen(
                 )
             }
             // The first time Today opens on a new day: what yesterday came to.
-            overnight?.let { line ->
-                OvernightCard(line, onClose = vm::overnightSeen)
-                Spacer(Modifier.height(12.dp))
-            }
-            if (newBadges.isNotEmpty()) {
-                NewBadgesCard(newBadges, onSee = onBadges, onDismiss = vm::badgesSeen)
-                Spacer(Modifier.height(12.dp))
-            }
-            backup.due?.let { days ->
-                BackupReminderCard(days, onBackUp = onSettings, onLater = vm::backupLater)
-                Spacer(Modifier.height(12.dp))
-            }
-            if (screen.hiddenPrivate > 0) {
-                OutlinedButton(onClick = onUnlock, modifier = Modifier.fillMaxWidth().testTag("unlock-private")) {
-                    Text(if (screen.hiddenPrivate == 1) "🔒 1 private goal · Unlock" else "🔒 ${screen.hiddenPrivate} private goals · Unlock")
+            Fold(overnight) { line ->
+                Column {
+                    OvernightCard(line, onClose = vm::overnightSeen)
+                    Spacer(Modifier.height(12.dp))
                 }
-                Spacer(Modifier.height(12.dp))
+            }
+            Fold(newBadges.takeIf { it.isNotEmpty() }) { earned ->
+                Column {
+                    NewBadgesCard(earned, onSee = onBadges, onDismiss = vm::badgesSeen)
+                    Spacer(Modifier.height(12.dp))
+                }
+            }
+            Fold(backup.due) { days ->
+                Column {
+                    BackupReminderCard(days, onBackUp = onSettings, onLater = vm::backupLater)
+                    Spacer(Modifier.height(12.dp))
+                }
+            }
+            Fold(screen.hiddenPrivate.takeIf { it > 0 }) { hidden ->
+                Column {
+                    OutlinedButton(onClick = onUnlock, modifier = Modifier.fillMaxWidth().testTag("unlock-private")) {
+                        Text(if (hidden == 1) "🔒 1 private goal · Unlock" else "🔒 $hidden private goals · Unlock")
+                    }
+                    Spacer(Modifier.height(12.dp))
+                }
             }
         }
 
@@ -439,7 +471,7 @@ fun TodayScreen(
             if (goalsStarted) return
             goalsStarted = true
             if (categories.isNotEmpty()) {
-                item(key = "categories") {
+                glidingItem("categories") {
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(bottom = 4.dp).testTag("today-categories"),
@@ -457,7 +489,7 @@ fun TodayScreen(
                 }
             }
             if (view.isEmpty) {
-                item(key = "empty") {
+                glidingItem("empty") {
                     val going = anyGoals.any { it.kind == GoalKind.HABIT && io.github.randomtools3377.checklist.core.Completed.habitLastDay(it, view.day) == null }
                     if (going || screen.hiddenPrivate > 0) {
                         // A day off: there are goals, only none of them today. What's next, not "Add a goal".
@@ -481,8 +513,9 @@ fun TodayScreen(
         for (choice in look.sections) {
             if (!choice.shown) continue
             when (choice.section) {
-                TodaySection.MOOD -> item(key = "mood") {
-                    Column {
+                TodaySection.MOOD -> glidingItem("mood") {
+                    // The check-in and its answer come and go: the card's place grows and shrinks smoothly.
+                    Column(Modifier.gentleSize()) {
                     // With check-ins on, the character asks instead, on its own card.
                     val characterAsks = companion?.say?.askMood == true &&
                         look.sections.any { it.section == TodaySection.CHARACTER && it.shown }
@@ -576,7 +609,7 @@ fun TodayScreen(
                     }
                     }
                 }
-                TodaySection.BALANCE -> item(key = "balance") {
+                TodaySection.BALANCE -> glidingItem("balance") {
                     BalanceCard(
                         view.balance,
                         modifier = Modifier.clickable(onClick = onHistory),
@@ -588,7 +621,7 @@ fun TodayScreen(
                     TextButton(onClick = onHowDoing, modifier = Modifier.testTag("how-doing-open")) { Text("How am I doing?") }
                     Spacer(Modifier.height(4.dp))
                 }
-                TodaySection.CHARACTER -> if (character != null) item(key = "character") {
+                TodaySection.CHARACTER -> if (character != null) glidingItem("character") {
                     // With the character on: its level, under the balance.
                     character?.let { sheet ->
                         LevelCard(
@@ -613,19 +646,19 @@ fun TodayScreen(
                         Spacer(Modifier.height(12.dp))
                     }
                 }
-                TodaySection.QUESTS -> if (quests?.list?.isNotEmpty() == true) item(key = "quests") {
+                TodaySection.QUESTS -> if (quests?.list?.isNotEmpty() == true) glidingItem("quests") {
                     quests?.list?.takeIf { it.isNotEmpty() }?.let { list ->
                         QuestsCard(list)
                         Spacer(Modifier.height(12.dp))
                     }
                 }
-                TodaySection.RACE -> if (race != null) item(key = "race") {
+                TodaySection.RACE -> if (race != null) glidingItem("race") {
                     race?.let { standing ->
                         RaceCard(standing, raceCatchUp)
                         Spacer(Modifier.height(12.dp))
                     }
                 }
-                TodaySection.BOSS -> if (boss != null) item(key = "boss") {
+                TodaySection.BOSS -> if (boss != null) glidingItem("boss") {
                     boss?.let { fight ->
                         BossCard(fight) { say ->
                             vm.attackBoss { attack -> say(attack?.let { attackText(it.dealt, it.beaten, it.paid) } ?: "Nothing to use.") }
@@ -634,14 +667,14 @@ fun TodayScreen(
                     }
                 }
                 TodaySection.WEEKLY_TARGET -> week?.let { progress ->
-                    item(key = "weekly-target") {
+                    glidingItem("weekly-target") {
                         WeeklyTargetCard(progress)
                         Spacer(Modifier.height(12.dp))
                     }
                 }
                 // Nothing to count yet: no streak card.
                 TodaySection.STREAKS -> if (!(view.isEmpty && screen.streaks.done == 0 && screen.streaks.perfect == 0)) {
-                    item(key = "streaks") {
+                    glidingItem("streaks") {
                         StreakCard(
                             screen.streaks, screen.streakSettings,
                             today = io.github.randomtools3377.checklist.core.NearWins.streakToday(
@@ -666,13 +699,13 @@ fun TodayScreen(
                     }
                 }
                 TodaySection.PACE -> if (screen.plan.isNotEmpty() || screen.events.isNotEmpty()) {
-                    if (screen.events.isNotEmpty()) item(key = "events") {
+                    if (screen.events.isNotEmpty()) glidingItem("events") {
                         Column(Modifier.padding(bottom = 8.dp).testTag("today-events")) {
                             Text("In your calendar", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
                             screen.events.forEach { EventLine(it) }
                         }
                     }
-                    if (screen.plan.isNotEmpty()) item(key = "pace") {
+                    if (screen.plan.isNotEmpty()) glidingItem("pace") {
                         PaceCard(
                             screen, onSettings,
                             settings = io.github.randomtools3377.checklist.core.PaceSettings(lockSettings.dayEndHour, lockSettings.defaultFinish, lockSettings.dayStart),
@@ -685,20 +718,20 @@ fun TodayScreen(
                 }
                 TodaySection.DUE_TODAY -> {
                     startGoals()
-                    if (plan.isNotEmpty()) item(key = "title-today") { SectionTitle("Today") }
+                    if (plan.isNotEmpty()) glidingItem("title-today") { SectionTitle("Today") }
                     // Everything due today done (with goals whose week, month or year ends today), none
                     // skipped: the perfect-day bonus comes when the day ends.
                     val recap = dayRecap?.takeIf { filter == null }
                     // Everything due is done: the day so far, what tonight adds, and tomorrow's first few.
                     if (recap != null) {
-                        item(key = "day-recap") {
+                        glidingItem("day-recap") {
                             DayRecapCard(recap, comingUp)
                             Spacer(Modifier.height(10.dp))
                         }
                     }
                     // A day off among goals due this week or later: what's next.
                     if (filter == null && screen.plan.isEmpty() && view.limits.isEmpty() && !view.isEmpty && screen.hiddenPrivate == 0 && anyGoals.any { it.kind == GoalKind.HABIT }) {
-                        item(key = "day-off") {
+                        glidingItem("day-off") {
                             Column(Modifier.padding(bottom = 8.dp)) {
                                 Text("Nothing due today. Enjoy it.", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("day-off"))
                                 comingUp?.let {
@@ -714,7 +747,7 @@ fun TodayScreen(
                     }
                     // With combos on: the run of perfect days, and what tonight is worth. The recap says it once the day is done.
                     if (filter == null && recap == null) comboLine?.let { line ->
-                        item(key = "combo") {
+                        glidingItem("combo") {
                             Text(
                                 "🔗 $line",
                                 style = MaterialTheme.typography.bodyMedium,
@@ -724,7 +757,7 @@ fun TodayScreen(
                         }
                     }
                     if (filter == null && recap == null && boosts.perfectDayBonus > 0 && screen.perfectSoFar) {
-                        item(key = "perfect-day") {
+                        glidingItem("perfect-day") {
                             Text(
                                 "🌟 Perfect day so far: +${boosts.perfectDayBonus} when the day ends",
                                 style = MaterialTheme.typography.bodyMedium,
@@ -734,11 +767,11 @@ fun TodayScreen(
                         }
                     }
                     if (grid) {
-                        items(plan.chunked(2), key = { "today-tiles-${it.first().row.goal.id}" }) { pair ->
+                        glidingItems(plan.chunked(2), key = { "today-tiles-${it.first().row.goal.id}" }) { pair ->
                             TileRow(pair.map { it.row }, screen, ::tick) { details = it }
                         }
                     } else {
-                        items(plan, key = { "today-${it.row.goal.id}" }) { planned ->
+                        glidingItems(plan, key = { "today-${it.row.goal.id}" }) { planned ->
                             HabitCard(
                                 row = planned.row,
                                 // A habit done several times a day shows its next one instead.
@@ -747,11 +780,12 @@ fun TodayScreen(
                                 paceLine = null,
                                 nextLine = nextLine(planned.row, screen),
                                 onTick = { spot -> tick(planned.row, spot) },
-                                onUndo = { if (planned.row.isRoutine) vm.undoRoutine(planned.row.goal.id) else vm.undoHabitTick(planned.row.goal.id) },
+                                onUndo = { takeBack { if (planned.row.isRoutine) vm.undoRoutine(planned.row.goal.id) else vm.undoHabitTick(planned.row.goal.id) } },
                                 onSkip = { skipping = planned.row.goal },
                                 onItem = { item, spot -> checkItem(planned.row, item, spot) },
-                                onUncheck = { item -> vm.uncheckItem(item.step.id) },
+                                onUncheck = { item -> takeBack { vm.uncheckItem(item.step.id) } },
                                 onFocus = planned.row.goal.minutes?.let { minutes -> { vm.startFocus(planned.row.goal.id, minutes) } },
+                                swipe = look.swipeTick,
                                 lastTick = screen.lastTicks[planned.row.goal.id],
                                 onNote = { editingTick = it },
                                 stopwatch = stopwatch,
@@ -767,13 +801,16 @@ fun TodayScreen(
                     // "At most" goals: nothing to do, only to stay under, so they come after the day's goals.
                     val limits = shown(view.limits)
                     if (limits.isNotEmpty()) {
-                        item(key = "title-limits") { SectionTitle("Stay under") }
-                        items(limits, key = { "limit-${it.goal.id}" }) { row ->
+                        glidingItem("title-limits") { SectionTitle("Stay under") }
+                        glidingItems(limits, key = { "limit-${it.goal.id}" }) { row ->
                             AtMostCard(
                                 row = row,
-                                onAdd = { vm.addUse(row.goal.id) },
+                                onAdd = {
+                                    celebrations.buzz(haptics, BuzzKind.LIGHT)
+                                    vm.addUse(row.goal.id)
+                                },
                                 onAmount = { using = row.goal.id },
-                                onUndo = { vm.undoUse(row.goal.id) },
+                                onUndo = { takeBack { vm.undoUse(row.goal.id) } },
                                 onConfirm = { vm.confirmAtMost(row.goal.id) },
                                 onUnconfirm = { vm.undoHabitTick(row.goal.id) },
                                 onSkip = { skipping = row.goal },
@@ -785,8 +822,8 @@ fun TodayScreen(
                 // An extra: shown when turned on, or while there are to-dos.
                 TodaySection.TODOS -> if (Feature.TODOS in features || view.todos.isNotEmpty()) {
                     startGoals()
-                    item(key = "title-todos") { SectionTitle("To-dos") }
-                    item(key = "todo-add") {
+                    glidingItem("title-todos") { SectionTitle("To-dos") }
+                    glidingItem("todo-add") {
                         QuickTodoField(
                             // Added while one category is showing, it takes that category, so it stays on screen.
                             onAdd = { name -> vm.addTodo(name, filter) },
@@ -794,7 +831,7 @@ fun TodayScreen(
                         )
                         Spacer(Modifier.height(10.dp))
                     }
-                    items(todos, key = { "todo-${it.goal.id}" }) { row ->
+                    glidingItems(todos, key = { "todo-${it.goal.id}" }) { row ->
                         TodoCard(
                             row = row,
                             onDone = { spot ->
@@ -802,38 +839,40 @@ fun TodayScreen(
                                 val action: (Long, (TickResult) -> Unit) -> Unit = if (row.items.isNotEmpty()) vm::finishRoutine else vm::tickHabit
                                 action(row.goal.id) { result -> celebrateTick(result, spot, bigWhenFinished = row.items.isNotEmpty()) }
                             },
-                            onUndo = { if (row.items.isNotEmpty()) vm.undoRoutine(row.goal.id) else vm.undoHabitTick(row.goal.id) },
+                            onUndo = { takeBack { if (row.items.isNotEmpty()) vm.undoRoutine(row.goal.id) else vm.undoHabitTick(row.goal.id) } },
                             onEdit = { onEditTodo(row.goal.id) },
                             onItem = { item, spot ->
                                 vm.checkItem(item.step.id) { result ->
+                                    if (result is TickResult.Ticked && !result.finished) celebrations.buzz(haptics, BuzzKind.LIGHT)
                                     if (result is TickResult.Ticked && result.finished) celebrateTick(result, spot, bigWhenFinished = true)
                                 }
                             },
-                            onUncheck = { item -> vm.uncheckItem(item.step.id) },
+                            onUncheck = { item -> takeBack { vm.uncheckItem(item.step.id) } },
+                            swipe = look.swipeTick,
                         )
                         Spacer(Modifier.height(10.dp))
                     }
                 }
                 TodaySection.THIS_WEEK -> {
                     startGoals()
-                    habitSection("This week", shown(view.thisWeek), screen, ::tick, vm, grid, { details = it }, stopwatch, { r -> entering = r }, ::checkItem, { editingTick = it }) { skipping = it }
+                    habitSection("This week", shown(view.thisWeek), screen, ::tick, vm, grid, { details = it }, stopwatch, { r -> entering = r }, ::checkItem, { editingTick = it }, ::takeBack, look.swipeTick) { skipping = it }
                 }
                 TodaySection.THIS_MONTH -> {
                     startGoals()
-                    habitSection("This month", shown(view.thisMonth), screen, ::tick, vm, grid, { details = it }, stopwatch, { r -> entering = r }, ::checkItem, { editingTick = it }) { skipping = it }
+                    habitSection("This month", shown(view.thisMonth), screen, ::tick, vm, grid, { details = it }, stopwatch, { r -> entering = r }, ::checkItem, { editingTick = it }, ::takeBack, look.swipeTick) { skipping = it }
                 }
                 TodaySection.THIS_YEAR -> {
                     startGoals()
-                    habitSection("This year", shown(view.thisYear), screen, ::tick, vm, grid, { details = it }, stopwatch, { r -> entering = r }, ::checkItem, { editingTick = it }) { skipping = it }
+                    habitSection("This year", shown(view.thisYear), screen, ::tick, vm, grid, { details = it }, stopwatch, { r -> entering = r }, ::checkItem, { editingTick = it }, ::takeBack, look.swipeTick) { skipping = it }
                 }
                 TodaySection.MONEY -> if (io.github.randomtools3377.checklist.core.Feature.BUDGET in features && !(vm.settings.value.locks.budget && !vm.unlocked.value)) {
-                    item(key = "money") { TodayMoneyCard(vm, onBudget, onSpent) }
+                    glidingItem("money") { TodayMoneyCard(vm, onBudget, onSpent) }
                 }
                 TodaySection.PROJECTS -> {
                     startGoals()
                     if (projects.isNotEmpty()) {
-                        item(key = "title-projects") { SectionTitle("Projects") }
-                        items(projects, key = { "project-${it.goal.id}" }) { project ->
+                        glidingItem("title-projects") { SectionTitle("Projects") }
+                        glidingItems(projects, key = { "project-${it.goal.id}" }) { project ->
                             ProjectCard(
                                 project = project,
                                 paceLine = screen.longPaces[project.goal.id]?.let { paceText(it) },
@@ -850,7 +889,7 @@ fun TodayScreen(
                                         }
                                     }
                                 },
-                                onUndo = { step -> vm.undoStep(step.step.id) },
+                                onUndo = { step -> takeBack { vm.undoStep(step.step.id) } },
                             )
                             Spacer(Modifier.height(10.dp))
                         }
@@ -922,10 +961,18 @@ private fun TodoCard(
     onEdit: () -> Unit,
     onItem: (StepRow, Spot) -> Unit = { _, _ -> },
     onUncheck: (StepRow) -> Unit = {},
+    /** Whether sliding the card to the right does it, like its Done button. */
+    swipe: Boolean = false,
 ) {
     val goal = row.goal
     val spot = remember { Spot() }
     val cardSize = LocalCardSize.current
+    val swipeDoes = if (swipe) SwipeTick.does(row) else SwipeTick.Does.NOTHING
+    SwipeToTick(
+        label = SwipeTick.label(swipeDoes, counted = false, quit = false),
+        enabled = swipeDoes != SwipeTick.Does.NOTHING,
+        onSwipe = { if (!row.done) onDone(spot) },
+    ) {
     Card(Modifier.fillMaxWidth().clickable(onClick = onEdit).testTag("todo:${goal.name}")) {
       Column(Modifier.goalStrip(goal.color)) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(cardSize.padding)) {
@@ -961,6 +1008,7 @@ private fun TodoCard(
             }
         }
       }
+    }
     }
 }
 
@@ -1182,25 +1230,30 @@ private fun LazyListScope.habitSection(
     /** Ticks a routine's item; the last one finishes the routine and celebrates, as in the daily list. */
     checkItem: (HabitRow, StepRow, Spot) -> Unit,
     onNote: (Long) -> Unit,
+    /** Wraps taking a tick or an item back, for its small buzz. */
+    takeBack: (() -> Unit) -> Unit,
+    /** Whether sliding a card to the right ticks it (Settings → Appearance). */
+    swipe: Boolean,
     onSkip: (Goal) -> Unit,
 ) {
     if (rows.isEmpty()) return
     item { SectionTitle(title) }
     if (grid) {
-        items(rows.chunked(2), key = { "tiles-${it.first().goal.id}" }) { pair -> TileRow(pair, screen, tick, onDetails) }
+        glidingItems(rows.chunked(2), key = { "tiles-${it.first().goal.id}" }) { pair -> TileRow(pair, screen, tick, onDetails) }
         return
     }
-    items(rows, key = { "habit-${it.goal.id}" }) { row ->
+    glidingItems(rows, key = { "habit-${it.goal.id}" }) { row ->
         HabitCard(
             row = row,
             timeLabel = null,
             late = false,
             paceLine = screen.longPaces[row.goal.id]?.let { paceText(it) },
             onTick = { spot -> tick(row, spot) },
-            onUndo = { if (row.isRoutine) vm.undoRoutine(row.goal.id) else vm.undoHabitTick(row.goal.id) },
+            onUndo = { takeBack { if (row.isRoutine) vm.undoRoutine(row.goal.id) else vm.undoHabitTick(row.goal.id) } },
             onSkip = { onSkip(row.goal) },
             onItem = { item, spot -> checkItem(row, item, spot) },
-            onUncheck = { item -> vm.uncheckItem(item.step.id) },
+            onUncheck = { item -> takeBack { vm.uncheckItem(item.step.id) } },
+            swipe = swipe,
             // The same buttons as a goal due today: Focus for one with a length, and a note on its latest tick.
             onFocus = row.goal.minutes?.let { minutes -> { vm.startFocus(row.goal.id, minutes) } },
             lastTick = screen.lastTicks[row.goal.id],
@@ -1319,8 +1372,8 @@ private fun PaceCard(
             // A slim bar for the day, filling with each goal done.
             if (counted.isNotEmpty()) {
                 Spacer(Modifier.height(8.dp))
-                LinearProgressIndicator(
-                    progress = { doneCount.toFloat() / counted.size },
+                SmoothBar(
+                    progress = doneCount.toFloat() / counted.size,
                     modifier = Modifier.fillMaxWidth().height(4.dp).testTag("pace-bar"),
                 )
                 Text(
@@ -1421,16 +1474,25 @@ private fun HabitCard(
     onStart: (() -> Unit)? = null,
     /** For a to-do with a date: opens its editor, from a tap on its name or "Change date". */
     onEdit: (() -> Unit)? = null,
+    /** Whether sliding the card to the right does what its button does (in Today's lists, with the setting on). */
+    swipe: Boolean = false,
 ) {
     val goal = row.goal
     val spot = remember { Spot() }
     val amountMode = goal.hasAmount && onAmount != null
     val counted = !amountMode && (goal.target > 1 || row.isRoutine)
+    // A swipe only ever does what the button on the card does: tick, add one, or open the amount box.
+    val swipeDoes = if (swipe) SwipeTick.does(row) else SwipeTick.Does.NOTHING
     val cardSize = LocalCardSize.current
     val rate = LocalPayRate.current
     val boosted = LocalBoosted.current == goal.id
     val streakPercent = LocalStreakPercent.current
     val extras = LocalTodayExtras.current
+    SwipeToTick(
+        label = SwipeTick.label(swipeDoes, counted = counted && !row.isRoutine, quit = goal.quit),
+        enabled = swipeDoes != SwipeTick.Does.NOTHING,
+        onSwipe = { if (swipeDoes == SwipeTick.Does.AMOUNT && amountMode) onAmount?.invoke(spot, null) else if (swipeDoes == SwipeTick.Does.TICK) onTick(spot) },
+    ) {
     Card(Modifier.fillMaxWidth()) {
       Column(Modifier.goalStrip(goal.color)) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(cardSize.padding)) {
@@ -1497,8 +1559,8 @@ private fun HabitCard(
                         }
                     }
                     Spacer(Modifier.height(4.dp))
-                    LinearProgressIndicator(
-                        progress = { ((row.progress / (goal.amount ?: 1.0)).toFloat()).coerceIn(0f, 1f) },
+                    SmoothBar(
+                        progress = ((row.progress / (goal.amount ?: 1.0)).toFloat()).coerceIn(0f, 1f),
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }
@@ -1616,8 +1678,8 @@ private fun HabitCard(
                 }
                 if (counted) {
                     Spacer(Modifier.height(6.dp))
-                    LinearProgressIndicator(
-                        progress = { (row.count.toFloat() / goal.target).coerceIn(0f, 1f) },
+                    SmoothBar(
+                        progress = (row.count.toFloat() / goal.target).coerceIn(0f, 1f),
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }
@@ -1674,10 +1736,15 @@ private fun HabitCard(
                     onClick = { if (shownDone && (!counted || row.isRoutine)) onUndo() else if (!shownDone) onTick(spot) },
                     routine = row.isRoutine,
                     label = if (goal.quit) "Avoided" else "Done",
+                    // Each "+1" pops too, not only the last one.
+                    count = if (row.isRoutine) (if (shownDone) 1 else 0) else row.count,
                 )
                 if (counted) {
-                    Text(
-                        if (row.isRoutine) "${row.items.count { it.done }} of ${row.items.size}" else "${row.count} of ${goal.target}",
+                    // "2 of 8" rolls up to "3 of 8", and back down when one is taken back.
+                    val had = if (row.isRoutine) row.items.count { it.done } else row.count
+                    RollingText(
+                        if (row.isRoutine) "$had of ${row.items.size}" else "$had of ${goal.target}",
+                        order = had,
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(top = 2.dp).testTag("count:${goal.name}"),
@@ -1695,6 +1762,7 @@ private fun HabitCard(
             }
         }
       }
+    }
     }
 }
 
@@ -1714,12 +1782,12 @@ private fun RoutineItemLine(item: StepRow, onTick: (Spot) -> Unit, onUndo: () ->
         androidx.compose.material3.Checkbox(
             checked = item.done,
             onCheckedChange = null,
-            modifier = Modifier.onGloballyPositioned { spot.center = it.boundsInRoot().center },
+            modifier = Modifier.onGloballyPositioned { spot.center = it.boundsInRoot().center }.pop(item.done),
         )
         Spacer(Modifier.width(4.dp))
         Text(
             item.step.name,
-            color = if (item.done) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
+            color = fading(if (item.done) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface),
         )
     }
 }
@@ -1730,24 +1798,36 @@ private fun RoutineItemLine(item: StepRow, onTick: (Spot) -> Unit, onUndo: () ->
  * takes the tick back.
  */
 @Composable
-private fun TickButton(done: Boolean, counted: Boolean, description: String, modifier: Modifier, onClick: () -> Unit, routine: Boolean = false, label: String = "Done") {
+private fun TickButton(
+    done: Boolean,
+    counted: Boolean,
+    description: String,
+    modifier: Modifier,
+    onClick: () -> Unit,
+    routine: Boolean = false,
+    label: String = "Done",
+    /** How many times it was ticked, where that is more than done or not: the button pops as it changes. */
+    count: Int = if (done) 1 else 0,
+) {
     val semantics = Modifier.semantics { contentDescription = description }
     val padding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
-    if (done) {
-        Button(onClick = onClick, contentPadding = padding, modifier = modifier.then(semantics)) {
+    // One button whose colours fade from the soft "to do" look to the filled "done" one, with a
+    // small bounce as the tick lands, and the same played back when it is taken back.
+    Button(
+        onClick = onClick,
+        contentPadding = padding,
+        colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+            containerColor = fading(if (done) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondaryContainer),
+            contentColor = fading(if (done) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer),
+        ),
+        modifier = modifier.pop(count).then(semantics),
+    ) {
+        if (!done && counted && !routine) {
+            Text("+1", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+        } else {
             Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(4.dp))
             Text(label)
-        }
-    } else {
-        FilledTonalButton(onClick = onClick, contentPadding = padding, modifier = modifier.then(semantics)) {
-            if (counted && !routine) {
-                Text("+1", fontSize = 18.sp, fontWeight = FontWeight.Bold)
-            } else {
-                Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(4.dp))
-                Text(label)
-            }
         }
     }
 }
@@ -1779,8 +1859,8 @@ private fun ProjectCard(project: ProjectRow, paceLine: String?, onTick: (StepRow
             }
             if (project.steps.isNotEmpty()) {
                 Spacer(Modifier.height(8.dp))
-                LinearProgressIndicator(
-                    progress = { project.doneCount.toFloat() / project.steps.size },
+                SmoothBar(
+                    progress = project.doneCount.toFloat() / project.steps.size,
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Spacer(Modifier.height(4.dp))
@@ -1816,6 +1896,7 @@ private fun StepLine(step: StepRow, onTick: (Spot) -> Unit, onUndo: () -> Unit) 
             modifier = Modifier
                 .size(40.dp)
                 .onGloballyPositioned { spot.center = it.boundsInRoot().center }
+                .pop(step.done)
                 .testTag("step:${step.step.name}"),
         ) {
             if (step.done) {
@@ -1834,7 +1915,7 @@ private fun StepLine(step: StepRow, onTick: (Spot) -> Unit, onUndo: () -> Unit) 
         Text(
             step.step.name,
             modifier = Modifier.weight(1f),
-            color = if (step.done) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
+            color = fading(if (step.done) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface),
         )
         Text("+${payNow(step.step.points, step.step.goalId)}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
@@ -1852,7 +1933,7 @@ private fun WeeklyTargetCard(week: WeekProgress) {
                 modifier = Modifier.testTag("weekly-target-text"),
             )
             Spacer(Modifier.height(6.dp))
-            LinearProgressIndicator(progress = { week.share }, modifier = Modifier.fillMaxWidth())
+            SmoothBar(progress = week.share, modifier = Modifier.fillMaxWidth())
         }
     }
 }
@@ -1934,6 +2015,7 @@ private fun GoalTile(row: HabitRow, line: String, modifier: Modifier, onTap: (Sp
     Card(
         modifier = modifier
             .height(cardSize.tile)
+            .pop(row.count)
             .onGloballyPositioned { spot.center = it.boundsInRoot().center }
             .combinedClickable(
                 onClickLabel = if (done) "Details" else "Tick",
@@ -1943,11 +2025,11 @@ private fun GoalTile(row: HabitRow, line: String, modifier: Modifier, onTap: (Sp
             )
             .semantics { contentDescription = "${goal.name}: $line" }
             .testTag("tile:${goal.name}"),
-        colors = if (done) {
-            CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary)
-        } else {
-            CardDefaults.cardColors()
-        },
+        // The tile fills in as it is ticked.
+        colors = CardDefaults.cardColors(
+            containerColor = fading(if (done) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHighest),
+            contentColor = fading(if (done) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface),
+        ),
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,

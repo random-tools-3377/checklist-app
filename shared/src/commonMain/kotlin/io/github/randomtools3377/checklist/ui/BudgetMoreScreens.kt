@@ -24,7 +24,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -142,7 +141,7 @@ fun SavingsCard(savings: List<SavingProgress>, hourly: Double?, vm: MainViewMode
                             modifier = Modifier.testTag("saving-amounts:${saving.goal.name}"),
                         )
                     }
-                    LinearProgressIndicator(progress = { saving.share }, modifier = Modifier.fillMaxWidth().padding(start = 36.dp, top = 2.dp))
+                    SmoothBar(progress = saving.share, modifier = Modifier.fillMaxWidth().padding(start = 36.dp, top = 2.dp))
                     Text(
                         if (saving.reached) "Reached! 🎉" else "${centsText(saving.leftCents)} to go" + (hourly?.let { " · ${workText(saving.leftCents, it)}" } ?: ""),
                         style = MaterialTheme.typography.bodySmall,
@@ -577,7 +576,7 @@ fun BudgetReportScreen(vm: MainViewModel, onBack: () -> Unit) {
                         Text(spend.category.name, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
                         Text("${centsText(spend.cents)} · ${(share * 100).toInt()}%", style = MaterialTheme.typography.bodyMedium)
                     }
-                    LinearProgressIndicator(progress = { share }, modifier = Modifier.fillMaxWidth().padding(start = 32.dp, top = 2.dp))
+                    SmoothBar(progress = share, modifier = Modifier.fillMaxWidth().padding(start = 32.dp, top = 2.dp))
                 }
             }
         }

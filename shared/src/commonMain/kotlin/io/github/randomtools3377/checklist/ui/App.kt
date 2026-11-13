@@ -56,6 +56,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.runtime.toMutableStateList
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
@@ -105,7 +106,13 @@ fun ChecklistRoot(phone: Phone, vm: MainViewModel) {
             val own = sheet?.let { level ->
                 remember(level, figureLook, talks) { OwnCharacter(figureLook, io.github.randomtools3377.checklist.core.Outfit.of(level), talks) }
             }
-            androidx.compose.runtime.CompositionLocalProvider(LocalPayRate provides rate, LocalEmptyPicture provides picture, LocalCharacter provides own) {
+            // The one rule every animation asks: the user's "Less motion" choice, else the device's own
+            // setting. The app's own tests hold still too, so nothing is mid-move when they look.
+            val calm = io.github.randomtools3377.checklist.core.LessMotion.calm(
+                if (appearance.lessMotion == null) null else io.github.randomtools3377.checklist.core.LessMotion.encode(appearance.lessMotion == true),
+                device = phone.reducedMotion() || phone.underTest,
+            )
+            androidx.compose.runtime.CompositionLocalProvider(LocalPayRate provides rate, LocalEmptyPicture provides picture, LocalCharacter provides own, LocalCalm provides calm) {
                 // Measures the window, for tablets and phones on their side.
                 WindowSized { ChecklistApp(vm) }
             }
@@ -125,6 +132,11 @@ fun ChecklistApp(vm: MainViewModel) {
         }
     }
     val stack = rememberSaveable(saver = RoutesSaver) { mutableListOf(AppTab.TODAY.route).toMutableStateList() }
+    // Where Today's and the Goals list are scrolled to, kept here so coming back to them returns
+    // to the same place instead of the top. The app's own tests start each visit from the top.
+    val keptTodayList = androidx.compose.foundation.lazy.rememberLazyListState()
+    val keptGoalsList = androidx.compose.foundation.lazy.rememberLazyListState()
+    val keepsPlaces = !LocalPhone.current.underTest
     var showBought by rememberSaveable { mutableStateOf(false) }
     var newGoal by remember { mutableStateOf(false) }
     // The box from the quick-add widget.
@@ -153,7 +165,7 @@ fun ChecklistApp(vm: MainViewModel) {
     var selectGoals by rememberSaveable { mutableStateOf(false) }
     var reorderRewards by rememberSaveable { mutableStateOf(false) }
 
-    val route = stack.last()
+    val topRoute = stack.last()
     fun push(next: String) {
         stack.add(next)
     }
@@ -173,7 +185,7 @@ fun ChecklistApp(vm: MainViewModel) {
         if (tab != null) goTo(tab) else push(next)
     }
 
-    BackButton(enabled = stack.size > 1 || route != AppTab.TODAY.route) { pop() }
+    BackButton(enabled = stack.size > 1 || topRoute != AppTab.TODAY.route) { pop() }
 
     val today by vm.todayState.collectAsStateWithLifecycle()
     val goals by vm.goalsView.collectAsStateWithLifecycle()
@@ -239,8 +251,11 @@ fun ChecklistApp(vm: MainViewModel) {
     val celebrationExtras by vm.celebrationExtras.collectAsStateWithLifecycle()
     celebrations.extras = celebrationExtras
     celebrations.goal = { vm.celebrated }
-    val celebratingOn = LocalPhone.current
-    celebrations.calm = { celebratingOn.reducedMotion() }
+    val calm = LocalCalm.current
+    celebrations.calm = { calm }
+    val buzzingOn = LocalPhone.current
+    celebrations.deviceBuzz = buzzingOn::buzz
+    celebrations.scope = androidx.compose.runtime.rememberCoroutineScope()
     // The app opens on the tab chosen in Appearance, once the settings have been read.
     var firstTabApplied by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(appearance.loaded) {
@@ -399,9 +414,12 @@ fun ChecklistApp(vm: MainViewModel) {
         return
     }
 
-    androidx.compose.runtime.SideEffect { ShownRoute.route = route }
-    FirstTimeTip(route, vm)
+    androidx.compose.runtime.SideEffect { ShownRoute.route = topRoute }
+    FirstTimeTip(topRoute, vm)
     Box(Modifier.fillMaxSize()) {
+        // A page opened slides in and Back slides it away; with less motion screens simply swap.
+        ScreenSwitch(topRoute, stack.size, screenOf = { r -> if (AppTab.entries.any { it.route == r }) "tabs" else r }) { route ->
+        Box(Modifier.fillMaxSize()) {
         val parts = route.split("/")
         val id = parts.getOrNull(1)?.toLongOrNull() ?: 0L
         // On a wide window a screen with its own top bar sits in the middle at a readable width;
@@ -633,6 +651,7 @@ fun ChecklistApp(vm: MainViewModel) {
                                 onSkipRequestHandled = vm::clearSkipRequest,
                                 padding = padding,
                                 onHowDoing = { howDoing = 0L },
+                                listState = if (keepsPlaces) keptTodayList else androidx.compose.foundation.lazy.rememberLazyListState(),
                             )
                         }
                         AppTab.GOALS -> GoalsScreen(
@@ -651,6 +670,7 @@ fun ChecklistApp(vm: MainViewModel) {
                             vm = vm,
                             onNew = { newGoal = true },
                             finishedProjects = doneList.filter { it.goal.kind == io.github.randomtools3377.checklist.core.GoalKind.PROJECT }.associate { it.goal.id to it.day },
+                            listState = if (keepsPlaces) keptGoalsList else androidx.compose.foundation.lazy.rememberLazyListState(),
                         )
                         AppTab.PLAN -> PlanScreen(planDays, vm, padding, onTimeline = { index -> push("timeline/$index") }, onEditTodo = { id -> push("todo/$id") })
                         AppTab.REVIEW -> if (settings.locks.review && !unlocked) {
@@ -734,6 +754,14 @@ fun ChecklistApp(vm: MainViewModel) {
                     }
                 }
             }
+        }
+        }
+        // A screen on its way out takes no more taps, so a second Back can't land on it.
+        if (route != topRoute) Box(Modifier.fillMaxSize().pointerInput(Unit) {
+            awaitPointerEventScope {
+                while (true) awaitPointerEvent(androidx.compose.ui.input.pointer.PointerEventPass.Initial).changes.forEach { it.consume() }
+            }
+        })
         }
         }
 

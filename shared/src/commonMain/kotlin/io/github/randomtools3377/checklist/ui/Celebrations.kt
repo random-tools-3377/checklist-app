@@ -38,13 +38,16 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import io.github.randomtools3377.checklist.core.BuzzKind
 import io.github.randomtools3377.checklist.core.CelebrationSounds
 import io.github.randomtools3377.checklist.core.GlowSize
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
@@ -64,6 +67,10 @@ sealed interface BigCelebration {
     /** A habit finished for its day, week, month or year, with its own GIF. */
     data class GoalFinished(val icon: String, val name: String, val points: Int, val gif: String) : BigCelebration
 }
+
+/** How long a still "+10" stays, with less motion; and the pause between the two taps of a "refused" buzz. */
+private const val STILL_BURST_MILLIS = 900L
+private const val REFUSED_GAP_MILLIS = 110L
 
 private data class Burst(val id: Long, val at: Offset, val label: String, val big: Boolean)
 
@@ -90,8 +97,14 @@ class Celebrations {
     /** The goal whose tick is being celebrated, for its own sound and its colour (see MainViewModel.celebrated). */
     var goal: () -> io.github.randomtools3377.checklist.core.Goal? = { null }
 
-    /** Whether the phone asks for less motion; the glow round the edges is left out then. */
+    /** Whether to hold still ("Less motion", see LocalCalm): no glow, no flying confetti, and a still "+10". */
     var calm: () -> Boolean = { false }
+
+    /** Asks the device itself for a buzz of a kind, where it has its own (see Phone.buzz); false falls back to the app's. */
+    var deviceBuzz: (BuzzKind) -> Boolean = { false }
+
+    /** For the second tap of a "refused" buzz. */
+    var scope: kotlinx.coroutines.CoroutineScope? = null
 
     private var glow by mutableStateOf<Glow?>(null)
 
@@ -132,9 +145,26 @@ class Celebrations {
         if (extras.glow && !calm()) glow = Glow(nextId++, size, goalColor)
     }
 
-    /** A buzz, unless buzzing is off. */
-    fun buzz(haptics: androidx.compose.ui.hapticfeedback.HapticFeedback) {
-        if (style.buzz) haptics.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+    /**
+     * A buzz, unless buzzing is off: the fuller one for something finished, a light click for one
+     * of several, a soft double tap for something refused, and a small tick for a tick taken back.
+     * The device's own kinds are used where it has them; otherwise the two every phone has.
+     */
+    fun buzz(haptics: androidx.compose.ui.hapticfeedback.HapticFeedback, kind: BuzzKind = BuzzKind.DONE) {
+        if (!style.buzz) return
+        if (deviceBuzz(kind)) return
+        val light = androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove
+        when (kind) {
+            BuzzKind.DONE -> haptics.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+            BuzzKind.LIGHT, BuzzKind.BACK -> haptics.performHapticFeedback(light)
+            BuzzKind.REFUSED -> {
+                haptics.performHapticFeedback(light)
+                scope?.launch {
+                    delay(REFUSED_GAP_MILLIS)
+                    haptics.performHapticFeedback(light)
+                }
+            }
+        }
     }
 
     @Composable
@@ -142,12 +172,12 @@ class Celebrations {
         Box(Modifier.fillMaxSize()) {
             for (burst in bursts.toList()) {
                 key(burst.id) {
-                    BurstEffect(burst, style.confetti.amount) { bursts.remove(burst) }
+                    BurstEffect(burst, style.confetti.amount, still = calm()) { bursts.remove(burst) }
                 }
             }
             big?.let { celebration ->
                 key(celebration) {
-                    BigEffect(celebration, style.confetti.amount) { big = null }
+                    BigEffect(celebration, style.confetti.amount, still = calm()) { big = null }
                 }
             }
             // On top of everything, and only drawn: it never takes a touch.
@@ -163,7 +193,23 @@ class Celebrations {
 private class Particle(val angle: Float, val distance: Float, val radius: Float, val color: Color)
 
 @Composable
-private fun BurstEffect(burst: Burst, amount: Float, onEnd: () -> Unit) {
+private fun BurstEffect(burst: Burst, amount: Float, still: Boolean, onEnd: () -> Unit) {
+    if (still) {
+        // Less motion: a still "+10" where the tick was, there for a moment and then gone.
+        LaunchedEffect(Unit) {
+            delay(STILL_BURST_MILLIS)
+            onEnd()
+        }
+        Text(
+            text = burst.label,
+            color = MaterialTheme.colorScheme.primary,
+            fontWeight = FontWeight.Bold,
+            fontSize = if (burst.big) 30.sp else 22.sp,
+            // Only something to see: the card says what was earned.
+            modifier = Modifier.offsetTo(burst.at, rise = 0f).clearAndSetSemantics {},
+        )
+        return
+    }
     val progress = remember { Animatable(0f) }
     val particles = remember {
         val count = ((if (burst.big) 36 else 16) * amount).toInt()
@@ -218,11 +264,12 @@ private fun Modifier.offsetTo(at: Offset, rise: Float): Modifier =
 private class Piece(val x: Float, val delay: Float, val speed: Float, val sway: Float, val spin: Float, val w: Float, val h: Float, val color: Color)
 
 @Composable
-private fun BigEffect(celebration: BigCelebration, amount: Float, onEnd: () -> Unit) {
+private fun BigEffect(celebration: BigCelebration, amount: Float, still: Boolean, onEnd: () -> Unit) {
     val fall = remember { Animatable(0f) }
-    val pop = remember { Animatable(0.3f) }
+    // Less motion: the words are simply there, and no confetti falls.
+    val pop = remember { Animatable(if (still) 1f else 0.3f) }
     val pieces = remember {
-        List(((if (celebration is BigCelebration.ProjectFinished) 120 else 60) * amount).toInt()) {
+        List(if (still) 0 else ((if (celebration is BigCelebration.ProjectFinished) 120 else 60) * amount).toInt()) {
             Piece(
                 x = Random.nextFloat(),
                 delay = Random.nextFloat() * 0.35f,
@@ -236,10 +283,10 @@ private fun BigEffect(celebration: BigCelebration, amount: Float, onEnd: () -> U
         }
     }
     LaunchedEffect(Unit) {
-        pop.animateTo(1f, spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow))
+        if (!still) pop.animateTo(1f, spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow))
     }
     LaunchedEffect(Unit) {
-        fall.animateTo(1f, tween(durationMillis = 3200, easing = LinearEasing))
+        if (!still) fall.animateTo(1f, tween(durationMillis = 3200, easing = LinearEasing))
     }
     LaunchedEffect(Unit) {
         // Closes by itself, or sooner with a tap.

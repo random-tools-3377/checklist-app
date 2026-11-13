@@ -118,7 +118,7 @@ fun HistoryScreen(
                     }
                     HorizontalDivider()
                 }
-                items(onDay, key = { "entry-${it.id}" }) { entry ->
+                glidingItems(onDay, key = { "entry-${it.id}" }) { entry ->
                     // A tick can be fixed: when it was done, and a note about it.
                     val tickId = entry.tickId?.takeIf { entry.kind == EntryKind.TICK }
                     // A penalty's skip or miss can be opened: to change its reason or note, or to say it was a forgotten tick.

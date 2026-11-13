@@ -2,6 +2,7 @@
 
 package io.github.randomtools3377.checklist.ios
 
+import io.github.randomtools3377.checklist.core.BuzzKind
 import io.github.randomtools3377.checklist.core.CelebrationSounds
 import io.github.randomtools3377.checklist.data.SharedParts
 import io.github.randomtools3377.checklist.data.nextInChain
@@ -32,7 +33,12 @@ import platform.UIKit.UIGraphicsBeginImageContextWithOptions
 import platform.UIKit.UIGraphicsEndImageContext
 import platform.UIKit.UIGraphicsGetImageFromCurrentImageContext
 import platform.UIKit.UIImage
+import platform.UIKit.UIImpactFeedbackGenerator
+import platform.UIKit.UIImpactFeedbackStyle
 import platform.UIKit.UIImageJPEGRepresentation
+import platform.UIKit.UINotificationFeedbackGenerator
+import platform.UIKit.UINotificationFeedbackType
+import platform.UIKit.UISelectionFeedbackGenerator
 import platform.UIKit.UIViewController
 import platform.darwin.NSObject
 import platform.darwin.dispatch_async
@@ -236,6 +242,20 @@ class IosPhone : Phone {
         val name = CelebrationSounds.newName(Random.nextBytes(8))
         parts.gifs.write(name, bytes)
         return Result.success(name)
+    }
+
+    /**
+     * Each kind of buzz in the iPhone's own terms: a light tap, the fuller one, the "warning"
+     * double tap for something refused, and the small selection tick for a tick taken back.
+     */
+    override fun buzz(kind: BuzzKind): Boolean {
+        when (kind) {
+            BuzzKind.LIGHT -> UIImpactFeedbackGenerator(UIImpactFeedbackStyle.UIImpactFeedbackStyleLight).impactOccurred()
+            BuzzKind.DONE -> UIImpactFeedbackGenerator(UIImpactFeedbackStyle.UIImpactFeedbackStyleMedium).impactOccurred()
+            BuzzKind.REFUSED -> UINotificationFeedbackGenerator().notificationOccurred(UINotificationFeedbackType.UINotificationFeedbackTypeWarning)
+            BuzzKind.BACK -> UISelectionFeedbackGenerator().selectionChanged()
+        }
+        return true
     }
 
     /** "Reduce Motion" in the iPhone's Accessibility settings. */

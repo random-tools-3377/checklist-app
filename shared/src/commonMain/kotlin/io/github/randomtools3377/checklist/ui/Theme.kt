@@ -94,6 +94,10 @@ data class Appearance(
     val widgetStyle: io.github.randomtools3377.checklist.widget.WidgetStyle = io.github.randomtools3377.checklist.widget.WidgetStyle.SOLID,
     /** Blue for good and vermillion for bad, apart for every common kind of colour blindness. */
     val colourBlind: Boolean = false,
+    /** "Less motion": the user's choice, or null while the device's own setting decides (see LessMotion in the rules). */
+    val lessMotion: Boolean? = null,
+    /** Whether sliding a goal's card to the right on Today ticks it. */
+    val swipeTick: Boolean = true,
     /** False until the settings have been read, so the first tab isn't picked from the defaults. */
     val loaded: Boolean = false,
 ) {

@@ -25,7 +25,6 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.LinearProgressIndicator
 import io.github.randomtools3377.checklist.core.SavingFor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -130,12 +129,14 @@ fun BalanceCard(
     ) {
         Column(Modifier.padding(horizontal = 20.dp, vertical = 16.dp)) {
             Text("Balance", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onPrimaryContainer)
-            Text(
-                text = pointsText(balance),
+            // It counts up or down to its new value; what is read out, and tested, is always the final one.
+            CountingText(
+                value = balance,
+                text = { pointsText(it) },
+                tag = "balance",
                 fontSize = 34.sp,
                 fontWeight = FontWeight.Bold,
                 color = if (balance < 0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onPrimaryContainer,
-                modifier = Modifier.testTag("balance"),
             )
             if (note != null) {
                 Text(note, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onPrimaryContainer)
@@ -155,8 +156,8 @@ private fun SavingForPart(saving: SavingFor, onShop: () -> Unit) {
     val on = MaterialTheme.colorScheme.onPrimaryContainer
     Column(Modifier.fillMaxWidth().padding(top = 12.dp).testTag("saving-for")) {
         Text("★ Saving for ${saving.reward.icon} ${saving.reward.name}", style = MaterialTheme.typography.titleSmall, color = on, modifier = Modifier.testTag("saving-for-name"))
-        LinearProgressIndicator(
-            progress = { saving.progress.coerceIn(0f, 1f) },
+        SmoothBar(
+            progress = saving.progress.coerceIn(0f, 1f),
             modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
             trackColor = MaterialTheme.colorScheme.surface,
         )

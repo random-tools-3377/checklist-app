@@ -128,9 +128,10 @@ const val SETTING_BACKUP_KEY = "backup_key"
 /**
  * Settings that only make sense on the phone that set them, so they stay out of the backup file:
  * the running Start and Stop timing, which of the phone's calendars are shown (by its own ids),
- * and the key for protected backup files. An import keeps this device's calendars and key.
+ * the key for protected backup files, and "Less motion", which starts on each device's own
+ * setting. An import keeps this device's calendars, key and motion.
  */
-val PHONE_ONLY_SETTINGS = setOf(SETTING_STOPWATCH, SETTING_CALENDAR_IDS, SETTING_BACKUP_KEY)
+val PHONE_ONLY_SETTINGS = setOf(SETTING_STOPWATCH, SETTING_CALENDAR_IDS, SETTING_BACKUP_KEY, io.github.randomtools3377.checklist.core.LessMotion.SETTING)
 
 /** "0" turns off the daily mood check-in; and the day it was put off ("Not today"). */
 const val SETTING_MOOD = "mood_checkin"
@@ -1191,6 +1192,7 @@ class Repository(private val db: AppDatabase, private val celebrations: GifStore
         // This phone keeps its own calendar choice. A running timing stops: its goal may now be another one.
         val calendarIds = dao.setting(SETTING_CALENDAR_IDS)
         val backupKey = dao.setting(SETTING_BACKUP_KEY)
+        val lessMotion = dao.setting(io.github.randomtools3377.checklist.core.LessMotion.SETTING)
         deleteEverything()
         dao.insertGoals(backup.goals.map { it.toEntity() })
         dao.insertSteps(backup.steps.map { it.toEntity() })
@@ -1203,6 +1205,7 @@ class Repository(private val db: AppDatabase, private val celebrations: GifStore
                 listOfNotNull(
                     calendarIds?.let { SettingEntity(SETTING_CALENDAR_IDS, it) },
                     backupKey?.let { SettingEntity(SETTING_BACKUP_KEY, it) },
+                    lessMotion?.let { SettingEntity(io.github.randomtools3377.checklist.core.LessMotion.SETTING, it) },
                 ),
         )
         dao.insertLapses(backup.lapses.map { it.toEntity() })

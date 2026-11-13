@@ -185,7 +185,16 @@ interface Phone {
     /** Whether the device can buzz, for celebrations (a computer can't). */
     val canBuzz: Boolean get() = true
 
-    /** Whether the device asks for less motion, where that is known; the glow round the edges is left out then. */
+    /**
+     * A buzz of [kind] in the device's own way, where it has one for each kind; whether it took
+     * it. False (a computer, or a phone without its own) leaves the buzz to the app's two usual ones.
+     */
+    fun buzz(kind: io.github.randomtools3377.checklist.core.BuzzKind): Boolean = false
+
+    /**
+     * Whether the device asks for less motion, where that is known. "Less motion" in Appearance
+     * starts on it (see LocalCalm), and every animation in the app follows that.
+     */
     fun reducedMotion(): Boolean = false
 
     /**

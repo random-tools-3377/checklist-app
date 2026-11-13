@@ -138,6 +138,28 @@ class AndroidPhone(private val app: ChecklistApplication) : Phone {
         }
     }
 
+    /**
+     * Each kind of buzz in Android's own terms, through the window on screen: a light click, the
+     * fuller long-press buzz, "rejected" (two soft taps on older phones) and a small tick. It
+     * needs no permission and follows the phone's own touch-feedback setting.
+     */
+    override fun buzz(kind: io.github.randomtools3377.checklist.core.BuzzKind): Boolean {
+        val view = activity?.get()?.window?.decorView ?: return false
+        when (kind) {
+            io.github.randomtools3377.checklist.core.BuzzKind.LIGHT -> view.performHapticFeedback(android.view.HapticFeedbackConstants.CONTEXT_CLICK)
+            io.github.randomtools3377.checklist.core.BuzzKind.DONE -> view.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
+            io.github.randomtools3377.checklist.core.BuzzKind.BACK -> view.performHapticFeedback(android.view.HapticFeedbackConstants.CLOCK_TICK)
+            io.github.randomtools3377.checklist.core.BuzzKind.REFUSED ->
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    view.performHapticFeedback(android.view.HapticFeedbackConstants.REJECT)
+                } else {
+                    view.performHapticFeedback(android.view.HapticFeedbackConstants.CLOCK_TICK)
+                    view.postDelayed({ view.performHapticFeedback(android.view.HapticFeedbackConstants.CLOCK_TICK) }, 110L)
+                }
+        }
+        return true
+    }
+
     /** Animations turned off in the phone's accessibility or developer settings. */
     override fun reducedMotion(): Boolean =
         android.provider.Settings.Global.getFloat(app.contentResolver, android.provider.Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f

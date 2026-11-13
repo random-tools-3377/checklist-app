@@ -30,7 +30,6 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
@@ -182,7 +181,11 @@ fun BudgetScreen(
             confirmButton = { TextButton(onClick = vm::moneyPaidSeen, modifier = Modifier.testTag("money-paid-ok")) { Text("Nice") } },
         )
     }
-    val shown = view ?: return
+    // The split second before the budget is read: faint card shapes, not a blank screen.
+    val shown = view ?: run {
+        PlaceholderCards(Modifier.padding(padding))
+        return
+    }
     val now by rememberNow(live = shown.thisMonth)
     val month = remember(shown, now) { Budget.month(shown.first, shown.plans, shown.changes, shown.entries, shown.categories, now) }
     val plan = shown.plan
@@ -238,8 +241,8 @@ fun BudgetScreen(
                         )
                         Text("of ${moneyText(pay.total, alwaysCents = true)}", style = MaterialTheme.typography.bodyMedium)
                         Spacer(Modifier.height(8.dp))
-                        LinearProgressIndicator(
-                            progress = { if (pay.total > 0) (pay.earned / pay.total).toFloat().coerceIn(0f, 1f) else 0f },
+                        SmoothBar(
+                            progress = if (pay.total > 0) (pay.earned / pay.total).toFloat().coerceIn(0f, 1f) else 0f,
                             modifier = Modifier.fillMaxWidth().height(10.dp),
                         )
                         TextButton(onClick = { onChangeDay(if (shown.thisMonth) now.date else shown.first) }, modifier = Modifier.testTag("change-a-day")) {
@@ -334,7 +337,7 @@ private fun TodayPayCard(pay: DayPay, now: LocalDateTime, onChange: () -> Unit) 
                     )
                     Text("of ${moneyText(pay.total, alwaysCents = true)} today", style = MaterialTheme.typography.bodyMedium)
                     Spacer(Modifier.height(8.dp))
-                    LinearProgressIndicator(progress = { done.toFloat() }, modifier = Modifier.fillMaxWidth().height(12.dp).testTag("today-bar"))
+                    SmoothBar(progress = done.toFloat(), modifier = Modifier.fillMaxWidth().height(12.dp).testTag("today-bar"))
                     Spacer(Modifier.height(4.dp))
                     Text(
                         "${timeText(minuteTime(hours.start))} – ${timeText(minuteTime(hours.stop))}" + when {
@@ -396,8 +399,8 @@ private fun CategoryRow(spend: CategorySpend) {
             )
         }
         if (limit != null && limit > 0) {
-            LinearProgressIndicator(
-                progress = { (spend.cents.toFloat() / limit).coerceIn(0f, 1f) },
+            SmoothBar(
+                progress = (spend.cents.toFloat() / limit).coerceIn(0f, 1f),
                 color = if (spend.over) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
                 modifier = Modifier.fillMaxWidth().padding(start = 36.dp, top = 2.dp),
             )
@@ -912,6 +915,7 @@ fun CategoriesScreen(vm: MainViewModel, onBack: () -> Unit) {
     val categories by vm.moneyCategories.collectAsStateWithLifecycle()
     var editing by remember { mutableStateOf<MoneyCategory?>(null) }
     val shown = categories.filter { !it.archived }
+    val dragCategories = rememberDragList(shown.map { it.id }) { from, to -> vm.moveMoneyCategory(shown[from].id, to - from) }
     Scaffold(
         topBar = {
             TopAppBar(
@@ -940,7 +944,8 @@ fun CategoriesScreen(vm: MainViewModel, onBack: () -> Unit) {
                 val index = shown.indexOf(category)
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth().clickable { editing = category }.padding(vertical = 4.dp).testTag("edit-category:${category.name}"),
+                    // Hold a category and drag it, or use its arrows.
+                    modifier = Modifier.dragRow(dragCategories, index).then(if (dragCategories.glides) glide() else Modifier).fillMaxWidth().clickable { editing = category }.padding(vertical = 4.dp).testTag("edit-category:${category.name}"),
                 ) {
                     Text(category.icon, fontSize = 24.sp, modifier = Modifier.width(40.dp))
                     Column(Modifier.weight(1f)) {
@@ -1050,7 +1055,7 @@ fun TodayMoneyCard(vm: MainViewModel, onOpen: () -> Unit, onSpent: () -> Unit = 
             }
             if (hours != null) {
                 val done = pay.done(now)
-                LinearProgressIndicator(progress = { done.toFloat() }, modifier = Modifier.fillMaxWidth().padding(top = 6.dp).height(8.dp))
+                SmoothBar(progress = done.toFloat(), modifier = Modifier.fillMaxWidth().padding(top = 6.dp).height(8.dp))
                 Text(
                     when {
                         done <= 0.0 -> "Starts at ${timeText(minuteTime(hours.start))}"
@@ -1128,8 +1133,8 @@ private fun MoneyGameCard(game: MoneyGameView, vm: MainViewModel) {
                 color = if (over) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.testTag("money-game-today"),
             )
-            LinearProgressIndicator(
-                progress = { if (shareCents > 0) (game.spentCents.toFloat() / shareCents).coerceIn(0f, 1f) else 1f },
+            SmoothBar(
+                progress = if (shareCents > 0) (game.spentCents.toFloat() / shareCents).coerceIn(0f, 1f) else 1f,
                 color = if (over) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
                 modifier = Modifier.fillMaxWidth(),
             )

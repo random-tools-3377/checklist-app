@@ -161,6 +161,18 @@ fun AppearanceScreen(appearance: Appearance, vm: MainViewModel, onAnyColour: () 
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
+            // One switch every animation in the app follows. It starts on the device's own setting.
+            Spacer(Modifier.height(4.dp))
+            Title("Motion", Modifier.scrollPlace(target, LookPlace.MOTION))
+            SwitchRow(
+                LESS_MOTION_TITLE,
+                appearance.lessMotion ?: phone.reducedMotion(),
+                "switch:less-motion",
+                hint = "Cards, bars, numbers and screens simply change instead of sliding, rolling or popping, and confetti is a still \"+10\". " +
+                    "It starts on your ${phone.deviceWord}'s own setting.",
+                onChange = vm::setLessMotion,
+            )
+
             Spacer(Modifier.height(4.dp))
             Title("Today", Modifier.scrollPlace(target, LookPlace.TODAY))
             Choice("Layout", TodayLayout.entries, appearance.layout, { it.label }, "layout") { vm.setTodayLayout(it) }
@@ -170,6 +182,14 @@ fun AppearanceScreen(appearance: Appearance, vm: MainViewModel, onAnyColour: () 
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Choice("Card size", CardSize.entries, appearance.cardSize, { it.label }, "card-size") { vm.setCardSize(it) }
+            SwitchRow(
+                SWIPE_TICK_TITLE,
+                appearance.swipeTick,
+                "switch:swipe-tick",
+                hint = "Slide a goal's or a to-do's card to the right to do what its button does: Done, +1, or the box for an amount. " +
+                    "Undo shows as usual. Nothing is ever skipped by a swipe.",
+                onChange = vm::setSwipeTick,
+            )
             BackdropSetting(appearance, vm)
 
             Spacer(Modifier.height(4.dp))
@@ -407,8 +427,17 @@ private fun SectionsEditor(
 ) {
     val listed = sections.filter { offered(it.section) }
     val listedSections = listed.map { it.section }
+    // Hold a section and drag it, or use its arrows.
+    val drag = rememberDragList(listedSections) { from, to ->
+        val section = listedSections[from]
+        onChange { now ->
+            var moved = now
+            repeat(kotlin.math.abs(to - from)) { moved = Offered.move(moved, section, if (to > from) 1 else -1, listedSections) }
+            moved
+        }
+    }
     listed.forEachIndexed { index, choice ->
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.dragRow(drag, index).fillMaxWidth()) {
             TickBoxRow(
                 checked = choice.shown,
                 tag = "section:${choice.section.name}",
@@ -439,8 +468,10 @@ private fun TabsEditor(tabs: TabChoice, vm: MainViewModel) {
     fun offered(tab: AppTabKind) = tab != AppTabKind.BUDGET || io.github.randomtools3377.checklist.core.Feature.BUDGET in features
     // Every tab in the user's order: shown or hidden (Today always shows), and moved up or down.
     val listed = tabs.order.filter { offered(it) }
+    // Hold a tab and drag it, or use its arrows.
+    val drag = rememberDragList(listed) { from, to -> vm.moveTab(listed[from], tabs.order.indexOf(listed[to]) - tabs.order.indexOf(listed[from])) }
     listed.forEachIndexed { index, tab ->
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.dragRow(drag, index).fillMaxWidth()) {
             TickBoxRow(
                 checked = tab !in tabs.hidden,
                 tag = "tab:${tab.name}",

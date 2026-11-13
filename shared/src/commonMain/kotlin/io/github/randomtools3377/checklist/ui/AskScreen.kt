@@ -314,9 +314,10 @@ fun AskScreen(
 
     val listen = rememberVoice(onHeard = { heard -> ask(heard) }, onProblem = { voiceProblem = it })
     val list = rememberLazyListState()
+    val calm = LocalCalm.current
     LaunchedEffect(said.size, pending) {
         val count = said.size + (if (pending != null) 1 else 0) + 2
-        list.animateScrollToItem((count - 1).coerceAtLeast(0))
+        if (calm) list.scrollToItem((count - 1).coerceAtLeast(0)) else list.animateScrollToItem((count - 1).coerceAtLeast(0))
     }
 
     Scaffold(

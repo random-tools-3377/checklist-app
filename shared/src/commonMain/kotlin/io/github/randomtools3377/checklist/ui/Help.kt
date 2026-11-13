@@ -151,6 +151,8 @@ internal fun HelpTopic.stepsOn(device: GuideDevice): List<String> = when (this) 
     // Where there is no AI helper yet, the app answers in its own words and the AI isn't mentioned.
     HelpTopic.ASK, HelpTopic.HOW_DOING -> if (device.ai) steps else steps.filterNot { "AI helper" in it }
     // Its face on a widget only where there are widgets.
+    // A computer has nothing to buzz.
+    HelpTopic.APPEARANCE -> if (device.computer) steps.filterNot { it.startsWith("With \"Buzz\" on") } else steps
     HelpTopic.CHARACTER -> if (device.widgets) steps else steps.filterNot { "balance and streaks widget" in it }
     else -> steps
 }
@@ -373,6 +375,7 @@ fun HelpScreen(vm: MainViewModel, onBack: () -> Unit, onAsk: () -> Unit = {}) {
     var goTo by remember { mutableStateOf<HelpTopic?>(null) }
     val list = helpList(device, query, if (onlyOn) features else null)
     val listState = rememberLazyListState()
+    val calm = LocalCalm.current
     LaunchedEffect(goTo) {
         val topic = goTo ?: return@LaunchedEffect
         // Its place: the top item, then each group's title and guides.
@@ -381,7 +384,7 @@ fun HelpScreen(vm: MainViewModel, onBack: () -> Unit, onAsk: () -> Unit = {}) {
             index++
             val at = topics.indexOf(topic)
             if (at >= 0) {
-                listState.animateScrollToItem(index + at)
+                if (calm) listState.scrollToItem(index + at) else listState.animateScrollToItem(index + at)
                 break
             }
             index += topics.size

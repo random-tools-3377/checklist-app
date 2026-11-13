@@ -40,7 +40,6 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Tab
@@ -84,7 +83,11 @@ fun ShopScreen(
     /** Opens the editor for a new reward. */
     onNew: () -> Unit = {},
 ) {
-    if (view == null) return
+    if (view == null) {
+        // The split second before the shop is read: faint card shapes, not a blank screen.
+        PlaceholderCards(Modifier.padding(padding))
+        return
+    }
     val haptics = LocalHapticFeedback.current
     val phone = LocalPhone.current
     var buying by remember { mutableStateOf<Reward?>(null) }
@@ -125,6 +128,8 @@ fun ShopScreen(
                 modifier = Modifier.testTag("tab:bought"),
             )
         }
+        // Reorder: hold a reward and drag it; a drop moves it by as many places as it was dragged.
+        val dragRewards = rememberDragList(view.rewards.map { it.reward.id }) { from, to -> vm.moveReward(view.rewards[from].reward.id, to - from) }
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = padding.calculateBottomPadding() + 88.dp),
@@ -139,6 +144,8 @@ fun ShopScreen(
                     }
                 }
                 itemsIndexed(view.rewards, key = { _, row -> row.reward.id }) { index, row ->
+                    // Held and dragged while reordering; otherwise it glides to its place when the list changes.
+                    Column(Modifier.dragPlace(dragRewards, index).dragHandle(dragRewards, index, enabled = reordering).then(if (dragRewards.glides) glide() else Modifier)) {
                     RewardCard(
                         row,
                         view.balance,
@@ -154,6 +161,7 @@ fun ShopScreen(
                         perDay = view.perDay,
                     )
                     Spacer(Modifier.height(10.dp))
+                    }
                 }
             } else {
                 if (view.bought.isEmpty()) {
@@ -164,7 +172,7 @@ fun ShopScreen(
                         }
                     }
                 }
-                items(view.bought, key = { it.id }) { purchase ->
+                glidingItems(view.bought, key = { it.id }) { purchase ->
                     BoughtCard(purchase, onUse = { using = purchase }, onReturn = { returning = purchase })
                     Spacer(Modifier.height(10.dp))
                 }
@@ -173,7 +181,7 @@ fun ShopScreen(
                     item(key = "used-title") {
                         Text("Used", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 12.dp, bottom = 6.dp).testTag("used-title"))
                     }
-                    items(used, key = { "used:${it.id}" }) { purchase ->
+                    glidingItems(used, key = { "used:${it.id}" }) { purchase ->
                         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp).testTag("used:${purchase.name}")) {
                             Text(purchase.icon, modifier = Modifier.width(36.dp), textAlign = TextAlign.Center)
                             Text(purchase.name, modifier = Modifier.weight(1f))
@@ -248,8 +256,11 @@ fun ShopScreen(
                                     celebrations.buzz(haptics)
                                     celebrations.show(BigCelebration.Bought(reward.icon, result.prize ?: reward.name, mystery = result.prize != null))
                                 }
-                                is BuyResult.TooExpensive ->
+                                is BuyResult.TooExpensive -> {
+                                    // Refused: a soft double tap.
+                                    celebrations.buzz(haptics, io.github.randomtools3377.checklist.core.BuzzKind.REFUSED)
                                     phone.toast("Not enough ${pointsWord()} for ${reward.name} yet.")
+                                }
                                 BuyResult.NotFound -> Unit
                             }
                         }
@@ -369,8 +380,8 @@ private fun RewardCard(
                 // Saving for it: how far the balance has got toward the price.
                 val have = balance.coerceAtLeast(0)
                 Spacer(Modifier.height(8.dp))
-                LinearProgressIndicator(
-                    progress = { (have.toFloat() / reward.price).coerceIn(0f, 1f) },
+                SmoothBar(
+                    progress = (have.toFloat() / reward.price).coerceIn(0f, 1f),
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Text(

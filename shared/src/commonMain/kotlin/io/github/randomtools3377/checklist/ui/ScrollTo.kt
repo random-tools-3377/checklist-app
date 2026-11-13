@@ -14,20 +14,22 @@ import kotlinx.coroutines.launch
  * Where a page opened from a Settings search scrolls to, once, when it opens: the place marked
  * [place] with [scrollPlace]. With no place, the page opens at the top as usual.
  */
-internal class ScrollTarget(private val place: String?, private val scroll: ScrollState, private val scope: CoroutineScope) {
+internal class ScrollTarget(private val place: String?, private val scroll: ScrollState, private val scope: CoroutineScope, private val calm: Boolean = false) {
     private var done = place == null
 
     fun placed(at: String, y: Float) {
         if (done || at != place) return
         done = true
-        scope.launch { scroll.animateScrollTo(y.toInt().coerceAtLeast(0)) }
+        // With less motion the page is simply there.
+        scope.launch { if (calm) scroll.scrollTo(y.toInt().coerceAtLeast(0)) else scroll.animateScrollTo(y.toInt().coerceAtLeast(0)) }
     }
 }
 
 @Composable
 internal fun rememberScrollTarget(place: String?, scroll: ScrollState): ScrollTarget {
     val scope = rememberCoroutineScope()
-    return remember(place, scroll) { ScrollTarget(place, scroll, scope) }
+    val calm = LocalCalm.current
+    return remember(place, scroll) { ScrollTarget(place, scroll, scope, calm) }
 }
 
 /** Marks a place [key] on a page that scrolls with [target]'s scroll state, as a direct child of what scrolls. */

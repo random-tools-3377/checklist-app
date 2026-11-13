@@ -30,7 +30,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -144,7 +143,7 @@ fun CharacterFigure(
     /** Changes to play [move] again, like each new win on a hard day. */
     moveKey: Any? = null,
     alive: Boolean = true,
-    still: Boolean = LocalPhone.current.reducedMotion(),
+    still: Boolean = LocalCalm.current,
 ) {
     val open = remember(look, outfit, expression) { Figure.parts(look, outfit, expression) }
     val shut = remember(look, outfit, expression) { Figure.parts(look, outfit, expression, blink = true) }
@@ -313,7 +312,7 @@ fun LevelCard(
                 )
                 GuideButton(HelpTopic.CHARACTER)
             }
-            LinearProgressIndicator(progress = { sheet.level.share }, modifier = Modifier.fillMaxWidth())
+            SmoothBar(progress = sheet.level.share, modifier = Modifier.fillMaxWidth())
         }
         }
         // With check-ins on: what the character says, and what it suggests.
@@ -506,7 +505,7 @@ fun CharacterScreen(
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text("⭐ Level ${sheet.level.level}", fontSize = 28.sp, fontWeight = FontWeight.Bold, modifier = Modifier.testTag("character-level"))
                     titles?.shown?.let { Text(it, style = MaterialTheme.typography.titleMedium, modifier = Modifier.testTag("character-title")) }
-                    LinearProgressIndicator(progress = { sheet.level.share }, modifier = Modifier.fillMaxWidth())
+                    SmoothBar(progress = sheet.level.share, modifier = Modifier.fillMaxWidth())
                     Text(
                         "${sheet.xp} experience in all · ${sheet.level.toNext} to level ${sheet.level.level + 1}",
                         style = MaterialTheme.typography.bodyMedium,
@@ -547,7 +546,7 @@ private fun SkillRow(area: SkillArea, level: Level, xp: Long, onIdeas: () -> Uni
                         modifier = Modifier.testTag("skill-level:${area.name}"),
                     )
                 }
-                LinearProgressIndicator(progress = { level.share }, modifier = Modifier.fillMaxWidth())
+                SmoothBar(progress = level.share, modifier = Modifier.fillMaxWidth())
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         "$xp experience · ${level.toNext} to level ${level.level + 1}",
@@ -758,7 +757,7 @@ fun BossCard(view: BossView, onAttack: ((String) -> Unit) -> Unit) {
             if (fight.beaten) {
                 Text("🏆 Beaten this week! A new boss comes on Monday.", style = MaterialTheme.typography.bodyMedium, color = goodColor(), modifier = Modifier.testTag("boss-beaten"))
             } else {
-                LinearProgressIndicator(progress = { fight.share }, modifier = Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.error)
+                SmoothBar(progress = fight.share, modifier = Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.error)
                 Text("${fight.left} of ${fight.health} health left · it leaves on Sunday night", style = MaterialTheme.typography.bodySmall)
                 if (view.items.isEmpty()) {
                     Text(
