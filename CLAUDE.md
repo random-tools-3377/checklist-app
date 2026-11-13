@@ -48,7 +48,9 @@ The app has no network access unless the owner decides otherwise for this app.
   - a date every year, or once on a single date
   - an optional start date and end date for any of these
 - Each goal has a name, an icon, the points it pays, how often it repeats, its allowance, an
-  optional reminder, and optionally its own celebration GIF.
+  optional reminder, optionally its own celebration GIF, and optionally why it is good, in the
+  user's own words, like "so I sleep better" (see "Reminders are about the task" under
+  Notifications).
 - The user can reorder goals, and rewards in the shop.
 - Counted goals, like "8 glasses", pay for each tick plus a bonus for finishing **(default)**.
 - A goal done several times a day can have a time for each one, like 9 am and 9 pm, each with
@@ -223,26 +225,38 @@ The app has no network access unless the owner decides otherwise for this app.
   chosen in Settings (10 minutes, 30 minutes or an hour; 10 to start); "keep reminding" repeats
   every 30 minutes until the goal is done or its finish time passes (at most 12 times), set per
   goal. The backup reminder shows on Today, with "Back up" and "Later" (tomorrow).
+- **Reminders are about the task and why it is good, not the points** (decided after 0.71.0).
+  This covers a goal's reminders and its late nudges. **Details (default):** the reason is the
+  goal's own "Why it's good" line, which the user writes in the goal editor. It is optional,
+  and the app never writes one itself, the AI included. A reminder keeps the goal's icon and
+  name as its title; its text leads with the reason, then the time, the length and the count,
+  and no longer shows what the goal pays. "Last one for today" and the streak line stay,
+  because they are about getting it done. A goal with no reason reads as before, without the
+  points. A locked private goal's reminder still names nothing, its reason included. Points
+  still show once something is ticked ("ticked, +5") and inside the app. The morning plan, the
+  evening check and the Sunday summary are not changed by this.
 - Nudges when a goal is late, to help get it done (decided after 0.68.0): the app keeps at it,
-  each nudge worded differently, going round four kinds (encouraging; what you'd gain: points,
-  the streak, how close a reward is; make it smaller, "just start", with a Focus button;
-  playful), with a way to stop them for that goal. On for every goal with a time or its own
-  finish-by time, with a switch in each goal's editor and one in Settings for all.
+  each nudge worded differently, going round four kinds (encouraging; why it's good: the
+  goal's own reason and the streak, changed after 0.71.0 from what the tick pays; make it
+  smaller, "just start", with a Focus button; playful), with a way to stop them for that goal.
+  On for every goal with a time or its own finish-by time, with a switch in each goal's editor
+  and one in Settings for all.
   **Details (default):** a habit due on single days with a set time, a time for each one, or
   its own finish-by time is nudged once it is 30 minutes late, then every 30 minutes until it
   is done, skipped or the day ends, at most 12 for each time; the three numbers are in "Points
   and rules". Not projects, to-dos, goals to quit, "at most" goals or goals counted per week,
   month or year; the default finish time never counts. "Stop for today" (on the Android nudge)
   and "No more nudges today" (on the goal's card) end them for that goal that day. Once a goal
-  is late its nudges take the place of "keep reminding". "What you'd gain" uses real numbers
-  only: what the tick pays, the main streak from 2 days, the starred reward unless the shop is
-  locked; a locked private goal's nudge names nothing; never blaming, and nothing about
-  misses, penalties or moods. Settings → Notifications has "Nudges when something is late" (on
-  to start) and a switch for each kind; with all four off they are encouraging ones. Android
-  gives them their own notification type, "Late nudges", with Done (or +1), Stop for today
-  and, on a "make it smaller" nudge for a goal with a length, Focus; no Snooze. The iPhone gets
-  them ahead of time without buttons, and one written for a later day names only the points;
-  Windows shows them while the app runs.
+  is late its nudges take the place of "keep reminding". "Why it's good" uses the goal's own
+  reason and the main streak from 2 days, never what the tick pays or how close a reward is;
+  a goal with neither gets an encouraging one instead; a locked private goal's nudge names
+  nothing; never blaming, and nothing about misses, penalties or moods. Settings →
+  Notifications has "Nudges when something is late" (on to start) and a switch for each kind;
+  with all four off they are encouraging ones. Android gives them their own notification type,
+  "Late nudges", with Done (or +1), Stop for today and, on a "make it smaller" nudge for a goal
+  with a length, Focus; no Snooze. The iPhone gets them ahead of time without buttons, and one
+  written for a later day names only the goal and its reason; Windows shows them while the app
+  runs.
 - A morning plan: one notification when the user's day starts, with today's list and the pace
   **(default: on once "My day starts at" is set, and can be turned off)**.
 - Notifications have Done and Skip buttons. A Skip that would go over the limit opens the app
